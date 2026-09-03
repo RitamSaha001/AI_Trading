@@ -140,15 +140,77 @@ describe('LocalQuantLLM High-Benchmark Fallback Engine', () => {
     expect(res.reply).toContain('Validity Proofs');
   });
 
+  it('executes autonomous multi-step agentic workflows with 4-phase execution blueprints', () => {
+    const res = queryLocalQuantLLM('Audit my portfolio, hedge my risk, and deploy an automated bot', mockState, mockMarkets);
+    expect(res.reply).toContain('Autonomous Agentic Workflow');
+    expect(res.reply).toContain('4-Phase Execution Roadmap');
+    expect(res.reply).toContain('Phase 1: Capital Defense');
+    expect(res.reply).toContain('Phase 4: Sentinel Vigilance');
+    expect(res.actionProposal).toBeDefined();
+    expect(res.actionProposal?.requiresConfirmation).toBe(true);
+  });
+
+  it('handles friendly human greetings and capability introduction warmly', () => {
+    const res = queryLocalQuantLLM('Hello! Who are you and what can you do for me?', mockState, mockMarkets);
+    expect(res.reply).toContain('Nexus Intelligence');
+    expect(res.reply).toContain('What I Can Do for You');
+    expect(res.reply).toContain('Autonomous Agentic Workflows');
+    expect(res.reply).toContain('Capabilities Hub');
+  });
+
+  it('provides deep psychological guidance on quitting job to trade full-time', () => {
+    const res = queryLocalQuantLLM('I want to quit my job to trade full time. What do you think?', mockState, mockMarkets);
+    expect(res.reply).toContain('Thinking of Quitting Your Job to Trade Full-Time');
+    expect(res.reply).toContain('Living Expenses');
+    expect(res.reply).toContain('Mental Capital Drain');
+    expect(res.reply).toContain('The Professional Blueprint');
+  });
+
+  it('neutralizes emotional FOMO with quantitative reality', () => {
+    const res = queryLocalQuantLLM('I have massive FOMO on this pump, should I buy now?', mockState, mockMarkets);
+    expect(res.reply).toContain('Emotional Circuit Breaker: Neutralizing FOMO');
+    expect(res.reply).toContain('Never Chase the Bid');
+    expect(res.reply).toContain('Mean-Reversion');
+  });
+
+  it('explains blockchain in clear storytelling for a child or grandmother (ELI5)', () => {
+    const res = queryLocalQuantLLM('Explain blockchain to my grandmother in simple words', mockState, mockMarkets);
+    expect(res.reply).toContain('Magic Shared Notebook');
+    expect(res.reply).toContain('Double-Spending');
+  });
+
+  it('eloquently articulates Satoshi Nakamoto vision and Byzantine Generals resolution', () => {
+    const res = queryLocalQuantLLM('What was Satoshi Nakamoto vision in the Bitcoin whitepaper?', mockState, mockMarkets);
+    expect(res.reply).toContain('Byzantine Generals Problem');
+    expect(res.reply).toContain('Proof-of-Work');
+    expect(res.reply).toContain('Genesis Block');
+  });
+
+  it('shares clever quantitative crypto humor when asked for a joke', () => {
+    const res = queryLocalQuantLLM('Tell me a funny crypto trading joke', mockState, mockMarkets);
+    expect(res.reply).toContain('Quantitative & Crypto Trading Humor');
+    expect(res.reply).toContain('Sandwich Bot');
+  });
+
+  it('answers freeform open-ended economic questions with dynamic telemetry grounding', () => {
+    const res = queryLocalQuantLLM('How might quantum computing impact RSA and elliptic curve cryptography in finance?', mockState, mockMarkets);
+    expect(res.reply).toContain('Contextual Market Analysis');
+    expect(res.reply).toContain('Current Portfolio Baseline');
+    expect(res.reply).toContain('Total Capital Equity');
+  });
+
   it('generates distinct, non-identical responses for different prompts (no static repetitive template)', () => {
     const res1 = queryLocalQuantLLM('Should I sell ETH?', mockState, mockMarkets);
     const res2 = queryLocalQuantLLM('How do funding rates work?', mockState, mockMarkets);
     const res3 = queryLocalQuantLLM('Run a stress test on my portfolio', mockState, mockMarkets);
+    const res4 = queryLocalQuantLLM('Tell me a joke', mockState, mockMarkets);
 
     expect(res1.reply).not.toEqual(res2.reply);
     expect(res2.reply).not.toEqual(res3.reply);
+    expect(res3.reply).not.toEqual(res4.reply);
     expect(res1.reply).toContain('ETH');
     expect(res2.reply).toContain('Funding Rate');
     expect(res3.reply).toContain('Stress-Test');
+    expect(res4.reply).toContain('Humor');
   });
 });
