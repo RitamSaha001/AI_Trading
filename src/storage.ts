@@ -143,7 +143,7 @@ export function freshState(customCash = 50000): AppState {
     strategies: initialStrategies,
     settings: {
       geminiApiKey: '',
-      geminiModel: 'gemini-3.8-flash',
+      geminiModel: 'gemini-1.5-flash',
       soundEnabled: true,
       theme: 'glass',
     },

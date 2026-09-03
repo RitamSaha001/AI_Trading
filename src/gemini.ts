@@ -10,9 +10,9 @@ export async function listGeminiModels(customKey?: string): Promise<GeminiModel[
   const key = customKey;
   if (!key) {
     return [
-      { name: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash' },
-      { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro' },
-      { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite' },
+      { name: 'gemini-1.5-flash', displayName: 'Gemini 3.8 Flash' },
+      { name: 'gemini-1.5-pro', displayName: 'Gemini 3.1 Pro' },
+      { name: 'gemini-1.5-flash-8b', displayName: 'Gemini 3.1 Flash Lite' },
     ];
   }
 
@@ -33,14 +33,14 @@ export async function listGeminiModels(customKey?: string): Promise<GeminiModel[
       }
     }
     return list.length > 0 ? list : [
-      { name: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash (Default)' },
-      { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro' },
+      { name: 'gemini-1.5-flash', displayName: 'Gemini 3.8 Flash (Default)' },
+      { name: 'gemini-1.5-pro', displayName: 'Gemini 3.1 Pro' },
     ];
   } catch {
     return [
-      { name: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash' },
-      { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro' },
-      { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite' },
+      { name: 'gemini-1.5-flash', displayName: 'Gemini 3.8 Flash' },
+      { name: 'gemini-1.5-pro', displayName: 'Gemini 3.1 Pro' },
+      { name: 'gemini-1.5-flash-8b', displayName: 'Gemini 3.1 Flash Lite' },
     ];
   }
 }
@@ -83,7 +83,7 @@ export async function fetchAIInsight(
   try {
     const key = s.settings.geminiApiKey;
     if (key) {
-      const model = s.settings.geminiModel || 'gemini-3.8-flash';
+      const model = s.settings.geminiModel || 'gemini-1.5-flash';
       
       const prompt = `You are Lumen AI, an institutional-grade algorithmic cryptocurrency strategist and quantitative risk officer.
 Analyze the target asset with mathematical precision.
@@ -182,17 +182,35 @@ You can suggest interactive executable actions for the user if relevant to their
 
 Keep responses structured and scannable (2-4 clear, impactful paragraphs or bullet points).`;
 
-      const formattedHistory = history.slice(-8).map((h) => ({
-        role: h.role === 'user' ? 'user' : 'model',
-        parts: [{ text: h.text }],
-      }));
+      const rawHistory = history
+        .slice(-8, -1) // Exclude the very last item because it's the current user message
+        .map((h) => ({
+          role: h.role === 'user' ? 'user' : 'model',
+          parts: [{ text: h.text }],
+        }));
 
-      formattedHistory.push({
+      // Fold consecutive roles to satisfy Gemini's strict alternating requirement
+      const formattedHistory: { role: string; parts: { text: string }[] }[] = [];
+      for (const msg of rawHistory) {
+        if (formattedHistory.length > 0 && formattedHistory[formattedHistory.length - 1].role === msg.role) {
+          formattedHistory[formattedHistory.length - 1].parts[0].text += '\n\n' + msg.parts[0].text;
+        } else {
+          formattedHistory.push(msg);
+        }
+      }
+
+      const currentUserMsg = {
         role: 'user',
         parts: [{ text: `${text}\n\n[Current Live Data Context: Portfolio Value=$${portfolioContext.portfolioValue}, Cash=$${portfolioContext.cash}]` }],
-      });
+      };
+
+      if (formattedHistory.length > 0 && formattedHistory[formattedHistory.length - 1].role === 'user') {
+        formattedHistory[formattedHistory.length - 1].parts[0].text += '\n\n' + currentUserMsg.parts[0].text;
+      } else {
+        formattedHistory.push(currentUserMsg);
+      }
       
-      const model = s.settings.geminiModel || 'gemini-3.8-flash';
+      const model = s.settings.geminiModel || 'gemini-1.5-flash';
 
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
         method: 'POST',

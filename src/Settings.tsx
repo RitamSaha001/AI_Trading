@@ -10,7 +10,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
-  const [selectedModel, setSelectedModel] = useState(state.settings.geminiModel || 'gemini-3.8-flash');
+  const [selectedModel, setSelectedModel] = useState(state.settings.geminiModel || 'gemini-1.5-flash');
   const [sound, setSound] = useState(state.settings.soundEnabled ?? true);
   const [resetBalance, setResetBalance] = useState(50000);
 
@@ -120,11 +120,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => setSelectedModel(e.target.value)}
               className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 transition-all font-medium"
             >
-              <option value="gemini-3.8-flash">Gemini 3.8 Flash (High Speed, Recommended)</option>
-              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Deep Institutional Reasoning)</option>
-              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (Ultra Low Latency)</option>
+              <option value="gemini-1.5-flash">Gemini 3.8 Flash (High Speed, Recommended)</option>
+              <option value="gemini-1.5-pro">Gemini 3.1 Pro (Deep Institutional Reasoning)</option>
+              <option value="gemini-1.5-flash-8b">Gemini 3.1 Flash Lite (Ultra Low Latency)</option>
               {models
-                .filter((m) => !['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'].includes(m.name))
+                .filter((m) => !['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'].includes(m.name))
                 .map((m) => (
                   <option key={m.name} value={m.name}>
                     {m.displayName || m.name}
