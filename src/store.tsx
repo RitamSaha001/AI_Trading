@@ -68,6 +68,13 @@ type Ctx = {
   addStrategy: (x: Omit<StrategyConfig, 'id' | 'tradesExecuted' | 'totalPnl' | 'realizedPnl' | 'feesPaid'>) => void;
   removeStrategy: (id: string) => void;
   resetStrategyMetrics: (id: string) => void;
+  pauseMarketStrategies: (asset: Asset) => void;
+  resumeMarketStrategies: (asset: Asset) => void;
+  emergencyBrakeMarket: (asset: Asset) => void;
+  pauseAllStrategies: () => void;
+  resumeAllStrategies: () => void;
+  resetAllCircuitBreakers: () => void;
+  setLossPreventionMode: (mode: 'strict' | 'balanced' | 'aggressive') => void;
   addAlert: (x: Omit<AppState['alerts'][number], 'id' | 'triggered' | 'createdAt'>) => void;
   toggleAlert: (id: string) => void;
   removeAlert: (id: string) => void;
@@ -512,11 +519,96 @@ export function Provider({ children }: { children: React.ReactNode }) {
       ...s,
       strategies: s.strategies.map((x) =>
         x.id === id
-          ? { ...x, tradesExecuted: 0, totalPnl: 0, realizedPnl: 0, feesPaid: 0, winCount: 0, lossCount: 0 }
+          ? { ...x, tradesExecuted: 0, totalPnl: 0, realizedPnl: 0, feesPaid: 0, winCount: 0, lossCount: 0, consecutiveLosses: 0, circuitBreakerTriggered: false }
           : x
       ),
     }));
     triggerToast('Metrics Reset', 'Strategy performance counters cleared.', 'info');
+  }, [triggerToast]);
+
+  const pauseMarketStrategies = useCallback((asset: Asset) => {
+    setState((s) => ({
+      ...s,
+      pausedMarkets: Array.from(new Set([...(s.pausedMarkets || []), asset])),
+      strategies: s.strategies.map((strat) => (strat.asset === asset ? { ...strat, enabled: false } : strat)),
+    }));
+    triggerToast(`Market ${asset} Paused`, `All automated strategies for ${asset} have been safely paused.`, 'warn');
+  }, [triggerToast]);
+
+  const resumeMarketStrategies = useCallback((asset: Asset) => {
+    setState((s) => ({
+      ...s,
+      pausedMarkets: (s.pausedMarkets || []).filter((a) => a !== asset),
+      strategies: s.strategies.map((strat) =>
+        strat.asset === asset ? { ...strat, enabled: true, circuitBreakerTriggered: false, consecutiveLosses: 0 } : strat
+      ),
+    }));
+    triggerToast(`Market ${asset} Resumed`, `Automated strategies for ${asset} are active and scanning.`, 'success');
+  }, [triggerToast]);
+
+  const emergencyBrakeMarket = useCallback((asset: Asset) => {
+    setState((s) => {
+      const updatedPaused = Array.from(new Set([...(s.pausedMarkets || []), asset]));
+      const updatedStrategies = s.strategies.map((strat) =>
+        strat.asset === asset
+          ? { ...strat, enabled: false, circuitBreakerTriggered: true, circuitBreakerReason: 'Emergency brake applied by operator' }
+          : strat
+      );
+      const remainingOrders = s.orders.filter((o) => !(o.asset === asset && o.status === 'pending'));
+      for (const o of remainingOrders) {
+        if (o.asset === asset && o.status === 'filled') {
+          o.takeProfit = undefined;
+          o.stopLoss = undefined;
+        }
+      }
+      return {
+        ...s,
+        pausedMarkets: updatedPaused,
+        strategies: updatedStrategies,
+        orders: remainingOrders,
+        notifications: [
+          {
+            id: 'eb_' + Math.random().toString(36).substring(2, 8),
+            ts: Date.now(),
+            title: `Emergency Brake: ${asset}`,
+            body: `Emergency brake engaged for ${asset}. All bots paused and active brackets neutralized.`,
+            type: 'risk',
+          },
+          ...s.notifications,
+        ],
+      };
+    });
+    triggerToast(`Emergency Brake: ${asset}`, `All bots paused and open orders cleared for ${asset}.`, 'warn');
+  }, [triggerToast]);
+
+  const pauseAllStrategies = useCallback(() => {
+    setState((s) => ({
+      ...s,
+      strategies: s.strategies.map((strat) => ({ ...strat, enabled: false })),
+    }));
+    triggerToast('All Strategies Halted', 'All automated algorithmic trading engines have been halted.', 'warn');
+  }, [triggerToast]);
+
+  const resumeAllStrategies = useCallback(() => {
+    setState((s) => ({
+      ...s,
+      pausedMarkets: [],
+      strategies: s.strategies.map((strat) => ({ ...strat, enabled: true, circuitBreakerTriggered: false, consecutiveLosses: 0 })),
+    }));
+    triggerToast('All Strategies Resumed', 'All algorithmic engines re-enabled with reset circuit breakers.', 'success');
+  }, [triggerToast]);
+
+  const resetAllCircuitBreakers = useCallback(() => {
+    setState((s) => ({
+      ...s,
+      strategies: s.strategies.map((strat) => ({ ...strat, circuitBreakerTriggered: false, consecutiveLosses: 0 })),
+    }));
+    triggerToast('Circuit Breakers Cleared', 'Consecutive loss counters reset for all strategies.', 'info');
+  }, [triggerToast]);
+
+  const setLossPreventionMode = useCallback((mode: 'strict' | 'balanced' | 'aggressive') => {
+    setState((s) => ({ ...s, lossPreventionMode: mode }));
+    triggerToast('Loss Prevention Updated', `Risk sentinel mode set to ${mode.toUpperCase()}.`, 'info');
   }, [triggerToast]);
 
   const addAlert = useCallback(
@@ -1064,6 +1156,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
       addStrategy,
       removeStrategy,
       resetStrategyMetrics,
+      pauseMarketStrategies,
+      resumeMarketStrategies,
+      emergencyBrakeMarket,
+      pauseAllStrategies,
+      resumeAllStrategies,
+      resetAllCircuitBreakers,
+      setLossPreventionMode,
       addAlert,
       toggleAlert,
       removeAlert,
@@ -1105,6 +1204,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
       addStrategy,
       removeStrategy,
       resetStrategyMetrics,
+      pauseMarketStrategies,
+      resumeMarketStrategies,
+      emergencyBrakeMarket,
+      pauseAllStrategies,
+      resumeAllStrategies,
+      resetAllCircuitBreakers,
+      setLossPreventionMode,
       addAlert,
       toggleAlert,
       removeAlert,

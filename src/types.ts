@@ -96,6 +96,7 @@ export type AlertRule = {
 };
 
 export type StrategyKind =
+  | 'titan_adaptive'
   | 'vwap_trend'
   | 'breakout_volatility'
   | 'ai_multi_factor'
@@ -119,6 +120,11 @@ export type StrategyConfig = {
   feesPaid: number;
   winCount?: number;
   lossCount?: number;
+  consecutiveLosses?: number;
+  maxConsecutiveLossesAllowed?: number; // default 2
+  circuitBreakerTriggered?: boolean;
+  circuitBreakerReason?: string;
+  pausedReason?: string;
   targetProfitPct?: number; // Target Take Profit % (e.g. 5.0)
   trailingStopPct?: number; // Trailing Stop % (e.g. 2.0)
   params: {
@@ -136,6 +142,8 @@ export type StrategyConfig = {
     dynamicRiskSizing?: boolean;
     oversoldMultiplier?: number;
     pauseThresholdRsi?: number;
+    regimeFilterEnabled?: boolean;
+    lossCutoffUsd?: number;
   };
 };
 
@@ -312,6 +320,8 @@ export type AppState = {
   orders: Order[];
   alerts: AlertRule[];
   strategies: StrategyConfig[];
+  pausedMarkets?: Asset[];
+  lossPreventionMode?: 'strict' | 'balanced' | 'aggressive';
   settings: Settings;
   notifications: NotificationItem[];
   timeframe: Timeframe;

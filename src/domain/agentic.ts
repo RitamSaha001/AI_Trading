@@ -534,6 +534,7 @@ export function synthesizeStrategyBot(
   const effectiveAtr = ind?.atr || currentPrice * 0.02;
 
   const names: Record<StrategyKind, string> = {
+    titan_adaptive: `${asset} Titan Adaptive Multi-Regime Sentinel`,
     vwap_trend: `${asset} Institutional VWAP Momentum Engine`,
     breakout_volatility: `${asset} Dynamic Squeeze & Volatility Breakout`,
     ai_multi_factor: `${asset} Composite Multi-Factor Alpha Quant`,
@@ -548,7 +549,7 @@ export function synthesizeStrategyBot(
   const targetProfitPct = +(options?.targetProfitPct ?? Math.max(3.5, Math.min(14.0, (effectiveAtr / currentPrice) * 100 * 3.2))).toFixed(1);
   const trailingStopPct = +(options?.trailingStopPct ?? Math.max(1.5, Math.min(5.0, (effectiveAtr / currentPrice) * 100 * 1.3))).toFixed(1);
   const maxAllocation = options?.maxAllocation ?? (['BTC', 'ETH'].includes(asset) ? 0.30 : 0.20);
-  const cooldownSec = options?.cooldownSec ?? (kind === 'grid_scalp' ? 15 : 25);
+  const cooldownSec = options?.cooldownSec ?? (kind === 'titan_adaptive' ? 180 : kind === 'grid_scalp' ? 120 : 180);
 
   return {
     id,
@@ -562,15 +563,18 @@ export function synthesizeStrategyBot(
     totalPnl: 0,
     realizedPnl: 0,
     feesPaid: 0,
+    consecutiveLosses: 0,
+    maxConsecutiveLossesAllowed: 2,
     targetProfitPct,
     trailingStopPct,
     params: {
-      atrMultiplierTP: 3.0,
-      atrMultiplierSL: 1.3,
+      atrMultiplierTP: 3.5,
+      atrMultiplierSL: 1.35,
       minAlphaScore: 35,
       rsiThresholdBuy: 65,
       rsiThresholdSell: 38,
       dcaAmountUsd: 150,
+      regimeFilterEnabled: true,
       ...(options?.params || {}),
     },
   };

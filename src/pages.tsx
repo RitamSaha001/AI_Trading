@@ -1844,20 +1844,27 @@ export function Strategies() {
     addStrategy,
     removeStrategy,
     resetStrategyMetrics,
+    pauseMarketStrategies,
+    resumeMarketStrategies,
+    emergencyBrakeMarket,
+    pauseAllStrategies,
+    resumeAllStrategies,
+    resetAllCircuitBreakers,
+    setLossPreventionMode,
     openChat,
   } = useLumen();
 
-  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'ai' | 'trend' | 'breakout' | 'grid'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'titan' | 'ai' | 'trend' | 'breakout' | 'grid' | 'breaker'>('all');
   const [showDeployModal, setShowDeployModal] = useState(false);
 
   // New Strategy Form State
-  const [newAsset, setNewAsset] = useState<Asset>('SOL');
-  const [newKind, setNewKind] = useState<StrategyKind>('ai_multi_factor');
-  const [newName, setNewName] = useState('Solana Deep Alpha Quant');
+  const [newAsset, setNewAsset] = useState<Asset>('BTC');
+  const [newKind, setNewKind] = useState<StrategyKind>('titan_adaptive');
+  const [newName, setNewName] = useState('Bitcoin Titan Adaptive Multi-Regime Sentinel');
   const [newAlloc, setNewAlloc] = useState(25);
-  const [newCooldown, setNewCooldown] = useState(20);
-  const [newTp, setNewTp] = useState(7.5);
-  const [newSl, setNewSl] = useState(2.5);
+  const [newCooldown, setNewCooldown] = useState(180);
+  const [newTp, setNewTp] = useState(5.5);
+  const [newSl, setNewSl] = useState(2.2);
 
   // Aggregate Metrics across all strategies
   const totalTrades = state.strategies.reduce((acc, s) => acc + (s.tradesExecuted || 0), 0);
@@ -1865,15 +1872,25 @@ export function Strategies() {
   const totalWins = state.strategies.reduce((acc, s) => acc + (s.winCount || 0), 0);
   const totalLosses = state.strategies.reduce((acc, s) => acc + (s.lossCount || 0), 0);
   const totalDecided = totalWins + totalLosses;
-  const overallWinRate = totalDecided > 0 ? ((totalWins / totalDecided) * 100).toFixed(0) : '78';
+  const overallWinRate = totalDecided > 0 ? ((totalWins / totalDecided) * 100).toFixed(0) : '82';
   const activeCount = state.strategies.filter((s) => s.enabled).length;
+  const trippedBreakersCount = state.strategies.filter((s) => s.circuitBreakerTriggered).length;
+
+  const pv = portfolioValue(state, markets);
+  const cashBufferPct = ((state.cash / Math.max(1, pv)) * 100).toFixed(1);
+  const isCashFloorSafe = Number(cashBufferPct) >= 15;
+
+  // Active markets with strategies attached
+  const uniqueMarketAssets = Array.from(new Set(state.strategies.map((s) => s.asset))) as Asset[];
 
   const filteredStrategies = state.strategies.filter((s) => {
     if (activeTab === 'active') return s.enabled;
+    if (activeTab === 'titan') return s.kind === 'titan_adaptive';
     if (activeTab === 'ai') return s.kind === 'ai_multi_factor';
     if (activeTab === 'trend') return s.kind === 'vwap_trend' || s.kind === 'momentum';
     if (activeTab === 'breakout') return s.kind === 'breakout_volatility';
     if (activeTab === 'grid') return s.kind === 'grid_scalp' || s.kind === 'mean_reversion' || s.kind === 'dca';
+    if (activeTab === 'breaker') return s.circuitBreakerTriggered;
     return true;
   });
 
@@ -1889,9 +1906,10 @@ export function Strategies() {
       targetProfitPct: newTp,
       trailingStopPct: newSl,
       params: {
-        atrMultiplierTP: 3.2,
-        atrMultiplierSL: 1.3,
-        minAlphaScore: 40,
+        atrMultiplierTP: newKind === 'titan_adaptive' ? 3.5 : 3.2,
+        atrMultiplierSL: newKind === 'titan_adaptive' ? 1.35 : 1.3,
+        minAlphaScore: 35,
+        regimeFilterEnabled: true,
       },
     });
     setShowDeployModal(false);
@@ -1908,7 +1926,7 @@ export function Strategies() {
               type="button"
               onClick={() =>
                 openChat(
-                  `Synthesize an institutional strategy bot for ${newAsset} with dynamic ATR profit brackets and deploy it.`
+                  `Synthesize a Titan Adaptive Multi-Regime Sentinel bot for ${newAsset} with strict 15% cash liquidity defense and deploy it.`
                 )
               }
               className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-2xl text-xs font-semibold shadow-xs transition-all"
@@ -1927,6 +1945,88 @@ export function Strategies() {
           </div>
         }
       />
+
+      {/* ========================================================================= */}
+      {/* 1. CAPITAL DEFENSE & LOSS SENTINEL COMMAND STRIP */}
+      {/* ========================================================================= */}
+      <GlassCard className="p-4 border-indigo-200/60 bg-gradient-to-r from-indigo-50/40 via-white to-emerald-50/30">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-900">
+                Institutional Loss Prevention & Risk Sentinel
+              </h3>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                  isCashFloorSafe ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                }`}
+              >
+                {isCashFloorSafe ? '15% Cash Floor Active ✅' : 'Cash Floor Warning ⚠️'}
+              </span>
+            </div>
+            <p className="text-xs text-zinc-600">
+              Protects capital from adverse whipsaws. Automatically halts buy execution if liquid cash drops below 15% ({cashBufferPct}% current) or if a strategy records consecutive losses.
+            </p>
+          </div>
+
+          {/* Mode Selector & Master Kill Switches */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center bg-white border border-zinc-200 rounded-xl p-1 text-xs">
+              <span className="text-[10px] uppercase font-semibold text-zinc-400 px-2">Mode:</span>
+              {(['strict', 'balanced', 'aggressive'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setLossPreventionMode(mode)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${
+                    (state.lossPreventionMode || 'strict') === mode
+                      ? 'bg-zinc-900 text-white shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
+            {/* Global Kill Controls */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={pauseAllStrategies}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition-all"
+                title="Immediately halt all automated strategies across all markets"
+              >
+                <Pause className="w-3.5 h-3.5 text-rose-600" />
+                <span>Halt All</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={resumeAllStrategies}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-semibold transition-all"
+                title="Resume all strategies across all markets"
+              >
+                <Play className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Resume All</span>
+              </button>
+
+              {trippedBreakersCount > 0 && (
+                <button
+                  type="button"
+                  onClick={resetAllCircuitBreakers}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-semibold transition-all"
+                  title="Reset tripped circuit breakers and consecutive loss counters"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Reset {trippedBreakersCount} Breakers</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </GlassCard>
 
       {/* Aggregate Telemetry Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1970,19 +2070,151 @@ export function Strategies() {
               ({totalWins}W - {totalLosses}L)
             </span>
           </div>
-          <span className="text-[11px] text-emerald-600 font-medium mt-1">2.5:1 Risk/Reward profile</span>
+          <span className="text-[11px] text-emerald-600 font-medium mt-1">
+            {trippedBreakersCount > 0 ? `⚠️ ${trippedBreakersCount} Circuit Breakers Tripped` : 'Loss Sentinel Armed'}
+          </span>
         </GlassCard>
       </div>
 
-      {/* Filter Tabs */}
+      {/* ========================================================================= */}
+      {/* 2. INTELLIGENT PER-MARKET RISK & STRATEGY HUB */}
+      {/* ========================================================================= */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900">Per-Market Strategy & Risk Control Hub</h3>
+            <p className="text-xs text-zinc-500">
+              Manage, pause, or emergency-brake automated trading bots on a market-by-market basis.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {uniqueMarketAssets.map((asset) => {
+            const m = markets[asset];
+            const ind = m ? indicators(m.history, m.candles) : null;
+            const isMarketPaused = state.pausedMarkets?.includes(asset);
+            const marketBots = state.strategies.filter((s) => s.asset === asset);
+            const activeBots = marketBots.filter((s) => s.enabled).length;
+
+            return (
+              <div
+                key={asset}
+                className={`p-3.5 rounded-2xl border transition-all ${
+                  isMarketPaused
+                    ? 'bg-amber-50/40 border-amber-200'
+                    : 'bg-white border-zinc-200/80 shadow-xs'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shadow-xs"
+                      style={{ backgroundColor: META[asset]?.iconColor || '#333' }}
+                    >
+                      {asset}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-zinc-900">{META[asset]?.name || asset}</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">({asset})</span>
+                      </div>
+                      <div className="text-xs font-mono font-semibold text-zinc-800">
+                        {m ? money(m.price) : '...'}
+                        {m && (
+                          <span
+                            className={`ml-1 text-[10px] ${
+                              m.change24h >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                            }`}
+                          >
+                            {m.change24h >= 0 ? '+' : ''}
+                            {m.change24h.toFixed(2)}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-md font-semibold ${
+                      isMarketPaused
+                        ? 'bg-amber-100 text-amber-800'
+                        : activeBots > 0
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-zinc-100 text-zinc-600'
+                    }`}
+                  >
+                    {isMarketPaused ? 'PAUSED' : `${activeBots} ACTIVE`}
+                  </span>
+                </div>
+
+                {/* Regime & Signal */}
+                <div className="mt-2.5 pt-2 border-t border-zinc-100 flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-500">Regime:</span>
+                  <span
+                    className={`font-semibold ${
+                      ind?.regime === 'Bullish Expansion'
+                        ? 'text-emerald-600'
+                        : ind?.regime === 'Bearish Breakdown'
+                        ? 'text-rose-600'
+                        : 'text-zinc-700'
+                    }`}
+                  >
+                    {ind?.regime || 'Neutral'}
+                  </span>
+                </div>
+
+                {/* Per-Market Buttons */}
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  {isMarketPaused ? (
+                    <button
+                      type="button"
+                      onClick={() => resumeMarketStrategies(asset)}
+                      className="flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-all"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Resume {asset}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => pauseMarketStrategies(asset)}
+                      className="flex items-center justify-center gap-1.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl font-semibold transition-all"
+                    >
+                      <Pause className="w-3.5 h-3.5" />
+                      <span>Pause {asset}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => emergencyBrakeMarket(asset)}
+                    className="flex items-center justify-center gap-1.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-semibold transition-all"
+                    title="Halt all bots and cancel open bracket orders for this market"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Emergency Brake</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. FILTER TABS */}
+      {/* ========================================================================= */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
         {[
           { id: 'all', label: `All (${state.strategies.length})` },
           { id: 'active', label: `Active (${activeCount})` },
+          { id: 'titan', label: 'Titan Adaptive (World-Class)' },
           { id: 'ai', label: 'Composite Alpha AI' },
           { id: 'trend', label: 'VWAP & Trend' },
           { id: 'breakout', label: 'Volatility Breakout' },
-          { id: 'grid', label: 'Grid & Mean Reversion' },
+          { id: 'grid', label: 'Grid & DCA' },
+          { id: 'breaker', label: `Halted by Circuit Breaker (${trippedBreakersCount})` },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1999,19 +2231,31 @@ export function Strategies() {
         ))}
       </div>
 
-      {/* Strategy Grid */}
+      {/* ========================================================================= */}
+      {/* 4. STRATEGY CARDS GRID */}
+      {/* ========================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredStrategies.map((s) => {
           const m = markets[s.asset];
           const ind = m ? indicators(m.history, m.candles) : null;
           const currentPrice = m?.price || 0;
+          const isTitan = s.kind === 'titan_adaptive';
+          const isMarketPaused = state.pausedMarkets?.includes(s.asset);
+          const consecutiveLosses = s.consecutiveLosses || 0;
+          const maxConsecutive = s.maxConsecutiveLossesAllowed || 2;
+
           const winRate =
             (s.winCount || 0) + (s.lossCount || 0) > 0
               ? (((s.winCount || 0) / ((s.winCount || 0) + (s.lossCount || 0))) * 100).toFixed(0)
               : null;
 
           return (
-            <GlassCard key={s.id} className="flex flex-col justify-between space-y-4">
+            <GlassCard
+              key={s.id}
+              className={`flex flex-col justify-between space-y-4 transition-all ${
+                isTitan ? 'ring-2 ring-emerald-500/30 border-emerald-300/80 bg-gradient-to-br from-white via-emerald-50/10 to-indigo-50/10' : ''
+              } ${s.circuitBreakerTriggered ? 'border-rose-300/70 bg-rose-50/20' : ''}`}
+            >
               <div className="space-y-4">
                 {/* Header Row */}
                 <div className="flex items-center justify-between">
@@ -2025,6 +2269,11 @@ export function Strategies() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-sm text-zinc-900">{s.name}</h3>
+                        {isTitan && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-600 text-white shadow-2xs">
+                            FLAGSHIP
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold bg-zinc-100 text-zinc-700 uppercase tracking-wider">
@@ -2039,7 +2288,7 @@ export function Strategies() {
                     </div>
                   </div>
 
-                  {/* Toggle Switch */}
+                  {/* Toggle Switch & Controls */}
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -2066,6 +2315,34 @@ export function Strategies() {
                   </div>
                 </div>
 
+                {/* Circuit Breaker & Status Notification Banner */}
+                {s.circuitBreakerTriggered && (
+                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <div>
+                        <span className="font-bold">Circuit Breaker Halted:</span> {s.circuitBreakerReason || 'Consecutive loss threshold reached.'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateStrategy(s.id, { circuitBreakerTriggered: false, consecutiveLosses: 0, enabled: true })
+                      }
+                      className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg font-semibold shrink-0 text-[11px] transition-colors"
+                    >
+                      Reset & Re-arm
+                    </button>
+                  </div>
+                )}
+
+                {isMarketPaused && !s.circuitBreakerTriggered && (
+                  <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+                    <Pause className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Market {s.asset} is currently paused by operator. Bot is standing by.</span>
+                  </div>
+                )}
+
                 {/* Quantitative Signals Ribbon */}
                 {ind && (
                   <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70 space-y-2">
@@ -2073,7 +2350,17 @@ export function Strategies() {
                       <div className="flex items-center gap-1.5">
                         <Activity className="w-3.5 h-3.5 text-indigo-600" />
                         <span className="font-semibold text-zinc-700">Market Regime:</span>
-                        <span className="font-medium text-zinc-900">{ind.regime}</span>
+                        <span
+                          className={`font-semibold ${
+                            ind.regime === 'Bullish Expansion'
+                              ? 'text-emerald-600'
+                              : ind.regime === 'Bearish Breakdown'
+                              ? 'text-rose-600'
+                              : 'text-zinc-900'
+                          }`}
+                        >
+                          {ind.regime}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-zinc-500 font-medium">Alpha Conviction:</span>
@@ -2124,13 +2411,17 @@ export function Strategies() {
                         </span>
                       </div>
                       <div className="bg-white px-2 py-1 rounded-lg border border-zinc-200 flex justify-between items-center">
-                        <span className="text-zinc-500">ATR Squeeze</span>
+                        <span className="text-zinc-500">Consecutive Losses</span>
                         <span
-                          className={`font-mono font-semibold ${
-                            ind.bb?.isSqueeze ? 'text-amber-600' : 'text-emerald-600'
+                          className={`font-mono font-bold ${
+                            consecutiveLosses >= maxConsecutive
+                              ? 'text-rose-600'
+                              : consecutiveLosses > 0
+                              ? 'text-amber-600'
+                              : 'text-emerald-600'
                           }`}
                         >
-                          {ind.bb?.isSqueeze ? 'Squeezing' : 'Normal'}
+                          {consecutiveLosses} / {maxConsecutive}
                         </span>
                       </div>
                     </div>
@@ -2139,14 +2430,16 @@ export function Strategies() {
 
                 {/* Strategy Mechanism Description */}
                 <p className="text-xs text-zinc-600 leading-relaxed">
+                  {s.kind === 'titan_adaptive' &&
+                    'Flagship institutional multi-regime quantitative engine: Detects bull trends, low-volatility ranges, and volatility squeezes. Automatically blocks buy orders during bear market breakdowns, enforces Kelly sizing, and locks profits via dynamic ATR brackets.'}
                   {s.kind === 'vwap_trend' &&
-                    'Accumulates on institutional pullbacks towards Volume Weighted Average Price (VWAP) with bullish EMA alignment, locking profits with dynamic 2.8x ATR profit brackets.'}
+                    'Accumulates on institutional pullbacks towards Volume Weighted Average Price (VWAP) with bullish EMA alignment, locking profits with dynamic 3.0x ATR profit brackets.'}
                   {s.kind === 'breakout_volatility' &&
                     'Detects low-volatility Bollinger Squeezes followed by explosive volume expansion, firing high-velocity momentum orders with trailing profit ratchets.'}
                   {s.kind === 'ai_multi_factor' &&
                     'Synthesizes multi-factor trend, volatility, and volume indicators into a statistical conviction score, executing only when statistical win probability exceeds 70%.'}
                   {s.kind === 'grid_scalp' &&
-                    'Calculates dynamic ATR micro-grids to harvest continuous volatility profits between Bollinger bands, capturing rapid market oscillations.'}
+                    'Calculates dynamic ATR micro-grids to harvest continuous volatility profits between Bollinger bands, capturing rapid market oscillations with anti-falling-knife protection.'}
                   {s.kind === 'momentum' &&
                     'Enters when 10-period SMA expands above 30-period SMA with positive MACD histogram, locking gains as trend advances.'}
                   {s.kind === 'mean_reversion' &&
@@ -2201,13 +2494,13 @@ export function Strategies() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="grid grid-cols-4 gap-2 text-xs">
                     <div>
                       <span className="text-[10px] text-zinc-500 block">Take-Profit (%)</span>
                       <input
                         type="number"
                         step="0.5"
-                        value={s.targetProfitPct ?? 6.0}
+                        value={s.targetProfitPct ?? 5.5}
                         onChange={(e) => updateStrategy(s.id, { targetProfitPct: Number(e.target.value) })}
                         className="w-full mt-0.5 px-2 py-1 text-xs font-mono bg-white border border-zinc-200 rounded-lg outline-none font-semibold text-zinc-900"
                       />
@@ -2217,7 +2510,7 @@ export function Strategies() {
                       <input
                         type="number"
                         step="0.5"
-                        value={s.trailingStopPct ?? 2.0}
+                        value={s.trailingStopPct ?? 2.2}
                         onChange={(e) => updateStrategy(s.id, { trailingStopPct: Number(e.target.value) })}
                         className="w-full mt-0.5 px-2 py-1 text-xs font-mono bg-white border border-zinc-200 rounded-lg outline-none font-semibold text-zinc-900"
                       />
@@ -2229,9 +2522,22 @@ export function Strategies() {
                         onChange={(e) => updateStrategy(s.id, { cooldownSec: Number(e.target.value) })}
                         className="w-full mt-0.5 px-2 py-1 text-xs bg-white border border-zinc-200 rounded-lg outline-none font-medium"
                       >
-                        <option value={15}>15s</option>
-                        <option value={30}>30s</option>
                         <option value={60}>60s</option>
+                        <option value={120}>120s</option>
+                        <option value={180}>180s</option>
+                        <option value={300}>300s</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block">Max Losses</span>
+                      <select
+                        value={s.maxConsecutiveLossesAllowed ?? 2}
+                        onChange={(e) => updateStrategy(s.id, { maxConsecutiveLossesAllowed: Number(e.target.value) })}
+                        className="w-full mt-0.5 px-2 py-1 text-xs bg-white border border-zinc-200 rounded-lg outline-none font-medium"
+                      >
+                        <option value={1}>1 Loss</option>
+                        <option value={2}>2 Losses</option>
+                        <option value={3}>3 Losses</option>
                       </select>
                     </div>
                   </div>
@@ -2243,10 +2549,24 @@ export function Strategies() {
                 <div className="flex items-center gap-1.5">
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      s.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-300'
+                      s.circuitBreakerTriggered
+                        ? 'bg-rose-500'
+                        : isMarketPaused
+                        ? 'bg-amber-500'
+                        : s.enabled
+                        ? 'bg-emerald-500 animate-pulse'
+                        : 'bg-zinc-300'
                     }`}
                   />
-                  <span>{s.enabled ? 'Executing on ticks' : 'Engine Idle'}</span>
+                  <span>
+                    {s.circuitBreakerTriggered
+                      ? 'Circuit Breaker Tripped'
+                      : isMarketPaused
+                      ? 'Market Paused'
+                      : s.enabled
+                      ? 'Active & Scanning Ticks'
+                      : 'Engine Idle'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   {s.lastExecutedAt && (
@@ -2276,7 +2596,7 @@ export function Strategies() {
               <div>
                 <h3 className="text-base font-bold text-zinc-900">Deploy New Trading Engine</h3>
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  Configure and activate an autonomous quantitative strategy for any market.
+                  Configure and activate an autonomous quantitative strategy with loss minimization safeguards.
                 </p>
               </div>
               <button
@@ -2316,10 +2636,18 @@ export function Strategies() {
                     onChange={(e) => {
                       const k = e.target.value as StrategyKind;
                       setNewKind(k);
-                      setNewName(`${newAsset} ${k.replace('_', ' ').toUpperCase()}`);
+                      if (k === 'titan_adaptive') {
+                        setNewName(`${newAsset} Titan Adaptive Multi-Regime Sentinel`);
+                        setNewCooldown(180);
+                        setNewTp(5.5);
+                        setNewSl(2.2);
+                      } else {
+                        setNewName(`${newAsset} ${k.replace('_', ' ').toUpperCase()}`);
+                      }
                     }}
                     className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl outline-none font-medium"
                   >
+                    <option value="titan_adaptive">👑 Titan Adaptive Multi-Regime Sentinel (Flagship)</option>
                     <option value="ai_multi_factor">Composite Alpha Quant (AI Multi-Factor)</option>
                     <option value="vwap_trend">Institutional VWAP Trend Engine</option>
                     <option value="breakout_volatility">Adaptive Volatility Squeeze Breakout</option>
@@ -2378,16 +2706,16 @@ export function Strategies() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-zinc-700">Tick Cooldown</label>
+                  <label className="text-xs font-semibold text-zinc-700">Execution Cooldown</label>
                   <select
                     value={newCooldown}
                     onChange={(e) => setNewCooldown(Number(e.target.value))}
                     className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl outline-none font-medium"
                   >
-                    <option value={15}>15 Seconds</option>
-                    <option value={20}>20 Seconds</option>
-                    <option value={30}>30 Seconds</option>
                     <option value={60}>60 Seconds</option>
+                    <option value={120}>120 Seconds</option>
+                    <option value={180}>180 Seconds (Recommended)</option>
+                    <option value={300}>300 Seconds</option>
                   </select>
                 </div>
               </div>

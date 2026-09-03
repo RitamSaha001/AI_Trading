@@ -403,9 +403,27 @@ export function checkPendingOrders(
       closeReason = `Take-Profit reached at ${money(m.price)} (Target: ${money(lot.takeProfit)})`;
     } else if (lot.stopLoss && m.price <= lot.stopLoss) {
       closeReason = `Stop-Loss triggered at ${money(m.price)} (Stop: ${money(lot.stopLoss)})`;
-    } else if (lot.stopLoss && m.price > lot.price * 1.02) {
-      // Dynamic Trailing Stop Ratchet: Protect accumulated unrealized profits as price runs up
-      const dynamicTrailStop = +(m.price * 0.98).toFixed(2);
+    } else if (lot.stopLoss && m.price > lot.price * 1.025) {
+      // Dynamic Trailing Stop Ratchet:
+      // Give adequate breathing room (3.5% or wider) so normal noise doesn't trigger early stops,
+      // while locking in breakeven (+0.2% fee coverage) once position reaches >= 2.5% gain.
+      const gainRatio = (m.price - lot.price) / lot.price;
+      let dynamicTrailStop = lot.stopLoss;
+
+      // Breakeven lock once in >= 2.5% profit
+      const breakevenFloor = +(lot.price * 1.002).toFixed(2);
+      if (breakevenFloor > dynamicTrailStop) {
+        dynamicTrailStop = breakevenFloor;
+      }
+
+      // Trailing ratchet with 3.5% breathing room on sustained runs
+      if (gainRatio >= 0.04) {
+        const profitTrailingStop = +(m.price * 0.965).toFixed(2);
+        if (profitTrailingStop > dynamicTrailStop) {
+          dynamicTrailStop = profitTrailingStop;
+        }
+      }
+
       if (dynamicTrailStop > lot.stopLoss) {
         lot.stopLoss = dynamicTrailStop;
         changed = true;
@@ -431,8 +449,26 @@ export function checkPendingOrders(
           strat.totalPnl = (strat.totalPnl || 0) + tradePnl;
           if (tradePnl > 0) {
             strat.winCount = (strat.winCount || 0) + 1;
+            strat.consecutiveLosses = 0;
           } else {
             strat.lossCount = (strat.lossCount || 0) + 1;
+            strat.consecutiveLosses = (strat.consecutiveLosses || 0) + 1;
+
+            // Loss Minimization Circuit Breaker: auto-pause strategy on consecutive losses
+            const maxAllowed = strat.maxConsecutiveLossesAllowed || 2;
+            if (strat.consecutiveLosses >= maxAllowed) {
+              strat.enabled = false;
+              strat.circuitBreakerTriggered = true;
+              strat.circuitBreakerReason = `Auto-paused by Loss Sentinel: ${strat.consecutiveLosses} consecutive losses (${money(tradePnl)} P&L). Capital protected.`;
+
+              state.notifications.unshift({
+                id: 'cb_' + Math.random().toString(36).substring(2, 8),
+                ts: Date.now(),
+                title: `Circuit Breaker: ${strat.name}`,
+                body: `Auto-paused after ${strat.consecutiveLosses} consecutive losses. Capital protected from adverse market regime.`,
+                type: 'risk',
+              });
+            }
           }
         }
       }

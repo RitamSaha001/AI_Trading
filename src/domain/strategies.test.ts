@@ -192,4 +192,112 @@ describe('Autonomous Algorithmic Strategy Suite', () => {
     expect(resOverbought.executed).toBe(false);
     expect(resOverbought.message).toContain('overbought');
   });
+
+  it('halts strategy when per-market pause is active for that asset', () => {
+    const state = freshState(50000, 'clean');
+    state.pausedMarkets = ['BTC'];
+    const markets = { BTC: createMockMarket(65000, 'BTC') } as any;
+
+    const strat: StrategyConfig = {
+      id: 'test_btc_sentinel',
+      asset: 'BTC',
+      kind: 'titan_adaptive',
+      name: 'Titan Sentinel',
+      enabled: true,
+      maxAllocation: 0.25,
+      cooldownSec: 0,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      params: {},
+    };
+
+    const res = evaluateStrategy(strat, state, markets);
+    expect(res.executed).toBe(false);
+    expect(res.message).toContain('paused by operator');
+  });
+
+  it('halts strategy when consecutive loss circuit breaker is triggered', () => {
+    const state = freshState(50000, 'clean');
+    const markets = { BTC: createMockMarket(65000, 'BTC') } as any;
+
+    const strat: StrategyConfig = {
+      id: 'test_btc_breaker',
+      asset: 'BTC',
+      kind: 'titan_adaptive',
+      name: 'Titan Sentinel',
+      enabled: true,
+      circuitBreakerTriggered: true,
+      circuitBreakerReason: 'Consecutive loss limit reached (2 losses)',
+      maxAllocation: 0.25,
+      cooldownSec: 0,
+      tradesExecuted: 2,
+      totalPnl: -120,
+      realizedPnl: -120,
+      feesPaid: 15,
+      params: {},
+    };
+
+    const res = evaluateStrategy(strat, state, markets);
+    expect(res.executed).toBe(false);
+    expect(res.message).toContain('Circuit Breaker Active');
+  });
+
+  it('blocks new strategy buys when 15% cash liquidity floor is violated', () => {
+    const state = freshState(50000, 'clean');
+    state.positions = { BTC: 1.0 }; // $65,000 position
+    state.cash = 4000; // Equity = $69,000; cash ratio = 4,000 / 69,000 = 5.8% (< 15%)
+    const markets = { BTC: createMockMarket(65000, 'BTC') } as any;
+
+    const strat: StrategyConfig = {
+      id: 'test_btc_floor',
+      asset: 'BTC',
+      kind: 'titan_adaptive',
+      name: 'Titan Sentinel',
+      enabled: true,
+      maxAllocation: 0.85,
+      cooldownSec: 0,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      params: {},
+    };
+
+    const res = evaluateStrategy(strat, state, markets);
+    expect(res.executed).toBe(false);
+    expect(res.message).toContain('15% cash liquidity floor');
+  });
+
+  it('executes Titan Adaptive strategy with dynamic ATR brackets and stops when conditions align', () => {
+    const state = freshState(50000, 'clean');
+    const market = createMockMarket(65000, 'BTC');
+    const markets = { BTC: market } as any;
+
+    const strat: StrategyConfig = {
+      id: 'titan_btc_live',
+      asset: 'BTC',
+      kind: 'titan_adaptive',
+      name: 'Titan Adaptive BTC',
+      enabled: true,
+      maxAllocation: 0.35,
+      cooldownSec: 0,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      consecutiveLosses: 0,
+      maxConsecutiveLossesAllowed: 2,
+      params: { minAlphaScore: -100, rsiThresholdBuy: 100, regimeFilterEnabled: false },
+    };
+
+    const res = evaluateStrategy(strat, state, markets);
+    expect(res.executed).toBe(true);
+    expect(res.type).toBe('buy');
+    expect(res.orderResult?.ok).toBe(true);
+    expect(res.orderResult?.order?.takeProfit).toBeGreaterThan(65000);
+    expect(res.orderResult?.order?.stopLoss).toBeLessThan(65000);
+    expect(strat.tradesExecuted).toBe(1);
+  });
 });

@@ -15,15 +15,32 @@ export interface StrategyExecutionResult {
 
 /**
  * Evaluates an algorithmic strategy against real market signals, allocation caps, cooldowns,
- * and dynamically attaches institutional ATR profit targets and stop-loss brackets.
+ * capital defense constraints (15% cash reserve floor, consecutive loss circuit breakers,
+ * per-market pause state), and dynamically attaches institutional ATR profit targets and stop-loss brackets.
  */
 export function evaluateStrategy(
   strategy: StrategyConfig,
   state: AppState,
   markets: Record<Asset, Market | undefined>
 ): StrategyExecutionResult {
+  // 1. Basic Status & Circuit Breaker Gates
   if (!strategy.enabled) {
     return { executed: false, message: 'Strategy disabled' };
+  }
+
+  if (strategy.circuitBreakerTriggered) {
+    return {
+      executed: false,
+      message: `Circuit Breaker Active: ${strategy.circuitBreakerReason || 'Halted after consecutive losses'}`,
+    };
+  }
+
+  // 2. Per-Market Master Pause Gate
+  if (state.pausedMarkets && state.pausedMarkets.includes(strategy.asset)) {
+    return {
+      executed: false,
+      message: `Market ${strategy.asset} is paused by operator. All automated trading suspended.`,
+    };
   }
 
   const mm = markets[strategy.asset];
@@ -31,18 +48,25 @@ export function evaluateStrategy(
     return { executed: false, message: 'No market quote' };
   }
 
+  // 3. Execution Cooldown Check
   const now = Date.now();
   const lastExec = strategy.lastExecutedAt || 0;
   if (now - lastExec < strategy.cooldownSec * 1000) {
     return { executed: false, message: 'Cooldown active' };
   }
 
+  // 4. Portfolio Telemetry & Capital Defense Invariants
   const pv = portfolioValue(state, markets);
   const currentVal = positionValue(state, markets, strategy.asset);
   const maxAllowedVal = pv * (strategy.maxAllocation || 0.25);
   const availableCash = getAvailableCash(state);
-  const currentHolding = state.positions[strategy.asset] || 0;
   const availableHolding = getAvailablePosition(state, strategy.asset);
+
+  const cashRatio = state.cash / Math.max(1, pv);
+  const isLossPreventionStrict = state.lossPreventionMode !== 'aggressive';
+
+  // Strict 15% Cash Liquidity Floor: Halt any new buy allocations if cash is depleted
+  const isCashFloorViolated = isLossPreventionStrict && cashRatio < 0.15;
 
   const ind: TechnicalIndicators = indicators(mm.history, mm.candles);
   const currentPrice = mm.price;
@@ -69,7 +93,7 @@ export function evaluateStrategy(
   // Helper to calculate dynamic take-profit and stop-loss brackets
   const calculateBrackets = (
     entryPrice: number,
-    tpMultiplier = 2.8,
+    tpMultiplier = 3.2,
     slMultiplier = 1.3,
     customTpPct?: number,
     customSlPct?: number
@@ -92,10 +116,112 @@ export function evaluateStrategy(
     return { takeProfit: tp, stopLoss: sl };
   };
 
+  // Check if market is in severe structural downtrend (Bearish Regime Gate)
+  const regimeFilterActive = strategy.params.regimeFilterEnabled !== false;
+  const isBearishRegime =
+    regimeFilterActive &&
+    (ind.regime === 'Bearish Breakdown' ||
+      (ind.score <= -1 && ind.rsi < 40) ||
+      ind.emaRibbon.alignment === 'bearish');
+
+  // =========================================================================
+  // 0. THE TITAN ADAPTIVE MULTI-REGIME QUANTITATIVE SENTINEL (WORLD-CLASS FLAGSHIP)
+  // =========================================================================
+  if (strategy.kind === 'titan_adaptive') {
+    // 1. Invalidation / Structural Breakdown Exit (Protects existing position before SL hit)
+    if (isBearishRegime && availableHolding > 0 && ind.score <= -2) {
+      const trimQty = +(availableHolding * 0.4).toFixed(4);
+      if (trimQty > 0) {
+        const r = executeOrder(state, markets, 'sell', strategy.asset, trimQty, {
+          auto: true,
+          strategyName: strategy.name,
+        });
+        if (r.ok && r.order) {
+          return recordExecution(
+            r,
+            'sell',
+            `Titan Defensive Trim: Sold ${formatQty(trimQty, strategy.asset)} ${strategy.asset} due to structural regime breakdown (Score: ${ind.score})`
+          );
+        }
+      }
+    }
+
+    // 2. Buy Gate checks
+    if (isCashFloorViolated) {
+      return { executed: false, message: 'Titan Sentinel: BUY BLOCKED (Preserving mandatory 15% cash liquidity floor)' };
+    }
+    if (isBearishRegime) {
+      return { executed: false, message: 'Titan Sentinel: BUY BLOCKED (Market in Bearish Downtrend Regime)' };
+    }
+
+    // 3. Multi-Regime Signal Evaluation
+    const vwapObj = ind.vwap;
+    const isAboveVwap = vwapObj ? currentPrice >= vwapObj.vwap * 0.995 : true;
+    const hasSufficientVolume = mm.volume24h > 10000;
+    const isNotOverbought = ind.rsi <= (strategy.params.rsiThresholdBuy ?? 68);
+    const hasAlphaConviction = ind.alphaScore >= (strategy.params.minAlphaScore ?? 30);
+    const isEmaConstructive = !regimeFilterActive || ind.emaRibbon.alignment !== 'bearish';
+
+    // Quantitative Entry Alignment:
+    // Requires non-bearish regime, above VWAP support, solid alpha score, and healthy RSI bandwidth
+    if (
+      isAboveVwap &&
+      isNotOverbought &&
+      hasAlphaConviction &&
+      isEmaConstructive &&
+      hasSufficientVolume &&
+      currentVal < maxAllowedVal
+    ) {
+      const remainingAllocation = maxAllowedVal - currentVal;
+      // Fractional Kelly Volatility-Targeted Sizing (max 20% of cash, scaled by win probability)
+      const kellyScale = Math.min(0.2, (ind.winProbabilityPct / 100) * 0.22);
+      const budget = Math.min(remainingAllocation, availableCash * kellyScale);
+
+      if (budget >= 15) {
+        const qty = +(budget / currentPrice).toFixed(4);
+        const brackets = calculateBrackets(
+          currentPrice,
+          strategy.params.atrMultiplierTP ?? 3.5,
+          strategy.params.atrMultiplierSL ?? 1.35,
+          strategy.targetProfitPct ?? 5.5,
+          strategy.trailingStopPct ?? 2.2
+        );
+
+        const r = executeOrder(state, markets, 'buy', strategy.asset, qty, {
+          auto: true,
+          strategyName: strategy.name,
+          takeProfit: brackets.takeProfit,
+          stopLoss: brackets.stopLoss,
+        });
+
+        if (r.ok && r.order) {
+          return recordExecution(
+            r,
+            'buy',
+            `Titan Adaptive Execution: ${formatQty(qty, strategy.asset)} ${strategy.asset} @ ${money(currentPrice)} (Alpha: +${ind.alphaScore}, WinProb: ${ind.winProbabilityPct}%, TP: ${money(brackets.takeProfit)}, SL: ${money(brackets.stopLoss)})`
+          );
+        }
+      }
+    }
+
+    return {
+      executed: false,
+      message: `Titan Sentinel: Market scanning (Alpha: ${ind.alphaScore}, RSI: ${ind.rsi.toFixed(1)}, VWAP: ${isAboveVwap ? 'OK' : 'BELOW'})`,
+    };
+  }
+
   // =========================================================================
   // 1. INSTITUTIONAL VWAP TREND ACCUMULATION ENGINE
   // =========================================================================
   if (strategy.kind === 'vwap_trend') {
+    // Loss Prevention: Don't buy if cash floor violated or market is bearish
+    if (isCashFloorViolated) {
+      return { executed: false, message: 'VWAP Trend: BUY BLOCKED (Preserving 15% cash liquidity floor)' };
+    }
+    if (isBearishRegime) {
+      return { executed: false, message: 'VWAP Trend: BUY BLOCKED (Market in Bearish Regime)' };
+    }
+
     const vwapObj = ind.vwap;
     const isAboveVwap = vwapObj ? currentPrice >= vwapObj.vwap * 0.996 : ind.score >= 0;
     const isPullbackSweetSpot = vwapObj
@@ -105,7 +231,7 @@ export function evaluateStrategy(
     // Entry condition: Price retesting VWAP with bullish momentum alignment
     if (isAboveVwap && isPullbackSweetSpot && currentVal < maxAllowedVal) {
       const remainingAllocation = maxAllowedVal - currentVal;
-      const budget = Math.min(remainingAllocation, availableCash * 0.25);
+      const budget = Math.min(remainingAllocation, availableCash * 0.20);
       if (budget >= 15) {
         const qty = +(budget / currentPrice).toFixed(4);
         const brackets = calculateBrackets(
@@ -156,14 +282,21 @@ export function evaluateStrategy(
   // 2. ADAPTIVE VOLATILITY & SQUEEZE BREAKOUT ENGINE
   // =========================================================================
   if (strategy.kind === 'breakout_volatility') {
+    if (isCashFloorViolated) {
+      return { executed: false, message: 'Breakout Engine: BUY BLOCKED (Preserving 15% cash liquidity floor)' };
+    }
+    if (isBearishRegime) {
+      return { executed: false, message: 'Breakout Engine: BUY BLOCKED (Market in Bearish Regime)' };
+    }
+
     const isSqueeze = ind.bb?.isSqueeze ?? false;
-    const isBreakout = ind.bb && currentPrice >= ind.bb.upper * 0.998 && ind.rsi > 58;
+    const isBreakout = ind.bb && currentPrice >= ind.bb.upper * 0.998 && ind.rsi > 56 && ind.rsi < 72;
     const hasMomentumVolume = (ind.macd && ind.macd.histogram > 0) || ind.score >= 1;
 
     // Trigger explosive breakout entry
     if ((isBreakout || (isSqueeze && hasMomentumVolume)) && currentVal < maxAllowedVal) {
       const remainingAllocation = maxAllowedVal - currentVal;
-      const budget = Math.min(remainingAllocation, availableCash * 0.28);
+      const budget = Math.min(remainingAllocation, availableCash * 0.22);
       if (budget >= 15) {
         const qty = +(budget / currentPrice).toFixed(4);
         const brackets = calculateBrackets(
@@ -196,13 +329,12 @@ export function evaluateStrategy(
   // 3. COMPOSITE MULTI-FACTOR ALPHA QUANT ENGINE
   // =========================================================================
   if (strategy.kind === 'ai_multi_factor') {
-    const minAlpha = strategy.params.minAlphaScore ?? 42;
+    const minAlpha = strategy.params.minAlphaScore ?? 40;
 
-    // High conviction buy signal: Multi-factor score meets statistical hurdle
-    if (ind.alphaScore >= minAlpha && currentVal < maxAllowedVal) {
+    // Buy gate checks
+    if (!isCashFloorViolated && ind.alphaScore >= minAlpha && currentVal < maxAllowedVal) {
       const remainingAllocation = maxAllowedVal - currentVal;
-      // Conviction scaling: Higher alpha score deploys higher cash proportion
-      const convictionMultiplier = 0.15 + (ind.alphaScore / 100) * 0.2;
+      const convictionMultiplier = Math.min(0.20, 0.10 + (Math.max(0, ind.alphaScore) / 100) * 0.15);
       const budget = Math.min(remainingAllocation, availableCash * convictionMultiplier);
 
       if (budget >= 15) {
@@ -233,7 +365,7 @@ export function evaluateStrategy(
     }
 
     // Sell / Capital preservation trim on alpha collapse
-    if (ind.alphaScore <= -40 && availableHolding > 0) {
+    if (ind.alphaScore <= -35 && availableHolding > 0) {
       const trimQty = +(availableHolding * 0.4).toFixed(4);
       if (trimQty > 0) {
         const r = executeOrder(state, markets, 'sell', strategy.asset, trimQty, {
@@ -255,10 +387,18 @@ export function evaluateStrategy(
   // 4. DYNAMIC MULTI-TIER ATR GRID SCALPER
   // =========================================================================
   if (strategy.kind === 'grid_scalp') {
+    if (isCashFloorViolated) {
+      return { executed: false, message: 'Grid Scalper: BUY BLOCKED (Preserving 15% cash liquidity floor)' };
+    }
+    // Anti-Falling Knife: Never grid-buy during a structural market breakdown!
+    if (isBearishRegime) {
+      return { executed: false, message: 'Grid Scalper: BUY BLOCKED (Market in Bearish Downtrend - Anti-falling knife active)' };
+    }
+
     const percentB = ind.bb?.percentB ?? 0.5;
 
-    // Grid Buy: price in lower 30% of Bollinger band or Stochastic deeply oversold
-    if ((percentB <= 0.3 || (ind.stochastic && ind.stochastic.k < 25)) && currentVal < maxAllowedVal) {
+    // Grid Buy: only in healthy range consolidation where %B is in lower quartile but not zero
+    if (percentB <= 0.28 && percentB >= 0.05 && ind.rsi >= 32 && currentVal < maxAllowedVal) {
       const remainingAllocation = maxAllowedVal - currentVal;
       const budget = Math.min(remainingAllocation, availableCash * 0.15);
 
@@ -267,7 +407,7 @@ export function evaluateStrategy(
         const brackets = calculateBrackets(
           currentPrice,
           1.8,
-          1.0,
+          1.1,
           strategy.targetProfitPct ?? 3.2,
           strategy.trailingStopPct ?? 1.5
         );
@@ -312,11 +452,18 @@ export function evaluateStrategy(
   // 5. ENHANCED MOMENTUM TREND-FOLLOWING ENGINE
   // =========================================================================
   if (strategy.kind === 'momentum') {
+    if (isCashFloorViolated) {
+      return { executed: false, message: 'Momentum: BUY BLOCKED (Preserving 15% cash liquidity floor)' };
+    }
+    if (isBearishRegime) {
+      return { executed: false, message: 'Momentum: BUY BLOCKED (Market in Bearish Regime)' };
+    }
+
     const buyRsi = strategy.params.rsiThresholdBuy ?? 68;
-    const isBullish = ind.score >= 1 && ind.rsi < buyRsi && (ind.emaRibbon.alignment !== 'bearish');
+    const isBullish = ind.score >= 1 && ind.rsi > 45 && ind.rsi < buyRsi && ind.emaRibbon.alignment !== 'bearish';
 
     if (isBullish && currentVal < maxAllowedVal) {
-      const budget = Math.min(maxAllowedVal - currentVal, availableCash * 0.22);
+      const budget = Math.min(maxAllowedVal - currentVal, availableCash * 0.20);
       if (budget >= 15) {
         const qty = +(budget / currentPrice).toFixed(4);
         const brackets = calculateBrackets(
@@ -368,15 +515,22 @@ export function evaluateStrategy(
   // 6. ENHANCED MEAN REVERSION / BOLLINGER %B EXHAUSTION
   // =========================================================================
   if (strategy.kind === 'mean_reversion') {
+    if (isCashFloorViolated) {
+      return { executed: false, message: 'Mean Reversion: BUY BLOCKED (Preserving 15% cash liquidity floor)' };
+    }
+    // Mean reversion only succeeds in consolidating or expanding markets, not freefall!
+    if (ind.score <= -2 && ind.rsi < 30) {
+      return { executed: false, message: 'Mean Reversion: BUY BLOCKED (Freefall breakdown hazard)' };
+    }
+
     const buyRsi = strategy.params.rsiThresholdBuy ?? 35;
-    const isOversold = (ind.bb && currentPrice <= ind.bb.lower * 1.002) || ind.rsi <= buyRsi;
+    const isOversold = (ind.bb && currentPrice <= ind.bb.lower * 1.005 && ind.bb.percentB >= 0.05) || (ind.rsi <= buyRsi && ind.rsi >= 25);
 
     if (isOversold && currentVal < maxAllowedVal) {
-      const budget = Math.min(maxAllowedVal - currentVal, availableCash * 0.22);
+      const budget = Math.min(maxAllowedVal - currentVal, availableCash * 0.18);
       if (budget >= 15) {
         const qty = +(budget / currentPrice).toFixed(4);
-        // Target is the middle Bollinger band / 20-period mean
-        const targetTp = ind.bb ? ind.bb.middle : currentPrice * 1.045;
+        const targetTp = ind.bb ? ind.bb.middle : currentPrice * 1.04;
         const targetSl = +(Math.max(0.01, currentPrice - effectiveAtr * 1.2)).toFixed(2);
 
         const r = executeOrder(state, markets, 'buy', strategy.asset, qty, {
@@ -401,11 +555,15 @@ export function evaluateStrategy(
   // 7. SMART VALUE-WEIGHTED DCA (DOLLAR-COST AVERAGING)
   // =========================================================================
   if (strategy.kind === 'dca') {
+    if (isCashFloorViolated) {
+      return { executed: false, message: 'Smart DCA: Paused (Preserving mandatory 15% cash liquidity floor)' };
+    }
+
     const baseDcaAmount = strategy.params.dcaAmountUsd ?? 100;
 
     // Smart Value Multiplier:
     // If deeply oversold (RSI < 35), increase purchase size to 1.6x
-    // If overbought (RSI > 70), pause DCA to avoid buying the top
+    // If overbought (RSI > 70), pause DCA to avoid buying euphoric peaks
     let dcaMultiplier = 1.0;
     if (ind.rsi < 35) {
       dcaMultiplier = 1.6;
@@ -417,7 +575,7 @@ export function evaluateStrategy(
     if (availableCash >= dcaAmount && currentVal < maxAllowedVal) {
       const qty = +(dcaAmount / currentPrice).toFixed(4);
       if (qty > 0) {
-        const brackets = calculateBrackets(currentPrice, 3.0, 1.5, 6.0, 3.0);
+        const brackets = calculateBrackets(currentPrice, 3.2, 1.5, 6.5, 3.0);
         const r = executeOrder(state, markets, 'buy', strategy.asset, qty, {
           auto: true,
           strategyName: strategy.name,
