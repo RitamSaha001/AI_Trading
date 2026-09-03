@@ -154,37 +154,34 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/20 backdrop-blur-md transition-all duration-300"
+      className="fixed inset-0 z-50 flex justify-end bg-black/25 transition-opacity duration-300"
       onMouseDown={(e) => e.currentTarget === e.target && onClose()}
     >
-      <aside className="relative flex flex-col w-full max-w-[550px] h-full liquid-glass border-l border-white/70 shadow-[-20px_0_60px_rgba(0,0,0,0.06)] text-zinc-900 animate-in slide-in-from-right duration-300 overflow-hidden">
-        {/* Apple Minimalist Header */}
-        <header className="flex items-center justify-between px-6 py-4.5 border-b border-black/[0.04] bg-white/40 backdrop-blur-2xl">
+      <aside className="relative flex flex-col w-full max-w-[540px] h-full bg-white border-l border-zinc-200/80 shadow-[-16px_0_48px_rgba(0,0,0,0.06)] text-zinc-900 animate-in slide-in-from-right duration-300 overflow-hidden">
+        {/* Minimalist Header */}
+        <header className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 bg-white/95">
           <div className="flex items-center gap-3">
-            <div className="relative flex items-center justify-center">
-              <div className="w-9 h-9 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-sm relative z-10">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <div className="absolute inset-0 rounded-2xl siri-aurora-glow scale-125 pointer-events-none" />
+            <div className="w-8 h-8 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-2xs">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold tracking-tight text-zinc-900">Nexus Intelligence</h2>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-800 rounded-full border border-emerald-500/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-800 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   Active
                 </span>
-                <span className="text-[10px] font-mono text-zinc-400 bg-black/[0.03] px-2 py-0.5 rounded-full border border-black/[0.04]">
+                <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">
                   {resolveGemini3Model(state.settings.geminiModel).replace('gemini-', '')}
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400 tracking-tight">Executive Autonomous Quant &amp; Risk Sentinel</p>
+              <p className="text-[11px] text-zinc-400 tracking-tight">Quantitative Desk &amp; Risk Sentinel</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="w-8 h-8 rounded-full bg-black/[0.03] hover:bg-black/[0.08] text-zinc-400 hover:text-zinc-800 flex items-center justify-center transition-all active:scale-95"
+              className="w-7 h-7 rounded-full text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 flex items-center justify-center transition-all active:scale-95"
               onClick={onClose}
               title="Close Nexus AI"
             >
@@ -198,16 +195,13 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
           {/* Welcome State when fresh */}
           {chatHistory.length <= 1 && (
             <div className="my-auto py-8 px-2 text-center space-y-4 animate-in fade-in duration-300">
-              <div className="relative inline-flex items-center justify-center">
-                <div className="w-12 h-12 rounded-3xl bg-zinc-950 text-white flex items-center justify-center shadow-lg relative z-10">
-                  <Sparkles className="w-5 h-5 text-white" />
-                </div>
-                <div className="absolute inset-0 rounded-3xl siri-aurora-glow scale-150 pointer-events-none" />
+              <div className="w-11 h-11 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-xs mx-auto">
+                <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div className="space-y-1">
                 <h3 className="text-sm font-semibold text-zinc-900 tracking-tight">Autonomous Financial Intelligence</h3>
                 <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-                  Institutional reasoning powered by Gemini 3 and deterministic quantitative risk algorithms.
+                  Institutional reasoning powered by Gemini 3 with offline local neural engine fallback.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-left">
@@ -216,7 +210,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     key={idx}
                     type="button"
                     onClick={() => handleSend(q.prompt)}
-                    className="p-3 rounded-2xl liquid-glass-subtle hover:bg-white/90 border border-white/80 hover:border-black/[0.08] transition-all group space-y-1 text-left shadow-xs active:scale-[0.99]"
+                    className="p-3 rounded-xl bg-zinc-50 hover:bg-zinc-100/90 border border-zinc-200/60 transition-all group space-y-1 text-left shadow-2xs active:scale-[0.99]"
                   >
                     <span className="text-xs font-semibold text-zinc-800 group-hover:text-zinc-950 flex items-center justify-between">
                       {q.label}
@@ -238,17 +232,17 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             return (
               <div key={i} className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
                 {!isUser && (
-                  <div className="w-6 h-6 rounded-xl bg-zinc-950 text-white flex items-center justify-center flex-shrink-0 mt-1 shadow-xs">
+                  <div className="w-6 h-6 rounded-lg bg-zinc-950 text-white flex items-center justify-center flex-shrink-0 mt-1 shadow-2xs">
                     <Sparkles className="w-3 h-3 text-white" />
                   </div>
                 )}
 
                 <div className="max-w-[88%] space-y-2.5">
                   <div
-                    className={`p-4 text-[13px] leading-relaxed shadow-xs ${
+                    className={`p-4 text-[13px] leading-relaxed shadow-2xs ${
                       isUser
-                        ? 'bg-zinc-900 text-white rounded-[22px] rounded-tr-[4px] ml-auto font-normal'
-                        : 'liquid-glass-subtle text-zinc-800 border border-white/85 rounded-[24px] rounded-tl-[4px]'
+                        ? 'bg-zinc-900 text-white rounded-2xl rounded-tr-xs ml-auto font-normal'
+                        : 'bg-zinc-50/70 border border-zinc-200/70 text-zinc-800 rounded-2xl rounded-tl-xs'
                     }`}
                   >
                     {isUser ? (
@@ -260,7 +254,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
                   {/* Visual Execution Receipt ("What Nexus Did") - Apple Pay Style */}
                   {receipt && (
-                    <div className="p-4 rounded-[22px] bg-emerald-500/[0.04] border border-emerald-500/20 backdrop-blur-xl space-y-2.5 shadow-xs animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/70 space-y-2.5 shadow-2xs animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-1.5 text-emerald-800 font-semibold text-xs tracking-tight">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -277,14 +271,14 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                       </div>
 
                       {receipt.stateDiff && (
-                        <div className="p-2.5 rounded-xl bg-emerald-500/[0.08] border border-emerald-500/20 text-[11px] font-mono font-medium text-emerald-900 flex items-start gap-2">
+                        <div className="p-2.5 rounded-xl bg-white border border-emerald-200/80 text-[11px] font-mono font-medium text-emerald-900 flex items-start gap-2 shadow-2xs">
                           <span className="text-emerald-700 font-bold whitespace-nowrap">⚡ State-Diff:</span>
                           <span className="leading-snug">{receipt.stateDiff}</span>
                         </div>
                       )}
 
                       {receipt.details && receipt.details.length > 0 && (
-                        <div className="p-2.5 rounded-xl bg-white/75 border border-emerald-500/15 space-y-1 text-[11px] font-mono text-zinc-700">
+                        <div className="p-2.5 rounded-xl bg-white border border-emerald-200/60 space-y-1 text-[11px] font-mono text-zinc-700 shadow-2xs">
                           {receipt.details.map((d: string, dIdx: number) => (
                             <div key={dIdx} className="flex items-center gap-2">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
@@ -301,7 +295,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                             go(receipt.jumpRoute as any);
                             onClose();
                           }}
-                          className="w-full py-2 px-3 text-xs font-semibold text-emerald-800 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.99]"
+                          className="w-full py-2 px-3 text-xs font-semibold text-emerald-800 bg-emerald-100/70 hover:bg-emerald-100 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.99]"
                         >
                           <span>{receipt.jumpLabel || 'Inspect in Desk'}</span>
                           <ArrowUpRight className="w-3.5 h-3.5" />
@@ -310,9 +304,9 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     </div>
                   )}
 
-                  {/* Interactive Action Proposal Card (Apple Widget Style) */}
+                  {/* Interactive Action Proposal Card */}
                   {hasAction && p && !receipt && (
-                    <div className="p-4 rounded-[24px] liquid-glass border border-white/95 shadow-sm space-y-3 animate-in fade-in duration-200">
+                    <div className="p-4 rounded-2xl bg-white border border-zinc-200/90 shadow-2xs space-y-3 animate-in fade-in duration-200">
                       {/* Proposal Header */}
                       <div className="flex items-center justify-between text-xs font-semibold">
                         <span className="flex items-center gap-2 text-zinc-900 tracking-tight">
@@ -556,12 +550,12 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
           {chatLoading && (
             <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 rounded-xl bg-zinc-950 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+              <div className="w-6 h-6 rounded-lg bg-zinc-950 text-white flex items-center justify-center flex-shrink-0 shadow-2xs">
                 <Sparkles className="w-3 h-3 text-white" />
               </div>
-              <div className="liquid-glass-subtle px-4 py-3 rounded-2xl text-xs text-zinc-500 flex items-center gap-2.5 border border-white/80 shadow-xs">
+              <div className="bg-zinc-50 border border-zinc-200/70 px-3.5 py-2 rounded-xl text-xs text-zinc-500 flex items-center gap-2 shadow-2xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-950 animate-ping" />
-                <span>Nexus is computing quantitative telemetry &amp; risk bounds...</span>
+                <span>Nexus is evaluating quantitative telemetry...</span>
               </div>
             </div>
           )}
@@ -569,9 +563,9 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Floating Capabilities Hub Menu (Opened via '+') */}
+        {/* Capabilities Hub Menu (Opened via '+') */}
         {capabilitiesOpen && (
-          <div className="mx-4 mb-2 p-4 liquid-glass-floating rounded-3xl border border-white/90 shadow-2xl space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="mx-4 mb-2 p-3.5 bg-white rounded-2xl border border-zinc-200 shadow-xl space-y-2.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-semibold text-zinc-900 tracking-tight flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-zinc-900" />
@@ -593,10 +587,10 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     key={c.id}
                     type="button"
                     onClick={() => handleSend(c.prompt)}
-                    className="p-3 rounded-2xl bg-white/70 hover:bg-white/95 border border-black/[0.04] hover:border-black/[0.08] text-left transition-all group flex flex-col justify-between shadow-xs active:scale-[0.98]"
+                    className="p-2.5 rounded-xl bg-zinc-50 hover:bg-zinc-100 border border-zinc-200/60 text-left transition-all group flex flex-col justify-between shadow-2xs active:scale-[0.98]"
                   >
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <div className="w-6 h-6 rounded-lg bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-6 h-6 rounded-lg bg-white border border-zinc-200/80 text-zinc-800 flex items-center justify-center shadow-2xs">
                         <Icon className="w-3.5 h-3.5" />
                       </div>
                       <span className="text-xs font-semibold text-zinc-900 group-hover:text-black leading-tight">
@@ -619,7 +613,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 key={idx}
                 type="button"
                 onClick={() => handleSend(q.prompt)}
-                className="flex-shrink-0 px-3 py-1.5 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 bg-white/60 hover:bg-white/90 border border-black/[0.05] rounded-full shadow-xs transition-all active:scale-[0.98]"
+                className="flex-shrink-0 px-3 py-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200/80 rounded-full transition-all active:scale-[0.98]"
               >
                 {q.label}
               </button>
@@ -627,8 +621,8 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
           </div>
         )}
 
-        {/* Input Bar with '+' Capabilities Button - Apple Floating Pill */}
-        <div className="p-4 pt-1 border-t border-black/[0.03] bg-white/30 backdrop-blur-md">
+        {/* Input Bar with '+' Capabilities Button - Clean Minimalist Pill */}
+        <div className="p-4 pt-1 border-t border-zinc-100 bg-white">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -636,14 +630,14 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             }}
             className="flex items-center"
           >
-            <div className="w-full liquid-glass-floating rounded-full p-1.5 flex items-center gap-1.5 border border-white/90 shadow-[0_8px_32px_rgba(0,0,0,0.06)]">
+            <div className="w-full bg-zinc-50 border border-zinc-200 rounded-full p-1.5 flex items-center gap-1.5 shadow-2xs focus-within:border-zinc-400 focus-within:bg-white transition-all">
               <button
                 type="button"
                 onClick={() => setCapabilitiesOpen(!capabilitiesOpen)}
-                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                   capabilitiesOpen
                     ? 'bg-zinc-900 text-white rotate-45'
-                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.04]'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/60'
                 }`}
                 title="Browse Capabilities"
               >
@@ -653,13 +647,13 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 type="text"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Ask Nexus: models, stress-tests, bots..."
+                placeholder="Ask Nexus: analysis, stress-tests, bots..."
                 className="flex-1 bg-transparent border-none outline-none text-xs text-zinc-900 placeholder:text-zinc-400 px-3 py-1 font-normal"
               />
               <button
                 type="submit"
                 disabled={!text.trim() || chatLoading}
-                className="w-9 h-9 rounded-full bg-zinc-950 hover:bg-black disabled:opacity-20 text-white flex items-center justify-center transition-all active:scale-95 shadow-xs"
+                className="w-8 h-8 rounded-full bg-zinc-900 hover:bg-black disabled:opacity-20 text-white flex items-center justify-center transition-all active:scale-95 shadow-2xs"
                 title="Send"
               >
                 <Send className="w-3.5 h-3.5" />
