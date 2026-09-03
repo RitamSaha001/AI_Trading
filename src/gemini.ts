@@ -7,14 +7,32 @@ export type GeminiModel = {
 };
 
 export async function listGeminiModels(customKey?: string): Promise<GeminiModel[]> {
-  try {
-    const headers: Record<string, string> = {};
-    if (customKey) headers['x-gemini-key'] = customKey;
+  const key = customKey;
+  if (!key) {
+    return [
+      { name: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash' },
+      { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro' },
+      { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite' },
+    ];
+  }
 
-    const res = await fetch('/api/gemini/models', { headers });
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     const data = await res.json();
-    return data.models || [
+    
+    const list: GeminiModel[] = [];
+    if (data.models) {
+      for (const m of data.models) {
+        if (m.name && m.supportedGenerationMethods?.includes('generateContent')) {
+          list.push({
+            name: m.name.replace(/^models\//, ''),
+            displayName: m.displayName || m.name.replace(/^models\//, ''),
+          });
+        }
+      }
+    }
+    return list.length > 0 ? list : [
       { name: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash (Default)' },
       { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro' },
     ];
@@ -63,27 +81,52 @@ export async function fetchAIInsight(
   const portfolioContext = buildContext(s, markets);
 
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (s.settings.geminiApiKey) headers['x-gemini-key'] = s.settings.geminiApiKey;
+    const key = s.settings.geminiApiKey;
+    if (key) {
+      const model = s.settings.geminiModel || 'gemini-3.8-flash';
+      
+      const prompt = `You are Lumen AI, an institutional-grade algorithmic cryptocurrency strategist and quantitative risk officer.
+Analyze the target asset with mathematical precision.
 
-    const res = await fetch('/api/gemini/insight', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        asset,
-        marketData: {
-          price: m?.price,
-          change24h: m?.change24h,
-          indicators: ind,
-        },
-        portfolioContext,
-        model: s.settings.geminiModel || 'gemini-3.8-flash',
-      }),
-    });
+Asset: ${asset}
+Price: $${m?.price}
+24h Change: ${m?.change24h}%
+Indicators: RSI=${ind.rsi.toFixed(1)}, SMA10=${ind.s10?.toFixed(2)}, SMA30=${ind.s30?.toFixed(2)}, Volatility=${(ind.vol * 100).toFixed(2)}%
+Portfolio State: Cash=$${portfolioContext.cash}, Total Value=$${portfolioContext.portfolioValue}, Current Holding in ${asset}=${portfolioContext.assets?.[asset]?.holding || 0} units.
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.insight) return data.insight;
+Respond ONLY with valid JSON conforming to this schema:
+{
+  "direction": "bullish" | "bearish" | "neutral",
+  "confidence": number (40-98),
+  "rationale": string (2-3 crisp sentences detailing technical confluence, order flow dynamics, and risk-managed execution advice),
+  "signals": [
+    {"label": string, "value": string},
+    {"label": string, "value": string},
+    {"label": string, "value": string},
+    {"label": string, "value": string}
+  ],
+  "proposals": [
+    {"type": "order" | "alert", "side": "buy" | "sell", "amount": number, "alertType": "above" | "below", "value": number, "reason": string}
+  ]
+}`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: 'application/json',
+          }
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return JSON.parse(text);
+      }
     }
   } catch (e) {
     console.warn('AI insight fetch failed, computing client fallback:', e);
@@ -122,27 +165,67 @@ export async function sendAIChat(
   const marketsData = markets;
 
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (s.settings.geminiApiKey) headers['x-gemini-key'] = s.settings.geminiApiKey;
+    const key = s.settings.geminiApiKey;
+    if (key) {
+      const systemPrompt = `You are Lumen Copilot, an elite AI portfolio strategist and algorithmic crypto execution assistant.
+Tone: Apple-like elegance, concise, mathematically sharp, Wall Street quantitative precision. Never sound hypey, spammy, or use generic platitudes.
+Always ground assertions in the user's live data:
+Portfolio: Value=$${portfolioContext.portfolioValue}, Cash=$${portfolioContext.cash}, Risk=${portfolioContext.risk.label} (${portfolioContext.risk.score}/100).
+Holdings: ${JSON.stringify(portfolioContext.assets || {})}.
+Live Market Prices: ${JSON.stringify(Object.fromEntries(Object.entries(marketsData || {}).map(([k, v]: any) => [k, { price: v?.price, chg24h: v?.change24h, rsi: v?.indicators?.rsi }]))) }.
 
-    const res = await fetch('/api/gemini/chat', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        message: text,
-        history,
-        portfolioContext,
-        marketsData,
-        model: s.settings.geminiModel || 'gemini-3.8-flash',
-      }),
-    });
+You can suggest interactive executable actions for the user if relevant to their intent:
+- To propose a paper order: output a JSON block inside <<<ACTION ... ACTION>>> containing:
+{"type":"order","side":"buy"|"sell","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"DOGE","amount":number,"reason":string}
+- To propose a price alert: output a JSON block inside <<<ACTION ... ACTION>>> containing:
+{"type":"alert","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"DOGE","alertType":"above"|"below","value":number,"reason":string}
 
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        reply: data.reply || 'Analysis complete.',
-        actionProposal: data.actionProposal,
-      };
+Keep responses structured and scannable (2-4 clear, impactful paragraphs or bullet points).`;
+
+      const formattedHistory = history.slice(-8).map((h) => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: h.text }],
+      }));
+
+      formattedHistory.push({
+        role: 'user',
+        parts: [{ text: `${text}\n\n[Current Live Data Context: Portfolio Value=$${portfolioContext.portfolioValue}, Cash=$${portfolioContext.cash}]` }],
+      });
+      
+      const model = s.settings.geminiModel || 'gemini-3.8-flash';
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: formattedHistory,
+          generationConfig: { temperature: 0.3 }
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const fullText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        
+        let cleanedText = fullText;
+        let actionProposal: any = null;
+
+        const actionMatch = fullText.match(/<<<ACTION\s*([\s\S]*?)\s*ACTION>>>/);
+        if (actionMatch) {
+          try {
+            actionProposal = JSON.parse(actionMatch[1]);
+            cleanedText = fullText.replace(/<<<ACTION[\s\S]*?ACTION>>>/, '').trim();
+          } catch (e) {
+            console.warn('Failed to parse proposed action:', e);
+          }
+        }
+
+        return {
+          reply: cleanedText || 'Analysis complete.',
+          actionProposal,
+        };
+      }
     }
   } catch (err: any) {
     console.warn('Chat request failed:', err);
