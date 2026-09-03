@@ -120,6 +120,7 @@ export function MarketHeatmap({
   const [filter, setFilter] = useState<FilterMode>('all');
   const [layout, setLayout] = useState<LayoutMode>('weighted');
   const [hoveredAsset, setHoveredAsset] = useState<Asset | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   // Compute market performance summary
   const summary = useMemo(() => {
@@ -153,7 +154,7 @@ export function MarketHeatmap({
 
   // Filter and sort assets
   const visibleAssets = useMemo(() => {
-    return ASSETS.filter((a) => {
+    const list = ASSETS.filter((a) => {
       const m = markets[a];
       const chg = m?.change24h || 0;
       if (filter === 'gainers') return chg >= 0;
@@ -171,7 +172,8 @@ export function MarketHeatmap({
       // Or by 24h change
       return (mb?.change24h || 0) - (ma?.change24h || 0);
     });
-  }, [markets, filter, layout]);
+    return showAll ? list : list.slice(0, 24);
+  }, [markets, filter, layout, showAll]);
 
   const handleTileClick = (asset: Asset) => {
     onSelectAsset(asset);
@@ -494,6 +496,17 @@ export function MarketHeatmap({
             </div>
           );
         })}
+      </div>
+
+      {/* Expand/Collapse 108 Markets Toggle */}
+      <div className="mt-4 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="px-4 py-1.5 text-xs font-semibold rounded-xl border border-black/[0.08] bg-white hover:bg-black/[0.03] text-zinc-700 shadow-xs transition-all flex items-center gap-1.5"
+        >
+          <span>{showAll ? 'Show Top 24 Leading Markets' : `Expand Full Heatmap (All ${ASSETS.length} Markets)`}</span>
+        </button>
       </div>
 
       {/* Heatmap Legend */}

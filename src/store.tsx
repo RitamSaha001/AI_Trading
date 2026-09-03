@@ -13,7 +13,7 @@ import {
   AIActionProposal,
   AISafetyValidation,
 } from './types';
-import { fetchAll, MarketStreamService } from './services/market';
+import { fetchAll, fetchMarket, MarketStreamService } from './services/market';
 import {
   executeOrder,
   checkPendingOrders,
@@ -164,7 +164,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
   // Initial Full REST bootstrap
   const refreshMarkets = useCallback(async () => {
     try {
-      const data = await fetchAll(stateRef.current.timeframe);
+      const data = await fetchAll(stateRef.current.timeframe, stateRef.current.selectedAsset);
       setMarkets(data);
       const firstSource = Object.values(data)[0]?.source || 'Binance REST';
       setCurrentDataSource(firstSource);
@@ -313,6 +313,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
   const setSelectedAsset = useCallback((a: Asset) => {
     setState((s) => ({ ...s, selectedAsset: a }));
+    fetchMarket(a, stateRef.current.timeframe).then((m: Market) => {
+      setMarkets((prev) => ({ ...prev, [a]: m }));
+    }).catch(() => {});
   }, []);
 
   const setTimeframe = useCallback(

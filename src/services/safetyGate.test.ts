@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateAIProposal } from './safetyGate';
 import { AppState, Market, AIActionProposal } from '../types';
+import { createPositionsRecord } from '../domain/portfolio';
 
 const mockState: AppState = {
   schemaVersion: 2,
@@ -9,26 +10,12 @@ const mockState: AppState = {
   startingEquity: 50000,
   realizedPnl: 0,
   totalFees: 0,
-  positions: {
+  positions: createPositionsRecord({
     BTC: 0.5, // 0.5 * 60,000 = 30,000
-    ETH: 0,
-    SOL: 0,
-    ADA: 0,
-    XRP: 0,
-    AVAX: 0,
-    LINK: 0,
-    DOGE: 0,
-  },
-  avgBuyPrice: {
+  }),
+  avgBuyPrice: createPositionsRecord({
     BTC: 55000,
-    ETH: 0,
-    SOL: 0,
-    ADA: 0,
-    XRP: 0,
-    AVAX: 0,
-    LINK: 0,
-    DOGE: 0,
-  },
+  }),
   watchlist: ['BTC', 'ETH'],
   orders: [],
   alerts: [],

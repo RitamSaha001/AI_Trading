@@ -36,6 +36,8 @@ import {
   Filter,
   Plus,
   Trash2,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 
 function GlassCard({
@@ -508,185 +510,421 @@ export function Dashboard() {
 export function Markets() {
   const { state, markets, loading, setSelectedAsset, toggleWatch, refreshMarkets } = useLumen();
   const [query, setQuery] = useState('');
-  const [sortKey, setSortKey] = useState<'price' | 'change' | 'name'>('change');
+  const [category, setCategory] = useState<string>('All');
+  const [sortKey, setSortKey] = useState<'change' | 'price' | 'volume' | 'name'>('change');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [pageSize, setPageSize] = useState<number>(36);
+
+  const categories = ['All', 'Watchlist', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming'];
 
   const filtered = ASSETS.filter((a) => {
     const m = markets[a];
-    const q = query.toLowerCase();
-    return a.toLowerCase().includes(q) || (m?.name && m.name.toLowerCase().includes(q));
+    const meta = META[a];
+    const q = query.toLowerCase().trim();
+    const matchesQuery = !q || a.toLowerCase().includes(q) || (m?.name && m.name.toLowerCase().includes(q)) || (meta?.name && meta.name.toLowerCase().includes(q));
+    if (!matchesQuery) return false;
+
+    if (category === 'Watchlist') {
+      return state.watchlist.includes(a);
+    }
+    if (category !== 'All') {
+      return meta?.category === category;
+    }
+    return true;
   }).sort((a, b) => {
     const ma = markets[a];
     const mb = markets[b];
     if (sortKey === 'price') return (mb?.price || 0) - (ma?.price || 0);
     if (sortKey === 'change') return (mb?.change24h || 0) - (ma?.change24h || 0);
+    if (sortKey === 'volume') return (mb?.volume24h || 0) - (ma?.volume24h || 0);
     return a.localeCompare(b);
   });
+
+  const displayed = pageSize === 0 ? filtered : filtered.slice(0, pageSize);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
-        title="Cryptocurrency Markets"
-        subtitle="Live prices streamed from institutional public gateways with sub-second recalculation."
+        title="Institutional Markets"
+        subtitle={`Live quotes streamed across ${ASSETS.length} global crypto markets with sub-second recalculation.`}
         action={
-          <button
-            type="button"
-            onClick={refreshMarkets}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-zinc-800 bg-white border border-black/[0.08] rounded-xl shadow-xs hover:bg-black/[0.02]"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>{loading ? 'Refreshing...' : 'Refresh Quotes'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={refreshMarkets}
+              disabled={loading}
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white border border-black/[0.08] rounded-xl shadow-xs hover:bg-black/[0.02] transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>{loading ? 'Updating...' : 'Refresh Quotes'}</span>
+            </button>
+          </div>
         }
       />
 
       {/* Real-time Performance Heatmap */}
       <MarketHeatmap />
 
+      {/* Category Pills Strip */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        {categories.map((cat) => {
+          const isActive = category === cat;
+          const count = cat === 'All' 
+            ? ASSETS.length 
+            : cat === 'Watchlist' 
+            ? state.watchlist.length 
+            : ASSETS.filter((a) => META[a]?.category === cat).length;
+
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCategory(cat)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                isActive
+                  ? 'bg-zinc-950 text-white shadow-xs font-semibold'
+                  : 'bg-white/80 text-zinc-600 hover:text-zinc-950 hover:bg-white border border-black/[0.05]'
+              }`}
+            >
+              <span>{cat}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-black/[0.05] text-zinc-500'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filter and Sort Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-white/70 border border-black/[0.06] backdrop-blur-md">
-        <div className="relative w-full sm:w-80">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-4 rounded-2xl bg-white/70 border border-black/[0.06] backdrop-blur-md">
+        <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search symbol or name..."
+            placeholder={`Search across ${ASSETS.length} assets by symbol or name...`}
             className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 transition-all"
           />
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto text-xs">
-          <span className="text-zinc-400 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5" /> Sort:
-          </span>
-          <button
-            type="button"
-            onClick={() => setSortKey('change')}
-            className={`px-3 py-1.5 rounded-xl font-medium transition-all ${
-              sortKey === 'change' ? 'bg-black text-white shadow-xs' : 'text-zinc-600 hover:bg-black/[0.04]'
-            }`}
-          >
-            24h Gainers/Losers
-          </button>
-          <button
-            type="button"
-            onClick={() => setSortKey('price')}
-            className={`px-3 py-1.5 rounded-xl font-medium transition-all ${
-              sortKey === 'price' ? 'bg-black text-white shadow-xs' : 'text-zinc-600 hover:bg-black/[0.04]'
-            }`}
-          >
-            Highest Price
-          </button>
+        <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 text-xs">
+          <div className="flex items-center gap-1 bg-black/[0.03] p-1 rounded-xl border border-black/[0.04]">
+            <button
+              type="button"
+              onClick={() => setSortKey('change')}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                sortKey === 'change' ? 'bg-white text-zinc-950 shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              24h Change
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortKey('price')}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                sortKey === 'price' ? 'bg-white text-zinc-950 shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Price
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortKey('volume')}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                sortKey === 'volume' ? 'bg-white text-zinc-950 shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Volume
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 border-l border-black/[0.06] pl-3">
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-xl border transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-zinc-950 text-white border-zinc-950'
+                  : 'bg-white text-zinc-500 hover:text-zinc-950 border-black/[0.06]'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`p-1.5 rounded-xl border transition-all ${
+                viewMode === 'table'
+                  ? 'bg-zinc-950 text-white border-zinc-950'
+                  : 'bg-white text-zinc-500 hover:text-zinc-950 border-black/[0.06]'
+              }`}
+              title="Table View"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Asset Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {filtered.map((a) => {
-          const m = markets[a];
-          const isWatched = state.watchlist.includes(a);
-          const isUp = (m?.change24h || 0) >= 0;
-          const meta = META[a];
+      {/* Showing count indicator */}
+      <div className="flex items-center justify-between text-xs text-zinc-500 px-1">
+        <span>Showing {displayed.length} of {filtered.length} matching markets</span>
+        {filtered.length > 36 && (
+          <div className="flex items-center gap-2">
+            <span>Show:</span>
+            <button
+              type="button"
+              onClick={() => setPageSize(36)}
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-semibold ${pageSize === 36 ? 'bg-black text-white border-black' : 'bg-white text-zinc-600 border-black/[0.08]'}`}
+            >
+              36
+            </button>
+            <button
+              type="button"
+              onClick={() => setPageSize(72)}
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-semibold ${pageSize === 72 ? 'bg-black text-white border-black' : 'bg-white text-zinc-600 border-black/[0.08]'}`}
+            >
+              72
+            </button>
+            <button
+              type="button"
+              onClick={() => setPageSize(0)}
+              className={`px-2 py-0.5 rounded-lg border text-[11px] font-semibold ${pageSize === 0 ? 'bg-black text-white border-black' : 'bg-white text-zinc-600 border-black/[0.08]'}`}
+            >
+              All ({filtered.length})
+            </button>
+          </div>
+        )}
+      </div>
 
-          return (
-            <GlassCard key={a} className="flex flex-col justify-between hover:shadow-lg transition-all">
-              <div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shadow-xs"
-                      style={{ backgroundColor: meta?.iconColor || '#222' }}
-                    >
-                      {a}
+      {/* View Mode 1: Dense Institutional Table */}
+      {viewMode === 'table' ? (
+        <div className="overflow-x-auto rounded-3xl border border-black/[0.06] bg-white/80 backdrop-blur-xl shadow-xs">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-black/[0.06] text-[11px] font-semibold text-zinc-400 uppercase tracking-wider bg-black/[0.01]">
+                <th className="py-3 px-4">#</th>
+                <th className="py-3 px-4">Asset</th>
+                <th className="py-3 px-4 text-right">Price</th>
+                <th className="py-3 px-4 text-right">24h Change</th>
+                <th className="py-3 px-4 text-right hidden sm:table-cell">24h High / Low</th>
+                <th className="py-3 px-4 text-right hidden md:table-cell">24h Volume</th>
+                <th className="py-3 px-4 text-center hidden lg:table-cell w-36">Trend (24h)</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/[0.04]">
+              {displayed.map((a, idx) => {
+                const m = markets[a];
+                const meta = META[a];
+                const isUp = (m?.change24h || 0) >= 0;
+                const isWatched = state.watchlist.includes(a);
+
+                return (
+                  <tr
+                    key={a}
+                    className="hover:bg-black/[0.02] transition-colors cursor-pointer"
+                    onClick={() => {
+                      setSelectedAsset(a);
+                      go('/');
+                    }}
+                  >
+                    <td className="py-3 px-4 font-mono text-[11px] text-zinc-400">{idx + 1}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleWatch(a);
+                          }}
+                          className={`text-sm ${isWatched ? 'text-amber-500' : 'text-zinc-300 hover:text-zinc-600'}`}
+                        >
+                          ★
+                        </button>
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white text-[11px] shrink-0"
+                          style={{ backgroundColor: meta?.iconColor || '#333' }}
+                        >
+                          {a}
+                        </div>
+                        <div>
+                          <div className="font-bold text-zinc-950">{a}</div>
+                          <div className="text-[11px] text-zinc-400">{meta?.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-right font-bold font-mono text-zinc-950">
+                      {m ? money(m.price) : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span
+                        className={`inline-flex items-center gap-1 font-mono font-semibold px-2 py-0.5 rounded-md ${
+                          isUp ? 'bg-emerald-500/10 text-emerald-700' : 'bg-rose-500/10 text-rose-700'
+                        }`}
+                      >
+                        {isUp ? '+' : ''}
+                        {m ? m.change24h.toFixed(2) : '0.00'}%
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right hidden sm:table-cell font-mono text-[11px] text-zinc-500">
+                      {m ? `${money(m.low24h)} - ${money(m.high24h)}` : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-right hidden md:table-cell font-mono text-[11px] text-zinc-500">
+                      {m ? money(m.volume24h) : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-center hidden lg:table-cell">
+                      <div className="w-28 h-6 mx-auto">
+                        {m && <Sparkline data={m.history.slice(-20)} positive={isUp} height={24} />}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedAsset(a);
+                            go('/');
+                          }}
+                          className="px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:text-zinc-950 hover:bg-black/[0.04] rounded-lg transition-all"
+                        >
+                          Chart
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedAsset(a);
+                            go('/orders');
+                          }}
+                          className="px-3 py-1 text-[11px] font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-lg shadow-2xs transition-all"
+                        >
+                          Trade
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* View Mode 2: Responsive Fluid Grid Cards */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+          {displayed.map((a) => {
+            const m = markets[a];
+            const isWatched = state.watchlist.includes(a);
+            const isUp = (m?.change24h || 0) >= 0;
+            const meta = META[a];
+
+            return (
+              <GlassCard key={a} className="flex flex-col justify-between hover:shadow-lg transition-all duration-200">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-8 h-8 rounded-xl flex items-center justify-center font-bold text-white text-xs shadow-xs"
+                        style={{ backgroundColor: meta?.iconColor || '#222' }}
+                      >
+                        {a}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-bold text-sm text-zinc-900">{a}</h3>
+                          {meta?.category && (
+                            <span className="text-[9px] font-medium uppercase px-1.5 py-0.2 rounded-full bg-black/[0.04] text-zinc-500">
+                              {meta.category}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-zinc-400 block truncate max-w-[130px]">{meta?.name}</span>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-zinc-900">{a}</h3>
-                      <span className="text-[11px] text-zinc-400">{meta?.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleWatch(a)}
+                      className={`p-1.5 rounded-xl transition-all ${
+                        isWatched ? 'text-amber-500 bg-amber-500/10' : 'text-zinc-300 hover:text-zinc-600'
+                      }`}
+                      title={isWatched ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                    >
+                      ★
+                    </button>
+                  </div>
+
+                  <div className="mt-3.5">
+                    <div className="text-xl font-bold font-mono tracking-tight text-zinc-950">
+                      {m ? money(m.price) : 'Loading...'}
+                    </div>
+                    <div
+                      className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${
+                        isUp ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {isUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                      {isUp ? '+' : ''}
+                      {m ? m.change24h.toFixed(2) : '0.00'}% 24h
                     </div>
                   </div>
+
+                  <div className="mt-3 h-10">
+                    {m && <Sparkline data={m.history.slice(-24)} positive={isUp} height={36} />}
+                  </div>
+
+                  {/* 24h Range Indicator */}
+                  {m && (
+                    <div className="mt-3 pt-2.5 border-t border-black/[0.04] space-y-1">
+                      <div className="flex justify-between text-[10px] text-zinc-400 font-mono">
+                        <span>L: {money(m.low24h)}</span>
+                        <span>H: {money(m.high24h)}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-black/[0.04] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-600 rounded-full"
+                          style={{
+                            width: `${Math.max(
+                              5,
+                              Math.min(
+                                100,
+                                ((m.price - m.low24h) / Math.max(m.high24h - m.low24h, 1e-6)) * 100
+                              )
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => toggleWatch(a)}
-                    className={`p-1.5 rounded-xl transition-all ${
-                      isWatched ? 'text-amber-500 bg-amber-500/10' : 'text-zinc-300 hover:text-zinc-600'
-                    }`}
-                    title={isWatched ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                    onClick={() => {
+                      setSelectedAsset(a);
+                      go('/');
+                    }}
+                    className="flex-1 py-1.5 px-3 text-xs font-medium text-zinc-700 hover:text-zinc-950 hover:bg-black/[0.04] rounded-xl transition-all text-center"
                   >
-                    ★
+                    Analyze
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAsset(a);
+                      go('/orders');
+                    }}
+                    className="py-1.5 px-3.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-all shadow-2xs"
+                  >
+                    Trade
                   </button>
                 </div>
-
-                <div className="mt-4">
-                  <div className="text-xl font-bold font-mono tracking-tight text-zinc-950">
-                    {m ? money(m.price) : 'Loading...'}
-                  </div>
-                  <div
-                    className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${
-                      isUp ? 'text-emerald-600' : 'text-rose-600'
-                    }`}
-                  >
-                    {isUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                    {isUp ? '+' : ''}
-                    {m ? m.change24h.toFixed(2) : '0.00'}% 24h
-                  </div>
-                </div>
-
-                <div className="mt-3 h-10">
-                  {m && <Sparkline data={m.history.slice(-24)} positive={isUp} height={36} />}
-                </div>
-
-                {/* 24h Range Indicator */}
-                {m && (
-                  <div className="mt-4 pt-3 border-t border-black/[0.04] space-y-1">
-                    <div className="flex justify-between text-[10px] text-zinc-400">
-                      <span>L: {money(m.low24h)}</span>
-                      <span>H: {money(m.high24h)}</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-black/[0.04] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-indigo-600 rounded-full"
-                        style={{
-                          width: `${Math.max(
-                            5,
-                            Math.min(
-                              100,
-                              ((m.price - m.low24h) / Math.max(m.high24h - m.low24h, 1e-6)) * 100
-                            )
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-5 pt-3 border-t border-black/[0.05] flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedAsset(a);
-                    go('/');
-                  }}
-                  className="flex-1 py-1.5 px-3 text-xs font-medium text-zinc-700 hover:text-zinc-950 hover:bg-black/[0.04] rounded-xl transition-all text-center"
-                >
-                  Analyze
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedAsset(a);
-                    go('/orders');
-                  }}
-                  className="py-1.5 px-3.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-all shadow-xs"
-                >
-                  Trade
-                </button>
-              </div>
-            </GlassCard>
-          );
-        })}
-      </div>
+              </GlassCard>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1028,7 +1266,7 @@ export function Orders() {
 
             {/* Asset Selector */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-700">Contract / Asset</label>
+              <label className="text-xs font-semibold text-zinc-700">Contract / Asset ({ASSETS.length} available)</label>
               <select
                 value={selectedAsset}
                 onChange={(e) => {
@@ -1038,11 +1276,19 @@ export function Orders() {
                 }}
                 className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 font-medium"
               >
-                {ASSETS.map((x) => (
-                  <option key={x} value={x}>
-                    {x} — {META[x]?.name} ({money(markets[x]?.price || 0)})
-                  </option>
-                ))}
+                {['Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming', 'Other'].map((cat) => {
+                  const list = ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
+                  if (!list.length) return null;
+                  return (
+                    <optgroup key={cat} label={`── ${cat} (${list.length}) ──`}>
+                      {list.map((x) => (
+                        <option key={x} value={x}>
+                          {x} — {META[x]?.name} ({money(markets[x]?.price || 0)})
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             </div>
 

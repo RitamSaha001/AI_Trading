@@ -5,6 +5,7 @@ import {
   totalPortfolioPnl,
   money,
   formatQty,
+  createPositionsRecord,
 } from './portfolio';
 import { AppState, Market } from '../types';
 
@@ -15,26 +16,14 @@ const mockState: AppState = {
   startingEquity: 50000,
   realizedPnl: 1500,
   totalFees: 35,
-  positions: {
+  positions: createPositionsRecord({
     BTC: 0.5,
     ETH: 4.0,
-    SOL: 0,
-    ADA: 0,
-    XRP: 0,
-    AVAX: 0,
-    LINK: 0,
-    DOGE: 0,
-  },
-  avgBuyPrice: {
+  }),
+  avgBuyPrice: createPositionsRecord({
     BTC: 60000, // Cost: 0.5 * 60,000 = 30,000
     ETH: 3000,  // Cost: 4.0 * 3,000 = 12,000
-    SOL: 0,
-    ADA: 0,
-    XRP: 0,
-    AVAX: 0,
-    LINK: 0,
-    DOGE: 0,
-  },
+  }),
   watchlist: ['BTC', 'ETH'],
   orders: [],
   alerts: [],

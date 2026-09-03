@@ -20,6 +20,7 @@ import {
   X,
   Volume2,
   VolumeX,
+  Menu,
 } from 'lucide-react';
 import { money, portfolioValue, totalPortfolioPnl } from './trading';
 
@@ -81,6 +82,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
@@ -94,30 +96,65 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { path: '/alerts', label: 'Alerts', icon: Bell },
   ] as const;
 
+  const mobileBottomNav = [
+    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/markets', label: 'Markets', icon: BarChart3 },
+    { path: '/orders', label: 'Trade', icon: ArrowLeftRight },
+    { path: '/portfolio', label: 'Portfolio', icon: Briefcase },
+    { path: '/strategies', label: 'Strategies', icon: Cpu },
+  ] as const;
+
   const unreadAlerts = state.alerts.filter((a) => a.enabled && !a.triggered).length;
 
+  const handleNavClick = (path: Route) => {
+    go(path);
+    setMobileMenuOpen(false);
+  };
+
   return (
-    <div className="min-h-screen bg-[#fbfbfc] text-zinc-900 font-sans antialiased selection:bg-indigo-500/20 selection:text-indigo-900 flex">
-      {/* Apple Liquid Glass Sidebar */}
-      <aside className="w-64 bg-white/70 backdrop-blur-2xl border-r border-black/[0.05] p-5 fixed inset-0 right-auto flex flex-col z-30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-        {/* Brand */}
-        <div className="flex items-center gap-3 px-2 py-3 mb-6">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-zinc-950 via-zinc-900 to-zinc-800 text-white flex items-center justify-center shadow-md shadow-black/10 border border-white/20">
-            <Sparkles className="w-5 h-5 text-indigo-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-base tracking-tight text-zinc-950">Lumen</span>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-black/[0.05] text-zinc-600">
-                PAPER
-              </span>
+    <div className="min-h-screen bg-[#fbfbfc] text-zinc-900 font-sans antialiased selection:bg-indigo-500/20 selection:text-indigo-900 flex flex-col lg:flex-row">
+      {/* Mobile Drawer Overlay Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Responsive Sidebar (Fixed on lg, Slide-over on mobile/tablet) */}
+      <aside
+        className={`fixed inset-y-0 left-0 w-72 sm:w-80 lg:w-64 bg-white/95 lg:bg-white/70 backdrop-blur-2xl border-r border-black/[0.06] p-5 flex flex-col z-50 transition-transform duration-300 ease-out shadow-2xl lg:shadow-[4px_0_24px_rgba(0,0,0,0.02)] ${
+          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        {/* Brand & Close button for mobile */}
+        <div className="flex items-center justify-between px-2 py-2 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-zinc-950 via-zinc-900 to-zinc-800 text-white flex items-center justify-center shadow-md shadow-black/10 border border-white/20">
+              <Sparkles className="w-5 h-5 text-indigo-400" />
             </div>
-            <p className="text-[11px] text-zinc-500">Algorithmic Paper Trading</p>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-base tracking-tight text-zinc-950">Lumen</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-black/[0.05] text-zinc-600">
+                  100+ MKTS
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-500">Autonomous Paper Desk</p>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            className="lg:hidden p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-black/[0.04]"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Navigation */}
-        <div className="space-y-1 flex-1">
+        <div className="space-y-1 flex-1 overflow-y-auto">
           <div className="px-3 py-1 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
             Workspace
           </div>
@@ -127,7 +164,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <button
                 key={path}
                 type="button"
-                onClick={() => go(path)}
+                onClick={() => handleNavClick(path)}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all group ${
                   isActive
                     ? 'bg-black text-white shadow-sm font-semibold'
@@ -158,7 +195,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* Portfolio Snapshot Footer Card */}
         <div className="mt-auto space-y-3 pt-4 border-t border-black/[0.05]">
-          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/90 to-white/50 border border-black/[0.06] backdrop-blur-md shadow-sm">
+          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/90 to-white/50 border border-black/[0.06] backdrop-blur-md shadow-xs">
             <div className="flex items-center justify-between text-[11px] text-zinc-500 mb-1">
               <span>Paper Valuation</span>
               <span className={`font-semibold ${pnl.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -171,13 +208,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-1">
               <span>Cash: {money(state.cash)}</span>
-              <span className="text-[10px] text-zinc-500">Live Paper</span>
+              <span className="text-[10px] font-semibold text-indigo-600">Active</span>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => {
+              setSettingsOpen(true);
+              setMobileMenuOpen(false);
+            }}
             className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04] rounded-xl transition-all"
           >
             <SettingsIcon className="w-4 h-4 text-zinc-400" />
@@ -186,41 +226,55 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main Container */}
-      <div className="flex-1 ml-64 flex flex-col min-h-screen">
-        {/* Apple Glass Sticky Topbar */}
-        <header className="sticky top-0 z-20 h-16 bg-white/75 backdrop-blur-xl border-b border-black/[0.05] px-8 flex items-center justify-between">
-          {/* Quick Search */}
-          <div className="relative w-80 max-w-sm">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search assets (BTC, ETH, SOL, AVAX)..."
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const q = search.trim().toUpperCase();
-                  const found = ASSETS.find((a) => a === q || a.includes(q));
-                  if (found) {
-                    setSelectedAsset(found);
-                    go('/markets');
-                    setSearch('');
+      {/* Main Container: adjusts left margin on desktop, zero margin on mobile */}
+      <div className="flex-1 lg:ml-64 flex flex-col min-h-screen pb-20 lg:pb-0">
+        {/* Responsive Sticky Header */}
+        <header className="sticky top-0 z-20 h-16 bg-white/80 backdrop-blur-xl border-b border-black/[0.05] px-3 sm:px-6 md:px-8 flex items-center justify-between gap-2 sm:gap-4">
+          {/* Left: Mobile hamburger + Search */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-md">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-xl text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04] transition-all"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Quick Search */}
+            <div className="relative w-full">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search 108 markets (e.g. SUI, PEPE, TAO)..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const q = search.trim().toUpperCase();
+                    const found = ASSETS.find((a) => a === q || a.includes(q));
+                    if (found) {
+                      setSelectedAsset(found);
+                      go('/markets');
+                      setSearch('');
+                    }
                   }
-                }
-              }}
-              className="w-full pl-9 pr-4 py-1.5 text-xs bg-black/[0.03] hover:bg-black/[0.05] focus:bg-white border border-transparent focus:border-black/[0.1] rounded-xl outline-none transition-all placeholder:text-zinc-400 text-zinc-900"
-            />
+                }}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-black/[0.03] hover:bg-black/[0.05] focus:bg-white border border-transparent focus:border-black/[0.1] rounded-xl outline-none transition-all placeholder:text-zinc-400 text-zinc-900"
+              />
+            </div>
           </div>
 
-          {/* Top Actions */}
-          <div className="flex items-center gap-3">
-            {/* Live Data Source Indicator */}
-            <DataSourceBadge
-              source={currentDataSource}
-              isSynthetic={markets[state.selectedAsset]?.isSynthetic}
-              lastUpdated={markets[state.selectedAsset]?.lastUpdated}
-            />
+          {/* Right Header Actions */}
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            {/* Live Data Source Indicator (hidden on smallest screens to preserve space) */}
+            <div className="hidden sm:block">
+              <DataSourceBadge
+                source={currentDataSource}
+                isSynthetic={markets[state.selectedAsset]?.isSynthetic}
+                lastUpdated={markets[state.selectedAsset]?.lastUpdated}
+              />
+            </div>
 
             {/* Audio Toggle */}
             <button
@@ -232,7 +286,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               {state.settings.soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             </button>
 
-            {/* Notifications Popover Trigger */}
+            {/* Notifications Popover */}
             <div className="relative">
               <button
                 type="button"
@@ -247,7 +301,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </button>
 
               {notifOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white/95 backdrop-blur-2xl border border-black/[0.08] rounded-2xl shadow-xl p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white/95 backdrop-blur-2xl border border-black/[0.08] rounded-2xl shadow-xl p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-black/[0.05]">
                     <span className="text-xs font-semibold text-zinc-900">Activity &amp; Signals</span>
                     <span className="text-[10px] text-zinc-400">{state.notifications.length} logged</span>
@@ -271,37 +325,49 @@ export function Shell({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            {/* Settings Trigger */}
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.04] transition-all"
-              title="Settings"
-            >
-              <SettingsIcon className="w-4 h-4" />
-            </button>
-
-            {/* AI Copilot Trigger */}
+            {/* AI Copilot Header Trigger */}
             <button
               type="button"
               onClick={() => setChatOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-xl shadow-sm shadow-indigo-500/25 transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-xl shadow-xs transition-all"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Copilot</span>
+              <span className="hidden sm:inline">Copilot</span>
             </button>
           </div>
         </header>
 
         {/* Content Area */}
-        <main className="flex-1 p-8 max-w-7xl w-full mx-auto">{children}</main>
+        <main className="flex-1 p-3 sm:p-5 md:p-8 max-w-7xl w-full mx-auto overflow-x-hidden">
+          {children}
+        </main>
       </div>
 
-      {/* Floating Copilot Capsule Button (on mobile or bottom right) */}
+      {/* Mobile Bottom Navigation Bar (< lg screens) */}
+      <nav className="fixed bottom-0 inset-x-0 h-16 bg-white/90 backdrop-blur-xl border-t border-black/[0.06] flex items-center justify-around z-30 lg:hidden px-2 shadow-[0_-4px_16px_rgba(0,0,0,0.03)]">
+        {mobileBottomNav.map(({ path, label, icon: Icon }) => {
+          const isActive = route === path;
+          return (
+            <button
+              key={path}
+              type="button"
+              onClick={() => go(path)}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-colors ${
+                isActive ? 'text-zinc-950 font-semibold' : 'text-zinc-400 hover:text-zinc-700'
+              }`}
+            >
+              <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : ''}`} />
+              <span className="text-[10px] tracking-tight">{label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Floating Copilot Capsule Button (on desktop or tablet) */}
       <button
         type="button"
         onClick={() => setChatOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-2.5 bg-zinc-950/90 text-white backdrop-blur-xl border border-white/20 rounded-full shadow-2xl hover:scale-105 transition-all duration-200"
+        className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-30 flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-zinc-950/90 text-white backdrop-blur-xl border border-white/20 rounded-full shadow-2xl hover:scale-105 transition-all duration-200"
       >
         <Sparkles className="w-4 h-4 text-indigo-400" />
         <span className="text-xs font-semibold">AI Copilot</span>
@@ -325,7 +391,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Toast Notification Container */}
       {activeToast && (
-        <div className="fixed bottom-6 left-6 z-50 max-w-md bg-white/95 backdrop-blur-2xl border border-black/[0.08] shadow-2xl rounded-2xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-20 lg:bottom-6 left-3 right-3 sm:left-6 sm:right-auto z-50 max-w-md bg-white/95 backdrop-blur-2xl border border-black/[0.08] shadow-2xl rounded-2xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
           <div className="mt-0.5">
             {activeToast.type === 'success' ? (
               <CheckCircle className="w-5 h-5 text-emerald-500" />

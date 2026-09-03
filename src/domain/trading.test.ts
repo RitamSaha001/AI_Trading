@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { executeOrder, checkPendingOrders } from './trading';
 import { AppState, Market } from '../types';
+import { createPositionsRecord } from './portfolio';
 
 function createFreshState(cash = 50000): AppState {
   return {
@@ -10,26 +11,8 @@ function createFreshState(cash = 50000): AppState {
     startingEquity: cash,
     realizedPnl: 0,
     totalFees: 0,
-    positions: {
-      BTC: 0,
-      ETH: 0,
-      SOL: 0,
-      ADA: 0,
-      XRP: 0,
-      AVAX: 0,
-      LINK: 0,
-      DOGE: 0,
-    },
-    avgBuyPrice: {
-      BTC: 0,
-      ETH: 0,
-      SOL: 0,
-      ADA: 0,
-      XRP: 0,
-      AVAX: 0,
-      LINK: 0,
-      DOGE: 0,
-    },
+    positions: createPositionsRecord(),
+    avgBuyPrice: createPositionsRecord(),
     watchlist: ['BTC', 'ETH'],
     orders: [],
     alerts: [],

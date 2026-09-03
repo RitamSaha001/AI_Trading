@@ -1,4 +1,16 @@
-export const ASSETS = ['BTC', 'ETH', 'SOL', 'ADA', 'XRP', 'AVAX', 'LINK', 'DOGE'] as const;
+export const ASSETS = [
+  'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'SUI', 'SHIB',
+  'TON', 'LINK', 'NEAR', 'DOT', 'BCH', 'PEPE', 'UNI', 'APT', 'LTC', 'ICP',
+  'FET', 'KAS', 'POL', 'XLM', 'XMR', 'TIA', 'RENDER', 'STX', 'TAO', 'AAVE',
+  'ARB', 'OP', 'INJ', 'FIL', 'OKB', 'IMX', 'VET', 'MNT', 'CRO', 'FTM',
+  'WIF', 'FLOKI', 'BONK', 'GRT', 'THETA', 'SEI', 'JUP', 'RUNE', 'PYTH', 'HBAR',
+  'OM', 'LDO', 'ALGO', 'MKR', 'BSV', 'JASMY', 'ENA', 'AR', 'CORE', 'BTT',
+  'NOT', 'ONDO', 'WLD', 'PENDLE', 'BEAM', 'DYDX', 'STRK', 'GALA', 'BLUR', 'CRV',
+  'CHZ', 'SNX', 'AXS', 'SAND', 'MANA', 'ENJ', 'FLOW', 'QNT', 'NEO', 'EOS',
+  'IOTA', 'KAVA', 'MINA', 'ROSE', 'ZIL', 'KLAY', 'CFX', 'RON', 'APE', '1INCH',
+  'COMP', 'OSMO', 'GMX', 'RAY', 'JTO', 'ORDI', 'SATS', 'W', 'TNSR', 'EIGEN',
+  'NEIRO', 'TURBO', 'POPCAT', 'MEME', 'ME', 'ZK', 'MORPHO', 'COW'
+] as const;
 export type Asset = typeof ASSETS[number];
 
 export type Side = 'buy' | 'sell';
@@ -21,6 +33,8 @@ export type Candle = {
   volume: number;
 };
 
+export type MarketCategory = 'All' | 'Layer 1' | 'DeFi' | 'AI & Compute' | 'Meme' | 'Infra' | 'Gaming';
+
 export type Market = {
   asset: Asset;
   name: string;
@@ -35,6 +49,7 @@ export type Market = {
   source: DataSource;
   isSynthetic: boolean;
   lastUpdated: number;
+  category?: MarketCategory;
 };
 
 export type Order = {
