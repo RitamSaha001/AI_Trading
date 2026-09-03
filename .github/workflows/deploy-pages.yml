@@ -3,7 +3,7 @@ name: Deploy Lumen to GitHub Pages
 on:
   push:
     branches:
-      - lumen-production-gemini
+      - main
   workflow_dispatch:
 
 permissions:
