@@ -1,0 +1,2 @@
+import React from 'react';import{createRoot}from'react-dom/client';import'./styles.css';import{Provider}from'./store';import{Shell,useRoute}from'./Shell';import{Dashboard,Markets,Portfolio,Orders,Strategies,Alerts,SettingsPage}from'./pages';
+function App(){const r=useRoute();const page=r==='/'?<Dashboard/>:r==='/markets'?<Markets/>:r==='/portfolio'?<Portfolio/>:r==='/orders'?<Orders/>:r==='/strategies'?<Strategies/>:r==='/alerts'?<Alerts/>:<SettingsPage/>;return <Provider><Shell>{page}</Shell></Provider>};createRoot(document.getElementById('root')!).render(<App/>);
