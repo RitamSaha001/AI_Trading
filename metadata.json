@@ -1,0 +1,8 @@
+{
+  "name": "Lumen — AI Trading",
+  "description": "AI-powered cryptocurrency trading cockpit with live market data, paper execution, algorithmic momentum strategies, and portfolio analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
