@@ -1,39 +1,29 @@
-# Lumen AI Trading — React Native
+# Lumen AI Trading
 
-A performance-oriented React Native / Expo foundation for the Lumen simulated AI trading dashboard.
+A production-oriented React + TypeScript paper-trading cockpit rebuilt from the supplied Lumen HTML prototype.
 
-## Stack
+## Product features
+- Live public crypto market data using Binance REST with Coinbase fallback.
+- Persistent paper portfolio, positions, watchlist and paper order history.
+- Real Dashboard, Markets, Portfolio, Orders, Strategies, Alerts and Settings routes.
+- SVG line charts, sparklines, timeframe switching and asset search.
+- Paper execution with modeled market impact and a transparent 0.08% fee.
+- Allocation-limited momentum automation with configurable cooldowns.
+- Browser-local price/change alerts and a live notification panel.
+- Gemini settings with live model discovery and selectable generation-capable models.
+- Gemini-backed Insight and Copilot with deterministic local fallback.
 
-- Expo SDK 57 / React Native 0.86
-- TypeScript
-- React Context + `useSyncExternalStore`-style store boundaries
-- AsyncStorage for persisted paper-trading state
-- `react-native-svg` for lightweight chart primitives
-- Backend-only AI integration boundary
+## Gemini security
+This client-only build stores the Gemini API key in localStorage so the user can configure the model directly in the browser. For public production deployment, move Gemini calls behind your own server/API gateway so the key is never exposed to the browser.
 
-## Architecture
-
-`src/domain` contains pure trading calculations and order rules.
-`src/services` contains persistence, market-feed and AI client boundaries.
-`src/store` contains the app store and derived selectors.
-`src/components` contains memoized presentation components.
-`src/screens` contains screen composition.
-
-The market loop is AppState-aware and updates the store without forcing the entire screen tree to re-render. Market data and portfolio persistence are intentionally separated from UI state.
-
-## AI security
-
-The mobile app does not contain an Anthropic API key. Configure `EXPO_PUBLIC_AI_API_URL` to point at your server-side AI gateway.
-
-## Run
-
+## Run locally
 ```bash
 npm install
-npx expo start
+npm run dev
 ```
 
-For native builds, use the Expo/EAS workflow appropriate for your environment.
-
-## Source migration
-
-The original single-file browser prototype was split into domain logic, state, services, and React Native components. It remains a simulated paper-trading environment unless a real market feed/backend is explicitly connected.
+## Production build
+```bash
+npm run build
+npm run preview
+```
