@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Lumen AI Trading",
+    "slug": "lumen-ai-trading",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.lumen.aitrading" },
+    "android": { "package": "com.lumen.aitrading" },
+    "web": { "bundler": "metro" }
+  }
+}
