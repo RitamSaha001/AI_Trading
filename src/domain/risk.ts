@@ -12,7 +12,8 @@ export interface PortfolioRiskAnalysis {
   assetWeights: Record<Asset, number>;
   weightedVolatility: number; // 20-period annualized or relative volatility
   herfindahlIndex: number; // Quantitative measure of portfolio concentration (0 = perfectly diversified, 1 = concentrated)
-  strategyExposurePct: number; // % of portfolio capital allocated across active automated strategies
+  strategyExposurePct: number; // Actual % of portfolio capital currently deployed in active strategy assets
+  configuredMaxStrategyExposurePct: number; // Sum of configured maximum capacity allocations across active strategies
   riskFactors: { name: string; score: number; description: string }[];
 }
 
@@ -38,6 +39,7 @@ export function calculatePortfolioRisk(
       weightedVolatility: 0,
       herfindahlIndex: 0,
       strategyExposurePct: 0,
+      configuredMaxStrategyExposurePct: 0,
       riskFactors: [],
     };
   }
@@ -81,7 +83,18 @@ export function calculatePortfolioRisk(
 
   // 5. Active strategy capital exposure
   const activeStrategies = (state.strategies || []).filter((s) => s.enabled);
-  const strategyExposurePct = activeStrategies.reduce((sum, s) => sum + (s.maxAllocation || 0) * 100, 0);
+  const configuredMaxStrategyExposurePct = activeStrategies.reduce(
+    (sum, s) => sum + (s.maxAllocation || 0) * 100,
+    0
+  );
+
+  // Actual capital currently deployed in assets governed by active strategies
+  const activeStrategyAssets = new Set(activeStrategies.map((s) => s.asset));
+  const activeStrategyCapitalVal = Array.from(activeStrategyAssets).reduce(
+    (sum, a) => sum + positionValue(state, markets, a),
+    0
+  );
+  const strategyExposurePct = totalVal > 0 ? (activeStrategyCapitalVal / totalVal) * 100 : 0;
 
   // 6. Transparent, multi-factor composite risk scoring (0 - 100)
   // - Concentration penalty: High single-asset exposure creates vulnerability (0 to 45 pts)
@@ -132,6 +145,7 @@ export function calculatePortfolioRisk(
     weightedVolatility: weightedVol,
     herfindahlIndex: hhi,
     strategyExposurePct,
+    configuredMaxStrategyExposurePct,
     riskFactors,
   };
 }

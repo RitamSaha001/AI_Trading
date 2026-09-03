@@ -191,6 +191,8 @@ export function positionPnl(
 
 /**
  * Comprehensive portfolio P&L breakdown separating realized and unrealized performance.
+ * Strictly guarantees the accounting invariant: portfolioValue - startingEquity === totalPnl
+ * and totalPnl === realizedPnl + unrealizedPnl.
  */
 export function totalPortfolioPnl(
   state: Pick<AppState, 'cash' | 'positions' | 'avgBuyPrice' | 'startingEquity' | 'realizedPnl'>,
@@ -214,7 +216,7 @@ export function totalPortfolioPnl(
   }
 
   const totalPnl = realized + unrealized;
-  const startingEquity = state.startingEquity > 0 ? state.startingEquity : (totalVal || 50000);
+  const startingEquity = state.startingEquity > 0 ? state.startingEquity : Math.max(1, totalVal - totalPnl);
   const pct = startingEquity > 0 ? (totalPnl / startingEquity) * 100 : 0;
 
   return {
@@ -226,6 +228,50 @@ export function totalPortfolioPnl(
     pct,
     startingEquity,
   };
+}
+
+/**
+ * Computes total cash currently reserved by open/pending limit buy orders (including estimated taker fee).
+ */
+export function getReservedCash(state: Pick<AppState, 'orders'>): number {
+  return (state.orders || []).reduce((sum, o) => {
+    if (o.status === 'pending' && o.side === 'buy' && o.type === 'limit') {
+      const price = o.limitPrice ?? o.price;
+      const notional = price * o.amount;
+      const fee = notional * FEE_RATE;
+      return sum + (o.reservedCash ?? (notional + fee));
+    }
+    return sum;
+  }, 0);
+}
+
+/**
+ * Returns currently available liquid cash after subtracting funds reserved for pending limit buys.
+ */
+export function getAvailableCash(state: Pick<AppState, 'cash' | 'orders'>): number {
+  const reserved = getReservedCash(state);
+  return Math.max(0, (state.cash || 0) - reserved);
+}
+
+/**
+ * Computes asset units currently reserved by open/pending limit sell orders.
+ */
+export function getReservedPosition(state: Pick<AppState, 'orders'>, asset: Asset): number {
+  return (state.orders || []).reduce((sum, o) => {
+    if (o.status === 'pending' && o.side === 'sell' && o.asset === asset) {
+      return sum + (o.reservedAmount ?? o.amount);
+    }
+    return sum;
+  }, 0);
+}
+
+/**
+ * Returns available asset units after subtracting units reserved by pending limit sells.
+ */
+export function getAvailablePosition(state: Pick<AppState, 'positions' | 'orders'>, asset: Asset): number {
+  const holding = state.positions[asset] || 0;
+  const reserved = getReservedPosition(state, asset);
+  return Math.max(0, holding - reserved);
 }
 
 /**

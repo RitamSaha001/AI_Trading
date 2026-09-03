@@ -26,7 +26,22 @@ const safeFetch = async <T>(url: string, timeoutMs = 4500): Promise<T> => {
 };
 
 /**
+ * Deterministic seeded pseudo-random generator (Mulberry32).
+ * Ensures reproducible market candle bars across simulation ticks without Math.random jitter.
+ */
+function createSeededRng(seed: number) {
+  let s = (seed || 1337) >>> 0;
+  return function next(): number {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
  * Deterministic synthetic simulation fallback when external exchange networks are unreachable or rate-limited.
+ * Uses seeded pseudo-random curves for fully deterministic, reproducible candle bars.
  */
 export function generateHeuristicMarket(asset: Asset, tf: Timeframe): Market {
   const meta = META[asset];
@@ -35,19 +50,23 @@ export function generateHeuristicMarket(asset: Asset, tf: Timeframe): Market {
   const now = Date.now();
   const candles: Candle[] = [];
   let curr = base * 0.985;
-  const seed = asset.charCodeAt(0) * 7 + asset.charCodeAt(asset.length - 1);
+  const baseSeed = asset.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 13), 777);
+  const rng = createSeededRng(baseSeed + cfg.count * 17);
 
   for (let i = 0; i < cfg.count; i++) {
     const time = now - (cfg.count - i) * cfg.stepMs;
+    const r1 = rng();
+    const r2 = rng();
+    const r3 = rng();
     const wave =
-      Math.sin((i + seed) * 0.28) * (base * 0.007) +
-      Math.cos((i + seed * 2) * 0.12) * (base * 0.004) +
-      (Math.random() - 0.49) * (base * 0.003);
+      Math.sin((i + baseSeed) * 0.28) * (base * 0.007) +
+      Math.cos((i + baseSeed * 2) * 0.12) * (base * 0.004) +
+      (r1 - 0.49) * (base * 0.003);
     const open = curr;
     const close = Math.max(open * 0.6, open + wave);
-    const high = Math.max(open, close) * (1 + 0.0025 + Math.random() * 0.001);
-    const low = Math.min(open, close) * (1 - 0.0025 - Math.random() * 0.001);
-    const volume = base * (25 + (i % 7) * 8 + Math.random() * 12);
+    const high = Math.max(open, close) * (1 + 0.0025 + r2 * 0.001);
+    const low = Math.min(open, close) * (1 - 0.0025 - r3 * 0.001);
+    const volume = base * (25 + (i % 7) * 8 + r1 * 12);
     candles.push({ time, open, high, low, close, volume });
     curr = close;
   }
@@ -70,7 +89,7 @@ export function generateHeuristicMarket(asset: Asset, tf: Timeframe): Market {
     volume24h: +volume24h.toFixed(0),
     history: candles.map((c) => c.close),
     candles,
-    source: 'Simulated Heuristic',
+    source: 'Synthetic Heuristic Simulation',
     isSynthetic: true,
     lastUpdated: now,
     category: meta.category,

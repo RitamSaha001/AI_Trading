@@ -239,6 +239,22 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                                 )}
                               </div>
                             )}
+                            {p.executionPlan && (
+                              <div className="pt-2 border-t border-black/[0.04] grid grid-cols-3 gap-1.5 text-[10.5px] font-mono">
+                                <div className="bg-black/[0.02] p-1.5 rounded-lg">
+                                  <span className="text-[9px] text-zinc-400 block uppercase">Post-Sell Cash</span>
+                                  <span className="font-semibold text-zinc-900">{money(p.executionPlan.estimatedPostSellCash)}</span>
+                                </div>
+                                <div className="bg-black/[0.02] p-1.5 rounded-lg">
+                                  <span className="text-[9px] text-zinc-400 block uppercase">Est. Fees</span>
+                                  <span className="font-semibold text-zinc-700">{money(p.executionPlan.estimatedTotalFees)}</span>
+                                </div>
+                                <div className="bg-emerald-500/10 p-1.5 rounded-lg">
+                                  <span className="text-[9px] text-emerald-700 block uppercase font-bold">Residual Cash</span>
+                                  <span className="font-bold text-emerald-700">{money(p.executionPlan.residualCash)}</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 

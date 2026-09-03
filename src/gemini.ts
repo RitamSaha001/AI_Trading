@@ -474,19 +474,35 @@ ${
   }
 
   // 2. Agentic Allocation & Rebalancing Query
-  if (lower.includes('rebalance') || lower.includes('allocate') || lower.includes('fund') || lower.includes('kelly') || lower.includes('parity') || lower.includes('weights')) {
-    const plan = calculateAgenticAllocation(s, markets, lower.includes('kelly') ? 'kelly' : 'risk_parity');
+  if (lower.includes('rebalance') || lower.includes('allocate') || lower.includes('fund') || lower.includes('kelly') || lower.includes('parity') || lower.includes('weights') || lower.includes('growth')) {
+    const style = lower.includes('growth')
+      ? 'growth_weighted'
+      : lower.includes('kelly')
+      ? 'kelly'
+      : 'risk_parity';
+    const plan = calculateAgenticAllocation(s, markets, style);
     const targetKeys = Object.entries(plan.targetWeights).filter(([, w]) => w > 0);
 
     const reply = `### ⚖️ Agentic Portfolio Optimization (${plan.style.toUpperCase()})
 
-Calculated optimal capital distribution using inverse-volatility risk budgeting:
+Calculated optimal capital distribution using ${
+      plan.style === 'kelly'
+        ? 'Fractional Kelly Criterion ($f^* = \\frac{p b - q}{b}$)'
+        : plan.style === 'growth_weighted'
+        ? 'Growth-Weighted momentum heuristics'
+        : 'Inverse-volatility risk budgeting'
+    }:
 
 $$${plan.latexFormula}$$
 
 #### Mathematical Target Allocation:
 ${targetKeys.map(([a, w]) => `- **${a}**: $${w}\\%$`).join('\n')}
 - **Liquid Cash Reserve**: $${plan.cashTargetPct}\\%$ ($${money((plan.cashTargetPct / 100) * pv)}$)
+
+#### Two-Stage Execution Feasibility:
+- **Post-Sell Liquid Cash**: $${money(plan.executionPlan.estimatedPostSellCash)}
+- **Estimated Transaction Fees**: $${money(plan.executionPlan.estimatedTotalFees)}
+- **Residual Cash Balance**: $${money(plan.executionPlan.residualCash)}
 
 #### Execution Steps:
 ${

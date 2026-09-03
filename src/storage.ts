@@ -1,9 +1,9 @@
 import { AppState, ASSETS, Asset, StrategyConfig } from './types';
 import { META } from './domain/portfolio';
 
-export const SCHEMA_VERSION = 5;
-const STORAGE_KEY = 'lumen_cockpit_state_v5';
-const LEGACY_STORAGE_KEY = 'lumen_cockpit_state_v4';
+export const SCHEMA_VERSION = 6;
+const STORAGE_KEY = 'lumen_cockpit_state_v6';
+const LEGACY_STORAGE_KEY = 'lumen_cockpit_state_v5';
 
 export type SimulationMode = 'clean' | 'seeded';
 
@@ -36,52 +36,106 @@ export function freshState(customCash = 50000, mode: SimulationMode = 'clean'): 
 
   const initialStrategies: StrategyConfig[] = [
     {
-      id: 'strat_btc_mom',
+      id: 'strat_btc_vwap',
       asset: 'BTC',
-      kind: 'momentum',
-      name: 'Bitcoin Momentum Surfer (SMA Cross + RSI)',
+      kind: 'vwap_trend',
+      name: 'Bitcoin Institutional VWAP Trend Engine',
       enabled: true,
-      maxAllocation: 0.3,
-      cooldownSec: 30,
+      maxAllocation: 0.35,
+      cooldownSec: 25,
       tradesExecuted: 0,
       totalPnl: 0,
       realizedPnl: 0,
       feesPaid: 0,
-      params: { rsiThresholdBuy: 65, rsiThresholdSell: 35 },
+      targetProfitPct: 5.5,
+      trailingStopPct: 2.0,
+      params: { atrMultiplierTP: 3.0, atrMultiplierSL: 1.25 },
     },
     {
-      id: 'strat_eth_mr',
+      id: 'strat_eth_alpha',
       asset: 'ETH',
-      kind: 'mean_reversion',
-      name: 'Ethereum Bollinger Mean-Reversion',
-      enabled: false,
-      maxAllocation: 0.2,
-      cooldownSec: 45,
-      tradesExecuted: 0,
-      totalPnl: 0,
-      realizedPnl: 0,
-      feesPaid: 0,
-      params: { bollingerBandStdDev: 2, rsiThresholdBuy: 32 },
-    },
-    {
-      id: 'strat_sol_mom',
-      asset: 'SOL',
-      kind: 'momentum',
-      name: 'Solana High-Beta Momentum Breakout',
-      enabled: false,
-      maxAllocation: 0.2,
+      kind: 'ai_multi_factor',
+      name: 'Ethereum Composite Multi-Factor Alpha Engine',
+      enabled: true,
+      maxAllocation: 0.25,
       cooldownSec: 30,
       tradesExecuted: 0,
       totalPnl: 0,
       realizedPnl: 0,
       feesPaid: 0,
+      targetProfitPct: 6.2,
+      trailingStopPct: 2.2,
+      params: { minAlphaScore: 40, atrMultiplierTP: 3.2, atrMultiplierSL: 1.3 },
+    },
+    {
+      id: 'strat_sol_breakout',
+      asset: 'SOL',
+      kind: 'breakout_volatility',
+      name: 'Solana Adaptive Volatility & Squeeze Breakout',
+      enabled: true,
+      maxAllocation: 0.25,
+      cooldownSec: 20,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      targetProfitPct: 8.5,
+      trailingStopPct: 2.8,
+      params: { atrMultiplierTP: 3.5, atrMultiplierSL: 1.4 },
+    },
+    {
+      id: 'strat_sui_mom',
+      asset: 'SUI',
+      kind: 'momentum',
+      name: 'Sui High-Velocity Trend Surfer',
+      enabled: false,
+      maxAllocation: 0.15,
+      cooldownSec: 25,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      targetProfitPct: 7.0,
+      trailingStopPct: 2.5,
       params: { rsiThresholdBuy: 68, rsiThresholdSell: 38 },
     },
     {
-      id: 'strat_link_dca',
+      id: 'strat_link_grid',
       asset: 'LINK',
+      kind: 'grid_scalp',
+      name: 'Chainlink Dynamic ATR Grid Scalper',
+      enabled: false,
+      maxAllocation: 0.15,
+      cooldownSec: 40,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      targetProfitPct: 3.5,
+      trailingStopPct: 1.5,
+      params: { gridLevels: 5, gridSpacingPct: 1.2 },
+    },
+    {
+      id: 'strat_near_breakout',
+      asset: 'NEAR',
+      kind: 'breakout_volatility',
+      name: 'Near Protocol AI & Compute Squeeze Breakout',
+      enabled: false,
+      maxAllocation: 0.15,
+      cooldownSec: 30,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      targetProfitPct: 9.0,
+      trailingStopPct: 3.0,
+      params: { atrMultiplierTP: 3.8, atrMultiplierSL: 1.5 },
+    },
+    {
+      id: 'strat_avax_dca',
+      asset: 'AVAX',
       kind: 'dca',
-      name: 'Chainlink Dollar-Cost Average (DCA)',
+      name: 'Avalanche Smart Value-Weighted DCA',
       enabled: false,
       maxAllocation: 0.15,
       cooldownSec: 60,
@@ -89,7 +143,23 @@ export function freshState(customCash = 50000, mode: SimulationMode = 'clean'): 
       totalPnl: 0,
       realizedPnl: 0,
       feesPaid: 0,
-      params: { dcaAmountUsd: 100 },
+      params: { dcaAmountUsd: 150 },
+    },
+    {
+      id: 'strat_pepe_scalp',
+      asset: 'PEPE',
+      kind: 'breakout_volatility',
+      name: 'Pepe High-Beta Volatility Scalper',
+      enabled: false,
+      maxAllocation: 0.1,
+      cooldownSec: 15,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      targetProfitPct: 12.0,
+      trailingStopPct: 4.0,
+      params: { atrMultiplierTP: 4.0, atrMultiplierSL: 2.0 },
     },
   ];
 
@@ -186,13 +256,19 @@ export function migrateState(rawState: any): AppState {
           triggerHistory: Array.isArray(a.triggerHistory) ? a.triggerHistory : [],
         }))
       : base.alerts,
-    strategies: Array.isArray(rawState.strategies) && rawState.strategies.length > 0
-      ? rawState.strategies.map((s: any) => ({
-          ...s,
-          realizedPnl: typeof s.realizedPnl === 'number' ? s.realizedPnl : 0,
-          feesPaid: typeof s.feesPaid === 'number' ? s.feesPaid : 0,
-        }))
-      : base.strategies,
+    strategies: (() => {
+      if (!Array.isArray(rawState.strategies) || rawState.strategies.length === 0) {
+        return base.strategies;
+      }
+      const existing = rawState.strategies.map((s: any) => ({
+        ...s,
+        realizedPnl: typeof s.realizedPnl === 'number' ? s.realizedPnl : 0,
+        feesPaid: typeof s.feesPaid === 'number' ? s.feesPaid : 0,
+      }));
+      const existingIds = new Set(existing.map((x: any) => x.id));
+      const additions = base.strategies.filter((b) => !existingIds.has(b.id));
+      return [...existing, ...additions];
+    })(),
     settings: {
       ...base.settings,
       ...(rawState.settings || {}),

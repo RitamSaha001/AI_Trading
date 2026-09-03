@@ -1,14 +1,23 @@
 import { AIActionProposal, AISafetyValidation, ASSETS, AppState, Asset, Market } from '../types';
-import { portfolioValue, positionValue, money } from '../domain/portfolio';
+import {
+  portfolioValue,
+  positionValue,
+  money,
+  getAvailableCash,
+  getReservedCash,
+  getAvailablePosition,
+  getReservedPosition,
+  formatQty,
+} from '../domain/portfolio';
 import { calculateExecutionQuote } from '../domain/trading';
 
 export const MAX_SINGLE_ORDER_PORTFOLIO_PCT = 0.5; // Max 50% of portfolio in a single AI order
-export const MAX_ASSET_ALLOCATION_PCT = 0.6; // Max 60% concentration allowed from AI orders
+export const MAX_ASSET_ALLOCATION_PCT = 0.6; // Hard cap: Max 60% concentration allowed from AI orders
 export const STALE_DATA_THRESHOLD_MS = 45000; // 45 seconds
 
 /**
  * Validates any AI-generated proposal against financial sanity, portfolio risk caps,
- * and market freshness before a user is prompted for authorization.
+ * pending order reservations, and market freshness before authorization.
  */
 export function validateAIProposal(
   proposal: any,
@@ -36,7 +45,6 @@ export function validateAIProposal(
   if (proposal.type === 'rebalance' || proposal.type === 'emergency_defend') {
     const steps: any[] = proposal.rebalanceSteps || [];
     if (!Array.isArray(steps) || steps.length === 0) {
-      // If targets were provided without steps, check targets
       if (!proposal.rebalanceTargets && !proposal.cashTargetPct) {
         errors.push('Rebalance proposal must specify either rebalanceSteps or rebalanceTargets.');
       }
@@ -115,37 +123,41 @@ export function validateAIProposal(
   const quote = calculateExecutionQuote(market.price, side, amount);
   const totalPortVal = portfolioValue(state, markets);
   const currentCash = state.cash;
+  const availableCash = getAvailableCash(state);
+  const reservedCash = getReservedCash(state);
   const currentHolding = state.positions[asset] || 0;
+  const availableHolding = getAvailablePosition(state, asset);
+  const reservedHolding = getReservedPosition(state, asset);
   const currentAssetVal = positionValue(state, markets, asset);
 
   // Capital & Holdings Checks
   if (side === 'buy') {
-    if (quote.totalCashRequired > currentCash) {
+    if (quote.totalCashRequired > availableCash + 0.01) {
       errors.push(
-        `Insufficient liquid cash. Order requires ${money(quote.totalCashRequired)} (including fees), but available cash is ${money(currentCash)}.`
+        `Insufficient available liquid cash. Order requires ${money(quote.totalCashRequired)} (incl. fee), but available cash is ${money(availableCash)} (${money(reservedCash)} reserved for pending orders).`
       );
     }
 
-    // Single order size cap
+    // Single order size cap (Hard Block at 50%)
     if (quote.notional > totalPortVal * MAX_SINGLE_ORDER_PORTFOLIO_PCT) {
       errors.push(
-        `Order exceeds maximum safe single-trade size (50% of portfolio). Notional: ${money(quote.notional)}.`
+        `Order exceeds maximum safe single-trade cap (50% of portfolio). Trade notional: ${money(quote.notional)}, max allowed: ${money(totalPortVal * MAX_SINGLE_ORDER_PORTFOLIO_PCT)}.`
       );
     }
 
-    // Asset allocation cap
+    // Asset allocation cap (Hard Block at 60%)
     const resultingAssetVal = currentAssetVal + quote.notional;
     const resultingAllocPct = totalPortVal > 0 ? (resultingAssetVal / totalPortVal) * 100 : 0;
-    if (resultingAllocPct > MAX_ASSET_ALLOCATION_PCT * 100) {
-      warnings.push(
-        `Order would raise ${asset} allocation to ${resultingAllocPct.toFixed(1)}% (exceeding recommended 60% diversification cap).`
+    if (resultingAllocPct > MAX_ASSET_ALLOCATION_PCT * 100 + 0.01) {
+      errors.push(
+        `Safety Policy Hard Block: Order would raise ${asset} allocation to ${resultingAllocPct.toFixed(1)}%, violating the hard 60.0% diversification cap.`
       );
     }
   } else {
     // Sell
-    if (amount > currentHolding + 1e-6) {
+    if (amount > availableHolding + 1e-6) {
       errors.push(
-        `Insufficient holdings. Attempted to sell ${amount} ${asset}, but current portfolio holding is ${currentHolding}.`
+        `Insufficient available holdings. Attempted to sell ${formatQty(amount, asset)}, but available holding is ${formatQty(availableHolding, asset)} (${formatQty(reservedHolding, asset)} reserved for pending orders).`
       );
     }
   }

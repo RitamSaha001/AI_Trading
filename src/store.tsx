@@ -60,6 +60,9 @@ type Ctx = {
   cancelPendingOrder: (orderId: string) => boolean;
   toggleStrategy: (id: string) => void;
   updateStrategy: (id: string, p: Partial<StrategyConfig>) => void;
+  addStrategy: (x: Omit<StrategyConfig, 'id' | 'tradesExecuted' | 'totalPnl' | 'realizedPnl' | 'feesPaid'>) => void;
+  removeStrategy: (id: string) => void;
+  resetStrategyMetrics: (id: string) => void;
   addAlert: (x: Omit<AppState['alerts'][number], 'id' | 'triggered' | 'createdAt'>) => void;
   toggleAlert: (id: string) => void;
   removeAlert: (id: string) => void;
@@ -247,12 +250,16 @@ export function Provider({ children }: { children: React.ReactNode }) {
         notifications: [...stateRef.current.notifications],
       };
       const m = marketsRef.current;
-      if (!m.BTC) return;
+      const hasAnyMarket = Object.values(m).some((market) => market && market.price > 0);
+      if (!hasAnyMarket) return;
 
       let changed = false;
 
       // 1. Evaluate Pending Limit & Bracket Orders
       const orderResults = checkPendingOrders(s, m);
+      if (orderResults.changed) {
+        changed = true;
+      }
       if (orderResults.filledOrders.length > 0) {
         for (const order of orderResults.filledOrders) {
           const msg = `Order Executed: ${order.side.toUpperCase()} ${order.amount} ${order.asset} @ ${money(order.price)}`;
@@ -266,7 +273,33 @@ export function Provider({ children }: { children: React.ReactNode }) {
           if (s.settings.soundEnabled) playChime('trade');
           triggerToast(`Limit Order Filled`, msg, 'success');
         }
-        changed = true;
+      }
+      if (orderResults.rejectedOrders.length > 0) {
+        for (const order of orderResults.rejectedOrders) {
+          const msg = `Order Rejected: ${order.side.toUpperCase()} ${order.amount} ${order.asset} (${order.rejectReason || 'Validation failed'})`;
+          s.notifications.unshift({
+            id: 'notif_' + Math.random().toString(36).substring(2, 8),
+            ts: Date.now(),
+            title: `Order Rejected (${order.type.toUpperCase()})`,
+            body: msg,
+            type: 'order',
+          });
+          triggerToast(`Order Rejected`, msg, 'warn');
+        }
+      }
+      if (orderResults.triggeredBrackets.length > 0) {
+        for (const bracket of orderResults.triggeredBrackets) {
+          const msg = `${bracket.order.asset} Bracket Triggered: ${bracket.reason}`;
+          s.notifications.unshift({
+            id: 'notif_' + Math.random().toString(36).substring(2, 8),
+            ts: Date.now(),
+            title: `Bracket Order Executed`,
+            body: msg,
+            type: 'strategy',
+          });
+          if (s.settings.soundEnabled) playChime('trade');
+          triggerToast(`Bracket Triggered`, msg, 'info');
+        }
       }
 
       // 2. Evaluate Alerts
@@ -423,6 +456,50 @@ export function Provider({ children }: { children: React.ReactNode }) {
       strategies: s.strategies.map((x) => (x.id === id ? { ...x, ...p } : x)),
     }));
   }, []);
+
+  const addStrategy = useCallback(
+    (x: Omit<StrategyConfig, 'id' | 'tradesExecuted' | 'totalPnl' | 'realizedPnl' | 'feesPaid'>) => {
+      const id = 'strat_' + x.asset.toLowerCase() + '_' + Math.random().toString(36).substring(2, 7);
+      setState((s) => ({
+        ...s,
+        strategies: [
+          {
+            ...x,
+            id,
+            tradesExecuted: 0,
+            totalPnl: 0,
+            realizedPnl: 0,
+            feesPaid: 0,
+            winCount: 0,
+            lossCount: 0,
+          },
+          ...s.strategies,
+        ],
+      }));
+      triggerToast('Strategy Deployed', `New ${x.kind.replace('_', ' ')} algorithm activated on ${x.asset}`, 'success');
+    },
+    [triggerToast]
+  );
+
+  const removeStrategy = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      strategies: s.strategies.filter((x) => x.id !== id),
+    }));
+    triggerToast('Strategy Removed', 'Algorithmic strategy has been safely decommissioned.', 'info');
+  }, [triggerToast]);
+
+  const resetStrategyMetrics = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      strategies: s.strategies.map((x) =>
+        x.id === id
+          ? { ...x, tradesExecuted: 0, totalPnl: 0, realizedPnl: 0, feesPaid: 0, winCount: 0, lossCount: 0 }
+          : x
+      ),
+    }));
+    triggerToast('Metrics Reset', 'Strategy performance counters cleared.', 'info');
+  }, [triggerToast]);
 
   const addAlert = useCallback(
     (x: Omit<AppState['alerts'][number], 'id' | 'triggered' | 'createdAt'>) => {
@@ -643,6 +720,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
       cancelPendingOrder,
       toggleStrategy,
       updateStrategy,
+      addStrategy,
+      removeStrategy,
+      resetStrategyMetrics,
       addAlert,
       toggleAlert,
       removeAlert,
@@ -677,6 +757,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
       cancelPendingOrder,
       toggleStrategy,
       updateStrategy,
+      addStrategy,
+      removeStrategy,
+      resetStrategyMetrics,
       addAlert,
       toggleAlert,
       removeAlert,

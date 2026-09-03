@@ -22,7 +22,8 @@ export type DataSource =
   | 'Binance WebSocket (Live)'
   | 'Binance REST'
   | 'Coinbase REST'
-  | 'Simulated Heuristic';
+  | 'Simulated Heuristic'
+  | 'Synthetic Heuristic Simulation';
 
 export type Candle = {
   time: number;
@@ -72,6 +73,12 @@ export type Order = {
   filledAt?: number;
   takeProfit?: number;
   stopLoss?: number;
+  bracketId?: string;
+  positionLotId?: string;
+  parentOrderId?: string;
+  tradeGroupId?: string;
+  reservedCash?: number;
+  reservedAmount?: number;
 };
 
 export type AlertRule = {
@@ -88,7 +95,14 @@ export type AlertRule = {
   triggerHistory?: { ts: number; price: number; message: string }[];
 };
 
-export type StrategyKind = 'momentum' | 'mean_reversion' | 'dca';
+export type StrategyKind =
+  | 'vwap_trend'
+  | 'breakout_volatility'
+  | 'ai_multi_factor'
+  | 'grid_scalp'
+  | 'momentum'
+  | 'mean_reversion'
+  | 'dca';
 
 export type StrategyConfig = {
   id: string;
@@ -103,11 +117,23 @@ export type StrategyConfig = {
   totalPnl: number; // Historical cumulative attributed P&L
   realizedPnl: number;
   feesPaid: number;
+  winCount?: number;
+  lossCount?: number;
+  targetProfitPct?: number; // Target Take Profit % (e.g. 5.0)
+  trailingStopPct?: number; // Trailing Stop % (e.g. 2.0)
   params: {
     rsiThresholdBuy?: number;
     rsiThresholdSell?: number;
     dcaAmountUsd?: number;
     bollingerBandStdDev?: number;
+    vwapBandMultiplier?: number;
+    breakoutThresholdPct?: number;
+    minAlphaScore?: number;
+    gridLevels?: number;
+    gridSpacingPct?: number;
+    atrMultiplierTP?: number;
+    atrMultiplierSL?: number;
+    dynamicRiskSizing?: boolean;
   };
 };
 
@@ -160,6 +186,13 @@ export type AIActionProposal = {
   rebalanceTargets?: Partial<Record<Asset, number>>;
   cashTargetPct?: number;
   rebalanceSteps?: RebalanceStep[];
+  allowOverride?: boolean;
+  executionPlan?: {
+    estimatedPostSellCash: number;
+    estimatedTotalFees: number;
+    residualCash: number;
+    isCashFeasible: boolean;
+  };
 };
 
 export type AISafetyValidation = {
@@ -186,6 +219,8 @@ export type AISafetyValidation = {
 export type AppState = {
   schemaVersion: number;
   cash: number;
+  reservedCash?: number;
+  reservedPositions?: Partial<Record<Asset, number>>;
   initialCash: number;
   startingEquity: number;
   realizedPnl: number;
