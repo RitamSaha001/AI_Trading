@@ -7,20 +7,46 @@ export type GeminiModel = {
   displayName?: string;
 };
 
+// Model 3 series models exclusively
 export const SUPPORTED_MODELS: GeminiModel[] = [
-  { name: 'gemini-1.5-flash', displayName: 'Gemini 1.5 Flash (Fast, Recommended)' },
-  { name: 'gemini-1.5-pro', displayName: 'Gemini 1.5 Pro (Deep Quantitative Reasoning)' },
-  { name: 'gemini-1.5-flash-8b', displayName: 'Gemini 1.5 Flash-8B (High Throughput)' },
+  { name: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash (Fast & Intelligent, Recommended)' },
+  { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro (Deep Quantitative Reasoning)' },
+  { name: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite (Ultra-Low Latency)' },
 ];
 
+/**
+ * Validates and resolves model name ensuring only Gemini 3 series models are used.
+ * Automatically migrates any legacy or deprecated model name to gemini-3.8-flash.
+ */
+export function resolveGemini3Model(requestedModel?: string): string {
+  if (requestedModel && requestedModel.includes('gemini-3')) {
+    return requestedModel;
+  }
+  return 'gemini-3.8-flash';
+}
+
+export function resolveApiKey(customKey?: string): string {
+  const custom = customKey?.trim();
+  if (custom) return custom;
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
+    return (import.meta.env.VITE_GEMINI_API_KEY as string).trim();
+  }
+  return '';
+}
+
 export async function listGeminiModels(customKey?: string): Promise<GeminiModel[]> {
-  const key = customKey;
+  const key = resolveApiKey(customKey);
   if (!key) {
     return SUPPORTED_MODELS;
   }
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, {
+      headers: {
+        'x-goog-api-key': key,
+        'User-Agent': 'aistudio-build',
+      },
+    });
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     const data = await res.json();
 
@@ -29,10 +55,11 @@ export async function listGeminiModels(customKey?: string): Promise<GeminiModel[
       for (const m of data.models) {
         if (m.name && m.supportedGenerationMethods?.includes('generateContent')) {
           const cleanName = m.name.replace(/^models\//, '');
-          if (cleanName.includes('gemini-1.5') || cleanName.includes('gemini-2.0') || cleanName.includes('gemini-2.5')) {
+          // Strictly restrict to Gemini Model 3 series only
+          if (cleanName.includes('gemini-3')) {
             list.push({
               name: cleanName,
-              displayName: m.displayName || cleanName,
+              displayName: m.displayName ? `${m.displayName} (Gemini 3 Series)` : cleanName,
             });
           }
         }
@@ -85,7 +112,7 @@ export async function fetchAIInsight(
   rationale: string;
   signals: { label: string; value: string }[];
   proposals: AIActionProposal[];
-  engine: 'Gemini Live AI' | 'Deterministic Algorithmic Engine (Local Mode)';
+  engine: string;
 }> {
   const m = markets[asset];
   const ind = m
@@ -94,9 +121,9 @@ export async function fetchAIInsight(
   const portfolioContext = buildContext(s, markets);
 
   try {
-    const key = s.settings.geminiApiKey;
+    const key = resolveApiKey(s.settings.geminiApiKey);
     if (key) {
-      const model = s.settings.geminiModel || 'gemini-1.5-flash';
+      const model = resolveGemini3Model(s.settings.geminiModel);
 
       const prompt = `You are Lumen Copilot, an educational quantitative cryptocurrency market analyst.
 Analyze the target asset based strictly on standard technical indicators and portfolio allocation risk.
@@ -143,7 +170,11 @@ Return ONLY valid JSON matching this schema:
 
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+          'User-Agent': 'aistudio-build',
+        },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
@@ -157,7 +188,13 @@ Return ONLY valid JSON matching this schema:
         const data = await res.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text) {
-          const parsed = JSON.parse(text);
+          let cleanJson = text.trim();
+          if (cleanJson.startsWith('```json')) {
+            cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          } else if (cleanJson.startsWith('```')) {
+            cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
+          }
+          const parsed = JSON.parse(cleanJson);
           const sanitizedProposals: AIActionProposal[] = Array.isArray(parsed.proposals)
             ? parsed.proposals.map((p: any) => ({
                 type: p.type === 'order' ? 'order' : 'alert',
@@ -179,13 +216,13 @@ Return ONLY valid JSON matching this schema:
             rationale: parsed.rationale || 'Analysis completed.',
             signals: parsed.signals || [],
             proposals: sanitizedProposals,
-            engine: 'Gemini Live AI',
+            engine: `Gemini 3 Series (${model})`,
           };
         }
       }
     }
   } catch (e) {
-    console.warn('Gemini API call unsuccessful, activating local algorithmic analysis fallback:', e);
+    console.warn('Gemini 3 series API call unsuccessful, activating local algorithmic analysis fallback:', e);
   }
 
   // Deterministic local mathematical indicator fallback
@@ -255,9 +292,9 @@ export async function sendAIChat(
   const portfolioContext = buildContext(s, markets);
 
   try {
-    const key = s.settings.geminiApiKey;
+    const key = resolveApiKey(s.settings.geminiApiKey);
     if (key) {
-      const systemPrompt = `You are Lumen Copilot, an educational cryptocurrency paper-trading assistant.
+      const systemPrompt = `You are Lumen Copilot, an educational cryptocurrency paper-trading assistant powered by Gemini 3 series.
 You specialize in transparent portfolio analysis, technical indicator evaluation (SMA/EMA crossovers, RSI oscillators, Bollinger Bands), and risk budgeting.
 You DO NOT have access to live order books or insider data. Never claim to analyze order books or predict the future.
 Be calm, scannable, and transparent.
@@ -299,11 +336,15 @@ For alert: {"type":"alert","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"
         formattedHistory.push(currentUserMsg);
       }
 
-      const model = s.settings.geminiModel || 'gemini-1.5-flash';
+      const model = resolveGemini3Model(s.settings.geminiModel);
 
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+          'User-Agent': 'aistudio-build',
+        },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: formattedHistory,
@@ -343,7 +384,7 @@ For alert: {"type":"alert","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"
         return {
           reply: cleanedText || 'Analysis complete.',
           actionProposal,
-          engine: 'Gemini Live AI',
+          engine: `Gemini 3 Series (${model})`,
         };
       }
     }
@@ -353,7 +394,7 @@ For alert: {"type":"alert","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"
 
   // Local fallback response
   return {
-    reply: `Portfolio status: Total equity is $${portfolioValue(s, markets).toLocaleString()} with $${money(s.cash)} in liquid cash. Your portfolio risk score is currently ${calculatePortfolioRisk(s, markets).portfolioRiskScore}/100 (${calculatePortfolioRisk(s, markets).riskLabel}). Selected asset ${s.selectedAsset} is quoting at ${money(markets[s.selectedAsset]?.price || 0)}. To enable conversational generative reasoning, configure your Gemini API key in Settings.`,
+    reply: `Portfolio status: Total equity is $${portfolioValue(s, markets).toLocaleString()} with $${money(s.cash)} in liquid cash. Your portfolio risk score is currently ${calculatePortfolioRisk(s, markets).portfolioRiskScore}/100 (${calculatePortfolioRisk(s, markets).riskLabel}). Selected asset ${s.selectedAsset} is quoting at ${money(markets[s.selectedAsset]?.price || 0)}. To enable conversational generative reasoning powered by Gemini 3 series, configure your Gemini API key in Settings.`,
     actionProposal: null,
     engine: 'Deterministic Algorithmic Engine (Local Mode)',
   };

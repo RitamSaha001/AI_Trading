@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { listGeminiModels, SUPPORTED_MODELS } from './gemini';
+import { listGeminiModels, SUPPORTED_MODELS, resolveGemini3Model } from './gemini';
 import { useLumen } from './store';
 import { SimulationMode } from './storage';
 import { X, Sparkles, Key, Cpu, Volume2, RotateCcw, Check, Radio, Info } from 'lucide-react';
@@ -11,7 +11,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
-  const [selectedModel, setSelectedModel] = useState(state.settings.geminiModel || 'gemini-1.5-flash');
+  const [selectedModel, setSelectedModel] = useState(resolveGemini3Model(state.settings.geminiModel));
   const [sound, setSound] = useState(state.settings.soundEnabled ?? true);
   const [wsEnabled, setWsEnabled] = useState(state.settings.enableWebSocket ?? true);
   const [resetBalance, setResetBalance] = useState(50000);
@@ -113,7 +113,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
                 <Cpu className="w-3.5 h-3.5 text-zinc-400" />
-                Gemini Model
+                Gemini Model (Model 3 Series)
               </label>
               <button
                 type="button"
@@ -135,6 +135,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 </option>
               ))}
             </select>
+            <p className="text-[11px] text-zinc-500">
+              Configured exclusively for Gemini 3 series models for fast technical analysis, risk scoring, and copilot reasoning.
+            </p>
           </div>
 
           {/* Real-time WebSocket Feed */}

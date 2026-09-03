@@ -133,7 +133,7 @@ export function freshState(customCash = 50000, mode: SimulationMode = 'clean'): 
     strategies: initialStrategies,
     settings: {
       geminiApiKey: '',
-      geminiModel: 'gemini-1.5-flash',
+      geminiModel: 'gemini-3.8-flash',
       soundEnabled: true,
       theme: 'glass',
       maxSlippageBps: 50,
@@ -197,7 +197,10 @@ export function migrateState(rawState: any): AppState {
       ...base.settings,
       ...(rawState.settings || {}),
       geminiApiKey: rawState.settings?.geminiApiKey ?? '',
-      geminiModel: rawState.settings?.geminiModel ?? 'gemini-1.5-flash',
+      geminiModel:
+        rawState.settings?.geminiModel && String(rawState.settings.geminiModel).includes('gemini-3')
+          ? rawState.settings.geminiModel
+          : 'gemini-3.8-flash',
     },
     notifications: Array.isArray(rawState.notifications) ? rawState.notifications.slice(0, 100) : base.notifications,
     timeframe: rawState.timeframe ?? '1D',

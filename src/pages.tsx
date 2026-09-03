@@ -15,6 +15,7 @@ import {
   META,
 } from './trading';
 import { go } from './Shell';
+import { SUPPORTED_MODELS, resolveGemini3Model } from './gemini';
 import {
   TrendingUp,
   TrendingDown,
@@ -1600,18 +1601,20 @@ export function Alerts() {
 export function SettingsPage() {
   const { state, setSettings, reset } = useLumen();
   const [key, setKey] = useState(state.settings.geminiApiKey || '');
+  const [selectedModel, setSelectedModel] = useState(resolveGemini3Model(state.settings.geminiModel));
+  const [saved, setSaved] = useState(false);
 
   return (
     <div className="max-w-2xl space-y-6 animate-in fade-in duration-300">
       <PageHeader
         title="Settings &amp; Environment"
-        subtitle="Configure Gemini model endpoints, audio cues, and local paper balances."
+        subtitle="Configure Gemini 3 series model endpoints, audio cues, and local paper balances."
       />
 
       <GlassCard className="space-y-4">
-        <h3 className="text-sm font-bold text-zinc-900">Gemini AI Configuration</h3>
+        <h3 className="text-sm font-bold text-zinc-900">Gemini 3 Series AI Configuration</h3>
         <p className="text-xs text-zinc-500">
-          The app calls server-side endpoints proxied to Google GenAI. Providing a key will route requests with your credentials.
+          The app uses Google Gemini 3 series models exclusively for high-throughput technical analysis, quantitative risk modeling, and interactive copilot queries.
         </p>
 
         <div className="space-y-1.5">
@@ -1620,18 +1623,45 @@ export function SettingsPage() {
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder="AIzaSy... (leave blank to use server environment default)"
+            placeholder="AIzaSy... (leave blank for zero-cost offline local mode)"
             className="w-full px-3.5 py-2.5 text-xs font-mono bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500"
           />
         </div>
 
-        <button
-          type="button"
-          onClick={() => setSettings({ geminiApiKey: key.trim() })}
-          className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 rounded-xl shadow-xs hover:bg-zinc-800 transition-all"
-        >
-          Save API Key
-        </button>
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-zinc-700">Gemini Model (Model 3 Series Only)</label>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 font-medium text-zinc-900"
+          >
+            {SUPPORTED_MODELS.map((m) => (
+              <option key={m.name} value={m.name}>
+                {m.displayName || m.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-zinc-500">
+            Powered exclusively by Gemini 3.8 Flash, 3.1 Pro, and 3.1 Flash Lite.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSettings({
+                geminiApiKey: key.trim(),
+                geminiModel: selectedModel,
+              });
+              setSaved(true);
+              setTimeout(() => setSaved(false), 2000);
+            }}
+            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 rounded-xl shadow-xs hover:bg-zinc-800 transition-all flex items-center gap-1.5"
+          >
+            {saved ? 'Saved Successfully!' : 'Save AI Configuration'}
+          </button>
+        </div>
       </GlassCard>
 
       <GlassCard className="space-y-4 border-rose-500/20 bg-rose-500/[0.02]">

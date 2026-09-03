@@ -39,7 +39,7 @@ function createFreshState(cash = 50000): AppState {
     selectedAsset: 'BTC',
     settings: {
       geminiApiKey: '',
-      geminiModel: 'gemini-1.5-flash',
+      geminiModel: 'gemini-3.8-flash',
       soundEnabled: true,
       enableWebSocket: true,
       theme: 'light',

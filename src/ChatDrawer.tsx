@@ -15,6 +15,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { money } from './trading';
+import { resolveGemini3Model } from './gemini';
 
 export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { chatHistory, sendChat, chatLoading, executeActionProposal, state } = useLumen();
@@ -67,10 +68,10 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-semibold tracking-tight text-zinc-900">Lumen Copilot</h2>
                 <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold bg-indigo-500/10 text-indigo-700 rounded-full border border-indigo-500/20">
-                  {state.settings.geminiModel ? state.settings.geminiModel.replace('gemini-', '') : 'AI Engine'}
+                  {resolveGemini3Model(state.settings.geminiModel).replace('gemini-', '')}
                 </span>
               </div>
-              <p className="text-xs text-zinc-500">Technical indicators &amp; portfolio risk copilot</p>
+              <p className="text-xs text-zinc-500">Gemini 3 series indicators &amp; portfolio copilot</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
