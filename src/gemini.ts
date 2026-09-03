@@ -1,14 +1,33 @@
-import { AIActionProposal, AppState, Asset, Market } from './types';
+import {
+  ASSETS,
+  AIActionProposal,
+  AppState,
+  Asset,
+  Market,
+  StrategyKind,
+  StressTestScenario,
+} from './types';
 import { indicators, money, portfolioValue } from './trading';
 import { calculatePortfolioRisk } from './domain/risk';
 import {
   senseMarketDanger,
   calculateAgenticAllocation,
+  simulatePortfolioStressTest,
+  synthesizeStrategyBot,
+  generateSmartDCAPlan,
+  compareTokensAlpha,
   DangerAssessment,
   AgenticAllocationPlan,
 } from './domain/agentic';
 
-export { senseMarketDanger, calculateAgenticAllocation };
+export {
+  senseMarketDanger,
+  calculateAgenticAllocation,
+  simulatePortfolioStressTest,
+  synthesizeStrategyBot,
+  generateSmartDCAPlan,
+  compareTokensAlpha,
+};
 export type { DangerAssessment, AgenticAllocationPlan };
 
 export type GeminiModel = {
@@ -304,7 +323,7 @@ export async function sendAIChat(
   try {
     const key = resolveApiKey(s.settings.geminiApiKey);
     if (key) {
-      const systemPrompt = `You are Lumen Copilot, an elite quantitative cryptocurrency market analyst and autonomous portfolio risk guardian powered by Google Gemini 3 series.
+      const systemPrompt = `You are Lumen Nexus, an elite autonomous quantitative cryptocurrency market analyst, risk guardian, and agentic portfolio optimizer powered by Google Gemini 3 series.
 You specialize in transparent portfolio analysis, technical indicator evaluation (SMA/EMA crossovers, RSI oscillators, Bollinger Bands, ATR, MACD), risk budgeting, and agentic capital allocation.
 
 MATHEMATICAL & LATEX FORMATTING RULES:
@@ -314,19 +333,26 @@ Whenever explaining quantitative concepts, risk metrics, Kelly optimization, or 
 Never use raw ASCII fractions like "RSI = 100 - (100 / (1 + RS))" when LaTeX can be used.
 
 AGENTIC AUTONOMOUS POWERS:
-1. SENSING DANGER: If you sense high downside volatility, sharp negative momentum divergence, severe concentration (>40% in one volatile token), or depleted cash, warn the user clearly and propose an "emergency_defend" or "rebalance" action.
-2. AGENTIC REBALANCING: You can compute and propose complete multi-asset portfolio rebalancing (Kelly criterion or Risk-Parity) with concrete buy/sell execution steps.
-3. SPECIFIC PROPOSALS: If proposing an execution, wrap exactly ONE structured JSON inside <<<ACTION ... ACTION>>>.
+You can execute and propose 8 specialized agentic financial actions.
+When recommending an action, wrap exactly ONE valid JSON payload inside <<<ACTION ... ACTION>>>.
 
-SUPPORTED ACTIONS:
-- Single Order:
-  {"type":"order","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"DOGE","side":"buy"|"sell","amount":number,"rationale":string,"confidence":"low"|"medium"|"high","riskSummary":string}
-- Price Alert:
-  {"type":"alert","asset":"BTC"|"ETH"|...,"alertType":"above"|"below","value":number,"rationale":string,"confidence":"high","riskSummary":string}
-- Multi-Asset Agentic Rebalance:
-  {"type":"rebalance","asset":"BTC","rationale":string,"confidence":"high","riskSummary":string,"formulaLatex":string,"cashTargetPct":number,"rebalanceTargets":{"BTC":number,"ETH":number,"SOL":number},"rebalanceSteps":[{"asset":"SOL","action":"sell","amount":number,"estimatedPrice":number,"estimatedNotional":number},{"asset":"BTC","action":"buy","amount":number,"estimatedPrice":number,"estimatedNotional":number}]}
-- Emergency Capital Defense:
-  {"type":"emergency_defend","asset":"BTC","dangerLevel":"HIGH"|"CRITICAL","hazardSource":string,"rationale":string,"confidence":"high","riskSummary":string,"formulaLatex":string,"rebalanceSteps":[{"asset":"SOL","action":"sell","amount":number,"estimatedPrice":number,"estimatedNotional":number}]}
+SUPPORTED ACTION ENVELOPES:
+1. Single Order:
+   {"type":"order","asset":"BTC","side":"buy"|"sell","amount":number,"rationale":string,"confidence":"high","riskSummary":string}
+2. Price & Volatility Alert:
+   {"type":"alert","asset":"BTC","alertType":"above"|"below"|"changeUp"|"changeDown","value":number,"rationale":string,"confidence":"high","riskSummary":string}
+3. Agentic Multi-Asset Rebalance:
+   {"type":"rebalance","asset":"BTC","rationale":string,"confidence":"high","riskSummary":string,"formulaLatex":string,"cashTargetPct":number,"rebalanceTargets":{"BTC":number,"ETH":number,"SOL":number},"rebalanceSteps":[{"asset":"SOL","action":"sell","amount":number,"estimatedPrice":number,"estimatedNotional":number},{"asset":"BTC","action":"buy","amount":number,"estimatedPrice":number,"estimatedNotional":number}]}
+4. Emergency Capital Defense:
+   {"type":"emergency_defend","asset":"BTC","dangerLevel":"HIGH"|"CRITICAL","hazardSource":string,"rationale":string,"confidence":"high","riskSummary":string,"formulaLatex":string,"rebalanceSteps":[{"asset":"SOL","action":"sell","amount":number,"estimatedPrice":number,"estimatedNotional":number}]}
+5. Deploy Algorithmic Strategy Bot:
+   {"type":"deploy_strategy","asset":"BTC"|"ETH"|"SOL"|"LINK"|"SUI","strategyParams":{"kind":"vwap_trend"|"breakout_volatility"|"ai_multi_factor"|"grid_scalp"|"momentum"|"mean_reversion"|"dca","name":string,"maxAllocation":number,"cooldownSec":number,"targetProfitPct":number,"trailingStopPct":number},"rationale":string,"confidence":"high","riskSummary":string}
+6. Portfolio Stress-Test & Crash Simulation:
+   {"type":"stress_test","asset":"BTC","stressTest":{"scenarioId":"btc_flash_crash_20"|"macro_rate_shock"|"high_beta_liquidation"|"crypto_winter_cascade"},"rationale":string,"confidence":"high","riskSummary":string}
+7. Smart Value-Weighted DCA Plan:
+   {"type":"smart_dca","asset":"BTC"|"ETH"|"SOL","dcaPlan":{"asset":string,"frequency":"Weekly","baseAmountUsd":number,"oversoldMultiplier":1.6,"pauseThresholdRsi":70,"targetProfitPct":8.0,"trailingStopPct":2.5},"rationale":string,"confidence":"high","riskSummary":string}
+8. Multi-Asset Alpha Radar Comparison:
+   {"type":"token_compare","asset":"BTC","tokens":["BTC","ETH","SOL","AVAX"],"rationale":string,"confidence":"high","riskSummary":string}
 
 Live Telemetry:
 Portfolio Total Value: $${portfolioContext.portfolioValue}
@@ -334,7 +360,7 @@ Liquid Cash: $${portfolioContext.cash} (${((s.cash / (portfolioContext.portfolio
 Risk Score: ${portfolioContext.riskScore}/100 (${portfolioContext.riskLabel})
 Top Concentration: ${portfolioContext.topConcentration} in ${portfolioContext.topAsset || 'None'}
 Danger Sentinel Status: ${dangerAssessment.dangerLevel} (Score: ${dangerAssessment.dangerScore}/100, Hazards: ${dangerAssessment.hazards.join('; ') || 'None'})
-Live Quotes: ${JSON.stringify(Object.fromEntries(Object.entries(markets || {}).map(([k, v]: any) => [k, { price: v?.price, chg24h: v?.change24h, rsi: v?.indicators?.rsi }]))) }`;
+Live Quotes: ${JSON.stringify(Object.fromEntries(Object.entries(markets || {}).slice(0, 12).map(([k, v]: any) => [k, { price: v?.price, chg24h: v?.change24h, rsi: v?.indicators?.rsi }]))) }`;
 
       const rawHistory = history.slice(-8, -1).map((h) => ({
         role: h.role === 'user' ? 'user' : 'model',
@@ -389,11 +415,12 @@ Live Quotes: ${JSON.stringify(Object.fromEntries(Object.entries(markets || {}).m
           try {
             const rawProp = JSON.parse(actionMatch[1]);
             const pType = rawProp.type || 'order';
+            const targetAsset = rawProp.asset && ASSETS.includes(rawProp.asset) ? rawProp.asset : s.selectedAsset;
 
             if (pType === 'rebalance' || pType === 'emergency_defend') {
               actionProposal = {
                 type: pType,
-                asset: rawProp.asset || 'BTC',
+                asset: targetAsset,
                 dangerLevel: rawProp.dangerLevel || (pType === 'emergency_defend' ? 'HIGH' : 'NORMAL'),
                 hazardSource: rawProp.hazardSource || 'Autonomous Risk Audit',
                 rationale: rawProp.rationale || 'Agentic portfolio reallocation',
@@ -405,10 +432,66 @@ Live Quotes: ${JSON.stringify(Object.fromEntries(Object.entries(markets || {}).m
                 rebalanceSteps: Array.isArray(rawProp.rebalanceSteps) ? rawProp.rebalanceSteps : [],
                 requiresConfirmation: true,
               };
+            } else if (pType === 'deploy_strategy') {
+              const kind = rawProp.strategyParams?.kind || 'vwap_trend';
+              const synthesized = synthesizeStrategyBot(targetAsset, kind, s, markets, rawProp.strategyParams);
+              actionProposal = {
+                type: 'deploy_strategy',
+                asset: targetAsset,
+                rationale: rawProp.rationale || `Automated ${kind.replace('_', ' ')} bot calibrated for ${targetAsset}`,
+                confidence: 'high',
+                riskSummary: `Allocates up to ${((synthesized.maxAllocation || 0.25) * 100).toFixed(0)}% of portfolio into automated execution`,
+                requiresConfirmation: true,
+                strategyParams: {
+                  kind: synthesized.kind,
+                  name: synthesized.name,
+                  maxAllocation: synthesized.maxAllocation,
+                  cooldownSec: synthesized.cooldownSec,
+                  targetProfitPct: synthesized.targetProfitPct,
+                  trailingStopPct: synthesized.trailingStopPct,
+                  params: synthesized.params,
+                },
+              };
+            } else if (pType === 'stress_test') {
+              const scId = rawProp.stressTest?.scenarioId || 'btc_flash_crash_20';
+              const simulated = simulatePortfolioStressTest(s, markets, scId);
+              actionProposal = {
+                type: 'stress_test',
+                asset: targetAsset,
+                rationale: rawProp.rationale || `Simulated stress testing under ${simulated.title}`,
+                confidence: 'high',
+                riskSummary: `Projected portfolio impact: -${simulated.simulatedDrawdownPct}% ($${simulated.simulatedLossUsd.toLocaleString()})`,
+                requiresConfirmation: true,
+                stressTest: simulated,
+              };
+            } else if (pType === 'smart_dca') {
+              const budget = Number(rawProp.dcaPlan?.baseAmountUsd) || 200;
+              const dcaPlan = generateSmartDCAPlan(targetAsset, budget, s, markets);
+              actionProposal = {
+                type: 'smart_dca',
+                asset: targetAsset,
+                rationale: rawProp.rationale || `Automated Value-Weighted DCA plan for ${targetAsset}`,
+                confidence: 'high',
+                riskSummary: `Allocates $${dcaPlan.baseAmountUsd}/week with dynamic dip buying multipliers`,
+                requiresConfirmation: true,
+                dcaPlan,
+              };
+            } else if (pType === 'token_compare') {
+              const tokens = Array.isArray(rawProp.tokens) ? rawProp.tokens : ['BTC', 'ETH', 'SOL'];
+              const comparison = compareTokensAlpha(tokens, markets);
+              actionProposal = {
+                type: 'token_compare',
+                asset: targetAsset,
+                rationale: rawProp.rationale || comparison.verdict,
+                confidence: 'high',
+                riskSummary: `Peer alpha analysis across ${comparison.tokens.length} assets`,
+                requiresConfirmation: true,
+                tokenComparison: comparison,
+              };
             } else {
               actionProposal = {
                 type: pType === 'order' ? 'order' : 'alert',
-                asset: rawProp.asset || s.selectedAsset,
+                asset: targetAsset,
                 side: rawProp.side === 'sell' ? 'sell' : 'buy',
                 amount: Number(rawProp.amount) || 0.05,
                 alertType: rawProp.alertType || 'above',
@@ -436,13 +519,193 @@ Live Quotes: ${JSON.stringify(Object.fromEntries(Object.entries(markets || {}).m
     console.warn('Chat request failed, activating local autonomous engine:', err);
   }
 
-  // Deep Local Algorithmic Engine with LaTeX Math & Agentic Capabilities
+  // Deep Local Algorithmic Engine with Complete LaTeX Math & Agentic Capabilities
   const lower = text.toLowerCase();
   const pv = portfolioValue(s, markets);
   const rk = calculatePortfolioRisk(s, markets);
 
-  // 1. Danger Sensing Query
-  if (lower.includes('danger') || lower.includes('hazard') || lower.includes('protect') || lower.includes('safe') || lower.includes('crash')) {
+  // 1. Stress Test Query
+  if (lower.includes('stress') || lower.includes('crash') || lower.includes('shock') || lower.includes('scenario') || lower.includes('drop')) {
+    let scenarioId: StressTestScenario['scenarioId'] = 'btc_flash_crash_20';
+    if (lower.includes('macro') || lower.includes('rate') || lower.includes('fed')) {
+      scenarioId = 'macro_rate_shock';
+    } else if (lower.includes('alt') || lower.includes('beta') || lower.includes('liquidation')) {
+      scenarioId = 'high_beta_liquidation';
+    } else if (lower.includes('winter') || lower.includes('bear') || lower.includes('cascade')) {
+      scenarioId = 'crypto_winter_cascade';
+    }
+
+    const stress = simulatePortfolioStressTest(s, markets, scenarioId);
+
+    const reply = `### 🌪️ Portfolio Stress Test & Shock Simulation: ${stress.title}
+
+Simulated mathematical stress impact on your current holdings:
+- **Projected Drawdown**: $-${stress.simulatedDrawdownPct}\\%$ (Estimated Loss: $${money(stress.simulatedLossUsd)}$)
+- **Post-Shock Liquidation Value**: $${money(stress.postShockPortfolioVal)}$
+- **Survivability Rating**: \`${stress.survivabilityRating}\` (${stress.survivabilityScore}/100)
+- **95% 1-Day Value at Risk**: $\\text{VaR}_{95\\%} \\approx ${stress.var95Pct}\\%$
+
+#### Mathematical Shock Formulation
+$$\\Delta V_{\\text{portfolio}} = \\sum_{i=1}^N w_i \\cdot \\Delta P_i \\implies \\text{Projected Drawdown} = -${stress.simulatedDrawdownPct}\\%$$
+$$\\text{VaR}_{95\\%} = -\\left(\\mu_p - 1.645 \\cdot \\sigma_p\\right) \\approx ${stress.var95Pct}\\%$$
+
+#### Individual Asset Drawdowns:
+${
+  stress.assetImpacts.length > 0
+    ? stress.assetImpacts.slice(0, 4).map((imp) => `- **${imp.asset}**: ${imp.priceShockPct}% price shock (-$${money(imp.simulatedLossUsd)} loss)`).join('\n')
+    : `- 100% liquid cash reserves cushion against asset price shocks.`
+}
+
+#### Recommended Risk Mitigation:
+${stress.mitigationSteps.map((step) => `- 🛡️ ${step}`).join('\n')}`;
+
+    const actionProposal: AIActionProposal = {
+      type: 'stress_test',
+      asset: rk.topAsset || s.selectedAsset,
+      rationale: `Stress simulation under ${stress.title}. Projected drawdown: -${stress.simulatedDrawdownPct}%.`,
+      confidence: 'high',
+      riskSummary: `Cushion rating: ${stress.survivabilityRating} (${stress.survivabilityScore}/100)`,
+      requiresConfirmation: true,
+      stressTest: stress,
+    };
+
+    return {
+      reply,
+      actionProposal,
+      engine: 'Deterministic Algorithmic Engine (Local Mode)',
+    };
+  }
+
+  // 2. Strategy Bot Synthesizer Query
+  if (lower.includes('strategy') || lower.includes('bot') || lower.includes('synthesize') || lower.includes('deploy') || lower.includes('grid') || lower.includes('vwap') || lower.includes('breakout')) {
+    const targetAsset = (ASSETS as readonly string[]).find((a) => lower.includes(a.toLowerCase())) as Asset || s.selectedAsset;
+    let kind: StrategyKind = 'vwap_trend';
+    if (lower.includes('breakout') || lower.includes('squeeze')) kind = 'breakout_volatility';
+    else if (lower.includes('grid') || lower.includes('scalp')) kind = 'grid_scalp';
+    else if (lower.includes('momentum') || lower.includes('trend')) kind = 'momentum';
+    else if (lower.includes('mean') || lower.includes('reversion')) kind = 'mean_reversion';
+    else if (lower.includes('dca')) kind = 'dca';
+    else if (lower.includes('alpha') || lower.includes('multi')) kind = 'ai_multi_factor';
+
+    const bot = synthesizeStrategyBot(targetAsset, kind, s, markets);
+    const m = markets[targetAsset];
+    const spot = m?.price || 100;
+
+    const reply = `### 🤖 Synthesized Algorithmic Strategy Bot: \`${bot.name}\`
+
+Calibrated dynamic execution parameters for **${targetAsset}** based on current ATR & volatility:
+- **Strategy Engine**: \`${bot.kind.replace('_', ' ').toUpperCase()}\`
+- **Max Portfolio Allocation**: $${((bot.maxAllocation || 0.25) * 100).toFixed(0)}\\%$ ($${money((bot.maxAllocation || 0.25) * pv)}$)
+- **Target Profit (Take-Profit)**: $+${bot.targetProfitPct}\\%$ (~$${money(spot * (1 + (bot.targetProfitPct || 5) / 100))}$)
+- **Trailing Stop-Loss**: $-${bot.trailingStopPct}\\%$ (~$${money(spot * (1 - (bot.trailingStopPct || 2) / 100))}$)
+- **Cooldown Interval**: $${bot.cooldownSec}$ seconds
+
+#### Execution Bracket Formulation
+$$\\text{Target TP} = P_{\\text{entry}} + 3.0 \\cdot \\text{ATR}_{14} = \\$${(spot * (1 + (bot.targetProfitPct || 5) / 100)).toFixed(2)}$$
+$$\\text{Trailing SL} = P_{\\text{entry}} - 1.3 \\cdot \\text{ATR}_{14} = \\$${(spot * (1 - (bot.trailingStopPct || 2) / 100)).toFixed(2)}$$
+
+I have compiled the strategy package below. Authorize in the AI Safety Gate to deploy it to live ticker evaluation.`;
+
+    const actionProposal: AIActionProposal = {
+      type: 'deploy_strategy',
+      asset: targetAsset,
+      rationale: `Synthesized ${bot.kind.replace('_', ' ')} bot calibrated to ${targetAsset} volatility.`,
+      confidence: 'high',
+      riskSummary: `Deploys automated strategy with ${((bot.maxAllocation || 0.25) * 100).toFixed(0)}% allocation limit.`,
+      requiresConfirmation: true,
+      strategyParams: {
+        kind: bot.kind,
+        name: bot.name,
+        maxAllocation: bot.maxAllocation,
+        cooldownSec: bot.cooldownSec,
+        targetProfitPct: bot.targetProfitPct,
+        trailingStopPct: bot.trailingStopPct,
+        params: bot.params,
+      },
+    };
+
+    return {
+      reply,
+      actionProposal,
+      engine: 'Deterministic Algorithmic Engine (Local Mode)',
+    };
+  }
+
+  // 3. Smart Value-Weighted DCA Query
+  if (lower.includes('dca') || lower.includes('accumulate') || lower.includes('dollar cost') || lower.includes('schedule')) {
+    const targetAsset = (ASSETS as readonly string[]).find((a) => lower.includes(a.toLowerCase())) as Asset || s.selectedAsset;
+    const dcaPlan = generateSmartDCAPlan(targetAsset, 200, s, markets);
+    const m = markets[targetAsset];
+    const ind = m ? indicators(m.history, m.candles) : null;
+
+    const reply = `### 📈 Smart Value-Weighted DCA Accumulator for \`${targetAsset}\`
+
+Constructed an intelligent dollar-cost averaging plan with dynamic valuation multipliers:
+- **Target Asset**: \`${targetAsset}\` (Spot: $${money(m?.price || 0)}$, 14-period RSI: $${ind?.rsi.toFixed(1) || 50}$)
+- **Base Allocation**: $${money(dcaPlan.baseAmountUsd)}$ per execution
+- **Dynamic Dip Multiplier**: $${dcaPlan.oversoldMultiplier}\\times$ ($${money(dcaPlan.baseAmountUsd * dcaPlan.oversoldMultiplier)}$) whenever $\\text{RSI} < 35$
+- **Euphoria Pause Safeguard**: Automatically pauses purchasing whenever $\\text{RSI} > ${dcaPlan.pauseThresholdRsi}$ to avoid buying cycle peaks.
+
+#### Value-Weighted Multiplier Formulation
+$$\\text{Allocation}(RSI) = \\begin{cases} \\$${(dcaPlan.baseAmountUsd * dcaPlan.oversoldMultiplier).toFixed(0)} & \\text{if } \\text{RSI} < 35 \\text{ (Oversold Dip)} \\\\ 0 & \\text{if } \\text{RSI} > 70 \\text{ (Euphoria Top)} \\\\ \\$${dcaPlan.baseAmountUsd} & \\text{otherwise} \\end{cases}$$
+
+Review the DCA plan parameters below to deploy this bot to your active strategy roster.`;
+
+    const actionProposal: AIActionProposal = {
+      type: 'smart_dca',
+      asset: targetAsset,
+      rationale: `Smart value-weighted DCA for ${targetAsset} with dynamic dip buying and peak pauses.`,
+      confidence: 'high',
+      riskSummary: `Automates $${dcaPlan.baseAmountUsd}/period accumulation with risk safeguards.`,
+      requiresConfirmation: true,
+      dcaPlan,
+    };
+
+    return {
+      reply,
+      actionProposal,
+      engine: 'Deterministic Algorithmic Engine (Local Mode)',
+    };
+  }
+
+  // 4. Token Comparison & Alpha Radar Query
+  if (lower.includes('compare') || lower.includes('versus') || lower.includes(' vs ') || lower.includes('radar') || lower.includes('peer') || lower.includes('alpha')) {
+    const mentioned = (ASSETS as readonly string[]).filter((a) => lower.includes(a.toLowerCase())) as Asset[];
+    const targetAssets = mentioned.length >= 2 ? mentioned.slice(0, 4) : (['BTC', 'ETH', 'SOL', 'AVAX'] as Asset[]);
+    const comparison = compareTokensAlpha(targetAssets, markets);
+
+    const reply = `### 🔬 Multi-Token Alpha Radar & Risk-Adjusted Comparison
+
+Cross-sectional statistical comparison across target assets:
+
+| Asset | Price | 24h Change | RSI (14) | Ann. Volatility | Sharpe Ratio | Beta (BTC) | Regime |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+${comparison.tokens.map((t) => `| **${t.asset}** | ${money(t.price)} | ${t.change24h >= 0 ? '+' : ''}${t.change24h}% | ${t.rsi} | ${t.volAnnualizedPct}% | ${t.sharpeEstimate} | ${t.betaToBtc} | \`${t.regime}\` |`).join('\n')}
+
+#### Sharpe & Beta Formulation
+$$\\text{Sharpe} = \\frac{R_i - R_f}{\\sigma_i \\cdot \\sqrt{365}}, \\quad \\beta_i = \\frac{\\text{Cov}(R_i, R_{\\text{BTC}})}{\\text{Var}(R_{\\text{BTC}})}$$
+
+**Nexus Verdict**: ${comparison.verdict}`;
+
+    const actionProposal: AIActionProposal = {
+      type: 'token_compare',
+      asset: comparison.topAlphaAsset,
+      rationale: comparison.verdict,
+      confidence: 'high',
+      riskSummary: `Top alpha selection: ${comparison.topAlphaAsset}`,
+      requiresConfirmation: true,
+      tokenComparison: comparison,
+    };
+
+    return {
+      reply,
+      actionProposal,
+      engine: 'Deterministic Algorithmic Engine (Local Mode)',
+    };
+  }
+
+  // 5. Danger Sensing Query
+  if (lower.includes('danger') || lower.includes('hazard') || lower.includes('protect') || lower.includes('safe') || lower.includes('sentinel')) {
     const danger = senseMarketDanger(s, markets);
     const reply = `### 🛡️ Autonomous Sentinel Danger Audit
 
@@ -473,7 +736,7 @@ ${
     };
   }
 
-  // 2. Agentic Allocation & Rebalancing Query
+  // 6. Agentic Allocation & Rebalancing Query
   if (lower.includes('rebalance') || lower.includes('allocate') || lower.includes('fund') || lower.includes('kelly') || lower.includes('parity') || lower.includes('weights') || lower.includes('growth')) {
     const style = lower.includes('growth')
       ? 'growth_weighted'
@@ -520,26 +783,32 @@ ${plan.steps.length > 0 ? `I have generated the rebalance action below. Review a
     };
   }
 
-  // 3. Trade/Order Query
+  // 7. Trade/Order Query
   if (lower.includes('buy') || lower.includes('sell') || lower.includes('order')) {
     const isBuy = lower.includes('buy');
-    const assetMatch = (['BTC', 'ETH', 'SOL', 'ADA', 'XRP', 'AVAX', 'LINK', 'DOGE'] as Asset[]).find(
-      (a) => lower.includes(a.toLowerCase())
-    ) || s.selectedAsset;
+    const assetMatch = (ASSETS as readonly string[]).find((a) => lower.includes(a.toLowerCase())) as Asset || s.selectedAsset;
     const m = markets[assetMatch];
-    const ind = m ? indicators(m.history, m.candles) : { rsi: 50, vol: 0.02 };
+    const ind = m ? indicators(m.history, m.candles) : { rsi: 50, vol: 0.02, atr: 10 };
 
+    const currentSpot = m?.price || 100;
+    const atrVal = ind.atr || currentSpot * 0.02;
     const amount = assetMatch === 'BTC' ? 0.05 : assetMatch === 'ETH' ? 0.5 : 10;
-    const notional = amount * (m?.price || 100);
+    const notional = amount * currentSpot;
 
-    const reply = `### 📋 Trade Recommendation for \`${assetMatch}\`
+    const tpPrice = +(currentSpot + atrVal * 2.8).toFixed(2);
+    const slPrice = +(Math.max(0.01, currentSpot - atrVal * 1.3)).toFixed(2);
 
-- **Current Spot**: $${money(m?.price || 0)}$
+    const reply = `### 📋 Asymmetric Trade Recommendation for \`${assetMatch}\`
+
+- **Current Spot**: $${money(currentSpot)}$
 - **Relative Strength**: $\\text{RSI}_{14} = ${ind.rsi.toFixed(1)}$
 - **Historical Volatility**: $\\sigma = ${(ind.vol * 100).toFixed(2)}\\%$
+- **Suggested Take-Profit (2.8x ATR)**: $${money(tpPrice)}$
+- **Suggested Stop-Loss (1.3x ATR)**: $${money(slPrice)}$
 
-#### Value at Risk Model
+#### Value at Risk & Risk/Reward
 $$\\text{VaR}_{95\\%} = -\\left(\\mu - 1.645 \\cdot \\sigma\\right) \\approx ${(ind.vol * 1.645 * 100).toFixed(2)}\\%$$
+$$\\text{RR Ratio} = \\frac{\\text{TP} - P_0}{P_0 - \\text{SL}} = \\frac{${(tpPrice - currentSpot).toFixed(2)}}{${(currentSpot - slPrice).toFixed(2)}} \\approx 2.15$$
 
 Proposed **${isBuy ? 'BUY' : 'SELL'}** of \`${amount} ${assetMatch}\` (~$${money(notional)}$). Verify execution parameters below.`;
 
@@ -548,7 +817,7 @@ Proposed **${isBuy ? 'BUY' : 'SELL'}** of \`${amount} ${assetMatch}\` (~$${money
       asset: assetMatch,
       side: isBuy ? 'buy' : 'sell',
       amount,
-      rationale: `Algorithmic indicator analysis: RSI is ${ind.rsi.toFixed(1)} with ${m?.change24h || 0}% 24h change.`,
+      rationale: `Algorithmic indicator analysis: RSI is ${ind.rsi.toFixed(1)} with dynamic ATR brackets.`,
       confidence: 'medium',
       riskSummary: `Order requires ${money(notional)} notional equity.`,
       requiresConfirmation: true,
@@ -561,24 +830,28 @@ Proposed **${isBuy ? 'BUY' : 'SELL'}** of \`${amount} ${assetMatch}\` (~$${money
     };
   }
 
-  // Default general intelligence response with LaTeX math
+  // Default general intelligence response with LaTeX math & full agentic palette
   const mSel = markets[s.selectedAsset];
   const indSel = mSel ? indicators(mSel.history, mSel.candles) : { rsi: 50, vol: 0.02, chg: 0 };
 
-  const reply = `### 🧠 Lumen Copilot Portfolio Intelligence
+  const reply = `### 🧠 Lumen Nexus Autonomous Trading Intelligence
 
-- **Total Equity**: $${money(pv)}$ with $${money(s.cash)}$ in liquid USD cash ($${((s.cash / (pv || 1)) * 100).toFixed(1)}\\%$)
-- **Portfolio Risk Score**: $${rk.portfolioRiskScore}/100$ (${rk.riskLabel})
+- **Total Portfolio Value**: $${money(pv)}$ ($${money(s.cash)}$ liquid USD cash / $${((s.cash / (pv || 1)) * 100).toFixed(1)}\\%$)
+- **Portfolio Risk Score**: $${rk.portfolioRiskScore}/100$ (${rk.riskLabel}, HHI: $${rk.herfindahlIndex.toFixed(3)}$)
 - **Active Asset**: \`${s.selectedAsset}\` quoting at $${money(mSel?.price || 0)}$ ($${indSel.chg >= 0 ? '+' : ''}${indSel.chg.toFixed(2)}\\%$)
 
 #### Indicator Telemetry
 $$\\text{RSI}(14) = 100 - \\frac{100}{1 + \\text{RS}} = ${indSel.rsi.toFixed(1)}$$
 $$\\text{Sharpe Ratio Estimate}: \\text{SR} = \\frac{R_p - R_f}{\\sigma_p} \\approx ${(0.08 / Math.max(0.01, indSel.vol)).toFixed(2)}$$
 
-**Available Agentic Capabilities:**
-- 🛡️ **Sense Market Danger**: Ask me to *"sense danger"* to run the Autonomous Sentinel audit.
-- ⚖️ **Agentic Reallocation**: Ask me to *"rebalance funds"* or *"optimize with Kelly criterion"*.
-- 📐 **LaTeX Derivations**: Ask me to explain any financial formula with complete mathematical rigor.`;
+**Available End-to-End Agentic Capabilities (Click \`+\` below or ask directly):**
+- 🛡️ **Capital Defense**: *"Sense market danger"* to run the Sentinel flash crash audit.
+- 🌪️ **Stress Testing**: *"Run a stress test"* or *"simulate a 20% BTC flash crash"*.
+- 🤖 **Strategy Bot Synthesizer**: *"Synthesize a VWAP strategy on SOL"* or *"deploy a grid scalper"*.
+- 📈 **Smart DCA Accumulator**: *"Create a smart DCA plan for BTC"*.
+- ⚖️ **Agentic Rebalance**: *"Rebalance portfolio with Kelly criterion"* or *"risk parity"*.
+- 🔬 **Alpha Comparison Radar**: *"Compare BTC, ETH, and SOL"*.
+- 📋 **Asymmetric Trade**: *"Draft buy order with TP/SL brackets"*.`;
 
   return {
     reply,
@@ -586,3 +859,4 @@ $$\\text{Sharpe Ratio Estimate}: \\text{SR} = \\frac{R_p - R_f}{\\sigma_p} \\app
     engine: 'Deterministic Algorithmic Engine (Local Mode)',
   };
 }
+

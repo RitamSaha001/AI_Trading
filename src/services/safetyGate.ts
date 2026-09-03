@@ -32,12 +32,18 @@ export function validateAIProposal(
     return { valid: false, errors: ['Proposal is malformed or empty.'], warnings: [] };
   }
 
-  if (
-    proposal.type !== 'order' &&
-    proposal.type !== 'alert' &&
-    proposal.type !== 'rebalance' &&
-    proposal.type !== 'emergency_defend'
-  ) {
+  const supportedTypes = [
+    'order',
+    'alert',
+    'rebalance',
+    'emergency_defend',
+    'deploy_strategy',
+    'stress_test',
+    'smart_dca',
+    'token_compare',
+  ];
+
+  if (!supportedTypes.includes(proposal.type)) {
     return { valid: false, errors: [`Unsupported proposal type: ${proposal.type}`], warnings: [] };
   }
 
@@ -67,6 +73,52 @@ export function validateAIProposal(
     }
 
     return { valid: errors.length === 0, errors, warnings };
+  }
+
+  // 1c. Strategy Deployment Validation
+  if (proposal.type === 'deploy_strategy') {
+    if (!ASSETS.includes(proposal.asset)) {
+      errors.push(`Unknown cryptocurrency asset for strategy deployment: ${proposal.asset}`);
+    }
+    const maxAlloc = proposal.strategyParams?.maxAllocation ?? 0.25;
+    if (maxAlloc > 0.50) {
+      errors.push(`Maximum strategy allocation cannot exceed 50% of portfolio (requested ${(maxAlloc * 100).toFixed(0)}%).`);
+    }
+    const currentActiveAlloc = (state.strategies || [])
+      .filter((s) => s.enabled)
+      .reduce((sum, s) => sum + (s.maxAllocation || 0), 0);
+    if (currentActiveAlloc + maxAlloc > 1.0) {
+      warnings.push(`Total active algorithmic allocation would reach ${((currentActiveAlloc + maxAlloc) * 100).toFixed(0)}% of portfolio capacity.`);
+    }
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  // 1d. Stress Test Validation
+  if (proposal.type === 'stress_test') {
+    if (!proposal.stressTest) {
+      warnings.push('Scenario parameters will be dynamically populated upon execution.');
+    }
+    return { valid: true, errors: [], warnings };
+  }
+
+  // 1e. Smart DCA Validation
+  if (proposal.type === 'smart_dca') {
+    if (!ASSETS.includes(proposal.asset)) {
+      errors.push(`Unknown asset for Smart DCA plan: ${proposal.asset}`);
+    }
+    const baseAmount = proposal.dcaPlan?.baseAmountUsd ?? 100;
+    if (baseAmount <= 0 || !Number.isFinite(baseAmount)) {
+      errors.push('Base DCA allocation amount must be a positive number.');
+    }
+    if (baseAmount > state.cash) {
+      warnings.push(`Base DCA amount ($${baseAmount}) exceeds currently available cash ($${state.cash.toFixed(2)}). Ensure cash buffer is maintained.`);
+    }
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  // 1f. Token Comparison Validation
+  if (proposal.type === 'token_compare') {
+    return { valid: true, errors: [], warnings };
   }
 
   if (!ASSETS.includes(proposal.asset)) {

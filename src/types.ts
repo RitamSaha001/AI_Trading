@@ -134,6 +134,8 @@ export type StrategyConfig = {
     atrMultiplierTP?: number;
     atrMultiplierSL?: number;
     dynamicRiskSizing?: boolean;
+    oversoldMultiplier?: number;
+    pauseThresholdRsi?: number;
   };
 };
 
@@ -166,8 +168,72 @@ export type RebalanceStep = {
   estimatedNotional: number;
 };
 
+export type ExecutionReceipt = {
+  receiptId: string;
+  actionType: 'order' | 'alert' | 'rebalance' | 'emergency_defend' | 'deploy_strategy' | 'stress_test' | 'smart_dca' | 'token_compare';
+  title: string;
+  summary: string;
+  executedAt: number;
+  details: string[];
+  badges?: { label: string; color: 'emerald' | 'indigo' | 'amber' | 'rose' | 'zinc' }[];
+  jumpRoute?: string;
+  jumpLabel?: string;
+  metricsDiff?: {
+    cashDelta?: number;
+    portfolioDelta?: number;
+    allocationDelta?: string;
+  };
+};
+
+export type StressTestScenario = {
+  scenarioId: 'btc_flash_crash_20' | 'macro_rate_shock' | 'high_beta_liquidation' | 'crypto_winter_cascade';
+  title: string;
+  description: string;
+  simulatedDrawdownPct: number;
+  simulatedLossUsd: number;
+  postShockPortfolioVal: number;
+  var95Pct: number;
+  survivabilityScore: number; // 0 - 100
+  survivabilityRating: 'Robust' | 'Moderate' | 'Vulnerable' | 'Critical';
+  assetImpacts: {
+    asset: Asset;
+    priceShockPct: number;
+    simulatedLossUsd: number;
+  }[];
+  mitigationSteps: string[];
+};
+
+export type SmartDCAPlan = {
+  asset: Asset;
+  frequency: 'Daily' | 'Weekly' | 'Hourly';
+  baseAmountUsd: number;
+  oversoldMultiplier: number;
+  pauseThresholdRsi: number;
+  targetProfitPct: number;
+  trailingStopPct?: number;
+};
+
+export type TokenComparisonMetric = {
+  asset: Asset;
+  name: string;
+  price: number;
+  change24h: number;
+  rsi: number;
+  volAnnualizedPct: number;
+  sharpeEstimate: number;
+  momentumScore: number;
+  betaToBtc: number;
+  regime: string;
+};
+
+export type TokenComparison = {
+  tokens: TokenComparisonMetric[];
+  verdict: string;
+  topAlphaAsset: Asset;
+};
+
 export type AIActionProposal = {
-  type: 'order' | 'alert' | 'rebalance' | 'emergency_defend';
+  type: 'order' | 'alert' | 'rebalance' | 'emergency_defend' | 'deploy_strategy' | 'stress_test' | 'smart_dca' | 'token_compare';
   asset: Asset;
   side?: Side;
   amount?: number;
@@ -193,6 +259,20 @@ export type AIActionProposal = {
     residualCash: number;
     isCashFeasible: boolean;
   };
+  // New Agentic extensions
+  strategyParams?: {
+    kind: StrategyKind;
+    name: string;
+    maxAllocation: number;
+    cooldownSec: number;
+    targetProfitPct?: number;
+    trailingStopPct?: number;
+    params?: Record<string, any>;
+  };
+  stressTest?: StressTestScenario;
+  dcaPlan?: SmartDCAPlan;
+  tokenComparison?: TokenComparison;
+  executionReceipt?: ExecutionReceipt;
 };
 
 export type AISafetyValidation = {

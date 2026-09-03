@@ -21,6 +21,10 @@ export const AISafetyModal: React.FC<Props> = ({
   const isAlert = proposal.type === 'alert';
   const isRebalance = proposal.type === 'rebalance';
   const isDefend = proposal.type === 'emergency_defend';
+  const isStrategy = proposal.type === 'deploy_strategy';
+  const isStress = proposal.type === 'stress_test';
+  const isDca = proposal.type === 'smart_dca';
+  const isCompare = proposal.type === 'token_compare';
   const preview = validation.preview;
 
   return (
@@ -33,7 +37,13 @@ export const AISafetyModal: React.FC<Props> = ({
               className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
                 isDefend
                   ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
-                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  : isStress
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                  : isStrategy
+                  ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-400'
+                  : isDca
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                  : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400'
               }`}
             >
               {isDefend ? <AlertTriangle className="w-5 h-5" /> : isRebalance ? <Scale className="w-5 h-5 text-indigo-400" /> : <Shield className="w-5 h-5" />}
@@ -41,13 +51,21 @@ export const AISafetyModal: React.FC<Props> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-slate-100 text-base">
-                  {isDefend ? 'Sentinel Capital Defense Protocol' : 'AI Safety Authorization Gate'}
+                  {isDefend
+                    ? 'Sentinel Capital Defense Protocol'
+                    : isStrategy
+                    ? 'Algorithmic Strategy Deployment Gate'
+                    : isStress
+                    ? 'Portfolio Stress-Test Verification'
+                    : isDca
+                    ? 'Smart DCA Plan Deployment Gate'
+                    : 'AI Safety Authorization Gate'}
                 </h3>
                 <span
                   className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border ${
                     isDefend
                       ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
                   }`}
                 >
                   {isDefend ? 'High Priority' : 'Verification Required'}
@@ -78,6 +96,12 @@ export const AISafetyModal: React.FC<Props> = ({
                       ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                       : isRebalance
                       ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                      : isStrategy
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                      : isStress
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : isDca
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                       : proposal.side === 'buy'
                       ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                       : proposal.side === 'sell'
@@ -89,6 +113,12 @@ export const AISafetyModal: React.FC<Props> = ({
                     ? `Emergency Capital Defense (${proposal.dangerLevel || 'CRITICAL'})`
                     : isRebalance
                     ? 'Autonomous Portfolio Rebalance'
+                    : isStrategy
+                    ? `Deploy Bot: ${proposal.strategyParams?.name || proposal.asset}`
+                    : isStress
+                    ? `Simulate Shock: ${proposal.stressTest?.title || 'Market Crash'}`
+                    : isDca
+                    ? `Deploy Smart DCA for ${proposal.asset}`
                     : isOrder
                     ? `${proposal.side} ${proposal.amount} ${proposal.asset}`
                     : `Set Alert on ${proposal.asset}`}
@@ -151,6 +181,80 @@ export const AISafetyModal: React.FC<Props> = ({
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Strategy Deployment Preview */}
+          {isStrategy && proposal.strategyParams && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Strategy Parameters &amp; ATR Risk Controls
+              </h4>
+              <div className="grid grid-cols-2 gap-3 p-4 rounded-xl bg-slate-800/40 border border-slate-700/40 text-xs font-mono">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Engine Kind</span>
+                  <span className="font-semibold text-slate-100">{proposal.strategyParams.kind}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Max Portfolio Allocation</span>
+                  <span className="font-semibold text-indigo-400">{((proposal.strategyParams.maxAllocation || 0.25) * 100).toFixed(0)}%</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Target Take-Profit</span>
+                  <span className="font-semibold text-emerald-400">+{proposal.strategyParams.targetProfitPct || 5}%</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Trailing Stop-Loss</span>
+                  <span className="font-semibold text-rose-400">-{proposal.strategyParams.trailingStopPct || 2}%</span>
+                </div>
+                <div className="col-span-2 pt-2 border-t border-slate-700/60 text-slate-400 text-[11px]">
+                  Execution Loop: Continuously evaluated on 2.5-second live ticker intervals.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Stress Test Preview */}
+          {isStress && proposal.stressTest && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Simulated Drawdown &amp; Capital Cushion
+              </h4>
+              <div className="grid grid-cols-2 gap-3 p-4 rounded-xl bg-slate-800/40 border border-slate-700/40 text-xs font-mono">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Projected Portfolio Loss</span>
+                  <span className="font-bold text-rose-400">-${proposal.stressTest.simulatedLossUsd.toLocaleString()} (-{proposal.stressTest.simulatedDrawdownPct}%)</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Survivability Rating</span>
+                  <span className="font-bold text-amber-400">{proposal.stressTest.survivabilityRating} ({proposal.stressTest.survivabilityScore}/100)</span>
+                </div>
+                <div className="col-span-2 pt-2 border-t border-slate-700/60 text-slate-300 text-[11px]">
+                  {proposal.stressTest.description}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Smart DCA Preview */}
+          {isDca && proposal.dcaPlan && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Value-Weighted DCA Schedule
+              </h4>
+              <div className="grid grid-cols-2 gap-3 p-4 rounded-xl bg-slate-800/40 border border-slate-700/40 text-xs font-mono">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Base Allocation</span>
+                  <span className="font-semibold text-emerald-400">${proposal.dcaPlan.baseAmountUsd}/{proposal.dcaPlan.frequency}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Dip Multiplier</span>
+                  <span className="font-semibold text-indigo-400">{proposal.dcaPlan.oversoldMultiplier}x (when RSI &lt; 35)</span>
+                </div>
+                <div className="col-span-2 pt-2 border-t border-slate-700/60 text-slate-300 text-[11px]">
+                  Peak Protection: Automatically suspends buys when RSI &gt; {proposal.dcaPlan.pauseThresholdRsi} to prevent buying cycle tops.
+                </div>
               </div>
             </div>
           )}
@@ -248,7 +352,19 @@ export const AISafetyModal: React.FC<Props> = ({
             }`}
           >
             <CheckCircle className="w-4 h-4" />
-            <span>{isDefend ? 'Authorize Emergency Defense' : isRebalance ? 'Authorize Rebalance' : 'Authorize & Execute'}</span>
+            <span>
+              {isDefend
+                ? 'Authorize Emergency Defense'
+                : isStrategy
+                ? 'Authorize & Deploy Strategy Bot'
+                : isDca
+                ? 'Authorize & Deploy Smart DCA'
+                : isStress
+                ? 'Acknowledge Stress Test'
+                : isRebalance
+                ? 'Authorize Rebalance'
+                : 'Authorize & Execute'}
+            </span>
           </button>
         </div>
       </div>

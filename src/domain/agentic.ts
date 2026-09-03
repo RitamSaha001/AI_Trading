@@ -1,5 +1,18 @@
-import { ASSETS, Asset, AppState, Market, AIActionProposal, RebalanceStep } from '../types';
-import { portfolioValue, positionValue, FEE_RATE } from './portfolio';
+import {
+  ASSETS,
+  Asset,
+  AppState,
+  Market,
+  AIActionProposal,
+  RebalanceStep,
+  StrategyConfig,
+  StrategyKind,
+  StressTestScenario,
+  SmartDCAPlan,
+  TokenComparison,
+  TokenComparisonMetric,
+} from '../types';
+import { portfolioValue, positionValue, FEE_RATE, META } from './portfolio';
 import { returns, stdev, indicators } from './indicators';
 import { calculatePortfolioRisk } from './risk';
 
@@ -385,3 +398,264 @@ export function calculateAgenticAllocation(
     executionPlan,
   };
 }
+
+/**
+ * Mathematically models portfolio drawdown and liquidation risk under historical & hypothetical stress scenarios.
+ * Scenarios: Bitcoin Flash Crash (-20%), Macro Rate Shock, Altcoin Flash Liquidation, and Crypto Winter.
+ */
+export function simulatePortfolioStressTest(
+  state: AppState,
+  markets: Record<Asset, Market | undefined>,
+  scenarioId: StressTestScenario['scenarioId'] = 'btc_flash_crash_20'
+): StressTestScenario {
+  const currentTotalVal = portfolioValue(state, markets);
+  const rk = calculatePortfolioRisk(state, markets);
+
+  let shockTitle = '';
+  let shockDesc = '';
+  let btcDrop = -0.20;
+  let ethDrop = -0.25;
+  let altDrop = -0.35;
+  let memeDrop = -0.45;
+
+  if (scenarioId === 'macro_rate_shock') {
+    shockTitle = 'Macro Rate Hike & Liquidity Shock';
+    shockDesc = 'Central bank surprise +50bps rate hike drains market liquidity across risk assets.';
+    btcDrop = -0.12;
+    ethDrop = -0.16;
+    altDrop = -0.24;
+    memeDrop = -0.32;
+  } else if (scenarioId === 'high_beta_liquidation') {
+    shockTitle = 'Altcoin Flash Liquidation Cascade';
+    shockDesc = 'Derivatives leverage unwind triggering stop runs across high-beta and meme tokens.';
+    btcDrop = -0.08;
+    ethDrop = -0.14;
+    altDrop = -0.38;
+    memeDrop = -0.50;
+  } else if (scenarioId === 'crypto_winter_cascade') {
+    shockTitle = 'Crypto Winter Maximum Drawdown';
+    shockDesc = 'Prolonged multi-month bear market capitulation across all digital asset sectors.';
+    btcDrop = -0.45;
+    ethDrop = -0.55;
+    altDrop = -0.68;
+    memeDrop = -0.80;
+  } else {
+    // btc_flash_crash_20 (default)
+    shockTitle = 'Bitcoin Flash Crash (-20%)';
+    shockDesc = 'Sudden liquidation wick where Bitcoin drops 20% in 12 hours, dragging the market down.';
+    btcDrop = -0.20;
+    ethDrop = -0.25;
+    altDrop = -0.35;
+    memeDrop = -0.42;
+  }
+
+  let totalSimulatedLoss = 0;
+  const assetImpacts: StressTestScenario['assetImpacts'] = [];
+
+  for (const a of ASSETS) {
+    const units = state.positions[a] || 0;
+    const price = markets[a]?.price || 0;
+    const holdingVal = units * price;
+
+    if (holdingVal > 0) {
+      const cat = META[a]?.category || 'Layer 1';
+      let assetShockPct = altDrop;
+      if (a === 'BTC') assetShockPct = btcDrop;
+      else if (a === 'ETH') assetShockPct = ethDrop;
+      else if (cat === 'Meme') assetShockPct = memeDrop;
+      else if (cat === 'DeFi' || cat === 'Gaming') assetShockPct = altDrop * 1.1;
+
+      const loss = holdingVal * Math.abs(assetShockPct);
+      totalSimulatedLoss += loss;
+      assetImpacts.push({
+        asset: a,
+        priceShockPct: +(assetShockPct * 100).toFixed(1),
+        simulatedLossUsd: +loss.toFixed(2),
+      });
+    }
+  }
+
+  assetImpacts.sort((a, b) => b.simulatedLossUsd - a.simulatedLossUsd);
+
+  const postShockPortfolioVal = Math.max(0, currentTotalVal - totalSimulatedLoss);
+  const simulatedDrawdownPct = currentTotalVal > 0 ? (totalSimulatedLoss / currentTotalVal) * 100 : 0;
+  const var95Pct = +(rk.weightedVolatility * 1.645 * 100).toFixed(2);
+
+  const cashBufferPct = currentTotalVal > 0 ? (state.cash / currentTotalVal) * 100 : 100;
+  const survivabilityScore = Math.max(
+    5,
+    Math.min(100, Math.round(cashBufferPct * 0.7 + (100 - simulatedDrawdownPct) * 0.5 - rk.topAssetConcentrationPct * 0.2))
+  );
+
+  let survivabilityRating: StressTestScenario['survivabilityRating'] = 'Moderate';
+  if (survivabilityScore >= 75) survivabilityRating = 'Robust';
+  else if (survivabilityScore >= 50) survivabilityRating = 'Moderate';
+  else if (survivabilityScore >= 30) survivabilityRating = 'Vulnerable';
+  else survivabilityRating = 'Critical';
+
+  const mitigationSteps: string[] = [];
+  if (cashBufferPct < 20) {
+    mitigationSteps.push(`Increase liquid cash reserves to at least 25% (currently ${cashBufferPct.toFixed(1)}%) to cushion drawdowns.`);
+  }
+  if (assetImpacts.length > 0 && assetImpacts[0].simulatedLossUsd > currentTotalVal * 0.15) {
+    mitigationSteps.push(`Hedge or trim largest risk contributor ${assetImpacts[0].asset} (${assetImpacts[0].priceShockPct}% projected shock).`);
+  }
+  mitigationSteps.push('Deploy trailing stop-loss brackets on high-beta holdings.');
+  mitigationSteps.push('Prepare automated DCA orders to buy undervalued dips during panic capitulation.');
+
+  return {
+    scenarioId,
+    title: shockTitle,
+    description: shockDesc,
+    simulatedDrawdownPct: +simulatedDrawdownPct.toFixed(2),
+    simulatedLossUsd: +totalSimulatedLoss.toFixed(2),
+    postShockPortfolioVal: +postShockPortfolioVal.toFixed(2),
+    var95Pct,
+    survivabilityScore,
+    survivabilityRating,
+    assetImpacts,
+    mitigationSteps,
+  };
+}
+
+/**
+ * Automatically synthesizes an institutional-grade StrategyConfig calibrated to the asset's current ATR & volatility.
+ */
+export function synthesizeStrategyBot(
+  asset: Asset,
+  kind: StrategyKind,
+  state: AppState,
+  markets: Record<Asset, Market | undefined>,
+  options?: Partial<StrategyConfig>
+): StrategyConfig {
+  const m = markets[asset];
+  const ind = m ? indicators(m.history, m.candles) : null;
+  const currentPrice = m?.price || 100;
+  const effectiveAtr = ind?.atr || currentPrice * 0.02;
+
+  const names: Record<StrategyKind, string> = {
+    vwap_trend: `${asset} Institutional VWAP Momentum Engine`,
+    breakout_volatility: `${asset} Dynamic Squeeze & Volatility Breakout`,
+    ai_multi_factor: `${asset} Composite Multi-Factor Alpha Quant`,
+    grid_scalp: `${asset} Dynamic ATR Grid Scalper`,
+    momentum: `${asset} High-Velocity EMA Trend Surfer`,
+    mean_reversion: `${asset} Bollinger %B Mean-Reversion Harvest`,
+    dca: `${asset} Smart Value-Weighted DCA Accumulator`,
+  };
+
+  const id = 'strat_ai_' + asset.toLowerCase() + '_' + Math.random().toString(36).substring(2, 7);
+
+  const targetProfitPct = +(options?.targetProfitPct ?? Math.max(3.5, Math.min(14.0, (effectiveAtr / currentPrice) * 100 * 3.2))).toFixed(1);
+  const trailingStopPct = +(options?.trailingStopPct ?? Math.max(1.5, Math.min(5.0, (effectiveAtr / currentPrice) * 100 * 1.3))).toFixed(1);
+  const maxAllocation = options?.maxAllocation ?? (['BTC', 'ETH'].includes(asset) ? 0.30 : 0.20);
+  const cooldownSec = options?.cooldownSec ?? (kind === 'grid_scalp' ? 15 : 25);
+
+  return {
+    id,
+    asset,
+    kind,
+    name: options?.name || names[kind] || `${asset} Algorithmic Bot`,
+    enabled: true,
+    maxAllocation,
+    cooldownSec,
+    tradesExecuted: 0,
+    totalPnl: 0,
+    realizedPnl: 0,
+    feesPaid: 0,
+    targetProfitPct,
+    trailingStopPct,
+    params: {
+      atrMultiplierTP: 3.0,
+      atrMultiplierSL: 1.3,
+      minAlphaScore: 35,
+      rsiThresholdBuy: 65,
+      rsiThresholdSell: 38,
+      dcaAmountUsd: 150,
+      ...(options?.params || {}),
+    },
+  };
+}
+
+/**
+ * Generates an automated Smart Value-Weighted DCA plan with oversold dip buy scaling and euphoria pausing.
+ */
+export function generateSmartDCAPlan(
+  asset: Asset,
+  budgetUsd = 200,
+  state: AppState,
+  markets: Record<Asset, Market | undefined>
+): SmartDCAPlan {
+  return {
+    asset,
+    frequency: 'Weekly',
+    baseAmountUsd: budgetUsd,
+    oversoldMultiplier: 1.6, // scale buy by 1.6x when RSI < 35
+    pauseThresholdRsi: 70, // pause buys if RSI > 70
+    targetProfitPct: 8.0,
+    trailingStopPct: 2.5,
+  };
+}
+
+/**
+ * Computes cross-asset statistical correlation, Sharpe estimates, relative momentum, and beta against BTC.
+ */
+export function compareTokensAlpha(
+  assets: Asset[],
+  markets: Record<Asset, Market | undefined>
+): TokenComparison {
+  const targetAssets = assets.length > 0 ? assets : (['BTC', 'ETH', 'SOL', 'AVAX'] as Asset[]);
+  const metrics: TokenComparisonMetric[] = [];
+
+  const btcHist = markets.BTC?.history || [];
+  const btcReturns = returns(btcHist.slice(-25));
+  const btcVol = stdev(btcReturns);
+
+  for (const a of targetAssets) {
+    const m = markets[a];
+    const hist = m?.history || [];
+    const ind = indicators(hist, m?.candles);
+    const assetReturns = returns(hist.slice(-25));
+    const vol = stdev(assetReturns);
+    const volAnnualizedPct = +(vol * Math.sqrt(365) * 100).toFixed(1);
+
+    const meanReturn = assetReturns.length > 0 ? assetReturns.reduce((acc, r) => acc + r, 0) / assetReturns.length : 0;
+    const annReturn = meanReturn * 365;
+    const sharpeEstimate = vol > 0 ? +((annReturn - 0.04) / Math.max(0.01, vol * Math.sqrt(365))).toFixed(2) : 0;
+
+    let beta = 1.0;
+    if (a !== 'BTC' && btcVol > 0 && assetReturns.length === btcReturns.length && btcReturns.length > 5) {
+      let cov = 0;
+      const btcMean = btcReturns.reduce((acc, r) => acc + r, 0) / btcReturns.length;
+      for (let i = 0; i < assetReturns.length; i++) {
+        cov += (assetReturns[i] - meanReturn) * (btcReturns[i] - btcMean);
+      }
+      cov /= (assetReturns.length - 1);
+      beta = +(cov / (btcVol * btcVol)).toFixed(2);
+    }
+
+    metrics.push({
+      asset: a,
+      name: META[a]?.name || a,
+      price: m?.price || 0,
+      change24h: +(m?.change24h || 0).toFixed(2),
+      rsi: +ind.rsi.toFixed(1),
+      volAnnualizedPct,
+      sharpeEstimate,
+      momentumScore: ind.score,
+      betaToBtc: Math.max(0.1, beta),
+      regime: ind.regime,
+    });
+  }
+
+  const sorted = [...metrics].sort((a, b) => (b.momentumScore * 2 + b.sharpeEstimate) - (a.momentumScore * 2 + a.sharpeEstimate));
+  const topAlpha = sorted[0]?.asset || 'BTC';
+
+  const verdict = `${topAlpha} currently presents the highest risk-adjusted alpha profile with a momentum score of ${sorted[0]?.momentumScore >= 0 ? '+' : ''}${sorted[0]?.momentumScore} and ${sorted[0]?.regime} market structure.`;
+
+  return {
+    tokens: metrics,
+    verdict,
+    topAlphaAsset: topAlpha,
+  };
+}
+

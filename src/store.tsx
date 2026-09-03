@@ -12,6 +12,7 @@ import {
   Timeframe,
   AIActionProposal,
   AISafetyValidation,
+  ExecutionReceipt,
 } from './types';
 import { fetchAll, fetchMarket, MarketStreamService } from './services/market';
 import {
@@ -38,6 +39,10 @@ type Ctx = {
   aiLoading: boolean;
   chatHistory: { role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string }[];
   chatLoading: boolean;
+  chatOpen: boolean;
+  prefilledChatPrompt: string;
+  openChat: (prompt?: string) => void;
+  closeChat: () => void;
   activeToast: { id: string; title: string; message: string; type: 'success' | 'info' | 'warn' } | null;
   dismissToast: () => void;
   setSelectedAsset: (a: Asset) => void;
@@ -126,10 +131,23 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const [ai, setAi] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [prefilledChatPrompt, setPrefilledChatPrompt] = useState('');
+
+  const openChat = useCallback((prompt?: string) => {
+    if (prompt) setPrefilledChatPrompt(prompt);
+    setChatOpen(true);
+  }, []);
+
+  const closeChat = useCallback(() => {
+    setChatOpen(false);
+    setPrefilledChatPrompt('');
+  }, []);
+
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string }[]>([
     {
       role: 'assistant',
-      text: "Welcome to Lumen Copilot. I analyze technical trend indicators (SMA/EMA crossovers, RSI oscillators, and Bollinger Bands) and portfolio risk exposures across your paper holdings. How can I assist your strategy today?",
+      text: "Welcome to **Lumen Nexus**—your autonomous agentic trading intelligence. I analyze quantitative indicators (SMA/EMA ribbons, RSI, Bollinger Bands, ATR, VWAP), stress-test portfolios, synthesize algorithmic strategy bots, and execute mathematical capital allocation. Click the **`+`** icon below to launch any capability, or ask me directly.",
       engine: 'Deterministic Algorithmic Engine (Local Mode)',
     },
   ]);
@@ -609,11 +627,49 @@ export function Provider({ children }: { children: React.ReactNode }) {
     setPendingAIProposal(null);
     setPendingAIValidation(null);
 
+    let receipt: ExecutionReceipt | undefined;
+
     if (proposal.type === 'order') {
-      return order(proposal.side || 'buy', proposal.asset, proposal.amount || 0.05, {
+      const res = order(proposal.side || 'buy', proposal.asset, proposal.amount || 0.05, {
         auto: false,
-        strategyName: 'AI Copilot Recommendation',
+        strategyName: 'Lumen Nexus Recommendation',
       });
+      if (res.ok) {
+        receipt = {
+          receiptId: 'rcpt_' + Math.random().toString(36).substring(2, 8),
+          actionType: 'order',
+          title: `Order Executed: ${proposal.side?.toUpperCase()} ${proposal.amount} ${proposal.asset}`,
+          summary: `Submitted ${proposal.side?.toUpperCase()} order for ${proposal.amount} ${proposal.asset} via Nexus execution gate.`,
+          executedAt: Date.now(),
+          details: [
+            `Side: ${proposal.side?.toUpperCase()}`,
+            `Asset: ${proposal.asset}`,
+            `Amount: ${proposal.amount} units`,
+            `Market Price: $${(marketsRef.current[proposal.asset]?.price || 0).toLocaleString()}`,
+            `Execution Mode: Paper Execution (0.08% taker fee capitalized)`,
+          ],
+          badges: [
+            { label: 'Executed', color: 'emerald' },
+            { label: 'Safety Verified', color: 'indigo' },
+          ],
+          jumpRoute: '/orders',
+          jumpLabel: 'View in Orders Desk →',
+        };
+      }
+      if (receipt) {
+        setChatHistory((hist) =>
+          hist.map((item) => {
+            if (item.actionProposal && item.actionProposal.type === 'order' && !item.actionProposal.executionReceipt) {
+              return {
+                ...item,
+                actionProposal: { ...item.actionProposal, executionReceipt: receipt },
+              };
+            }
+            return item;
+          })
+        );
+      }
+      return res;
     } else if (proposal.type === 'alert') {
       addAlert({
         asset: proposal.asset,
@@ -623,6 +679,36 @@ export function Provider({ children }: { children: React.ReactNode }) {
         isRecurring: false,
         cooldownSec: 300,
       });
+      receipt = {
+        receiptId: 'rcpt_' + Math.random().toString(36).substring(2, 8),
+        actionType: 'alert',
+        title: `Volatility Alert Set: ${proposal.asset} (${proposal.alertType} $${proposal.value})`,
+        summary: `Active price trigger registered on ${proposal.asset} with automatic cooldown monitoring.`,
+        executedAt: Date.now(),
+        details: [
+          `Trigger Type: ${proposal.alertType}`,
+          `Threshold Value: $${proposal.value?.toLocaleString()}`,
+          `Current Spot: $${(marketsRef.current[proposal.asset]?.price || 0).toLocaleString()}`,
+          `Cooldown: 300s`,
+        ],
+        badges: [
+          { label: 'Armed', color: 'emerald' },
+          { label: 'Real-time', color: 'indigo' },
+        ],
+        jumpRoute: '/alerts',
+        jumpLabel: 'View in Alerts Desk →',
+      };
+      setChatHistory((hist) =>
+        hist.map((item) => {
+          if (item.actionProposal && item.actionProposal.type === 'alert' && !item.actionProposal.executionReceipt) {
+            return {
+              ...item,
+              actionProposal: { ...item.actionProposal, executionReceipt: receipt },
+            };
+          }
+          return item;
+        })
+      );
       return { ok: true };
     } else if (proposal.type === 'rebalance' || proposal.type === 'emergency_defend') {
       const steps = proposal.rebalanceSteps || [];
@@ -661,6 +747,232 @@ export function Provider({ children }: { children: React.ReactNode }) {
         isDefend ? 'Emergency Defense Executed' : 'Portfolio Rebalance Executed',
         `Executed ${executedCount} reallocation steps ($${totalVolume.toFixed(2)} total volume).`,
         'success'
+      );
+
+      receipt = {
+        receiptId: 'rcpt_' + Math.random().toString(36).substring(2, 8),
+        actionType: proposal.type,
+        title: isDefend ? 'Sentinel Capital Defense Completed' : 'Portfolio Rebalance Completed',
+        summary: `Successfully executed ${executedCount} reallocation steps ($${totalVolume.toFixed(2)} total volume) to optimize portfolio risk.`,
+        executedAt: Date.now(),
+        details: [
+          `Executed Steps: ${executedCount} transactions`,
+          `Total Rebalanced Volume: $${totalVolume.toFixed(2)}`,
+          `Target Cash Buffer: ${proposal.cashTargetPct || 15}%`,
+        ],
+        badges: [
+          { label: isDefend ? 'Defended' : 'Balanced', color: 'emerald' },
+          { label: 'Two-Stage Execution', color: 'indigo' },
+        ],
+        jumpRoute: '/portfolio',
+        jumpLabel: 'View in Portfolio Desk →',
+      };
+
+      setChatHistory((hist) =>
+        hist.map((item) => {
+          if (item.actionProposal && (item.actionProposal.type === 'rebalance' || item.actionProposal.type === 'emergency_defend') && !item.actionProposal.executionReceipt) {
+            return {
+              ...item,
+              actionProposal: { ...item.actionProposal, executionReceipt: receipt },
+            };
+          }
+          return item;
+        })
+      );
+      return { ok: true };
+    } else if (proposal.type === 'deploy_strategy') {
+      const params = proposal.strategyParams;
+      const id = 'strat_nexus_' + proposal.asset.toLowerCase() + '_' + Math.random().toString(36).substring(2, 7);
+      const newStrategy: StrategyConfig = {
+        id,
+        asset: proposal.asset,
+        kind: params?.kind || 'vwap_trend',
+        name: params?.name || `${proposal.asset} Algorithmic Strategy`,
+        enabled: true,
+        maxAllocation: params?.maxAllocation ?? 0.25,
+        cooldownSec: params?.cooldownSec ?? 25,
+        tradesExecuted: 0,
+        totalPnl: 0,
+        realizedPnl: 0,
+        feesPaid: 0,
+        winCount: 0,
+        lossCount: 0,
+        targetProfitPct: params?.targetProfitPct,
+        trailingStopPct: params?.trailingStopPct,
+        params: params?.params || {},
+      };
+
+      setState((s) => ({
+        ...s,
+        strategies: [newStrategy, ...s.strategies],
+      }));
+      triggerToast('Strategy Deployed', `Active: ${newStrategy.name} is now evaluating live market ticks.`, 'success');
+
+      receipt = {
+        receiptId: 'rcpt_' + Math.random().toString(36).substring(2, 8),
+        actionType: 'deploy_strategy',
+        title: `Algorithmic Bot Deployed: ${newStrategy.name}`,
+        summary: `Algorithmic engine ${newStrategy.kind.replace('_', ' ').toUpperCase()} active on 2.5s ticks with dynamic ATR profit brackets.`,
+        executedAt: Date.now(),
+        details: [
+          `Bot ID: ${newStrategy.id}`,
+          `Target Asset: ${newStrategy.asset}`,
+          `Max Allocation: ${((newStrategy.maxAllocation || 0.25) * 100).toFixed(0)}%`,
+          `Take-Profit Target: +${newStrategy.targetProfitPct || 5}%`,
+          `Trailing Stop: -${newStrategy.trailingStopPct || 2}%`,
+          `Evaluation Loop: Every 2.5s`,
+        ],
+        badges: [
+          { label: 'Active & Live', color: 'emerald' },
+          { label: 'Dynamic ATR', color: 'indigo' },
+        ],
+        jumpRoute: '/strategies',
+        jumpLabel: 'View in Strategies Desk →',
+      };
+
+      setChatHistory((hist) =>
+        hist.map((item) => {
+          if (item.actionProposal && item.actionProposal.type === 'deploy_strategy' && !item.actionProposal.executionReceipt) {
+            return {
+              ...item,
+              actionProposal: { ...item.actionProposal, executionReceipt: receipt },
+            };
+          }
+          return item;
+        })
+      );
+      return { ok: true };
+    } else if (proposal.type === 'smart_dca') {
+      const dca = proposal.dcaPlan;
+      const id = 'strat_dca_' + proposal.asset.toLowerCase() + '_' + Math.random().toString(36).substring(2, 7);
+      const dcaStrategy: StrategyConfig = {
+        id,
+        asset: proposal.asset,
+        kind: 'dca',
+        name: `${proposal.asset} Smart Value-Weighted DCA`,
+        enabled: true,
+        maxAllocation: 0.35,
+        cooldownSec: 86400,
+        tradesExecuted: 0,
+        totalPnl: 0,
+        realizedPnl: 0,
+        feesPaid: 0,
+        winCount: 0,
+        lossCount: 0,
+        targetProfitPct: dca?.targetProfitPct || 8.0,
+        trailingStopPct: dca?.trailingStopPct || 2.5,
+        params: {
+          dcaAmountUsd: dca?.baseAmountUsd || 200,
+          oversoldMultiplier: dca?.oversoldMultiplier || 1.6,
+          pauseThresholdRsi: dca?.pauseThresholdRsi || 70,
+        },
+      };
+
+      setState((s) => ({
+        ...s,
+        strategies: [dcaStrategy, ...s.strategies],
+      }));
+      triggerToast('Smart DCA Activated', `Autonomous DCA bot deployed for ${proposal.asset} ($${dca?.baseAmountUsd || 200}/period).`, 'success');
+
+      receipt = {
+        receiptId: 'rcpt_' + Math.random().toString(36).substring(2, 8),
+        actionType: 'smart_dca',
+        title: `Smart DCA Activated: ${proposal.asset}`,
+        summary: `Dynamic Value-Weighted DCA deployed. Accumulates $${dca?.baseAmountUsd}/period, scales up to 1.6x on oversold dips, and pauses during euphoric tops.`,
+        executedAt: Date.now(),
+        details: [
+          `Asset: ${proposal.asset}`,
+          `Base Budget: $${dca?.baseAmountUsd}/interval`,
+          `Dip Multiplier: 1.6x (when RSI < 35)`,
+          `Peak Protection: Pauses when RSI > 70`,
+          `Profit Target: +${dca?.targetProfitPct}%`,
+        ],
+        badges: [
+          { label: 'Automated', color: 'emerald' },
+          { label: 'Dip Scaling', color: 'indigo' },
+        ],
+        jumpRoute: '/strategies',
+        jumpLabel: 'View in Strategies Desk →',
+      };
+
+      setChatHistory((hist) =>
+        hist.map((item) => {
+          if (item.actionProposal && item.actionProposal.type === 'smart_dca' && !item.actionProposal.executionReceipt) {
+            return {
+              ...item,
+              actionProposal: { ...item.actionProposal, executionReceipt: receipt },
+            };
+          }
+          return item;
+        })
+      );
+      return { ok: true };
+    } else if (proposal.type === 'stress_test') {
+      triggerToast('Stress Test Executed', `Shock analysis complete for ${proposal.stressTest?.title || 'Portfolio'}.`, 'info');
+
+      receipt = {
+        receiptId: 'rcpt_' + Math.random().toString(36).substring(2, 8),
+        actionType: 'stress_test',
+        title: `Stress Test Completed: ${proposal.stressTest?.title}`,
+        summary: `Simulated impact on portfolio: -${proposal.stressTest?.simulatedDrawdownPct}% drawdown ($${proposal.stressTest?.simulatedLossUsd.toLocaleString()}). Survivability rating: ${proposal.stressTest?.survivabilityRating}.`,
+        executedAt: Date.now(),
+        details: [
+          `Scenario: ${proposal.stressTest?.title}`,
+          `Projected Drawdown: -${proposal.stressTest?.simulatedDrawdownPct}%`,
+          `Simulated Dollar Loss: $${proposal.stressTest?.simulatedLossUsd.toLocaleString()}`,
+          `Post-Shock Valuation: $${proposal.stressTest?.postShockPortfolioVal.toLocaleString()}`,
+          `Cushion Rating: ${proposal.stressTest?.survivabilityRating} (${proposal.stressTest?.survivabilityScore}/100)`,
+        ],
+        badges: [
+          { label: proposal.stressTest?.survivabilityRating || 'Audit Complete', color: 'amber' },
+          { label: 'VaR 95%', color: 'indigo' },
+        ],
+        jumpRoute: '/portfolio',
+        jumpLabel: 'View in Portfolio Desk →',
+      };
+
+      setChatHistory((hist) =>
+        hist.map((item) => {
+          if (item.actionProposal && item.actionProposal.type === 'stress_test' && !item.actionProposal.executionReceipt) {
+            return {
+              ...item,
+              actionProposal: { ...item.actionProposal, executionReceipt: receipt },
+            };
+          }
+          return item;
+        })
+      );
+      return { ok: true };
+    } else if (proposal.type === 'token_compare') {
+      triggerToast('Alpha Radar Complete', `Peer alpha analysis completed.`, 'info');
+
+      receipt = {
+        receiptId: 'rcpt_' + Math.random().toString(36).substring(2, 8),
+        actionType: 'token_compare',
+        title: `Alpha Radar Analysis Complete`,
+        summary: proposal.tokenComparison?.verdict || 'Cross-asset statistical evaluation finished.',
+        executedAt: Date.now(),
+        details: (proposal.tokenComparison?.tokens || []).map(
+          (t: any) => `${t.asset}: Sharpe ${t.sharpeEstimate}, Vol ${t.volAnnualizedPct}%, Beta ${t.betaToBtc}`
+        ),
+        badges: [
+          { label: `Top: ${proposal.tokenComparison?.topAlphaAsset || 'BTC'}`, color: 'emerald' },
+          { label: 'Cross-Sectional', color: 'indigo' },
+        ],
+        jumpRoute: '/markets',
+        jumpLabel: 'View in Markets Desk →',
+      };
+
+      setChatHistory((hist) =>
+        hist.map((item) => {
+          if (item.actionProposal && item.actionProposal.type === 'token_compare' && !item.actionProposal.executionReceipt) {
+            return {
+              ...item,
+              actionProposal: { ...item.actionProposal, executionReceipt: receipt },
+            };
+          }
+          return item;
+        })
       );
       return { ok: true };
     }
@@ -711,6 +1023,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
       aiLoading,
       chatHistory,
       chatLoading,
+      chatOpen,
+      prefilledChatPrompt,
+      openChat,
+      closeChat,
       activeToast,
       dismissToast,
       setSelectedAsset,
@@ -748,6 +1064,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
       aiLoading,
       chatHistory,
       chatLoading,
+      chatOpen,
+      prefilledChatPrompt,
+      openChat,
+      closeChat,
       activeToast,
       dismissToast,
       setSelectedAsset,

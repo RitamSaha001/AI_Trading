@@ -46,6 +46,9 @@ import {
   AlertTriangle,
   ChevronRight,
   X,
+  ShieldAlert,
+  Compass,
+  Scale,
 } from 'lucide-react';
 
 function GlassCard({
@@ -94,6 +97,7 @@ export function Dashboard() {
     refreshAI,
     executeActionProposal,
     order,
+    openChat,
   } = useLumen();
 
   const pv = portfolioValue(state, markets);
@@ -508,6 +512,86 @@ export function Dashboard() {
           <span className="text-[11px] text-zinc-500">Position weighting &amp; P&amp;L breakdown</span>
         </button>
       </div>
+
+      {/* Lumen Nexus Autonomous Actions Panel */}
+      <GlassCard className="p-6 bg-gradient-to-r from-indigo-900/5 via-purple-900/5 to-transparent border border-indigo-500/15">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-black/[0.05]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-zinc-900">Lumen Nexus Autonomous Actions</h3>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
+                  Ready to Dispatch
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500">
+                Trigger end-to-end agentic workflows with transparent safety checks and live execution receipts.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => openChat()}
+            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl shadow-sm transition-all self-start md:self-auto flex items-center gap-2"
+          >
+            <span>Open Nexus Terminal</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4">
+          <button
+            type="button"
+            onClick={() => openChat('Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.')}
+            className="p-3.5 rounded-xl border border-black/[0.06] bg-white/80 hover:bg-rose-50/50 hover:border-rose-200 text-left transition-all group"
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <ShieldAlert className="w-4 h-4 text-rose-600 group-hover:scale-110 transition-transform" />
+              <strong className="text-xs font-bold text-zinc-900 group-hover:text-rose-700">Sentinel Risk Audit</strong>
+            </div>
+            <p className="text-[11px] text-zinc-500 leading-tight">Sense market hazards &amp; verify capital defense protocols.</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openChat('Run a portfolio stress test simulating a 20% Bitcoin flash crash and tell me my projected loss and survivability rating.')}
+            className="p-3.5 rounded-xl border border-black/[0.06] bg-white/80 hover:bg-amber-50/50 hover:border-amber-200 text-left transition-all group"
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <Activity className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+              <strong className="text-xs font-bold text-zinc-900 group-hover:text-amber-700">Crash Stress Test</strong>
+            </div>
+            <p className="text-[11px] text-zinc-500 leading-tight">Simulate -20% market shock, 95% VaR, and survivability.</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openChat(`Synthesize an institutional VWAP momentum strategy bot for ${selectedAsset} with dynamic ATR profit brackets and deploy it.`)}
+            className="p-3.5 rounded-xl border border-black/[0.06] bg-white/80 hover:bg-indigo-50/50 hover:border-indigo-200 text-left transition-all group"
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <Zap className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition-transform" />
+              <strong className="text-xs font-bold text-zinc-900 group-hover:text-indigo-700">Synthesize Bot</strong>
+            </div>
+            <p className="text-[11px] text-zinc-500 leading-tight">Calibrate &amp; deploy an automated strategy for {selectedAsset}.</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openChat(`Create a Smart Value-Weighted DCA accumulation plan for ${selectedAsset} with dip buying multipliers.`)}
+            className="p-3.5 rounded-xl border border-black/[0.06] bg-white/80 hover:bg-emerald-50/50 hover:border-emerald-200 text-left transition-all group"
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <TrendingUp className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+              <strong className="text-xs font-bold text-zinc-900 group-hover:text-emerald-700">Smart DCA Plan</strong>
+            </div>
+            <p className="text-[11px] text-zinc-500 leading-tight">Dip multipliers and euphoria pauses for {selectedAsset}.</p>
+          </button>
+        </div>
+      </GlassCard>
     </div>
   );
 }
@@ -516,7 +600,15 @@ export function Dashboard() {
 // MARKETS
 // ----------------------------------------------------
 export function Markets() {
-  const { state, markets, loading, setSelectedAsset, toggleWatch, refreshMarkets } = useLumen();
+  const {
+    state,
+    markets,
+    loading,
+    setSelectedAsset,
+    toggleWatch,
+    refreshMarkets,
+    openChat,
+  } = useLumen();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('All');
   const [sortKey, setSortKey] = useState<'change' | 'price' | 'volume' | 'name'>('change');
@@ -557,6 +649,18 @@ export function Markets() {
         subtitle={`Live quotes streamed across ${ASSETS.length} global crypto markets with sub-second recalculation.`}
         action={
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                openChat(
+                  `Compare ${state.selectedAsset}, BTC, and ETH head-to-head on Alpha Radar, analyzing Sharpe ratios, volatility, and momentum score.`
+                )
+              }
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl shadow-xs transition-all"
+            >
+              <Compass className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Compare on Alpha Radar</span>
+            </button>
             <button
               type="button"
               onClick={refreshMarkets}
@@ -794,6 +898,17 @@ export function Markets() {
                           type="button"
                           onClick={() => {
                             setSelectedAsset(a);
+                            openChat(`Analyze current ${a} market momentum, RSI divergence, and resistance levels.`);
+                          }}
+                          className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title={`Ask Nexus AI about ${a}`}
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedAsset(a);
                             go('/');
                           }}
                           className="px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:text-zinc-950 hover:bg-black/[0.04] rounded-lg transition-all"
@@ -921,6 +1036,17 @@ export function Markets() {
                     type="button"
                     onClick={() => {
                       setSelectedAsset(a);
+                      openChat(`Analyze current ${a} market momentum, RSI divergence, and resistance levels.`);
+                    }}
+                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                    title={`Ask Nexus AI about ${a}`}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAsset(a);
                       go('/orders');
                     }}
                     className="py-1.5 px-3.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-all shadow-2xs"
@@ -941,7 +1067,7 @@ export function Markets() {
 // PORTFOLIO
 // ----------------------------------------------------
 export function Portfolio() {
-  const { state, markets } = useLumen();
+  const { state, markets, openChat } = useLumen();
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
   const riskProfile = calculatePortfolioRisk(state, markets);
@@ -953,6 +1079,34 @@ export function Portfolio() {
       <PageHeader
         title="Portfolio Analytics"
         subtitle="Live balance distribution, cost-basis calculations, fees, and mark-to-market valuations."
+        action={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                openChat(
+                  'Run a portfolio stress test simulating a 20% Bitcoin flash crash and tell me my projected loss and survivability rating.'
+                )
+              }
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl shadow-xs transition-all"
+            >
+              <Activity className="w-3.5 h-3.5 text-amber-600" />
+              <span>Crash Stress Test</span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                openChat(
+                  'Compute optimal agentic portfolio rebalancing using inverse-volatility risk budgeting with two-stage execution.'
+                )
+              }
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
+            >
+              <Scale className="w-3.5 h-3.5 text-white" />
+              <span>Rebalance with Nexus</span>
+            </button>
+          </div>
+        }
       />
 
       {/* KPI Cards */}
@@ -1572,6 +1726,7 @@ export function Strategies() {
     addStrategy,
     removeStrategy,
     resetStrategyMetrics,
+    openChat,
   } = useLumen();
 
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'ai' | 'trend' | 'breakout' | 'grid'>('all');
@@ -1630,14 +1785,28 @@ export function Strategies() {
         title="Autonomous Algorithmic Trading Engines"
         subtitle="Institutional multi-market quantitative models: Dynamic ATR Profit Brackets, Trailing Stops, VWAP & Composite Alpha Squeeze."
         action={
-          <button
-            type="button"
-            onClick={() => setShowDeployModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl text-xs font-semibold shadow-sm transition-all"
-          >
-            <Plus className="w-4 h-4 text-emerald-400" />
-            <span>Deploy Strategy</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                openChat(
+                  `Synthesize an institutional strategy bot for ${newAsset} with dynamic ATR profit brackets and deploy it.`
+                )
+              }
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-2xl text-xs font-semibold shadow-xs transition-all"
+            >
+              <Sparkles className="w-4 h-4 text-indigo-600" />
+              <span>Synthesize with Nexus AI</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDeployModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl text-xs font-semibold shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4 text-emerald-400" />
+              <span>Deploy Strategy</span>
+            </button>
+          </div>
         }
       />
 
