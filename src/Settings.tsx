@@ -1,2 +1,228 @@
-import React,{useEffect,useState}from'react';import{listGeminiModels}from'./gemini';import{useLumen}from'./store';
-export function SettingsModal({onClose}:{onClose:()=>void}){const{state,setSettings}=useLumen();const[key,setKey]=useState(state.settings.geminiApiKey);const[models,setModels]=useState<any[]>([]);const[loading,setLoading]=useState(false);const[error,setError]=useState('');const fetchModels=async()=>{setLoading(true);setError('');try{setModels(await listGeminiModels(key))}catch(e){setError(e instanceof Error?e.message:'Unable to load models.')}finally{setLoading(false)}};useEffect(()=>{if(key)fetchModels()},[]);return <div className="modal-backdrop" onMouseDown={e=>e.currentTarget===e.target&&onClose()}><section className="modal"><div className="modal-head"><div><h2>AI settings</h2><p>Use your Gemini API key and choose from models available to that key.</p></div><button className="icon-btn" onClick={onClose}>×</button></div><label>Gemini API key<input type="password" value={key} onChange={e=>setKey(e.target.value)} placeholder="AIza…"/></label><div className="hint">Stored in this browser’s localStorage for this client-only app. Use a dedicated key and never share it.</div><div className="row-actions"><button className="btn-solid" disabled={!key||loading} onClick={fetchModels}>{loading?'Loading…':'Load live models'}</button></div>{error&&<div className="error">{error}</div>}<label>Model<select value={state.settings.geminiModel} onChange={e=>setSettings({geminiModel:e.target.value})}>{models.length?models.map(m=><option key={m.name} value={m.name.replace(/^models\//,'')}>{m.displayName||m.name.replace(/^models\//,'')}</option>):<option value={state.settings.geminiModel}>{state.settings.geminiModel}</option>}</select></label>{models.length>0&&<div className="hint">{models.length} generation-capable Gemini models returned by the live Models API.</div>}<div className="modal-foot"><button className="btn-solid" onClick={()=>{setSettings({geminiApiKey:key});onClose()}}>Save settings</button><button className="btn-ghost danger" onClick={()=>{setKey('');setModels([]);setSettings({geminiApiKey:'',geminiModel:'gemini-3.7-flash'})}}>Clear key</button></div></section></div>}
+import React, { useEffect, useState } from 'react';
+import { listGeminiModels } from './gemini';
+import { useLumen } from './store';
+import { X, Sparkles, Key, Cpu, Volume2, RotateCcw, ShieldCheck, Check } from 'lucide-react';
+
+export function SettingsModal({ onClose }: { onClose: () => void }) {
+  const { state, setSettings, reset } = useLumen();
+  const [key, setKey] = useState(state.settings.geminiApiKey || '');
+  const [models, setModels] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedModel, setSelectedModel] = useState(state.settings.geminiModel || 'gemini-3.8-flash');
+  const [sound, setSound] = useState(state.settings.soundEnabled ?? true);
+  const [resetBalance, setResetBalance] = useState(50000);
+
+  const fetchModels = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await listGeminiModels(key);
+      setModels(list);
+    } catch (e: any) {
+      setError(e.message || 'Unable to query live models.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchModels();
+  }, []);
+
+  const handleSave = () => {
+    setSettings({
+      geminiApiKey: key.trim(),
+      geminiModel: selectedModel,
+      soundEnabled: sound,
+    });
+    setSaved(true);
+    setTimeout(() => {
+      setSaved(false);
+      onClose();
+    }, 600);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-md animate-in fade-in duration-200"
+      onMouseDown={(e) => e.currentTarget === e.target && onClose()}
+    >
+      <div className="relative w-full max-w-lg bg-white/90 backdrop-blur-2xl border border-white/60 rounded-3xl shadow-2xl overflow-hidden text-zinc-900 animate-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-black/[0.06] bg-white/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shadow-sm">
+              <Sparkles className="w-5 h-5 text-indigo-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Cockpit Preferences</h2>
+              <p className="text-xs text-zinc-500">Gemini intelligence &amp; paper simulator configurations</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-black/[0.04] transition-all"
+            onClick={onClose}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          {/* Gemini API Key */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
+              <Key className="w-3.5 h-3.5 text-zinc-400" />
+              Gemini API Key (Optional)
+            </label>
+            <input
+              type="password"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="AIzaSy... (leave blank to use server environment default)"
+              className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 placeholder:text-zinc-400 transition-all font-mono"
+            />
+            <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-0.5">
+              <span>If left empty, server-side environment key or high-grade quantitative engine is used.</span>
+              {key && (
+                <button
+                  type="button"
+                  onClick={() => setKey('')}
+                  className="text-rose-600 hover:underline font-medium"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Model Selection */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
+                <Cpu className="w-3.5 h-3.5 text-zinc-400" />
+                Active Model
+              </label>
+              <button
+                type="button"
+                onClick={fetchModels}
+                disabled={loading}
+                className="text-[11px] text-indigo-600 hover:underline font-medium"
+              >
+                {loading ? 'Querying...' : 'Refresh Models'}
+              </button>
+            </div>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 transition-all font-medium"
+            >
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash (High Speed, Recommended)</option>
+              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Deep Institutional Reasoning)</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (Ultra Low Latency)</option>
+              {models
+                .filter((m) => !['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'].includes(m.name))
+                .map((m) => (
+                  <option key={m.name} value={m.name}>
+                    {m.displayName || m.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Sound & Notifications */}
+          <div className="p-4 rounded-2xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-white border border-black/[0.06] flex items-center justify-center text-zinc-600 shadow-xs">
+                <Volume2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold text-zinc-800">Acoustic Feedback</h4>
+                <p className="text-[11px] text-zinc-500">Audio chimes on order execution and alert triggers</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSound(!sound)}
+              className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ${
+                sound ? 'bg-indigo-600' : 'bg-zinc-300'
+              }`}
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                  sound ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Simulator Capital Reset */}
+          <div className="p-4 rounded-2xl bg-rose-500/[0.04] border border-rose-500/15 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-rose-800">
+              <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+              Paper Balance Reset
+            </div>
+            <p className="text-[11px] text-zinc-600">
+              Reset all paper positions, order history, and reload starting cash:
+            </p>
+            <div className="flex items-center gap-2">
+              {[25000, 50000, 100000].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setResetBalance(amt)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${
+                    resetBalance === amt
+                      ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                      : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
+                  }`}
+                >
+                  ${amt.toLocaleString()}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`Reset the simulator with a starting cash balance of $${resetBalance.toLocaleString()}?`)) {
+                    reset(resetBalance);
+                    onClose();
+                  }
+                }}
+                className="ml-auto px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-all"
+              >
+                Reset Now
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-black/[0.06] bg-white/50">
+          <button
+            type="button"
+            className="px-4 py-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 hover:bg-black/[0.04] rounded-xl transition-all"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="px-5 py-2 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl shadow-sm transition-all flex items-center gap-1.5"
+          >
+            {saved ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-400" /> Saved!
+              </>
+            ) : (
+              'Save Preferences'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
