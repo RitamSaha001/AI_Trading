@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLumen } from './store';
 import { ASSETS, Asset, Timeframe, Side, OrderType, StrategyKind } from './types';
 import { LineChart, Sparkline } from './Chart';
+import { MarketHeatmap } from './components/MarketHeatmap';
 import {
   indicators,
   money,
@@ -9,6 +10,7 @@ import {
   positionValue,
   positionPnl,
   totalPortfolioPnl,
+  calculatePortfolioRisk,
   formatQty,
   META,
 } from './trading';
@@ -85,6 +87,7 @@ export function Dashboard() {
 
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
+  const riskProfile = calculatePortfolioRisk(state, markets);
   const selectedAsset = state.selectedAsset;
   const m = markets[selectedAsset];
   const ind = m ? indicators(m.history) : null;
@@ -92,8 +95,8 @@ export function Dashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <PageHeader
-        title="Institutional Trading Cockpit"
-        subtitle="Live cryptocurrency market streams, quantitative risk controls, and automated strategy execution."
+        title="Algorithmic Trading Dashboard"
+        subtitle="Live cryptocurrency market streams, quantitative risk controls, and automated paper execution."
         action={
           <button
             type="button"
@@ -102,7 +105,7 @@ export function Dashboard() {
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white/80 hover:bg-white border border-black/[0.08] rounded-xl shadow-xs transition-all"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${aiLoading ? 'animate-spin text-indigo-600' : 'text-zinc-500'}`} />
-            <span>{aiLoading ? 'Analyzing Confluence...' : 'Refresh AI Intelligence'}</span>
+            <span>{aiLoading ? 'Analyzing Indicators...' : 'Refresh Technical Intelligence'}</span>
           </button>
         }
       />
@@ -148,25 +151,37 @@ export function Dashboard() {
         <GlassCard className="flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-500">Dynamic Risk Score</span>
+              <span className="text-xs font-medium text-zinc-500">Portfolio Risk Score</span>
               <Shield className="w-4 h-4 text-indigo-500" />
             </div>
             <div className="flex items-baseline gap-2 mt-1">
               <div className="text-3xl font-bold font-mono tracking-tight text-zinc-950">
-                {ind?.score !== undefined ? Math.abs(ind.score * 18 + 24) : 28}
+                {riskProfile.portfolioRiskScore}
               </div>
-              <span className="text-xs font-semibold text-emerald-600">Controlled (Low Volatility)</span>
+              <span
+                className={`text-xs font-semibold ${
+                  riskProfile.portfolioRiskScore >= 70
+                    ? 'text-rose-600'
+                    : riskProfile.portfolioRiskScore >= 40
+                    ? 'text-amber-600'
+                    : 'text-emerald-600'
+                }`}
+              >
+                {riskProfile.riskLabel}
+              </span>
             </div>
             {/* Risk Bar */}
             <div className="w-full h-2 bg-black/[0.05] rounded-full overflow-hidden mt-3">
               <div
                 className="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(95, Math.abs((ind?.score || 0) * 18 + 24))}%` }}
+                style={{ width: `${Math.min(98, Math.max(5, riskProfile.portfolioRiskScore))}%` }}
               />
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center justify-between text-xs text-zinc-500">
-            <span>Active Positions: {ASSETS.filter((a) => (state.positions[a] || 0) > 0).length} Assets</span>
+            <span>
+              Top: {riskProfile.topAsset || 'None'} ({riskProfile.topAssetConcentrationPct.toFixed(0)}%)
+            </span>
             <button type="button" onClick={() => go('/portfolio')} className="text-indigo-600 hover:underline font-medium">
               View Allocations →
             </button>
@@ -347,8 +362,8 @@ export function Dashboard() {
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900">AI Alpha Signal</h4>
-                  <span className="text-[10px] text-zinc-400">Institutional Model</span>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900">AI Signal Analysis</h4>
+                  <span className="text-[10px] text-zinc-400">{ai?.engine || 'Quantitative Heuristic'}</span>
                 </div>
               </div>
 
@@ -402,12 +417,12 @@ export function Dashboard() {
             {/* Quantitative Rationale */}
             <div className="p-3 rounded-2xl bg-indigo-500/[0.04] border border-indigo-500/15">
               <p className="text-xs leading-relaxed text-zinc-700">
-                {ai?.rationale || 'Synthesizing live moving average crossovers, RSI dynamics, and order book momentum...'}
+                {ai?.rationale || 'Synthesizing moving average crossovers, RSI momentum, and price volatility...'}
               </p>
             </div>
           </div>
 
-          {/* 1-Click Execution Proposal */}
+          {/* Safety Gate Execution Proposal */}
           <div className="pt-2 border-t border-black/[0.04] space-y-2">
             {ai?.proposals?.[0] ? (
               <button
@@ -415,8 +430,8 @@ export function Dashboard() {
                 onClick={() => executeActionProposal(ai.proposals[0])}
                 className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
               >
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>Execute Proposed {ai.proposals[0].type === 'order' ? 'Trade' : 'Alert'}</span>
+                <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Review in AI Safety Gate ({ai.proposals[0].type})</span>
               </button>
             ) : (
               <button
@@ -523,6 +538,9 @@ export function Markets() {
           </button>
         }
       />
+
+      {/* Real-time Performance Heatmap */}
+      <MarketHeatmap />
 
       {/* Filter and Sort Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-white/70 border border-black/[0.06] backdrop-blur-md">
@@ -679,6 +697,7 @@ export function Portfolio() {
   const { state, markets } = useLumen();
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
+  const riskProfile = calculatePortfolioRisk(state, markets);
 
   const activeHoldings = ASSETS.filter((a) => (state.positions[a] || 0) > 0);
 
@@ -686,7 +705,7 @@ export function Portfolio() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
         title="Portfolio Analytics"
-        subtitle="Live balance distribution, holding valuations, and cost basis calculations."
+        subtitle="Live balance distribution, cost-basis calculations, fees, and mark-to-market valuations."
       />
 
       {/* KPI Cards */}
@@ -705,7 +724,22 @@ export function Portfolio() {
         </GlassCard>
 
         <GlassCard>
-          <span className="text-xs font-medium text-zinc-500">Liquid Cash Buffer</span>
+          <span className="text-xs font-medium text-zinc-500">Realized P&amp;L</span>
+          <div
+            className={`text-2xl font-bold font-mono mt-1 ${
+              state.realizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
+            }`}
+          >
+            {state.realizedPnl >= 0 ? '+' : ''}
+            {money(state.realizedPnl)}
+          </div>
+          <span className="text-xs text-zinc-500 mt-1 inline-block">
+            Fees Paid: {money(state.totalFees || 0)}
+          </span>
+        </GlassCard>
+
+        <GlassCard>
+          <span className="text-xs font-medium text-zinc-500">Liquid Cash</span>
           <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{money(state.cash)}</div>
           <span className="text-xs text-zinc-500 mt-1 inline-block">
             {((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}% of total capital
@@ -713,15 +747,21 @@ export function Portfolio() {
         </GlassCard>
 
         <GlassCard>
-          <span className="text-xs font-medium text-zinc-500">Active Positions</span>
-          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{activeHoldings.length}</div>
-          <span className="text-xs text-zinc-500 mt-1 inline-block">Across {ASSETS.length} tracked cryptos</span>
-        </GlassCard>
-
-        <GlassCard>
-          <span className="text-xs font-medium text-zinc-500">Total Paper Orders</span>
-          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{state.orders.length}</div>
-          <span className="text-xs text-zinc-500 mt-1 inline-block">Executed through simulator</span>
+          <span className="text-xs font-medium text-zinc-500">Risk Profile</span>
+          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">
+            {riskProfile.portfolioRiskScore} <span className="text-sm font-normal text-zinc-400">/ 100</span>
+          </div>
+          <span
+            className={`text-xs font-semibold mt-1 inline-block ${
+              riskProfile.portfolioRiskScore >= 70
+                ? 'text-rose-600'
+                : riskProfile.portfolioRiskScore >= 40
+                ? 'text-amber-600'
+                : 'text-emerald-600'
+            }`}
+          >
+            {riskProfile.riskLabel} ({riskProfile.topAsset || 'None'} {riskProfile.topAssetConcentrationPct.toFixed(0)}%)
+          </span>
         </GlassCard>
       </div>
 
@@ -801,6 +841,7 @@ export function Portfolio() {
               <tr>
                 <th className="px-6 py-3.5">Asset</th>
                 <th className="px-6 py-3.5">Units</th>
+                <th className="px-6 py-3.5">Avg Cost</th>
                 <th className="px-6 py-3.5">Price</th>
                 <th className="px-6 py-3.5">Total Value</th>
                 <th className="px-6 py-3.5">Allocation</th>
@@ -815,6 +856,7 @@ export function Portfolio() {
                 const val = qty * (m?.price || 0);
                 const alloc = pv > 0 ? (val / pv) * 100 : 0;
                 const pnlInfo = positionPnl(state, markets, a);
+                const avgCost = state.avgBuyPrice?.[a];
 
                 return (
                   <tr key={a} className="hover:bg-black/[0.015] transition-colors">
@@ -834,6 +876,9 @@ export function Portfolio() {
                     </td>
                     <td className="px-6 py-4 font-mono font-medium text-zinc-800">
                       {formatQty(qty, a)}
+                    </td>
+                    <td className="px-6 py-4 font-mono text-zinc-500">
+                      {qty > 0 && avgCost ? money(avgCost) : '—'}
                     </td>
                     <td className="px-6 py-4 font-mono text-zinc-600">
                       {m ? money(m.price) : '—'}
@@ -887,19 +932,20 @@ export function Portfolio() {
 // ORDERS & EXECUTION
 // ----------------------------------------------------
 export function Orders() {
-  const { state, markets, order } = useLumen();
+  const { state, markets, order, cancelPendingOrder } = useLumen();
   const [selectedAsset, setSelectedAsset] = useState<Asset>(state.selectedAsset);
   const [side, setSide] = useState<Side>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [amountStr, setAmountStr] = useState('0.1');
+  const [limitPriceStr, setLimitPriceStr] = useState('');
   const [takeProfitStr, setTakeProfitStr] = useState('');
   const [stopLossStr, setStopLossStr] = useState('');
-  const [orderFilter, setOrderFilter] = useState<'all' | 'buy' | 'sell'>('all');
+  const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'filled' | 'buy' | 'sell'>('all');
 
   const m = markets[selectedAsset];
   const currentHolding = state.positions[selectedAsset] || 0;
   const numAmount = Math.max(0, Number(amountStr) || 0);
-  const estPrice = m?.price || 0;
+  const estPrice = orderType === 'limit' && limitPriceStr ? Number(limitPriceStr) : (m?.price || 0);
   const estTotal = numAmount * estPrice;
   const estFee = estTotal * 0.0008;
 
@@ -919,22 +965,27 @@ export function Orders() {
     e.preventDefault();
     order(side, selectedAsset, numAmount, {
       type: orderType,
+      limitPrice: orderType === 'limit' && limitPriceStr ? Number(limitPriceStr) : undefined,
       takeProfit: takeProfitStr ? Number(takeProfitStr) : undefined,
       stopLoss: stopLossStr ? Number(stopLossStr) : undefined,
     });
   };
 
   const filteredOrders = state.orders.filter((o) => {
+    if (orderFilter === 'pending') return o.status === 'pending';
+    if (orderFilter === 'filled') return o.status === 'filled' || !o.status;
     if (orderFilter === 'buy') return o.side === 'buy';
     if (orderFilter === 'sell') return o.side === 'sell';
     return true;
   });
 
+  const pendingCount = state.orders.filter((o) => o.status === 'pending').length;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
         title="Paper Trading Terminal"
-        subtitle="Institutional simulator filling orders with modeled liquidity slippage and fees."
+        subtitle="Deterministic paper execution engine modeling realistic liquidity slippage and taker fees."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -943,7 +994,7 @@ export function Orders() {
           <div className="flex items-center justify-between pb-3 border-b border-black/[0.05]">
             <h3 className="text-sm font-bold text-zinc-900">Execution Ticket</h3>
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 font-semibold">
-              Live Paper Mode
+              Paper Mode
             </span>
           </div>
 
@@ -979,7 +1030,11 @@ export function Orders() {
               <label className="text-xs font-semibold text-zinc-700">Contract / Asset</label>
               <select
                 value={selectedAsset}
-                onChange={(e) => setSelectedAsset(e.target.value as Asset)}
+                onChange={(e) => {
+                  const a = e.target.value as Asset;
+                  setSelectedAsset(a);
+                  if (markets[a]) setLimitPriceStr(markets[a].price.toFixed(2));
+                }}
                 className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 font-medium"
               >
                 {ASSETS.map((x) => (
@@ -1007,7 +1062,10 @@ export function Orders() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOrderType('limit')}
+                  onClick={() => {
+                    setOrderType('limit');
+                    if (!limitPriceStr && m) setLimitPriceStr(m.price.toFixed(2));
+                  }}
                   className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
                     orderType === 'limit'
                       ? 'bg-black text-white border-black shadow-xs'
@@ -1018,6 +1076,27 @@ export function Orders() {
                 </button>
               </div>
             </div>
+
+            {/* Limit Price Input if limit order */}
+            {orderType === 'limit' && (
+              <div className="space-y-1.5 p-3 rounded-xl bg-indigo-500/[0.04] border border-indigo-500/15">
+                <div className="flex items-center justify-between text-xs">
+                  <label className="font-semibold text-indigo-950">Limit Target Price ($)</label>
+                  <span className="text-zinc-500 text-[11px]">Mark: {money(m?.price || 0)}</span>
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  value={limitPriceStr}
+                  onChange={(e) => setLimitPriceStr(e.target.value)}
+                  placeholder={m ? m.price.toFixed(2) : '0.00'}
+                  className="w-full px-3.5 py-2 text-xs font-mono font-semibold bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 text-zinc-900"
+                />
+                <p className="text-[10px] text-zinc-500">
+                  {side === 'buy' ? 'Executes when price drops to or below target.' : 'Executes when price rises to or above target.'}
+                </p>
+              </div>
+            )}
 
             {/* Trade Amount */}
             <div className="space-y-1.5">
@@ -1104,12 +1183,12 @@ export function Orders() {
                   : 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
               }`}
             >
-              Fill Paper {side.toUpperCase()} Order
+              Submit {orderType.toUpperCase()} {side.toUpperCase()} Order
             </button>
           </form>
         </GlassCard>
 
-        {/* Order Book & History (2 Cols) */}
+        {/* Execution Log & Orders */}
         <GlassCard className="lg:col-span-2 overflow-hidden p-0 flex flex-col">
           <div className="p-5 border-b border-black/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -1117,7 +1196,7 @@ export function Orders() {
               <p className="text-xs text-zinc-500">Complete transaction history with timestamped fills and fees.</p>
             </div>
             <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/[0.03]">
-              {(['all', 'buy', 'sell'] as const).map((f) => (
+              {(['all', 'pending', 'filled', 'buy', 'sell'] as const).map((f) => (
                 <button
                   key={f}
                   type="button"
@@ -1127,6 +1206,11 @@ export function Orders() {
                   }`}
                 >
                   {f}
+                  {f === 'pending' && pendingCount > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px]">
+                      {pendingCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -1137,13 +1221,15 @@ export function Orders() {
               <thead className="bg-black/[0.02] text-zinc-500 font-semibold border-b border-black/[0.04] sticky top-0 backdrop-blur-md">
                 <tr>
                   <th className="px-5 py-3">Timestamp</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Type</th>
                   <th className="px-5 py-3">Side</th>
                   <th className="px-5 py-3">Asset</th>
                   <th className="px-5 py-3">Amount</th>
-                  <th className="px-5 py-3">Fill Price</th>
-                  <th className="px-5 py-3">Total Notional</th>
+                  <th className="px-5 py-3">Fill/Target</th>
+                  <th className="px-5 py-3">Notional</th>
                   <th className="px-5 py-3">Fee</th>
-                  <th className="px-5 py-3">Source</th>
+                  <th className="px-5 py-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/[0.04]">
@@ -1151,6 +1237,22 @@ export function Orders() {
                   <tr key={o.id} className="hover:bg-black/[0.015] transition-colors">
                     <td className="px-5 py-3.5 text-zinc-400 font-mono text-[11px]">
                       {new Date(o.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span
+                        className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          o.status === 'pending'
+                            ? 'bg-amber-500/10 text-amber-700'
+                            : o.status === 'cancelled'
+                            ? 'bg-zinc-200 text-zinc-600'
+                            : 'bg-emerald-500/10 text-emerald-700'
+                        }`}
+                      >
+                        {o.status || 'filled'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-zinc-500 uppercase font-mono text-[11px]">
+                      {o.type || 'market'}
                     </td>
                     <td className="px-5 py-3.5">
                       <span
@@ -1166,20 +1268,30 @@ export function Orders() {
                     <td className="px-5 py-3.5 font-mono text-zinc-800">{money(o.price)}</td>
                     <td className="px-5 py-3.5 font-mono font-semibold text-zinc-900">{money(o.notional)}</td>
                     <td className="px-5 py-3.5 font-mono text-zinc-400">{money(o.fee)}</td>
-                    <td className="px-5 py-3.5">
-                      <span
-                        className={`text-[10px] font-medium px-2 py-0.5 rounded-md ${
-                          o.auto ? 'bg-indigo-500/10 text-indigo-700' : 'bg-black/[0.04] text-zinc-600'
-                        }`}
-                      >
-                        {o.auto ? 'Algo' : 'Manual'}
-                      </span>
+                    <td className="px-5 py-3.5 text-right">
+                      {o.status === 'pending' ? (
+                        <button
+                          type="button"
+                          onClick={() => cancelPendingOrder(o.id)}
+                          className="px-2.5 py-1 text-[11px] font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition-all"
+                        >
+                          Cancel
+                        </button>
+                      ) : (
+                        <span
+                          className={`text-[10px] font-medium px-2 py-0.5 rounded-md ${
+                            o.auto ? 'bg-indigo-500/10 text-indigo-700' : 'bg-black/[0.04] text-zinc-600'
+                          }`}
+                        >
+                          {o.auto ? 'Algo' : 'Manual'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-xs text-zinc-400">
+                    <td colSpan={10} className="p-8 text-center text-xs text-zinc-400">
                       No paper orders match the selected filter.
                     </td>
                   </tr>
@@ -1331,6 +1443,8 @@ export function Alerts() {
       type,
       value: val,
       enabled: true,
+      isRecurring: true,
+      cooldownSec: 300,
     });
   };
 

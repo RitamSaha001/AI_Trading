@@ -3,6 +3,8 @@ import { useLumen } from './store';
 import { ASSETS, Asset } from './types';
 import { SettingsModal } from './Settings';
 import { ChatDrawer } from './ChatDrawer';
+import { DataSourceBadge } from './components/DataSourceBadge';
+import { AISafetyModal } from './components/AISafetyModal';
 import {
   LayoutDashboard,
   BarChart3,
@@ -61,7 +63,19 @@ export function go(path: Route) {
 }
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { state, markets, setSelectedAsset, activeToast, dismissToast, setSettings } = useLumen();
+  const {
+    state,
+    markets,
+    currentDataSource,
+    setSelectedAsset,
+    activeToast,
+    dismissToast,
+    setSettings,
+    pendingAIProposal,
+    pendingAIValidation,
+    confirmPendingAIProposal,
+    rejectPendingAIProposal,
+  } = useLumen();
   const route = useRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -95,10 +109,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-1.5">
               <span className="font-semibold text-base tracking-tight text-zinc-950">Lumen</span>
               <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-black/[0.05] text-zinc-600">
-                PRO
+                PAPER
               </span>
             </div>
-            <p className="text-[11px] text-zinc-500">AI Trading Cockpit</p>
+            <p className="text-[11px] text-zinc-500">Algorithmic Paper Trading</p>
           </div>
         </div>
 
@@ -201,11 +215,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
           {/* Top Actions */}
           <div className="flex items-center gap-3">
-            {/* Live Feed Pill */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 text-xs font-medium border border-emerald-500/20">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Feeds Synchronized</span>
-            </div>
+            {/* Live Data Source Indicator */}
+            <DataSourceBadge
+              source={currentDataSource}
+              isSynthetic={markets[state.selectedAsset]?.isSynthetic}
+              lastUpdated={markets[state.selectedAsset]?.lastUpdated}
+            />
 
             {/* Audio Toggle */}
             <button
@@ -297,6 +312,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Copilot Drawer */}
       <ChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
+
+      {/* AI Safety Authorization Gate Modal */}
+      {pendingAIProposal && pendingAIValidation && (
+        <AISafetyModal
+          proposal={pendingAIProposal}
+          validation={pendingAIValidation}
+          onConfirm={confirmPendingAIProposal}
+          onReject={rejectPendingAIProposal}
+        />
+      )}
 
       {/* Toast Notification Container */}
       {activeToast && (

@@ -70,7 +70,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                   {state.settings.geminiModel ? state.settings.geminiModel.replace('gemini-', '') : 'AI Engine'}
                 </span>
               </div>
-              <p className="text-xs text-zinc-500">Institutional quantitative portfolio strategist</p>
+              <p className="text-xs text-zinc-500">Technical indicators &amp; portfolio risk copilot</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -121,37 +121,39 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                           ) : (
                             <Bell className="w-4 h-4 text-amber-600" />
                           )}
-                          Proposed {m.actionProposal.type === 'order' ? 'Paper Trade' : 'Price Alert'}
+                          AI Recommendation: {m.actionProposal.type === 'order' ? 'Paper Trade' : 'Price Alert'}
                         </span>
-                        <span className="text-[11px] text-zinc-500">1-Click Action</span>
+                        <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 border border-amber-500/30">
+                          Requires Approval
+                        </span>
                       </div>
 
                       <div className="text-xs text-zinc-700 bg-white/70 p-2.5 rounded-xl border border-black/[0.04] space-y-1">
                         {m.actionProposal.type === 'order' ? (
                           <>
                             <div className="flex justify-between">
-                              <span className="text-zinc-500">Order:</span>
-                              <strong className="uppercase font-semibold">
+                              <span className="text-zinc-500">Proposed Trade:</span>
+                              <strong className="uppercase font-semibold text-zinc-900">
                                 {m.actionProposal.side} {m.actionProposal.amount} {m.actionProposal.asset}
                               </strong>
                             </div>
-                            {m.actionProposal.reason && (
+                            {(m.actionProposal.rationale || m.actionProposal.reason) && (
                               <p className="text-[11px] text-zinc-500 pt-1 border-t border-black/[0.04]">
-                                {m.actionProposal.reason}
+                                {m.actionProposal.rationale || m.actionProposal.reason}
                               </p>
                             )}
                           </>
                         ) : (
                           <>
                             <div className="flex justify-between">
-                              <span className="text-zinc-500">Trigger:</span>
-                              <strong className="font-semibold">
+                              <span className="text-zinc-500">Trigger Target:</span>
+                              <strong className="font-semibold text-zinc-900">
                                 {m.actionProposal.asset} {m.actionProposal.alertType} ${m.actionProposal.value}
                               </strong>
                             </div>
-                            {m.actionProposal.reason && (
+                            {(m.actionProposal.rationale || m.actionProposal.reason) && (
                               <p className="text-[11px] text-zinc-500 pt-1 border-t border-black/[0.04]">
-                                {m.actionProposal.reason}
+                                {m.actionProposal.rationale || m.actionProposal.reason}
                               </p>
                             )}
                           </>
@@ -160,23 +162,11 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
                       <button
                         type="button"
-                        disabled={isExecuted}
                         onClick={() => handleActionClick(m.actionProposal, i)}
-                        className={`w-full py-2 px-3 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm ${
-                          isExecuted
-                            ? 'bg-emerald-500 text-white cursor-default'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-indigo-500/25'
-                        }`}
+                        className="w-full py-2 px-3 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-indigo-500/25"
                       >
-                        {isExecuted ? (
-                          <>
-                            <CheckCircle2 className="w-4 h-4" /> Executed Successfully
-                          </>
-                        ) : (
-                          <>
-                            <Zap className="w-3.5 h-3.5" /> Execute {m.actionProposal.type === 'order' ? 'Order' : 'Alert'}
-                          </>
-                        )}
+                        <ShieldAlert className="w-4 h-4 text-amber-300" />
+                        <span>Inspect in AI Safety Gate</span>
                       </button>
                     </div>
                   )}

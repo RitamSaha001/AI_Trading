@@ -1,8 +1,31 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, ASSETS, Asset, Market, Side, Timeframe, OrderType, StrategyConfig } from './types';
-import { fetchAll } from './market';
-import { executeOrder, indicators, risk, portfolioValue, money } from './trading';
-import { freshState, loadState, resetState, saveState } from './storage';
+import {
+  AppState,
+  ASSETS,
+  Asset,
+  DataSource,
+  Market,
+  Order,
+  OrderType,
+  Side,
+  StrategyConfig,
+  Timeframe,
+  AIActionProposal,
+  AISafetyValidation,
+} from './types';
+import { fetchAll, MarketStreamService } from './services/market';
+import {
+  executeOrder,
+  checkPendingOrders,
+  cancelOrder,
+  portfolioValue,
+  money,
+  calculatePortfolioRisk,
+} from './trading';
+import { evaluateStrategy } from './domain/strategies';
+import { evaluateAlert } from './domain/alerts';
+import { validateAIProposal } from './services/safetyGate';
+import { freshState, loadState, resetState, saveState, SimulationMode } from './storage';
 import { fetchAIInsight, sendAIChat } from './gemini';
 
 type Ctx = {
@@ -10,9 +33,10 @@ type Ctx = {
   markets: Record<Asset, Market | undefined>;
   loading: boolean;
   marketError: string;
+  currentDataSource: DataSource;
   ai: any;
   aiLoading: boolean;
-  chatHistory: { role: 'user' | 'assistant'; text: string; actionProposal?: any }[];
+  chatHistory: { role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string }[];
   chatLoading: boolean;
   activeToast: { id: string; title: string; message: string; type: 'success' | 'info' | 'warn' } | null;
   dismissToast: () => void;
@@ -23,8 +47,17 @@ type Ctx = {
     side: Side,
     a: Asset,
     qty: number,
-    options?: { type?: OrderType; limitPrice?: number; auto?: boolean; strategyName?: string; takeProfit?: number; stopLoss?: number }
-  ) => { ok: boolean; error?: string };
+    options?: {
+      type?: OrderType;
+      limitPrice?: number;
+      stopPrice?: number;
+      auto?: boolean;
+      strategyName?: string;
+      takeProfit?: number;
+      stopLoss?: number;
+    }
+  ) => { ok: boolean; error?: string; order?: Order };
+  cancelPendingOrder: (orderId: string) => boolean;
   toggleStrategy: (id: string) => void;
   updateStrategy: (id: string, p: Partial<StrategyConfig>) => void;
   addAlert: (x: Omit<AppState['alerts'][number], 'id' | 'triggered' | 'createdAt'>) => void;
@@ -33,14 +66,18 @@ type Ctx = {
   setSettings: (x: Partial<AppState['settings']>) => void;
   refreshAI: () => void;
   sendChat: (text: string) => Promise<void>;
+  pendingAIProposal: AIActionProposal | null;
+  pendingAIValidation: AISafetyValidation | null;
+  requestExecuteAIProposal: (proposal: any) => void;
+  confirmPendingAIProposal: () => { ok: boolean; error?: string };
+  rejectPendingAIProposal: () => void;
   executeActionProposal: (proposal: any) => { ok: boolean; error?: string };
-  reset: (startingCash?: number) => void;
+  reset: (startingCash?: number, mode?: SimulationMode) => void;
   refreshMarkets: () => Promise<void>;
 };
 
 const Context = createContext<Ctx | null>(null);
 
-// Gentle Web Audio notification chimes
 function playChime(type: 'success' | 'alert' | 'trade') {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -71,7 +108,7 @@ function playChime(type: 'success' | 'alert' | 'trade') {
       osc.stop(now + 0.35);
     }
   } catch {
-    // Audio contexts might be blocked until first user gesture
+    // blocked until user interaction
   }
 }
 
@@ -82,16 +119,22 @@ export function Provider({ children }: { children: React.ReactNode }) {
   );
   const [loading, setLoading] = useState(true);
   const [marketError, setMarketError] = useState('');
+  const [currentDataSource, setCurrentDataSource] = useState<DataSource>('Binance WebSocket (Live)');
   const [ai, setAi] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
-  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; text: string; actionProposal?: any }[]>([
+  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string }[]>([
     {
       role: 'assistant',
-      text: "Greetings. I'm Lumen Copilot, your algorithmic portfolio co-pilot. I analyze order book flow, RSI divergence, and momentum indicators across your live positions. How may I assist your strategy today?",
+      text: "Welcome to Lumen Copilot. I analyze technical trend indicators (SMA/EMA crossovers, RSI oscillators, and Bollinger Bands) and portfolio risk exposures across your paper holdings. How can I assist your strategy today?",
+      engine: 'Deterministic Algorithmic Engine (Local Mode)',
     },
   ]);
   const [activeToast, setActiveToast] = useState<{ id: string; title: string; message: string; type: 'success' | 'info' | 'warn' } | null>(null);
+
+  // Safety Gate Staging State
+  const [pendingAIProposal, setPendingAIProposal] = useState<AIActionProposal | null>(null);
+  const [pendingAIValidation, setPendingAIValidation] = useState<AISafetyValidation | null>(null);
 
   const stateRef = useRef(state);
   const marketsRef = useRef(markets);
@@ -118,33 +161,87 @@ export function Provider({ children }: { children: React.ReactNode }) {
     marketsRef.current = markets;
   }, [markets]);
 
+  // Initial Full REST bootstrap
   const refreshMarkets = useCallback(async () => {
     try {
       const data = await fetchAll(stateRef.current.timeframe);
       setMarkets(data);
+      const firstSource = Object.values(data)[0]?.source || 'Binance REST';
+      setCurrentDataSource(firstSource);
       setMarketError('');
     } catch {
-      setMarketError('Exchange public endpoints delayed. Utilizing resilient heuristic price engine.');
+      setMarketError('Exchange public endpoints delayed. Utilizing resilient heuristic simulation feed.');
+      setCurrentDataSource('Simulated Heuristic');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Poll live markets every 4.5 seconds
   useEffect(() => {
     refreshMarkets();
-    const id = setInterval(refreshMarkets, 4500);
-    return () => clearInterval(id);
   }, [refreshMarkets]);
 
-  // Algorithmic Strategy & Alert Monitor Loop
+  // Live WebSocket ticker feed with auto-reconnection
+  useEffect(() => {
+    if (state.settings.enableWebSocket === false) return;
+
+    const stream = new MarketStreamService(
+      (updates) => {
+        setMarkets((prev) => {
+          let hasChange = false;
+          const next = { ...prev };
+          const now = Date.now();
+
+          for (const [assetStr, upd] of Object.entries(updates)) {
+            const a = assetStr as Asset;
+            const currentM = prev[a];
+            if (currentM && upd) {
+              hasChange = true;
+              const newHist = currentM.history.length > 0 ? [...currentM.history.slice(-99), upd.price] : [upd.price];
+              next[a] = {
+                ...currentM,
+                price: upd.price,
+                high24h: Math.max(currentM.high24h, upd.high),
+                low24h: Math.min(currentM.low24h, upd.low),
+                volume24h: upd.volume,
+                change24h: upd.changePct,
+                history: newHist,
+                source: 'Binance WebSocket (Live)',
+                isSynthetic: false,
+                lastUpdated: now,
+              };
+            }
+          }
+
+          return hasChange ? next : prev;
+        });
+      },
+      (status) => {
+        setCurrentDataSource(status);
+      }
+    );
+
+    return () => {
+      stream.destroy();
+    };
+  }, [state.settings.enableWebSocket]);
+
+  // Periodic REST poll every 12 seconds to ensure klines/history remain fresh
+  useEffect(() => {
+    const pollId = setInterval(() => {
+      refreshMarkets();
+    }, 12000);
+    return () => clearInterval(pollId);
+  }, [refreshMarkets]);
+
+  // Price Tick Engine: Pending Orders, Limit Executions, Stop Loss & Take Profit, Strategies, Alerts
   useEffect(() => {
     const loopId = setInterval(() => {
-      const s = {
+      const s: AppState = {
         ...stateRef.current,
         positions: { ...stateRef.current.positions },
         avgBuyPrice: { ...(stateRef.current.avgBuyPrice || {}) },
-        orders: [...stateRef.current.orders],
+        orders: stateRef.current.orders.map((o) => ({ ...o })),
         alerts: stateRef.current.alerts.map((x) => ({ ...x })),
         strategies: stateRef.current.strategies.map((x) => ({ ...x })),
         notifications: [...stateRef.current.notifications],
@@ -153,160 +250,63 @@ export function Provider({ children }: { children: React.ReactNode }) {
       if (!m.BTC) return;
 
       let changed = false;
-      const now = Date.now();
 
-      // 1. Evaluate Alerts
-      for (const rule of s.alerts.filter((x) => x.enabled && !x.triggered)) {
-        const mm = m[rule.asset];
-        if (!mm) continue;
-
-        let pass = false;
-        if (rule.type === 'above' && mm.price >= rule.value) pass = true;
-        if (rule.type === 'below' && mm.price <= rule.value) pass = true;
-        if (rule.type === 'changeUp' && mm.change24h >= rule.value) pass = true;
-        if (rule.type === 'changeDown' && mm.change24h <= -Math.abs(rule.value)) pass = true;
-
-        if (pass) {
-          rule.triggered = true;
-          rule.lastTriggeredAt = now;
-          const msg = `${rule.asset} reached ${money(mm.price)} (${rule.type} target ${rule.value})`;
+      // 1. Evaluate Pending Limit & Bracket Orders
+      const orderResults = checkPendingOrders(s, m);
+      if (orderResults.filledOrders.length > 0) {
+        for (const order of orderResults.filledOrders) {
+          const msg = `Order Executed: ${order.side.toUpperCase()} ${order.amount} ${order.asset} @ ${money(order.price)}`;
           s.notifications.unshift({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
-            ts: now,
-            title: `Alert Triggered: ${rule.asset}`,
+            ts: Date.now(),
+            title: `Order Filled (${order.type.toUpperCase()})`,
             body: msg,
+            type: 'order',
+          });
+          if (s.settings.soundEnabled) playChime('trade');
+          triggerToast(`Limit Order Filled`, msg, 'success');
+        }
+        changed = true;
+      }
+
+      // 2. Evaluate Alerts
+      for (const rule of s.alerts) {
+        const trigger = evaluateAlert(rule, m[rule.asset]);
+        if (trigger) {
+          s.notifications.unshift({
+            id: 'notif_' + Math.random().toString(36).substring(2, 8),
+            ts: Date.now(),
+            title: `Price Alert: ${rule.asset}`,
+            body: trigger.message,
             type: 'alert',
           });
           if (s.settings.soundEnabled) playChime('alert');
-          triggerToast(`Price Alert: ${rule.asset}`, msg, 'info');
+          triggerToast(`Price Alert: ${rule.asset}`, trigger.message, 'info');
           changed = true;
         }
       }
 
-      // 2. Evaluate Algorithmic Strategies
-      const pv = portfolioValue(s, m);
-
-      for (const strat of s.strategies.filter((x) => x.enabled)) {
-        const mm = m[strat.asset];
-        if (!mm) continue;
-
-        const lastExec = strat.lastExecutedAt || 0;
-        if (now - lastExec < strat.cooldownSec * 1000) continue;
-
-        const ind = indicators(mm.history);
-        const currentVal = (s.positions[strat.asset] || 0) * mm.price;
-        const maxAllowedVal = pv * strat.maxAllocation;
-
-        if (strat.kind === 'momentum') {
-          // Momentum: SMA10 > SMA30 and RSI in healthy zone
-          if (ind.score >= 1 && ind.rsi < (strat.params.rsiThresholdBuy || 70) && currentVal < maxAllowedVal) {
-            const budget = Math.min(maxAllowedVal - currentVal, s.cash * 0.2);
-            if (budget >= 10) {
-              const qty = +(budget / mm.price).toFixed(4);
-              const r = executeOrder(s, m, 'buy', strat.asset, qty, {
-                auto: true,
-                strategyName: strat.name,
-              });
-              if (r.ok) {
-                strat.lastExecutedAt = now;
-                strat.tradesExecuted = (strat.tradesExecuted || 0) + 1;
-                const msg = `Algo Buy: ${qty} ${strat.asset} @ ${money(r.order!.price)}`;
-                s.notifications.unshift({
-                  id: 'notif_' + Math.random().toString(36).substring(2, 8),
-                  ts: now,
-                  title: `${strat.name}`,
-                  body: msg,
-                  type: 'strategy',
-                });
-                if (s.settings.soundEnabled) playChime('trade');
-                triggerToast(strat.name, msg, 'success');
-                changed = true;
-              }
-            }
-          } else if (ind.score <= -1 && ind.rsi > (strat.params.rsiThresholdSell || 30) && (s.positions[strat.asset] || 0) > 0) {
-            // Trim 20% of position
-            const trimQty = +((s.positions[strat.asset] || 0) * 0.2).toFixed(4);
-            if (trimQty > 0) {
-              const r = executeOrder(s, m, 'sell', strat.asset, trimQty, {
-                auto: true,
-                strategyName: strat.name,
-              });
-              if (r.ok) {
-                strat.lastExecutedAt = now;
-                strat.tradesExecuted = (strat.tradesExecuted || 0) + 1;
-                const msg = `Algo Take-Profit: Sold ${trimQty} ${strat.asset} @ ${money(r.order!.price)}`;
-                s.notifications.unshift({
-                  id: 'notif_' + Math.random().toString(36).substring(2, 8),
-                  ts: now,
-                  title: `${strat.name}`,
-                  body: msg,
-                  type: 'strategy',
-                });
-                if (s.settings.soundEnabled) playChime('trade');
-                triggerToast(strat.name, msg, 'info');
-                changed = true;
-              }
-            }
-          }
-        } else if (strat.kind === 'mean_reversion') {
-          // Bollinger oversold buy
-          if (ind.bb && mm.price < ind.bb.lower && ind.rsi < (strat.params.rsiThresholdBuy || 35) && currentVal < maxAllowedVal) {
-            const budget = Math.min(maxAllowedVal - currentVal, s.cash * 0.15);
-            if (budget >= 15) {
-              const qty = +(budget / mm.price).toFixed(4);
-              const r = executeOrder(s, m, 'buy', strat.asset, qty, {
-                auto: true,
-                strategyName: strat.name,
-              });
-              if (r.ok) {
-                strat.lastExecutedAt = now;
-                strat.tradesExecuted = (strat.tradesExecuted || 0) + 1;
-                const msg = `Mean-Reversion Oversold Entry: ${qty} ${strat.asset} @ ${money(r.order!.price)}`;
-                s.notifications.unshift({
-                  id: 'notif_' + Math.random().toString(36).substring(2, 8),
-                  ts: now,
-                  title: `${strat.name}`,
-                  body: msg,
-                  type: 'strategy',
-                });
-                if (s.settings.soundEnabled) playChime('trade');
-                triggerToast(strat.name, msg, 'success');
-                changed = true;
-              }
-            }
-          }
-        } else if (strat.kind === 'dca') {
-          // Systematic dollar-cost averaging
-          const dcaUsd = strat.params.dcaAmountUsd || 100;
-          if (s.cash >= dcaUsd && currentVal < maxAllowedVal) {
-            const qty = +(dcaUsd / mm.price).toFixed(4);
-            const r = executeOrder(s, m, 'buy', strat.asset, qty, {
-              auto: true,
-              strategyName: strat.name,
-            });
-            if (r.ok) {
-              strat.lastExecutedAt = now;
-              strat.tradesExecuted = (strat.tradesExecuted || 0) + 1;
-              const msg = `DCA Periodic Allocation: ${qty} ${strat.asset} ($${dcaUsd})`;
-              s.notifications.unshift({
-                id: 'notif_' + Math.random().toString(36).substring(2, 8),
-                ts: now,
-                title: `${strat.name}`,
-                body: msg,
-                type: 'strategy',
-              });
-              if (s.settings.soundEnabled) playChime('trade');
-              triggerToast(strat.name, msg, 'success');
-              changed = true;
-            }
-          }
+      // 3. Evaluate Automated Strategies
+      for (const strat of s.strategies) {
+        const stratResult = evaluateStrategy(strat, s, m);
+        if (stratResult.executed && stratResult.message) {
+          s.notifications.unshift({
+            id: 'notif_' + Math.random().toString(36).substring(2, 8),
+            ts: Date.now(),
+            title: strat.name,
+            body: stratResult.message,
+            type: 'strategy',
+          });
+          if (s.settings.soundEnabled) playChime('trade');
+          triggerToast(strat.name, stratResult.message, stratResult.type === 'buy' ? 'success' : 'info');
+          changed = true;
         }
       }
 
       if (changed) {
         setState(s);
       }
-    }, 5000);
+    }, 2500);
 
     return () => clearInterval(loopId);
   }, [triggerToast]);
@@ -338,32 +338,71 @@ export function Provider({ children }: { children: React.ReactNode }) {
       side: Side,
       a: Asset,
       qty: number,
-      options?: { type?: OrderType; limitPrice?: number; auto?: boolean; strategyName?: string; takeProfit?: number; stopLoss?: number }
+      options?: {
+        type?: OrderType;
+        limitPrice?: number;
+        stopPrice?: number;
+        auto?: boolean;
+        strategyName?: string;
+        takeProfit?: number;
+        stopLoss?: number;
+      }
     ) => {
-      const s = {
+      const s: AppState = {
         ...stateRef.current,
         positions: { ...stateRef.current.positions },
         avgBuyPrice: { ...(stateRef.current.avgBuyPrice || {}) },
         orders: [...stateRef.current.orders],
         notifications: [...stateRef.current.notifications],
       };
+
       const r = executeOrder(s, marketsRef.current, side, a, qty, options);
+
       if (r.ok && r.order) {
-        const msg = `${side === 'buy' ? 'Purchased' : 'Sold'} ${qty} ${a} @ ${money(r.order.price)} (Total: ${money(r.order.notional)})`;
+        const isLimit = r.order.type === 'limit';
+        const msg = isLimit
+          ? `Limit ${side.toUpperCase()} placed for ${qty} ${a} @ ${money(r.order.limitPrice || r.order.price)}`
+          : `${side === 'buy' ? 'Purchased' : 'Sold'} ${qty} ${a} @ ${money(r.order.price)} (Total: ${money(r.order.notional)})`;
+
         s.notifications.unshift({
           id: 'notif_' + Math.random().toString(36).substring(2, 8),
           ts: Date.now(),
-          title: `Order Executed (${side.toUpperCase()})`,
+          title: isLimit ? `Limit Order Queued` : `Order Executed (${side.toUpperCase()})`,
           body: msg,
           type: 'order',
         });
+
         if (s.settings.soundEnabled) playChime('trade');
-        triggerToast(`Order Filled: ${side.toUpperCase()} ${a}`, msg, 'success');
+        triggerToast(isLimit ? 'Limit Order Placed' : `Order Filled: ${side.toUpperCase()} ${a}`, msg, 'success');
         setState(s);
       } else if (r.error) {
         triggerToast('Order Rejected', r.error, 'warn');
       }
       return r;
+    },
+    [triggerToast]
+  );
+
+  const cancelPendingOrder = useCallback(
+    (orderId: string) => {
+      const s: AppState = {
+        ...stateRef.current,
+        orders: stateRef.current.orders.map((o) => ({ ...o })),
+        notifications: [...stateRef.current.notifications],
+      };
+      const ok = cancelOrder(s, orderId);
+      if (ok) {
+        s.notifications.unshift({
+          id: 'notif_' + Math.random().toString(36).substring(2, 8),
+          ts: Date.now(),
+          title: 'Order Cancelled',
+          body: `Pending order ${orderId.slice(0, 10)} was cancelled.`,
+          type: 'order',
+        });
+        triggerToast('Order Cancelled', 'Limit order cancelled successfully.', 'info');
+        setState(s);
+      }
+      return ok;
     },
     [triggerToast]
   );
@@ -392,7 +431,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
             ...x,
             id,
             triggered: false,
+            isRecurring: x.isRecurring ?? false,
+            cooldownSec: x.cooldownSec ?? 300,
             createdAt: Date.now(),
+            triggerHistory: [],
           },
           ...s.alerts,
         ],
@@ -449,13 +491,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
       setChatLoading(true);
 
       try {
-        const { reply, actionProposal } = await sendAIChat(
+        const { reply, actionProposal, engine } = await sendAIChat(
           text,
           stateRef.current,
           marketsRef.current,
           updated
         );
-        setChatHistory((h) => [...h, { role: 'assistant', text: reply, actionProposal }]);
+        setChatHistory((h) => [...h, { role: 'assistant', text: reply, actionProposal, engine }]);
       } catch (err: any) {
         setChatHistory((h) => [
           ...h,
@@ -468,39 +510,72 @@ export function Provider({ children }: { children: React.ReactNode }) {
     [chatHistory]
   );
 
+  // Safety Gate: Intercepts AI proposals, validates, and stages for user confirmation
+  const requestExecuteAIProposal = useCallback(
+    (proposal: any) => {
+      const validation = validateAIProposal(proposal, stateRef.current, marketsRef.current);
+      setPendingAIProposal(proposal);
+      setPendingAIValidation(validation);
+    },
+    []
+  );
+
+  const confirmPendingAIProposal = useCallback(() => {
+    if (!pendingAIProposal || !pendingAIValidation?.valid) {
+      return { ok: false, error: 'Cannot execute invalid proposal.' };
+    }
+
+    const proposal = pendingAIProposal;
+    setPendingAIProposal(null);
+    setPendingAIValidation(null);
+
+    if (proposal.type === 'order') {
+      return order(proposal.side || 'buy', proposal.asset, proposal.amount || 0.05, {
+        auto: false,
+        strategyName: 'AI Copilot Recommendation',
+      });
+    } else if (proposal.type === 'alert') {
+      addAlert({
+        asset: proposal.asset,
+        type: proposal.alertType || 'above',
+        value: proposal.value || 0,
+        enabled: true,
+        isRecurring: false,
+        cooldownSec: 300,
+      });
+      return { ok: true };
+    }
+
+    return { ok: false, error: 'Unknown proposal type' };
+  }, [pendingAIProposal, pendingAIValidation, order, addAlert]);
+
+  const rejectPendingAIProposal = useCallback(() => {
+    setPendingAIProposal(null);
+    setPendingAIValidation(null);
+    triggerToast('AI Proposal Dismissed', 'No trades were authorized.', 'info');
+  }, [triggerToast]);
+
   const executeActionProposal = useCallback(
     (proposal: any) => {
-      if (proposal.type === 'order') {
-        return order(proposal.side, proposal.asset, proposal.amount, {
-          auto: false,
-          strategyName: 'AI Copilot Recommendation',
-        });
-      } else if (proposal.type === 'alert') {
-        addAlert({
-          asset: proposal.asset,
-          type: proposal.alertType || 'above',
-          value: proposal.value,
-          enabled: true,
-        });
-        return { ok: true };
-      }
-      return { ok: false, error: 'Unknown proposal type' };
+      requestExecuteAIProposal(proposal);
+      return { ok: true };
     },
-    [order, addAlert]
+    [requestExecuteAIProposal]
   );
 
   const reset = useCallback(
-    (startingCash = 50000) => {
-      const s = resetState(startingCash);
+    (startingCash = 50000, mode: SimulationMode = 'clean') => {
+      const s = resetState(startingCash, mode);
       setState(s);
       setAi(null);
       setChatHistory([
         {
           role: 'assistant',
-          text: 'Simulation state restored. Fresh liquidity and market signals loaded.',
+          text: `Fresh ${mode === 'clean' ? 'clean slate' : 'seeded'} paper simulation initialized with $${startingCash.toLocaleString()} starting cash. Technical indicators and safety gates are armed.`,
+          engine: 'Deterministic Algorithmic Engine (Local Mode)',
         },
       ]);
-      triggerToast('Simulator Reset', `Allocated $${startingCash.toLocaleString()} starting balance`, 'info');
+      triggerToast('Simulation Reset', `Fresh balance of $${startingCash.toLocaleString()} allocated.`, 'info');
       refreshMarkets();
     },
     [refreshMarkets, triggerToast]
@@ -512,6 +587,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       markets,
       loading,
       marketError,
+      currentDataSource,
       ai,
       aiLoading,
       chatHistory,
@@ -522,6 +598,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       setTimeframe,
       toggleWatch,
       order,
+      cancelPendingOrder,
       toggleStrategy,
       updateStrategy,
       addAlert,
@@ -530,6 +607,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
       setSettings,
       refreshAI,
       sendChat,
+      pendingAIProposal,
+      pendingAIValidation,
+      requestExecuteAIProposal,
+      confirmPendingAIProposal,
+      rejectPendingAIProposal,
       executeActionProposal,
       reset,
       refreshMarkets,
@@ -539,6 +621,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       markets,
       loading,
       marketError,
+      currentDataSource,
       ai,
       aiLoading,
       chatHistory,
@@ -549,6 +632,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       setTimeframe,
       toggleWatch,
       order,
+      cancelPendingOrder,
       toggleStrategy,
       updateStrategy,
       addAlert,
@@ -557,6 +641,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
       setSettings,
       refreshAI,
       sendChat,
+      pendingAIProposal,
+      pendingAIValidation,
+      requestExecuteAIProposal,
+      confirmPendingAIProposal,
+      rejectPendingAIProposal,
       executeActionProposal,
       reset,
       refreshMarkets,
@@ -571,5 +660,3 @@ export function useLumen() {
   if (!c) throw new Error('Provider missing');
   return c;
 }
-
-export { risk };

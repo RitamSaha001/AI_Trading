@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { listGeminiModels } from './gemini';
+import { listGeminiModels, SUPPORTED_MODELS } from './gemini';
 import { useLumen } from './store';
-import { X, Sparkles, Key, Cpu, Volume2, RotateCcw, ShieldCheck, Check } from 'lucide-react';
+import { SimulationMode } from './storage';
+import { X, Sparkles, Key, Cpu, Volume2, RotateCcw, Check, Radio, Info } from 'lucide-react';
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { state, setSettings, reset } = useLumen();
   const [key, setKey] = useState(state.settings.geminiApiKey || '');
-  const [models, setModels] = useState<any[]>([]);
+  const [models, setModels] = useState<any[]>(SUPPORTED_MODELS);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [selectedModel, setSelectedModel] = useState(state.settings.geminiModel || 'gemini-1.5-flash');
   const [sound, setSound] = useState(state.settings.soundEnabled ?? true);
+  const [wsEnabled, setWsEnabled] = useState(state.settings.enableWebSocket ?? true);
   const [resetBalance, setResetBalance] = useState(50000);
+  const [resetMode, setResetMode] = useState<SimulationMode>('clean');
 
   const fetchModels = async () => {
     setLoading(true);
@@ -36,6 +39,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       geminiApiKey: key.trim(),
       geminiModel: selectedModel,
       soundEnabled: sound,
+      enableWebSocket: wsEnabled,
     });
     setSaved(true);
     setTimeout(() => {
@@ -49,7 +53,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-md animate-in fade-in duration-200"
       onMouseDown={(e) => e.currentTarget === e.target && onClose()}
     >
-      <div className="relative w-full max-w-lg bg-white/90 backdrop-blur-2xl border border-white/60 rounded-3xl shadow-2xl overflow-hidden text-zinc-900 animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-lg bg-white/95 backdrop-blur-2xl border border-white/60 rounded-3xl shadow-2xl overflow-hidden text-zinc-900 animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-black/[0.06] bg-white/50">
           <div className="flex items-center gap-3">
@@ -82,21 +86,26 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               type="password"
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              placeholder="AIzaSy... (leave blank to use server environment default)"
+              placeholder="AIzaSy... (leave empty for 100% Free Local Mode)"
               className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 placeholder:text-zinc-400 transition-all font-mono"
             />
-            <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-0.5">
-              <span>If left empty, server-side environment key or high-grade quantitative engine is used.</span>
-              {key && (
+            <div className="p-2.5 rounded-xl bg-indigo-50/60 border border-indigo-100/80 text-[11px] text-indigo-950 flex items-start gap-2">
+              <Info className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+              <p>
+                <strong>Zero-Cost Offline Mode:</strong> If you do not enter a key, Lumen runs entirely for free using the client-side Deterministic Algorithmic Engine (computing SMA, EMA, RSI, Bollinger Bands, and risk budgets locally in your browser).
+              </p>
+            </div>
+            {key && (
+              <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={() => setKey('')}
-                  className="text-rose-600 hover:underline font-medium"
+                  className="text-[11px] text-rose-600 hover:underline font-medium"
                 >
-                  Clear
+                  Clear Key (Revert to Local Mode)
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Model Selection */}
@@ -104,7 +113,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
                 <Cpu className="w-3.5 h-3.5 text-zinc-400" />
-                Active Model
+                Gemini Model
               </label>
               <button
                 type="button"
@@ -120,17 +129,38 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => setSelectedModel(e.target.value)}
               className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 transition-all font-medium"
             >
-              <option value="gemini-1.5-flash">Gemini 3.8 Flash (High Speed, Recommended)</option>
-              <option value="gemini-1.5-pro">Gemini 3.1 Pro (Deep Institutional Reasoning)</option>
-              <option value="gemini-1.5-flash-8b">Gemini 3.1 Flash Lite (Ultra Low Latency)</option>
-              {models
-                .filter((m) => !['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'].includes(m.name))
-                .map((m) => (
-                  <option key={m.name} value={m.name}>
-                    {m.displayName || m.name}
-                  </option>
-                ))}
+              {models.map((m) => (
+                <option key={m.name} value={m.name}>
+                  {m.displayName || m.name}
+                </option>
+              ))}
             </select>
+          </div>
+
+          {/* Real-time WebSocket Feed */}
+          <div className="p-4 rounded-2xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-white border border-black/[0.06] flex items-center justify-center text-zinc-600 shadow-xs">
+                <Radio className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-semibold text-zinc-800">Real-Time WebSocket Stream</h4>
+                <p className="text-[11px] text-zinc-500">Live sub-second Binance miniTicker stream updates</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWsEnabled(!wsEnabled)}
+              className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ${
+                wsEnabled ? 'bg-indigo-600' : 'bg-zinc-300'
+              }`}
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
+                  wsEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
           </div>
 
           {/* Sound & Notifications */}
@@ -163,12 +193,41 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           <div className="p-4 rounded-2xl bg-rose-500/[0.04] border border-rose-500/15 space-y-3">
             <div className="flex items-center gap-2 text-xs font-semibold text-rose-800">
               <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
-              Paper Balance Reset
+              Paper Simulation Reset
             </div>
             <p className="text-[11px] text-zinc-600">
-              Reset all paper positions, order history, and reload starting cash:
+              Select your reset mode and starting balance:
             </p>
-            <div className="flex items-center gap-2">
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setResetMode('clean')}
+                className={`p-2.5 rounded-xl border text-left transition-all ${
+                  resetMode === 'clean'
+                    ? 'bg-white border-zinc-900 ring-1 ring-zinc-900 shadow-xs'
+                    : 'bg-black/[0.02] border-black/[0.06] text-zinc-600'
+                }`}
+              >
+                <div className="text-xs font-semibold text-zinc-900">Clean Slate</div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">100% Cash, 0 positions, 0 orders</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setResetMode('seeded')}
+                className={`p-2.5 rounded-xl border text-left transition-all ${
+                  resetMode === 'seeded'
+                    ? 'bg-white border-zinc-900 ring-1 ring-zinc-900 shadow-xs'
+                    : 'bg-black/[0.02] border-black/[0.06] text-zinc-600'
+                }`}
+              >
+                <div className="text-xs font-semibold text-zinc-900">Seeded Portfolio</div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">Starter BTC/ETH/SOL allocations</div>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
               {[25000, 50000, 100000].map((amt) => (
                 <button
                   key={amt}
@@ -186,8 +245,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 onClick={() => {
-                  if (confirm(`Reset the simulator with a starting cash balance of $${resetBalance.toLocaleString()}?`)) {
-                    reset(resetBalance);
+                  if (confirm(`Reset paper simulation in ${resetMode} mode with $${resetBalance.toLocaleString()}?`)) {
+                    reset(resetBalance, resetMode);
                     onClose();
                   }
                 }}
