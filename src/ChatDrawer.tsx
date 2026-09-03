@@ -276,6 +276,13 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                         <p className="text-[11.5px] text-zinc-500 leading-relaxed">{receipt.summary}</p>
                       </div>
 
+                      {receipt.stateDiff && (
+                        <div className="p-2.5 rounded-xl bg-emerald-500/[0.08] border border-emerald-500/20 text-[11px] font-mono font-medium text-emerald-900 flex items-start gap-2">
+                          <span className="text-emerald-700 font-bold whitespace-nowrap">⚡ State-Diff:</span>
+                          <span className="leading-snug">{receipt.stateDiff}</span>
+                        </div>
+                      )}
+
                       {receipt.details && receipt.details.length > 0 && (
                         <div className="p-2.5 rounded-xl bg-white/75 border border-emerald-500/15 space-y-1 text-[11px] font-mono text-zinc-700">
                           {receipt.details.map((d: string, dIdx: number) => (

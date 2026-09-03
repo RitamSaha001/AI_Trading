@@ -173,6 +173,7 @@ export type ExecutionReceipt = {
   actionType: 'order' | 'alert' | 'rebalance' | 'emergency_defend' | 'deploy_strategy' | 'stress_test' | 'smart_dca' | 'token_compare';
   title: string;
   summary: string;
+  stateDiff?: string;
   executedAt: number;
   details: string[];
   badges?: { label: string; color: 'emerald' | 'indigo' | 'amber' | 'rose' | 'zinc' }[];

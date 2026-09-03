@@ -628,6 +628,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
     setPendingAIValidation(null);
 
     let receipt: ExecutionReceipt | undefined;
+    const preCash = stateRef.current.cash;
+    const preTotalVal = portfolioValue(stateRef.current, marketsRef.current);
+    const preRisk = calculatePortfolioRisk(stateRef.current, marketsRef.current);
 
     if (proposal.type === 'order') {
       const res = order(proposal.side || 'buy', proposal.asset, proposal.amount || 0.05, {
@@ -635,11 +638,18 @@ export function Provider({ children }: { children: React.ReactNode }) {
         strategyName: 'Lumen Nexus Recommendation',
       });
       if (res.ok) {
+        const postCash = stateRef.current.cash;
+        const notional = (proposal.amount || 0) * (marketsRef.current[proposal.asset]?.price || 0);
+        const stateDiff = proposal.side === 'sell'
+          ? `Sold ${proposal.amount} ${proposal.asset} ($${Math.round(notional).toLocaleString()}) ➔ Cash buffer expanded to ${money(postCash)} ➔ Capital defense fortified.`
+          : `Allocated ${proposal.amount} ${proposal.asset} ($${Math.round(notional).toLocaleString()}) ➔ Cash reserve maintained at ${money(postCash)} (${((postCash / Math.max(1, preTotalVal)) * 100).toFixed(1)}%).`;
+
         receipt = {
           receiptId: 'rcpt_' + Math.random().toString(36).substring(2, 8),
           actionType: 'order',
           title: `Order Executed: ${proposal.side?.toUpperCase()} ${proposal.amount} ${proposal.asset}`,
           summary: `Submitted ${proposal.side?.toUpperCase()} order for ${proposal.amount} ${proposal.asset} via Nexus execution gate.`,
+          stateDiff,
           executedAt: Date.now(),
           details: [
             `Side: ${proposal.side?.toUpperCase()}`,
@@ -684,6 +694,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         actionType: 'alert',
         title: `Volatility Alert Set: ${proposal.asset} (${proposal.alertType} $${proposal.value})`,
         summary: `Active price trigger registered on ${proposal.asset} with automatic cooldown monitoring.`,
+        stateDiff: `Registered dynamic price trigger on ${proposal.asset} at ${money(proposal.value || 0)} with 300s automated cooldown.`,
         executedAt: Date.now(),
         details: [
           `Trigger Type: ${proposal.alertType}`,
@@ -743,6 +754,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
 
       const isDefend = proposal.type === 'emergency_defend';
+      const postCash = stateRef.current.cash;
+      const postRisk = calculatePortfolioRisk(stateRef.current, marketsRef.current);
+      const cashBufferPct = ((postCash / Math.max(1, preTotalVal)) * 100).toFixed(1);
+      const riskDelta = Math.max(0, preRisk.portfolioRiskScore - postRisk.portfolioRiskScore);
+
+      const stateDiff = isDefend
+        ? `Emergency capital de-risk: Executed ${executedCount} transactions ($${totalVolume.toFixed(2)} volume) ➔ Cash buffer raised to ${money(postCash)} (${cashBufferPct}%) ➔ Portfolio risk score reduced by ${riskDelta} pts.`
+        : `Two-stage risk parity rebalance: Executed ${executedCount} reallocations ($${totalVolume.toFixed(2)}) ➔ Cash reserve anchored at ${cashBufferPct}% ➔ Risk score optimized to ${postRisk.portfolioRiskScore}/100.`;
+
       triggerToast(
         isDefend ? 'Emergency Defense Executed' : 'Portfolio Rebalance Executed',
         `Executed ${executedCount} reallocation steps ($${totalVolume.toFixed(2)} total volume).`,
@@ -754,6 +774,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         actionType: proposal.type,
         title: isDefend ? 'Sentinel Capital Defense Completed' : 'Portfolio Rebalance Completed',
         summary: `Successfully executed ${executedCount} reallocation steps ($${totalVolume.toFixed(2)} total volume) to optimize portfolio risk.`,
+        stateDiff,
         executedAt: Date.now(),
         details: [
           `Executed Steps: ${executedCount} transactions`,
@@ -813,6 +834,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         actionType: 'deploy_strategy',
         title: `Algorithmic Bot Deployed: ${newStrategy.name}`,
         summary: `Algorithmic engine ${newStrategy.kind.replace('_', ' ').toUpperCase()} active on 2.5s ticks with dynamic ATR profit brackets.`,
+        stateDiff: `Deployed ${newStrategy.name} ➔ Target Profit: +${newStrategy.targetProfitPct}% ➔ Trailing Stop: -${newStrategy.trailingStopPct}% ➔ Allocation Cap: ${((newStrategy.maxAllocation || 0.25) * 100).toFixed(0)}%.`,
         executedAt: Date.now(),
         details: [
           `Bot ID: ${newStrategy.id}`,
@@ -879,6 +901,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         actionType: 'smart_dca',
         title: `Smart DCA Activated: ${proposal.asset}`,
         summary: `Dynamic Value-Weighted DCA deployed. Accumulates $${dca?.baseAmountUsd}/period, scales up to 1.6x on oversold dips, and pauses during euphoric tops.`,
+        stateDiff: `Deployed Smart Value-Weighted DCA on ${proposal.asset}: Base $${dca?.baseAmountUsd}/${dca?.frequency} ➔ Dip multiplier: ${dca?.oversoldMultiplier}x on RSI < 35 ➔ Cycle top pause at RSI > ${dca?.pauseThresholdRsi}.`,
         executedAt: Date.now(),
         details: [
           `Asset: ${proposal.asset}`,
@@ -915,6 +938,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         actionType: 'stress_test',
         title: `Stress Test Completed: ${proposal.stressTest?.title}`,
         summary: `Simulated impact on portfolio: -${proposal.stressTest?.simulatedDrawdownPct}% drawdown ($${proposal.stressTest?.simulatedLossUsd.toLocaleString()}). Survivability rating: ${proposal.stressTest?.survivabilityRating}.`,
+        stateDiff: `Stress-tested ${proposal.stressTest?.title || 'scenario'}: Simulated drawdown of -${proposal.stressTest?.simulatedDrawdownPct}% ($${proposal.stressTest?.simulatedLossUsd.toLocaleString()}) ➔ Cushion score: ${proposal.stressTest?.survivabilityScore}/100.`,
         executedAt: Date.now(),
         details: [
           `Scenario: ${proposal.stressTest?.title}`,
@@ -951,6 +975,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         actionType: 'token_compare',
         title: `Alpha Radar Analysis Complete`,
         summary: proposal.tokenComparison?.verdict || 'Cross-asset statistical evaluation finished.',
+        stateDiff: `Alpha Radar: Top risk-adjusted asset identified as ${proposal.tokenComparison?.topAlphaAsset || 'BTC'} with constructive momentum.`,
         executedAt: Date.now(),
         details: (proposal.tokenComparison?.tokens || []).map(
           (t: any) => `${t.asset}: Sharpe ${t.sharpeEstimate}, Vol ${t.volAnnualizedPct}%, Beta ${t.betaToBtc}`

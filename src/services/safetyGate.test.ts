@@ -116,4 +116,43 @@ describe('Service: AI Safety Gate Verification', () => {
     expect(validation.valid).toBe(true);
     expect(validation.errors.length).toBe(0);
   });
+
+  it('blocks proposal when buy order severely depletes mandatory liquid cash reserve', () => {
+    // Total portfolio = $40,000. Cash = $10,000.
+    // Buying 3.1 ETH = $9,300, leaving only $700 cash (< 5% of total portfolio, violating 15% rule)
+    const proposal: AIActionProposal = {
+      type: 'order',
+      asset: 'ETH',
+      side: 'buy',
+      amount: 3.1,
+      orderType: 'market',
+      rationale: 'Heavy ETH allocation',
+      confidence: 'medium',
+      riskSummary: 'Drains cash buffer',
+      requiresConfirmation: true,
+    };
+
+    const validation = validateAIProposal(proposal, mockState, mockMarkets as any);
+    expect(validation.valid).toBe(false);
+    expect(validation.errors.some((e) => /Capital Defense Hard Block/i.test(e))).toBe(true);
+  });
+
+  it('blocks proposal when buy order violates the 50% diversification cap', () => {
+    // Current BTC holding = 30,000 (75% of portfolio). Buying more BTC exceeds the 50% cap.
+    const proposal: AIActionProposal = {
+      type: 'order',
+      asset: 'BTC',
+      side: 'buy',
+      amount: 0.05,
+      orderType: 'market',
+      rationale: 'Add more to dominant position',
+      confidence: 'low',
+      riskSummary: 'Concentration risk',
+      requiresConfirmation: true,
+    };
+
+    const validation = validateAIProposal(proposal, mockState, mockMarkets as any);
+    expect(validation.valid).toBe(false);
+    expect(validation.errors.some((e) => /diversification cap/i.test(e))).toBe(true);
+  });
 });

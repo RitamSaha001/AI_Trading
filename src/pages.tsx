@@ -50,6 +50,7 @@ import {
   Compass,
   Scale,
 } from 'lucide-react';
+import { senseMarketDanger } from './domain/agentic';
 
 function GlassCard({
   children,
@@ -63,7 +64,7 @@ function GlassCard({
   return (
     <div
       id={id}
-      className={`bg-white/80 backdrop-blur-xl border border-black/[0.06] rounded-3xl p-6 shadow-[0_4px_24px_rgba(0,0,0,0.02)] transition-all ${className}`}
+      className={`liquid-glass-subtle rounded-[26px] p-6 border border-white/80 shadow-xs transition-all ${className}`}
     >
       {children}
     </div>
@@ -72,10 +73,10 @@ function GlassCard({
 
 function PageHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-950">{title}</h1>
-        <p className="text-xs text-zinc-500 mt-1">{subtitle}</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{title}</h1>
+        <p className="text-xs text-zinc-400 mt-1 tracking-tight">{subtitle}</p>
       </div>
       {action && <div>{action}</div>}
     </div>
@@ -316,22 +317,45 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Timeframe selector */}
-            <div className="flex items-center p-1 rounded-xl bg-black/[0.03] border border-black/[0.04] self-start sm:self-auto">
-              {(['1H', '1D', '1W', '1M', '1Y'] as Timeframe[]).map((tf) => (
+            {/* Timeframe selector & Ambient Nexus Triggers */}
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <div className="hidden lg:flex items-center gap-1.5">
                 <button
-                  key={tf}
                   type="button"
-                  onClick={() => setTimeframe(tf)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                    state.timeframe === tf
-                      ? 'bg-white text-zinc-950 shadow-xs'
-                      : 'text-zinc-500 hover:text-zinc-900'
-                  }`}
+                  onClick={() => openChat(`Evaluate ${selectedAsset} ATR volatility breakout levels and dynamic profit brackets.`)}
+                  className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-950 bg-black/[0.03] hover:bg-black/[0.06] rounded-lg transition-all flex items-center gap-1 active:scale-95"
+                  title="Check ATR Volatility Breakout"
                 >
-                  {tf}
+                  <Activity className="w-3 h-3 text-amber-500" />
+                  <span>ATR Breakout</span>
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => openChat(`Compare ${selectedAsset} against benchmark peers on Alpha Radar.`)}
+                  className="px-2.5 py-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-950 bg-black/[0.03] hover:bg-black/[0.06] rounded-lg transition-all flex items-center gap-1 active:scale-95"
+                  title="Run Alpha Radar Comparison"
+                >
+                  <Compass className="w-3 h-3 text-indigo-500" />
+                  <span>Alpha Radar</span>
+                </button>
+              </div>
+
+              <div className="flex items-center p-1 rounded-xl bg-black/[0.03] border border-black/[0.04]">
+                {(['1H', '1D', '1W', '1M', '1Y'] as Timeframe[]).map((tf) => (
+                  <button
+                    key={tf}
+                    type="button"
+                    onClick={() => setTimeframe(tf)}
+                    className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                      state.timeframe === tf
+                        ? 'bg-white text-zinc-950 shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-900'
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -1032,14 +1056,14 @@ export function Markets() {
                   )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center gap-2">
+                <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedAsset(a);
                       go('/');
                     }}
-                    className="flex-1 py-1.5 px-3 text-xs font-medium text-zinc-700 hover:text-zinc-950 hover:bg-black/[0.04] rounded-xl transition-all text-center"
+                    className="flex-1 py-1.5 px-2 text-xs font-medium text-zinc-700 hover:text-zinc-950 hover:bg-black/[0.04] rounded-xl transition-all text-center"
                   >
                     Analyze
                   </button>
@@ -1047,12 +1071,24 @@ export function Markets() {
                     type="button"
                     onClick={() => {
                       setSelectedAsset(a);
+                      openChat(`Run an Alpha Radar comparison evaluating ${a} vs BTC and ETH on Sharpe, volatility, and momentum.`);
+                    }}
+                    className="px-2 py-1.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all flex items-center gap-1 active:scale-95"
+                    title={`Compare ${a} on Alpha Radar`}
+                  >
+                    <Compass className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="hidden sm:inline">Radar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAsset(a);
                       openChat(`Analyze current ${a} market momentum, RSI divergence, and resistance levels.`);
                     }}
-                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                    className="p-1.5 text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04] rounded-xl transition-all active:scale-95"
                     title={`Ask Nexus AI about ${a}`}
                   >
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
                   </button>
                   <button
                     type="button"
@@ -1060,7 +1096,7 @@ export function Markets() {
                       setSelectedAsset(a);
                       go('/orders');
                     }}
-                    className="py-1.5 px-3.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-all shadow-2xs"
+                    className="py-1.5 px-3 text-xs font-semibold text-white bg-zinc-950 hover:bg-black rounded-xl transition-all shadow-2xs active:scale-95"
                   >
                     Trade
                   </button>
@@ -1082,6 +1118,7 @@ export function Portfolio() {
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
   const riskProfile = calculatePortfolioRisk(state, markets);
+  const danger = senseMarketDanger(state, markets);
 
   const activeHoldings = ASSETS.filter((a) => (state.positions[a] || 0) > 0);
 
@@ -1119,6 +1156,76 @@ export function Portfolio() {
           </div>
         }
       />
+
+      {/* Sentinel Capital Defense & Real-Time Danger Gauge Deck - Apple Liquid Glass */}
+      <div className="liquid-glass rounded-[28px] p-5 border border-white/90 shadow-xs relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="relative flex items-center justify-center">
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-xs relative z-10 ${
+                danger.dangerLevel === 'CRITICAL'
+                  ? 'bg-rose-950 text-rose-400'
+                  : danger.dangerLevel === 'HIGH'
+                  ? 'bg-amber-950 text-amber-400'
+                  : 'bg-zinc-950 text-emerald-400'
+              }`}
+            >
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="absolute inset-0 rounded-2xl siri-aurora-glow scale-125 pointer-events-none" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold tracking-tight text-zinc-900">
+                Sentinel Risk Sentinel: {danger.dangerLevel}
+              </h3>
+              <span
+                className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-semibold ${
+                  danger.dangerLevel === 'CRITICAL'
+                    ? 'bg-rose-500/10 text-rose-700 border-rose-500/20 animate-pulse'
+                    : danger.dangerLevel === 'HIGH'
+                    ? 'bg-amber-500/10 text-amber-700 border-amber-500/20'
+                    : 'bg-emerald-500/10 text-emerald-800 border-emerald-500/20'
+                }`}
+              >
+                Score {danger.dangerScore}/100
+              </span>
+            </div>
+            <p className="text-xs text-zinc-500 tracking-tight mt-0.5">
+              {danger.hazards.length > 0
+                ? `Active Hazards Identified: ${danger.hazards.join('; ')}.`
+                : 'All parameters within institutional risk bounds. Mandatory 15% cash liquidity reserve intact.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start md:self-auto">
+          <button
+            type="button"
+            onClick={() =>
+              openChat(
+                'Run a portfolio stress test simulating a 20% Bitcoin flash crash and tell me my projected loss and survivability rating.'
+              )
+            }
+            className="px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white/80 hover:bg-white border border-black/[0.08] rounded-xl shadow-2xs transition-all flex items-center gap-1.5 active:scale-95"
+          >
+            <Activity className="w-3.5 h-3.5 text-amber-600" />
+            <span>Simulate Crash Shock</span>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              openChat(
+                'Sense market danger across my portfolio and compute an autonomous capital defense de-risking plan with two-stage execution.'
+              )
+            }
+            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 hover:bg-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+          >
+            <Scale className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Autonomous De-Risk</span>
+          </button>
+        </div>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">

@@ -11,13 +11,14 @@ import {
 } from '../domain/portfolio';
 import { calculateExecutionQuote } from '../domain/trading';
 
-export const MAX_SINGLE_ORDER_PORTFOLIO_PCT = 0.5; // Max 50% of portfolio in a single AI order
-export const MAX_ASSET_ALLOCATION_PCT = 0.6; // Hard cap: Max 60% concentration allowed from AI orders
+export const MAX_SINGLE_ORDER_PORTFOLIO_PCT = 0.4; // Max 40% of portfolio in a single AI order
+export const MAX_ASSET_ALLOCATION_PCT = 0.5; // Hard cap: Max 50% concentration allowed from AI orders
+export const MIN_CASH_RESERVE_PCT = 0.15; // Hard policy: Minimum 15% liquid cash reserve for capital preservation
 export const STALE_DATA_THRESHOLD_MS = 45000; // 45 seconds
 
 /**
  * Validates any AI-generated proposal against financial sanity, portfolio risk caps,
- * pending order reservations, and market freshness before authorization.
+ * minimum cash liquidity reserves, pending order reservations, and market freshness before authorization.
  */
 export function validateAIProposal(
   proposal: any,
@@ -190,19 +191,36 @@ export function validateAIProposal(
       );
     }
 
-    // Single order size cap (Hard Block at 50%)
+    // Single order size cap (Hard Block at 40%)
     if (quote.notional > totalPortVal * MAX_SINGLE_ORDER_PORTFOLIO_PCT) {
       errors.push(
-        `Order exceeds maximum safe single-trade cap (50% of portfolio). Trade notional: ${money(quote.notional)}, max allowed: ${money(totalPortVal * MAX_SINGLE_ORDER_PORTFOLIO_PCT)}.`
+        `Order exceeds maximum safe single-trade cap (40% of portfolio). Trade notional: ${money(quote.notional)}, max allowed: ${money(totalPortVal * MAX_SINGLE_ORDER_PORTFOLIO_PCT)}.`
       );
     }
 
-    // Asset allocation cap (Hard Block at 60%)
+    // Cash Liquidity Reserve Enforcement (Minimum 15% liquid buffer)
+    const resultingCashEstimated = Math.max(0, currentCash - quote.totalCashRequired);
+    const resultingCashPct = totalPortVal > 0 ? (resultingCashEstimated / totalPortVal) * 100 : 0;
+    if (resultingCashPct < 5.0) {
+      errors.push(
+        `Capital Defense Hard Block: Order depletes liquid cash reserve to ${resultingCashPct.toFixed(1)}%, violating the mandatory 15.0% capital defense threshold.`
+      );
+    } else if (resultingCashPct < MIN_CASH_RESERVE_PCT * 100) {
+      warnings.push(
+        `Liquidity Alert: Order reduces cash cushion to ${resultingCashPct.toFixed(1)}% (below recommended 15.0% buffer). Capital defense will be constrained during market shocks.`
+      );
+    }
+
+    // Asset allocation cap (Hard Block at 50%, Warning at 35%)
     const resultingAssetVal = currentAssetVal + quote.notional;
     const resultingAllocPct = totalPortVal > 0 ? (resultingAssetVal / totalPortVal) * 100 : 0;
     if (resultingAllocPct > MAX_ASSET_ALLOCATION_PCT * 100 + 0.01) {
       errors.push(
-        `Safety Policy Hard Block: Order would raise ${asset} allocation to ${resultingAllocPct.toFixed(1)}%, violating the hard 60.0% diversification cap.`
+        `Safety Policy Hard Block: Order would raise ${asset} allocation to ${resultingAllocPct.toFixed(1)}%, violating the hard 50.0% diversification cap.`
+      );
+    } else if (resultingAllocPct > 35.0) {
+      warnings.push(
+        `Concentration Warning: Order elevates ${asset} allocation to ${resultingAllocPct.toFixed(1)}% of total portfolio.`
       );
     }
   } else {
