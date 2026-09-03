@@ -23,8 +23,42 @@ export function validateAIProposal(
     return { valid: false, errors: ['Proposal is malformed or empty.'], warnings: [] };
   }
 
-  if (proposal.type !== 'order' && proposal.type !== 'alert') {
+  if (
+    proposal.type !== 'order' &&
+    proposal.type !== 'alert' &&
+    proposal.type !== 'rebalance' &&
+    proposal.type !== 'emergency_defend'
+  ) {
     return { valid: false, errors: [`Unsupported proposal type: ${proposal.type}`], warnings: [] };
+  }
+
+  // 1b. Rebalance & Emergency Defense Validation
+  if (proposal.type === 'rebalance' || proposal.type === 'emergency_defend') {
+    const steps: any[] = proposal.rebalanceSteps || [];
+    if (!Array.isArray(steps) || steps.length === 0) {
+      // If targets were provided without steps, check targets
+      if (!proposal.rebalanceTargets && !proposal.cashTargetPct) {
+        errors.push('Rebalance proposal must specify either rebalanceSteps or rebalanceTargets.');
+      }
+    } else {
+      for (const s of steps) {
+        if (!ASSETS.includes(s.asset)) {
+          errors.push(`Unknown asset in rebalance step: ${s.asset}`);
+        }
+        if (s.action !== 'buy' && s.action !== 'sell') {
+          errors.push(`Invalid action in rebalance step for ${s.asset}: ${s.action}`);
+        }
+        if (!Number.isFinite(s.amount) || s.amount <= 0) {
+          errors.push(`Invalid amount in rebalance step for ${s.asset}: ${s.amount}`);
+        }
+      }
+    }
+
+    if (proposal.dangerLevel === 'CRITICAL' || proposal.dangerLevel === 'HIGH') {
+      warnings.push(`Urgent Capital Defense Flagged: ${proposal.hazardSource || 'Market risk threshold breached'}.`);
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
   }
 
   if (!ASSETS.includes(proposal.asset)) {

@@ -103,6 +103,9 @@ export type Settings = {
   theme: 'light' | 'glass';
   maxSlippageBps: number; // default 50 bps (0.5%)
   enableWebSocket: boolean;
+  guardianMode?: boolean; // Autonomous danger sentinel & capital preservation shield
+  dangerThreshold?: 'moderate' | 'high' | 'critical';
+  autoRebalanceDefend?: boolean;
 };
 
 export type NotificationItem = {
@@ -114,8 +117,16 @@ export type NotificationItem = {
   read?: boolean;
 };
 
+export type RebalanceStep = {
+  asset: Asset;
+  action: 'buy' | 'sell';
+  amount: number;
+  estimatedPrice: number;
+  estimatedNotional: number;
+};
+
 export type AIActionProposal = {
-  type: 'order' | 'alert';
+  type: 'order' | 'alert' | 'rebalance' | 'emergency_defend';
   asset: Asset;
   side?: Side;
   amount?: number;
@@ -127,6 +138,13 @@ export type AIActionProposal = {
   confidence: 'low' | 'medium' | 'high';
   riskSummary: string;
   requiresConfirmation: boolean;
+  // Agentic & Danger Sensing extensions
+  dangerLevel?: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  hazardSource?: string;
+  formulaLatex?: string;
+  rebalanceTargets?: Partial<Record<Asset, number>>;
+  cashTargetPct?: number;
+  rebalanceSteps?: RebalanceStep[];
 };
 
 export type AISafetyValidation = {

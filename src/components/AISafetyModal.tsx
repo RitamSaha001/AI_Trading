@@ -1,7 +1,8 @@
 import React from 'react';
 import { AIActionProposal, AISafetyValidation } from '../types';
-import { money, formatQty } from '../domain/portfolio';
-import { AlertTriangle, CheckCircle, Shield, X, ArrowRight, Info } from 'lucide-react';
+import { money } from '../domain/portfolio';
+import { AlertTriangle, CheckCircle, Shield, X, ArrowRight, Info, Scale, ShieldAlert } from 'lucide-react';
+import { LatexRenderer } from './LatexRenderer';
 
 interface Props {
   proposal: AIActionProposal;
@@ -17,6 +18,9 @@ export const AISafetyModal: React.FC<Props> = ({
   onReject,
 }) => {
   const isOrder = proposal.type === 'order';
+  const isAlert = proposal.type === 'alert';
+  const isRebalance = proposal.type === 'rebalance';
+  const isDefend = proposal.type === 'emergency_defend';
   const preview = validation.preview;
 
   return (
@@ -25,18 +29,32 @@ export const AISafetyModal: React.FC<Props> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Shield className="w-5 h-5" />
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
+                isDefend
+                  ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+              }`}
+            >
+              {isDefend ? <AlertTriangle className="w-5 h-5" /> : isRebalance ? <Scale className="w-5 h-5 text-indigo-400" /> : <Shield className="w-5 h-5" />}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-slate-100 text-base">AI Safety Authorization Gate</h3>
-                <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                  Verification Required
+                <h3 className="font-semibold text-slate-100 text-base">
+                  {isDefend ? 'Sentinel Capital Defense Protocol' : 'AI Safety Authorization Gate'}
+                </h3>
+                <span
+                  className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border ${
+                    isDefend
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  }`}
+                >
+                  {isDefend ? 'High Priority' : 'Verification Required'}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Independent risk validation required before any paper execution.
+                Independent risk validation required before executing any paper actions.
               </p>
             </div>
           </div>
@@ -56,14 +74,24 @@ export const AISafetyModal: React.FC<Props> = ({
                 <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">AI Proposed Action:</span>
                 <span
                   className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${
-                    proposal.side === 'buy'
+                    isDefend
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                      : isRebalance
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                      : proposal.side === 'buy'
                       ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                       : proposal.side === 'sell'
                       ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
                       : 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
                   }`}
                 >
-                  {isOrder ? `${proposal.side} ${proposal.amount} ${proposal.asset}` : `Set Alert on ${proposal.asset}`}
+                  {isDefend
+                    ? `Emergency Capital Defense (${proposal.dangerLevel || 'CRITICAL'})`
+                    : isRebalance
+                    ? 'Autonomous Portfolio Rebalance'
+                    : isOrder
+                    ? `${proposal.side} ${proposal.amount} ${proposal.asset}`
+                    : `Set Alert on ${proposal.asset}`}
                 </span>
               </div>
               <span className="text-xs text-slate-400">
@@ -71,10 +99,61 @@ export const AISafetyModal: React.FC<Props> = ({
               </span>
             </div>
 
+            {proposal.hazardSource && (
+              <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                <span><strong>Hazard Identified:</strong> {proposal.hazardSource}</span>
+              </div>
+            )}
+
             <p className="text-xs text-slate-300 leading-relaxed italic border-l-2 border-slate-600 pl-3">
               "{proposal.rationale}"
             </p>
+
+            {/* LaTeX Formula Display */}
+            {proposal.formulaLatex && (
+              <div className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-700/50">
+                <span className="text-[10px] uppercase font-mono text-slate-400 block mb-1">Mathematical Formulation:</span>
+                <LatexRenderer content={`$$${proposal.formulaLatex}$$`} />
+              </div>
+            )}
           </div>
+
+          {/* Rebalance / Emergency Defense Steps */}
+          {(isRebalance || isDefend) && proposal.rebalanceSteps && proposal.rebalanceSteps.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Execution Steps ({proposal.rebalanceSteps.length} Operations)</span>
+                {proposal.cashTargetPct && (
+                  <span className="text-emerald-400 lowercase font-mono">Target Cash: {proposal.cashTargetPct}%</span>
+                )}
+              </h4>
+              <div className="divide-y divide-slate-800 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
+                {proposal.rebalanceSteps.map((step, sIdx) => (
+                  <div key={sIdx} className="p-3 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded uppercase ${
+                          step.action === 'sell'
+                            ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                            : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                        }`}
+                      >
+                        {step.action}
+                      </span>
+                      <span className="font-semibold text-slate-200">
+                        {step.amount} {step.asset}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold text-slate-100">~{money(step.estimatedNotional)}</div>
+                      <div className="text-[10px] text-slate-400">@ {money(step.estimatedPrice)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Validation Result Messages */}
           {validation.errors.length > 0 && (
@@ -160,14 +239,16 @@ export const AISafetyModal: React.FC<Props> = ({
           <button
             onClick={onConfirm}
             disabled={!validation.valid}
-            className={`px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            className={`px-5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
               validation.valid
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20'
+                ? isDefend
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
             }`}
           >
             <CheckCircle className="w-4 h-4" />
-            <span>Authorize & Execute</span>
+            <span>{isDefend ? 'Authorize Emergency Defense' : isRebalance ? 'Authorize Rebalance' : 'Authorize & Execute'}</span>
           </button>
         </div>
       </div>

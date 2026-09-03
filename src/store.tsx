@@ -544,10 +544,49 @@ export function Provider({ children }: { children: React.ReactNode }) {
         cooldownSec: 300,
       });
       return { ok: true };
+    } else if (proposal.type === 'rebalance' || proposal.type === 'emergency_defend') {
+      const steps = proposal.rebalanceSteps || [];
+      let totalVolume = 0;
+      let executedCount = 0;
+
+      // First execute all sell orders to free up liquid cash
+      const sells = steps.filter((s: any) => s.action === 'sell');
+      const buys = steps.filter((s: any) => s.action === 'buy');
+
+      for (const step of sells) {
+        const res = order('sell', step.asset, step.amount, {
+          auto: true,
+          strategyName: proposal.type === 'emergency_defend' ? 'Sentinel Capital Defense' : 'Agentic Rebalancing',
+        });
+        if (res.ok) {
+          executedCount++;
+          totalVolume += step.estimatedNotional || 0;
+        }
+      }
+
+      // Next execute buy orders using liquid cash
+      for (const step of buys) {
+        const res = order('buy', step.asset, step.amount, {
+          auto: true,
+          strategyName: proposal.type === 'emergency_defend' ? 'Sentinel Capital Defense' : 'Agentic Rebalancing',
+        });
+        if (res.ok) {
+          executedCount++;
+          totalVolume += step.estimatedNotional || 0;
+        }
+      }
+
+      const isDefend = proposal.type === 'emergency_defend';
+      triggerToast(
+        isDefend ? 'Emergency Defense Executed' : 'Portfolio Rebalance Executed',
+        `Executed ${executedCount} reallocation steps ($${totalVolume.toFixed(2)} total volume).`,
+        'success'
+      );
+      return { ok: true };
     }
 
     return { ok: false, error: 'Unknown proposal type' };
-  }, [pendingAIProposal, pendingAIValidation, order, addAlert]);
+  }, [pendingAIProposal, pendingAIValidation, order, addAlert, triggerToast]);
 
   const rejectPendingAIProposal = useCallback(() => {
     setPendingAIProposal(null);

@@ -1,6 +1,15 @@
 import { AIActionProposal, AppState, Asset, Market } from './types';
 import { indicators, money, portfolioValue } from './trading';
 import { calculatePortfolioRisk } from './domain/risk';
+import {
+  senseMarketDanger,
+  calculateAgenticAllocation,
+  DangerAssessment,
+  AgenticAllocationPlan,
+} from './domain/agentic';
+
+export { senseMarketDanger, calculateAgenticAllocation };
+export type { DangerAssessment, AgenticAllocationPlan };
 
 export type GeminiModel = {
   name: string;
@@ -290,32 +299,48 @@ export async function sendAIChat(
   history: { role: 'user' | 'assistant'; text: string }[]
 ): Promise<{ reply: string; actionProposal?: AIActionProposal | null; engine: string }> {
   const portfolioContext = buildContext(s, markets);
+  const dangerAssessment = senseMarketDanger(s, markets);
 
   try {
     const key = resolveApiKey(s.settings.geminiApiKey);
     if (key) {
-      const systemPrompt = `You are Lumen Copilot, an educational cryptocurrency paper-trading assistant powered by Gemini 3 series.
-You specialize in transparent portfolio analysis, technical indicator evaluation (SMA/EMA crossovers, RSI oscillators, Bollinger Bands), and risk budgeting.
-You DO NOT have access to live order books or insider data. Never claim to analyze order books or predict the future.
-Be calm, scannable, and transparent.
+      const systemPrompt = `You are Lumen Copilot, an elite quantitative cryptocurrency market analyst and autonomous portfolio risk guardian powered by Google Gemini 3 series.
+You specialize in transparent portfolio analysis, technical indicator evaluation (SMA/EMA crossovers, RSI oscillators, Bollinger Bands, ATR, MACD), risk budgeting, and agentic capital allocation.
 
-Context:
-Portfolio Value: $${portfolioContext.portfolioValue}
-Cash Available: $${portfolioContext.cash}
-Portfolio Risk: ${portfolioContext.riskLabel} (${portfolioContext.riskScore}/100)
-Top Concentration: ${portfolioContext.topConcentration} (${portfolioContext.topAsset || 'None'})
-Live Prices: ${JSON.stringify(Object.fromEntries(Object.entries(markets || {}).map(([k, v]: any) => [k, { price: v?.price, chg24h: v?.change24h, rsi: v?.indicators?.rsi }]))) }
+MATHEMATICAL & LATEX FORMATTING RULES:
+Whenever explaining quantitative concepts, risk metrics, Kelly optimization, or indicator calculations, ALWAYS write clean LaTeX formulas:
+- Inline math: $formula$ (e.g. $\\text{RSI} = 100 - \\frac{100}{1 + \\text{RS}}$, $\\text{Sharpe} = \\frac{\\mathbb{E}[R_p - R_f]}{\\sigma_p}$, $\\text{VaR}_{95\\%} = \\mu_p - 1.645 \\cdot \\sigma_p$, $f^* = \\frac{bp - q}{b}$)
+- Display math for core models: $$formula$$ (e.g. $$w_i^* = \\frac{\\sigma_i^{-1}}{\\sum_{k=1}^N \\sigma_k^{-1}} \\cdot \\left(1 - w_{\\text{cash}}\\right)$$)
+Never use raw ASCII fractions like "RSI = 100 - (100 / (1 + RS))" when LaTeX can be used.
 
-If the user wants to execute a trade or set a price alert, output a proposal inside <<<ACTION ... ACTION>>>:
-For order: {"type":"order","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"DOGE","side":"buy"|"sell","amount":number,"rationale":string,"confidence":"low"|"medium"|"high","riskSummary":string}
-For alert: {"type":"alert","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"DOGE","alertType":"above"|"below","value":number,"rationale":string,"confidence":"low"|"medium"|"high","riskSummary":string}`;
+AGENTIC AUTONOMOUS POWERS:
+1. SENSING DANGER: If you sense high downside volatility, sharp negative momentum divergence, severe concentration (>40% in one volatile token), or depleted cash, warn the user clearly and propose an "emergency_defend" or "rebalance" action.
+2. AGENTIC REBALANCING: You can compute and propose complete multi-asset portfolio rebalancing (Kelly criterion or Risk-Parity) with concrete buy/sell execution steps.
+3. SPECIFIC PROPOSALS: If proposing an execution, wrap exactly ONE structured JSON inside <<<ACTION ... ACTION>>>.
+
+SUPPORTED ACTIONS:
+- Single Order:
+  {"type":"order","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"DOGE","side":"buy"|"sell","amount":number,"rationale":string,"confidence":"low"|"medium"|"high","riskSummary":string}
+- Price Alert:
+  {"type":"alert","asset":"BTC"|"ETH"|...,"alertType":"above"|"below","value":number,"rationale":string,"confidence":"high","riskSummary":string}
+- Multi-Asset Agentic Rebalance:
+  {"type":"rebalance","asset":"BTC","rationale":string,"confidence":"high","riskSummary":string,"formulaLatex":string,"cashTargetPct":number,"rebalanceTargets":{"BTC":number,"ETH":number,"SOL":number},"rebalanceSteps":[{"asset":"SOL","action":"sell","amount":number,"estimatedPrice":number,"estimatedNotional":number},{"asset":"BTC","action":"buy","amount":number,"estimatedPrice":number,"estimatedNotional":number}]}
+- Emergency Capital Defense:
+  {"type":"emergency_defend","asset":"BTC","dangerLevel":"HIGH"|"CRITICAL","hazardSource":string,"rationale":string,"confidence":"high","riskSummary":string,"formulaLatex":string,"rebalanceSteps":[{"asset":"SOL","action":"sell","amount":number,"estimatedPrice":number,"estimatedNotional":number}]}
+
+Live Telemetry:
+Portfolio Total Value: $${portfolioContext.portfolioValue}
+Liquid Cash: $${portfolioContext.cash} (${((s.cash / (portfolioContext.portfolioValue || 1)) * 100).toFixed(1)}%)
+Risk Score: ${portfolioContext.riskScore}/100 (${portfolioContext.riskLabel})
+Top Concentration: ${portfolioContext.topConcentration} in ${portfolioContext.topAsset || 'None'}
+Danger Sentinel Status: ${dangerAssessment.dangerLevel} (Score: ${dangerAssessment.dangerScore}/100, Hazards: ${dangerAssessment.hazards.join('; ') || 'None'})
+Live Quotes: ${JSON.stringify(Object.fromEntries(Object.entries(markets || {}).map(([k, v]: any) => [k, { price: v?.price, chg24h: v?.change24h, rsi: v?.indicators?.rsi }]))) }`;
 
       const rawHistory = history.slice(-8, -1).map((h) => ({
         role: h.role === 'user' ? 'user' : 'model',
         parts: [{ text: h.text }],
       }));
 
-      // Fold consecutive roles to prevent 400 Bad Request
       const formattedHistory: { role: string; parts: { text: string }[] }[] = [];
       for (const msg of rawHistory) {
         if (formattedHistory.length > 0 && formattedHistory[formattedHistory.length - 1].role === msg.role) {
@@ -327,7 +352,7 @@ For alert: {"type":"alert","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"
 
       const currentUserMsg = {
         role: 'user',
-        parts: [{ text: `${text}\n\n[Portfolio Context: Value=$${portfolioContext.portfolioValue}, Cash=$${portfolioContext.cash}, Risk=${portfolioContext.riskScore}/100]` }],
+        parts: [{ text: `${text}\n\n[Live Context: Total=$${portfolioContext.portfolioValue}, Cash=$${portfolioContext.cash}, Danger=${dangerAssessment.dangerLevel} (${dangerAssessment.dangerScore}/100)]` }],
       };
 
       if (formattedHistory.length > 0 && formattedHistory[formattedHistory.length - 1].role === 'user') {
@@ -363,18 +388,37 @@ For alert: {"type":"alert","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"
         if (actionMatch) {
           try {
             const rawProp = JSON.parse(actionMatch[1]);
-            actionProposal = {
-              type: rawProp.type === 'order' ? 'order' : 'alert',
-              asset: rawProp.asset || s.selectedAsset,
-              side: rawProp.side === 'sell' ? 'sell' : 'buy',
-              amount: Number(rawProp.amount) || 0.05,
-              alertType: rawProp.alertType || 'above',
-              value: Number(rawProp.value) || 0,
-              rationale: rawProp.rationale || rawProp.reason || 'AI strategy recommendation',
-              confidence: rawProp.confidence === 'high' || rawProp.confidence === 'low' ? rawProp.confidence : 'medium',
-              riskSummary: rawProp.riskSummary || 'Requires allocation check and user authorization',
-              requiresConfirmation: true,
-            };
+            const pType = rawProp.type || 'order';
+
+            if (pType === 'rebalance' || pType === 'emergency_defend') {
+              actionProposal = {
+                type: pType,
+                asset: rawProp.asset || 'BTC',
+                dangerLevel: rawProp.dangerLevel || (pType === 'emergency_defend' ? 'HIGH' : 'NORMAL'),
+                hazardSource: rawProp.hazardSource || 'Autonomous Risk Audit',
+                rationale: rawProp.rationale || 'Agentic portfolio reallocation',
+                confidence: rawProp.confidence || 'high',
+                riskSummary: rawProp.riskSummary || 'Rebalances portfolio assets towards target weights',
+                formulaLatex: rawProp.formulaLatex,
+                cashTargetPct: rawProp.cashTargetPct,
+                rebalanceTargets: rawProp.rebalanceTargets,
+                rebalanceSteps: Array.isArray(rawProp.rebalanceSteps) ? rawProp.rebalanceSteps : [],
+                requiresConfirmation: true,
+              };
+            } else {
+              actionProposal = {
+                type: pType === 'order' ? 'order' : 'alert',
+                asset: rawProp.asset || s.selectedAsset,
+                side: rawProp.side === 'sell' ? 'sell' : 'buy',
+                amount: Number(rawProp.amount) || 0.05,
+                alertType: rawProp.alertType || 'above',
+                value: Number(rawProp.value) || 0,
+                rationale: rawProp.rationale || rawProp.reason || 'AI strategy recommendation',
+                confidence: rawProp.confidence === 'high' || rawProp.confidence === 'low' ? rawProp.confidence : 'medium',
+                riskSummary: rawProp.riskSummary || 'Requires allocation check and user authorization',
+                requiresConfirmation: true,
+              };
+            }
             cleanedText = fullText.replace(/<<<ACTION[\s\S]*?ACTION>>>/, '').trim();
           } catch (e) {
             console.warn('Failed to parse proposed action JSON:', e);
@@ -389,12 +433,139 @@ For alert: {"type":"alert","asset":"BTC"|"ETH"|"SOL"|"ADA"|"XRP"|"AVAX"|"LINK"|"
       }
     }
   } catch (err: any) {
-    console.warn('Chat request failed:', err);
+    console.warn('Chat request failed, activating local autonomous engine:', err);
   }
 
-  // Local fallback response
+  // Deep Local Algorithmic Engine with LaTeX Math & Agentic Capabilities
+  const lower = text.toLowerCase();
+  const pv = portfolioValue(s, markets);
+  const rk = calculatePortfolioRisk(s, markets);
+
+  // 1. Danger Sensing Query
+  if (lower.includes('danger') || lower.includes('hazard') || lower.includes('protect') || lower.includes('safe') || lower.includes('crash')) {
+    const danger = senseMarketDanger(s, markets);
+    const reply = `### 🛡️ Autonomous Sentinel Danger Audit
+
+The autonomous risk monitor evaluated your portfolio telemetry:
+- **Danger Status**: \`${danger.dangerLevel}\` (Risk Score: $${danger.dangerScore}/100$)
+- **Liquid Buffer**: $${((s.cash / (pv || 1)) * 100).toFixed(1)}\\%$ in USD cash
+- **Top Concentration**: $${rk.topAssetConcentrationPct.toFixed(1)}\\%$ in \`${rk.topAsset || 'None'}\`
+
+#### Quantitative Danger Formulation
+$$${danger.latexFormula}$$
+
+${
+  danger.hazards.length > 0
+    ? `**Active Hazards Detected:**\n` + danger.hazards.map((h) => `- ⚠️ ${h}`).join('\n')
+    : `✅ **All Systems Normal**: No immediate flash drawdowns or toxic volatility spikes detected across your positions.`
+}
+
+${
+  danger.circuitBreakerRecommended
+    ? `> **Circuit Breaker Advisory**: Sensed elevated downside risk. I have prepared an emergency de-risking action below to convert high-beta allocations to cash buffer.`
+    : `Portfolio volatility is within safe thresholds. Would you like to optimize asset distribution using Risk-Parity?`
+}`;
+
+    return {
+      reply,
+      actionProposal: danger.defensiveProposal,
+      engine: 'Deterministic Algorithmic Engine (Local Mode)',
+    };
+  }
+
+  // 2. Agentic Allocation & Rebalancing Query
+  if (lower.includes('rebalance') || lower.includes('allocate') || lower.includes('fund') || lower.includes('kelly') || lower.includes('parity') || lower.includes('weights')) {
+    const plan = calculateAgenticAllocation(s, markets, lower.includes('kelly') ? 'kelly' : 'risk_parity');
+    const targetKeys = Object.entries(plan.targetWeights).filter(([, w]) => w > 0);
+
+    const reply = `### ⚖️ Agentic Portfolio Optimization (${plan.style.toUpperCase()})
+
+Calculated optimal capital distribution using inverse-volatility risk budgeting:
+
+$$${plan.latexFormula}$$
+
+#### Mathematical Target Allocation:
+${targetKeys.map(([a, w]) => `- **${a}**: $${w}\\%$`).join('\n')}
+- **Liquid Cash Reserve**: $${plan.cashTargetPct}\\%$ ($${money((plan.cashTargetPct / 100) * pv)}$)
+
+#### Execution Steps:
+${
+  plan.steps.length > 0
+    ? plan.steps.map((step) => `- **${step.action.toUpperCase()}** \`${step.amount} ${step.asset}\` (~$${money(step.estimatedNotional)})`).join('\n')
+    : `- Current allocations already match target optimization thresholds.`
+}
+
+${plan.steps.length > 0 ? `I have generated the rebalance action below. Review and authorize in the Safety Gate.` : ''}`;
+
+    return {
+      reply,
+      actionProposal: plan.steps.length > 0 ? plan.proposal : null,
+      engine: 'Deterministic Algorithmic Engine (Local Mode)',
+    };
+  }
+
+  // 3. Trade/Order Query
+  if (lower.includes('buy') || lower.includes('sell') || lower.includes('order')) {
+    const isBuy = lower.includes('buy');
+    const assetMatch = (['BTC', 'ETH', 'SOL', 'ADA', 'XRP', 'AVAX', 'LINK', 'DOGE'] as Asset[]).find(
+      (a) => lower.includes(a.toLowerCase())
+    ) || s.selectedAsset;
+    const m = markets[assetMatch];
+    const ind = m ? indicators(m.history, m.candles) : { rsi: 50, vol: 0.02 };
+
+    const amount = assetMatch === 'BTC' ? 0.05 : assetMatch === 'ETH' ? 0.5 : 10;
+    const notional = amount * (m?.price || 100);
+
+    const reply = `### 📋 Trade Recommendation for \`${assetMatch}\`
+
+- **Current Spot**: $${money(m?.price || 0)}$
+- **Relative Strength**: $\\text{RSI}_{14} = ${ind.rsi.toFixed(1)}$
+- **Historical Volatility**: $\\sigma = ${(ind.vol * 100).toFixed(2)}\\%$
+
+#### Value at Risk Model
+$$\\text{VaR}_{95\\%} = -\\left(\\mu - 1.645 \\cdot \\sigma\\right) \\approx ${(ind.vol * 1.645 * 100).toFixed(2)}\\%$$
+
+Proposed **${isBuy ? 'BUY' : 'SELL'}** of \`${amount} ${assetMatch}\` (~$${money(notional)}$). Verify execution parameters below.`;
+
+    const actionProposal: AIActionProposal = {
+      type: 'order',
+      asset: assetMatch,
+      side: isBuy ? 'buy' : 'sell',
+      amount,
+      rationale: `Algorithmic indicator analysis: RSI is ${ind.rsi.toFixed(1)} with ${m?.change24h || 0}% 24h change.`,
+      confidence: 'medium',
+      riskSummary: `Order requires ${money(notional)} notional equity.`,
+      requiresConfirmation: true,
+    };
+
+    return {
+      reply,
+      actionProposal,
+      engine: 'Deterministic Algorithmic Engine (Local Mode)',
+    };
+  }
+
+  // Default general intelligence response with LaTeX math
+  const mSel = markets[s.selectedAsset];
+  const indSel = mSel ? indicators(mSel.history, mSel.candles) : { rsi: 50, vol: 0.02, chg: 0 };
+
+  const reply = `### 🧠 Lumen Copilot Portfolio Intelligence
+
+- **Total Equity**: $${money(pv)}$ with $${money(s.cash)}$ in liquid USD cash ($${((s.cash / (pv || 1)) * 100).toFixed(1)}\\%$)
+- **Portfolio Risk Score**: $${rk.portfolioRiskScore}/100$ (${rk.riskLabel})
+- **Active Asset**: \`${s.selectedAsset}\` quoting at $${money(mSel?.price || 0)}$ ($${indSel.chg >= 0 ? '+' : ''}${indSel.chg.toFixed(2)}\\%$)
+
+#### Indicator Telemetry
+$$\\text{RSI}(14) = 100 - \\frac{100}{1 + \\text{RS}} = ${indSel.rsi.toFixed(1)}$$
+$$\\text{Sharpe Ratio Estimate}: \\text{SR} = \\frac{R_p - R_f}{\\sigma_p} \\approx ${(0.08 / Math.max(0.01, indSel.vol)).toFixed(2)}$$
+
+**Available Agentic Capabilities:**
+- 🛡️ **Sense Market Danger**: Ask me to *"sense danger"* to run the Autonomous Sentinel audit.
+- ⚖️ **Agentic Reallocation**: Ask me to *"rebalance funds"* or *"optimize with Kelly criterion"*.
+- 📐 **LaTeX Derivations**: Ask me to explain any financial formula with complete mathematical rigor.`;
+
   return {
-    reply: `Portfolio status: Total equity is $${portfolioValue(s, markets).toLocaleString()} with $${money(s.cash)} in liquid cash. Your portfolio risk score is currently ${calculatePortfolioRisk(s, markets).portfolioRiskScore}/100 (${calculatePortfolioRisk(s, markets).riskLabel}). Selected asset ${s.selectedAsset} is quoting at ${money(markets[s.selectedAsset]?.price || 0)}. To enable conversational generative reasoning powered by Gemini 3 series, configure your Gemini API key in Settings.`,
+    reply,
     actionProposal: null,
     engine: 'Deterministic Algorithmic Engine (Local Mode)',
   };
