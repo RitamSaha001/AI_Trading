@@ -101,6 +101,45 @@ describe('LocalQuantLLM High-Benchmark Fallback Engine', () => {
     expect(res.reply).toContain('%B');
   });
 
+  it('answers MEV, sandwich attacks, and order flow microstructure queries', () => {
+    const res = queryLocalQuantLLM('How do sandwich attacks and MEV searchers profit?', mockState, mockMarkets);
+    expect(res.reply).toContain('Maximal Extractable Value');
+    expect(res.reply).toContain('P_{\\text{max}}');
+    expect(res.reply).toContain('Loss Versus Rebalancing');
+    expect(res.reply).toContain('\\text{LVR}');
+  });
+
+  it('analyzes options volatility surfaces, skew, and Greeks', () => {
+    const res = queryLocalQuantLLM('Explain 25-delta put-call skew and implied volatility smile', mockState, mockMarkets);
+    expect(res.reply).toContain('Volatility Smile');
+    expect(res.reply).toContain('Black-Scholes');
+    expect(res.reply).toContain('\\text{Vega } (\\mathcal{V})');
+    expect(res.reply).toContain('\\text{25-Delta Put-Call Skew}');
+  });
+
+  it('deconstructs staking vs lending risks and yield curves', () => {
+    const res = queryLocalQuantLLM('Compare liquid staking LST yield vs Aave lending risk', mockState, mockMarkets);
+    expect(res.reply).toContain('Liquid Staking (LST) vs DeFi Lending');
+    expect(res.reply).toContain('Comparative Risk Matrix');
+    expect(res.reply).toContain('Slashing Risk');
+    expect(res.reply).toContain('U_{\\text{kink}}');
+  });
+
+  it('audits portfolio concentration with live Herfindahl-Hirschman index (HHI)', () => {
+    const res = queryLocalQuantLLM('Is my portfolio too concentrated? What is my HHI?', mockState, mockMarkets);
+    expect(res.reply).toContain('Herfindahl-Hirschman Index');
+    expect(res.reply).toContain('\\text{HHI} =');
+    expect(res.reply).toContain('Institutional Concentration Thresholds');
+  });
+
+  it('analyzes Layer-2 rollup gas economics, blobs, and proof latency', () => {
+    const res = queryLocalQuantLLM('Compare Optimistic vs ZK rollups finality and fees', mockState, mockMarkets);
+    expect(res.reply).toContain('Layer-2 Rollup Microeconomics');
+    expect(res.reply).toContain('EIP-4844');
+    expect(res.reply).toContain('Optimistic vs ZK Rollup Architecture');
+    expect(res.reply).toContain('Validity Proofs');
+  });
+
   it('generates distinct, non-identical responses for different prompts (no static repetitive template)', () => {
     const res1 = queryLocalQuantLLM('Should I sell ETH?', mockState, mockMarkets);
     const res2 = queryLocalQuantLLM('How do funding rates work?', mockState, mockMarkets);
