@@ -513,85 +513,96 @@ export function Dashboard() {
         </button>
       </div>
 
-      {/* Lumen Nexus Autonomous Actions Panel */}
-      <GlassCard className="p-6 bg-gradient-to-r from-indigo-900/5 via-purple-900/5 to-transparent border border-indigo-500/15">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-black/[0.05]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-              <Sparkles className="w-5 h-5" />
+      {/* Lumen Nexus Autonomous Actions Panel - Apple Liquid Glass Deck */}
+      <div className="liquid-glass rounded-[28px] p-6 border border-white/90 shadow-xs relative overflow-hidden space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-black/[0.04]">
+          <div className="flex items-center gap-3.5">
+            <div className="relative flex items-center justify-center">
+              <div className="w-10 h-10 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-xs relative z-10">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <div className="absolute inset-0 rounded-2xl siri-aurora-glow scale-125 pointer-events-none" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-zinc-900">Lumen Nexus Autonomous Actions</h3>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
-                  Ready to Dispatch
+                <h3 className="text-sm font-semibold tracking-tight text-zinc-900">Nexus Autonomous Intelligence</h3>
+                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-800 border border-emerald-500/15">
+                  Live Telemetry
                 </span>
               </div>
-              <p className="text-xs text-zinc-500">
-                Trigger end-to-end agentic workflows with transparent safety checks and live execution receipts.
+              <p className="text-xs text-zinc-500 tracking-tight">
+                Trigger end-to-end quantitative workflows with transparent safety validations and execution receipts.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => openChat()}
-            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl shadow-sm transition-all self-start md:self-auto flex items-center gap-2"
+            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 hover:bg-black rounded-full shadow-xs transition-all self-start md:self-auto flex items-center gap-2 active:scale-95"
           >
             <span>Open Nexus Terminal</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <button
             type="button"
             onClick={() => openChat('Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.')}
-            className="p-3.5 rounded-xl border border-black/[0.06] bg-white/80 hover:bg-rose-50/50 hover:border-rose-200 text-left transition-all group"
+            className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
           >
-            <div className="flex items-center gap-2 mb-1.5">
-              <ShieldAlert className="w-4 h-4 text-rose-600 group-hover:scale-110 transition-transform" />
-              <strong className="text-xs font-bold text-zinc-900 group-hover:text-rose-700">Sentinel Risk Audit</strong>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-xl bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600 group-hover:scale-110 transition-transform" />
+              </div>
+              <strong className="text-xs font-semibold text-zinc-900 tracking-tight">Sentinel Risk Audit</strong>
             </div>
-            <p className="text-[11px] text-zinc-500 leading-tight">Sense market hazards &amp; verify capital defense protocols.</p>
+            <p className="text-[11px] text-zinc-400 leading-tight">Sense market hazards &amp; verify capital defense protocols.</p>
           </button>
 
           <button
             type="button"
             onClick={() => openChat('Run a portfolio stress test simulating a 20% Bitcoin flash crash and tell me my projected loss and survivability rating.')}
-            className="p-3.5 rounded-xl border border-black/[0.06] bg-white/80 hover:bg-amber-50/50 hover:border-amber-200 text-left transition-all group"
+            className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
           >
-            <div className="flex items-center gap-2 mb-1.5">
-              <Activity className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
-              <strong className="text-xs font-bold text-zinc-900 group-hover:text-amber-700">Crash Stress Test</strong>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-xl bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+                <Activity className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
+              </div>
+              <strong className="text-xs font-semibold text-zinc-900 tracking-tight">Crash Stress Test</strong>
             </div>
-            <p className="text-[11px] text-zinc-500 leading-tight">Simulate -20% market shock, 95% VaR, and survivability.</p>
+            <p className="text-[11px] text-zinc-400 leading-tight">Simulate -20% market shock, 95% VaR, and survivability.</p>
           </button>
 
           <button
             type="button"
             onClick={() => openChat(`Synthesize an institutional VWAP momentum strategy bot for ${selectedAsset} with dynamic ATR profit brackets and deploy it.`)}
-            className="p-3.5 rounded-xl border border-black/[0.06] bg-white/80 hover:bg-indigo-50/50 hover:border-indigo-200 text-left transition-all group"
+            className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
           >
-            <div className="flex items-center gap-2 mb-1.5">
-              <Zap className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition-transform" />
-              <strong className="text-xs font-bold text-zinc-900 group-hover:text-indigo-700">Synthesize Bot</strong>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-xl bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
+              </div>
+              <strong className="text-xs font-semibold text-zinc-900 tracking-tight">Synthesize Bot</strong>
             </div>
-            <p className="text-[11px] text-zinc-500 leading-tight">Calibrate &amp; deploy an automated strategy for {selectedAsset}.</p>
+            <p className="text-[11px] text-zinc-400 leading-tight">Calibrate &amp; deploy an automated strategy for {selectedAsset}.</p>
           </button>
 
           <button
             type="button"
             onClick={() => openChat(`Create a Smart Value-Weighted DCA accumulation plan for ${selectedAsset} with dip buying multipliers.`)}
-            className="p-3.5 rounded-xl border border-black/[0.06] bg-white/80 hover:bg-emerald-50/50 hover:border-emerald-200 text-left transition-all group"
+            className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
           >
-            <div className="flex items-center gap-2 mb-1.5">
-              <TrendingUp className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-              <strong className="text-xs font-bold text-zinc-900 group-hover:text-emerald-700">Smart DCA Plan</strong>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-xl bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
+              </div>
+              <strong className="text-xs font-semibold text-zinc-900 tracking-tight">Smart DCA Plan</strong>
             </div>
-            <p className="text-[11px] text-zinc-500 leading-tight">Dip multipliers and euphoria pauses for {selectedAsset}.</p>
+            <p className="text-[11px] text-zinc-400 leading-tight">Dip multipliers and euphoria pauses for {selectedAsset}.</p>
           </button>
         </div>
-      </GlassCard>
+      </div>
     </div>
   );
 }

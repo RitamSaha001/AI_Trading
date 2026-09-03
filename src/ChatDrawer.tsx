@@ -154,44 +154,81 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/25 backdrop-blur-sm transition-all duration-300"
+      className="fixed inset-0 z-50 flex justify-end bg-black/20 backdrop-blur-md transition-all duration-300"
       onMouseDown={(e) => e.currentTarget === e.target && onClose()}
     >
-      <aside className="relative flex flex-col w-full max-w-[540px] h-full bg-white/95 backdrop-blur-2xl border-l border-white/60 shadow-2xl text-zinc-900 animate-in slide-in-from-right duration-300">
-        {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06] bg-white/70">
+      <aside className="relative flex flex-col w-full max-w-[550px] h-full liquid-glass border-l border-white/70 shadow-[-20px_0_60px_rgba(0,0,0,0.06)] text-zinc-900 animate-in slide-in-from-right duration-300 overflow-hidden">
+        {/* Apple Minimalist Header */}
+        <header className="flex items-center justify-between px-6 py-4.5 border-b border-black/[0.04] bg-white/40 backdrop-blur-2xl">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/25">
-              <Sparkles className="w-5 h-5" />
+            <div className="relative flex items-center justify-center">
+              <div className="w-9 h-9 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-sm relative z-10">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <div className="absolute inset-0 rounded-2xl siri-aurora-glow scale-125 pointer-events-none" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold tracking-tight text-zinc-900">Lumen Nexus</h2>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 rounded-full border border-emerald-500/20">
+                <h2 className="text-sm font-semibold tracking-tight text-zinc-900">Nexus Intelligence</h2>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-800 rounded-full border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Agentic Active
+                  Active
                 </span>
-                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold bg-indigo-500/10 text-indigo-700 rounded-full border border-indigo-500/20">
+                <span className="text-[10px] font-mono text-zinc-400 bg-black/[0.03] px-2 py-0.5 rounded-full border border-black/[0.04]">
                   {resolveGemini3Model(state.settings.geminiModel).replace('gemini-', '')}
                 </span>
               </div>
-              <p className="text-xs text-zinc-500">Autonomous Financial Intelligence &amp; Quantitative Engine</p>
+              <p className="text-[11px] text-zinc-400 tracking-tight">Executive Autonomous Quant &amp; Risk Sentinel</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-black/[0.04] transition-all"
+              className="w-8 h-8 rounded-full bg-black/[0.03] hover:bg-black/[0.08] text-zinc-400 hover:text-zinc-800 flex items-center justify-center transition-all active:scale-95"
               onClick={onClose}
               title="Close Nexus AI"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </header>
 
         {/* Chat Messages Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Welcome State when fresh */}
+          {chatHistory.length <= 1 && (
+            <div className="my-auto py-8 px-2 text-center space-y-4 animate-in fade-in duration-300">
+              <div className="relative inline-flex items-center justify-center">
+                <div className="w-12 h-12 rounded-3xl bg-zinc-950 text-white flex items-center justify-center shadow-lg relative z-10">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div className="absolute inset-0 rounded-3xl siri-aurora-glow scale-150 pointer-events-none" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-zinc-900 tracking-tight">Autonomous Financial Intelligence</h3>
+                <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
+                  Institutional reasoning powered by Gemini 3 and deterministic quantitative risk algorithms.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 text-left">
+                {quickPrompts.slice(0, 4).map((q, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSend(q.prompt)}
+                    className="p-3 rounded-2xl liquid-glass-subtle hover:bg-white/90 border border-white/80 hover:border-black/[0.08] transition-all group space-y-1 text-left shadow-xs active:scale-[0.99]"
+                  >
+                    <span className="text-xs font-semibold text-zinc-800 group-hover:text-zinc-950 flex items-center justify-between">
+                      {q.label}
+                      <ArrowUpRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-800 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    </span>
+                    <p className="text-[10px] text-zinc-400 line-clamp-1">{q.prompt}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {chatHistory.map((m, i) => {
             const isUser = m.role === 'user';
             const hasAction = m.actionProposal && !isUser;
@@ -199,19 +236,19 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             const receipt = p?.executionReceipt;
 
             return (
-              <div key={i} className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+              <div key={i} className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
                 {!isUser && (
-                  <div className="w-7 h-7 rounded-lg bg-zinc-900 text-white flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
-                    <Bot className="w-4 h-4" />
+                  <div className="w-6 h-6 rounded-xl bg-zinc-950 text-white flex items-center justify-center flex-shrink-0 mt-1 shadow-xs">
+                    <Sparkles className="w-3 h-3 text-white" />
                   </div>
                 )}
 
                 <div className="max-w-[88%] space-y-2.5">
                   <div
-                    className={`p-4 text-[13.5px] leading-relaxed rounded-2xl shadow-sm ${
+                    className={`p-4 text-[13px] leading-relaxed shadow-xs ${
                       isUser
-                        ? 'bg-zinc-900 text-white rounded-tr-sm ml-auto'
-                        : 'bg-white/95 text-zinc-800 border border-black/[0.06] rounded-tl-sm backdrop-blur-md'
+                        ? 'bg-zinc-900 text-white rounded-[22px] rounded-tr-[4px] ml-auto font-normal'
+                        : 'liquid-glass-subtle text-zinc-800 border border-white/85 rounded-[24px] rounded-tl-[4px]'
                     }`}
                   >
                     {isUser ? (
@@ -221,29 +258,29 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     )}
                   </div>
 
-                  {/* Visual Execution Receipt ("What Nexus Did") */}
+                  {/* Visual Execution Receipt ("What Nexus Did") - Apple Pay Style */}
                   {receipt && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/[0.08] via-emerald-500/[0.03] to-teal-500/[0.05] border border-emerald-500/30 backdrop-blur-md space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-4 rounded-[22px] bg-emerald-500/[0.04] border border-emerald-500/20 backdrop-blur-xl space-y-2.5 shadow-xs animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-emerald-800 font-semibold text-xs">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          <span>Nexus Execution Receipt</span>
+                        <span className="flex items-center gap-1.5 text-emerald-800 font-semibold text-xs tracking-tight">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Execution Verified</span>
                         </span>
-                        <span className="text-[10px] font-mono text-emerald-700/80 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                          {new Date(receipt.executedAt).toLocaleTimeString()}
+                        <span className="text-[10px] font-mono text-zinc-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/15">
+                          {new Date(receipt.executedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </span>
                       </div>
 
-                      <div className="space-y-1">
-                        <h4 className="text-xs font-bold text-zinc-900">{receipt.title}</h4>
-                        <p className="text-[11.5px] text-zinc-600 leading-relaxed">{receipt.summary}</p>
+                      <div className="space-y-0.5">
+                        <h4 className="text-xs font-semibold text-zinc-900">{receipt.title}</h4>
+                        <p className="text-[11.5px] text-zinc-500 leading-relaxed">{receipt.summary}</p>
                       </div>
 
                       {receipt.details && receipt.details.length > 0 && (
-                        <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-500/20 space-y-1 text-[11px]">
+                        <div className="p-2.5 rounded-xl bg-white/75 border border-emerald-500/15 space-y-1 text-[11px] font-mono text-zinc-700">
                           {receipt.details.map((d: string, dIdx: number) => (
-                            <div key={dIdx} className="flex items-center gap-1.5 text-zinc-700 font-mono">
-                              <span className="text-emerald-500 font-bold">•</span>
+                            <div key={dIdx} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
                               <span>{d}</span>
                             </div>
                           ))}
@@ -257,120 +294,95 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                             go(receipt.jumpRoute as any);
                             onClose();
                           }}
-                          className="w-full py-2 px-3 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                          className="w-full py-2 px-3 text-xs font-semibold text-emerald-800 bg-emerald-500/10 hover:bg-emerald-500/15 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.99]"
                         >
-                          <span>{receipt.jumpLabel || 'Inspect in Desk →'}</span>
+                          <span>{receipt.jumpLabel || 'Inspect in Desk'}</span>
                           <ArrowUpRight className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
                   )}
 
-                  {/* Interactive Action Proposal Card (when pending execution) */}
+                  {/* Interactive Action Proposal Card (Apple Widget Style) */}
                   {hasAction && p && !receipt && (
-                    <div
-                      className={`p-3.5 rounded-2xl backdrop-blur-md space-y-3 transition-all ${
-                        p.type === 'emergency_defend'
-                          ? 'bg-rose-500/[0.08] border border-rose-500/30'
-                          : p.type === 'stress_test'
-                          ? 'bg-amber-500/[0.08] border border-amber-500/30'
-                          : p.type === 'deploy_strategy'
-                          ? 'bg-indigo-500/[0.08] border border-indigo-500/30'
-                          : p.type === 'smart_dca'
-                          ? 'bg-emerald-500/[0.08] border border-emerald-500/30'
-                          : p.type === 'rebalance'
-                          ? 'bg-indigo-500/[0.08] border border-indigo-500/30'
-                          : 'bg-gradient-to-br from-indigo-500/[0.08] to-purple-500/[0.04] border border-indigo-500/20'
-                      }`}
-                    >
+                    <div className="p-4 rounded-[24px] liquid-glass border border-white/95 shadow-sm space-y-3 animate-in fade-in duration-200">
                       {/* Proposal Header */}
                       <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className="flex items-center gap-1.5 text-zinc-900">
-                          {p.type === 'emergency_defend' ? (
-                            <>
-                              <AlertTriangle className="w-4 h-4 text-rose-600 animate-pulse" />
-                              <span className="text-rose-900 font-bold">Sentinel: Capital Defense Trigger</span>
-                            </>
-                          ) : p.type === 'stress_test' ? (
-                            <>
-                              <Activity className="w-4 h-4 text-amber-600" />
-                              <span className="text-amber-900 font-bold">Portfolio Stress-Test Scenario</span>
-                            </>
-                          ) : p.type === 'deploy_strategy' ? (
-                            <>
-                              <Zap className="w-4 h-4 text-indigo-600" />
-                              <span className="text-indigo-900 font-bold">Synthesized Algorithmic Bot</span>
-                            </>
-                          ) : p.type === 'smart_dca' ? (
-                            <>
-                              <TrendingUp className="w-4 h-4 text-emerald-600" />
-                              <span className="text-emerald-900 font-bold">Smart Value-Weighted DCA Plan</span>
-                            </>
-                          ) : p.type === 'rebalance' ? (
-                            <>
-                              <Scale className="w-4 h-4 text-indigo-600" />
-                              <span className="text-indigo-900 font-bold">Agentic Rebalancing Plan</span>
-                            </>
-                          ) : p.type === 'token_compare' ? (
-                            <>
-                              <Compass className="w-4 h-4 text-violet-600" />
-                              <span className="text-violet-900 font-bold">Multi-Token Alpha Radar</span>
-                            </>
-                          ) : p.type === 'order' ? (
-                            <>
-                              <TrendingUp className="w-4 h-4 text-indigo-600" />
-                              <span>AI Paper Order Proposal</span>
-                            </>
-                          ) : (
-                            <>
-                              <Bell className="w-4 h-4 text-amber-600" />
-                              <span>AI Price Alert Proposal</span>
-                            </>
-                          )}
+                        <span className="flex items-center gap-2 text-zinc-900 tracking-tight">
+                          <div className="w-6 h-6 rounded-lg bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+                            {p.type === 'emergency_defend' ? (
+                              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                            ) : p.type === 'stress_test' ? (
+                              <Activity className="w-3.5 h-3.5 text-amber-600" />
+                            ) : p.type === 'deploy_strategy' ? (
+                              <Zap className="w-3.5 h-3.5 text-indigo-600" />
+                            ) : p.type === 'smart_dca' ? (
+                              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : p.type === 'rebalance' ? (
+                              <Scale className="w-3.5 h-3.5 text-blue-600" />
+                            ) : p.type === 'token_compare' ? (
+                              <Compass className="w-3.5 h-3.5 text-violet-600" />
+                            ) : p.type === 'order' ? (
+                              <LineChart className="w-3.5 h-3.5 text-zinc-800" />
+                            ) : (
+                              <Bell className="w-3.5 h-3.5 text-amber-600" />
+                            )}
+                          </div>
+                          <span>
+                            {p.type === 'emergency_defend'
+                              ? 'Capital Defense Protocol'
+                              : p.type === 'stress_test'
+                              ? 'Stress-Test Simulation'
+                              : p.type === 'deploy_strategy'
+                              ? 'Synthesized Strategy Bot'
+                              : p.type === 'smart_dca'
+                              ? 'Value-Weighted DCA Plan'
+                              : p.type === 'rebalance'
+                              ? 'Agentic Rebalancing Plan'
+                              : p.type === 'token_compare'
+                              ? 'Multi-Token Alpha Radar'
+                              : p.type === 'order'
+                              ? 'Asymmetric Bracket Order'
+                              : 'Adaptive Volatility Alert'}
+                          </span>
                         </span>
 
-                        <span
-                          className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded-md border ${
-                            p.type === 'emergency_defend'
-                              ? 'bg-rose-500/20 text-rose-800 border-rose-500/30 font-bold'
-                              : 'bg-indigo-500/15 text-indigo-800 border-indigo-500/30 font-semibold'
-                          }`}
-                        >
-                          {p.dangerLevel ? `${p.dangerLevel} DANGER` : 'Requires Gate Approval'}
+                        <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-black/[0.03] text-zinc-600 border border-black/[0.04]">
+                          {p.dangerLevel ? `${p.dangerLevel} Hazard` : 'Requires Authorization'}
                         </span>
                       </div>
 
                       {/* Proposal Body Details */}
-                      <div className="text-xs text-zinc-700 bg-white/80 p-3 rounded-xl border border-black/[0.04] space-y-2">
+                      <div className="text-xs text-zinc-700 bg-white/70 p-3 rounded-2xl border border-black/[0.03] space-y-2">
                         {p.type === 'deploy_strategy' && p.strategyParams && (
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
                               <span className="font-semibold text-zinc-900">{p.strategyParams.name}</span>
-                              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-mono rounded-md">
+                              <span className="px-2 py-0.5 bg-black/[0.03] text-zinc-600 text-[10px] font-mono rounded-full">
                                 {p.strategyParams.kind}
                               </span>
                             </div>
                             <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
-                              <div className="bg-black/[0.02] p-1.5 rounded-lg">
-                                <span className="text-[9px] text-zinc-400 block uppercase">Max Allocation</span>
+                              <div className="bg-black/[0.02] p-2 rounded-xl">
+                                <span className="text-[9px] text-zinc-400 block uppercase font-medium">Max Allocation</span>
                                 <span className="font-semibold text-zinc-800">
-                                  {((p.strategyParams.maxAllocation || 0.25) * 100).toFixed(0)}% of portfolio
+                                  {((p.strategyParams.maxAllocation || 0.25) * 100).toFixed(0)}%
                                 </span>
                               </div>
-                              <div className="bg-emerald-500/10 p-1.5 rounded-lg">
-                                <span className="text-[9px] text-emerald-700 block uppercase font-bold">Take-Profit</span>
-                                <span className="font-bold text-emerald-700">+{p.strategyParams.targetProfitPct || 5}%</span>
+                              <div className="bg-emerald-500/[0.06] p-2 rounded-xl border border-emerald-500/10">
+                                <span className="text-[9px] text-emerald-700 block uppercase font-medium">Take-Profit</span>
+                                <span className="font-semibold text-emerald-800">+{p.strategyParams.targetProfitPct || 5}%</span>
                               </div>
-                              <div className="bg-rose-500/10 p-1.5 rounded-lg">
-                                <span className="text-[9px] text-rose-700 block uppercase font-bold">Trailing Stop</span>
-                                <span className="font-bold text-rose-700">-{p.strategyParams.trailingStopPct || 2}%</span>
+                              <div className="bg-rose-500/[0.06] p-2 rounded-xl border border-rose-500/10">
+                                <span className="text-[9px] text-rose-700 block uppercase font-medium">Trailing Stop</span>
+                                <span className="font-semibold text-rose-800">-{p.strategyParams.trailingStopPct || 2}%</span>
                               </div>
-                              <div className="bg-black/[0.02] p-1.5 rounded-lg">
-                                <span className="text-[9px] text-zinc-400 block uppercase">Tick Frequency</span>
-                                <span className="font-semibold text-zinc-800">Every 2.5s</span>
+                              <div className="bg-black/[0.02] p-2 rounded-xl">
+                                <span className="text-[9px] text-zinc-400 block uppercase font-medium">Tick Frequency</span>
+                                <span className="font-semibold text-zinc-800">Live (2.5s)</span>
                               </div>
                             </div>
-                            <p className="text-[11px] text-zinc-500">{p.rationale}</p>
+                            <p className="text-[11px] text-zinc-500 leading-relaxed">{p.rationale}</p>
                           </div>
                         )}
 
@@ -378,22 +390,22 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
                               <span className="font-semibold text-zinc-900">{p.stressTest.title}</span>
-                              <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-mono rounded-md">
+                              <span className="px-2 py-0.5 bg-amber-500/10 text-amber-800 text-[10px] font-mono rounded-full">
                                 {p.stressTest.survivabilityRating} Cushion
                               </span>
                             </div>
                             <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
-                              <div className="bg-rose-500/10 p-1.5 rounded-lg">
-                                <span className="text-[9px] text-rose-700 block uppercase font-bold">Projected Drawdown</span>
-                                <span className="font-bold text-rose-700">-{p.stressTest.simulatedDrawdownPct}%</span>
+                              <div className="bg-rose-500/[0.06] p-2 rounded-xl border border-rose-500/10">
+                                <span className="text-[9px] text-rose-700 block uppercase font-medium">Drawdown</span>
+                                <span className="font-semibold text-rose-800">-{p.stressTest.simulatedDrawdownPct}%</span>
                               </div>
-                              <div className="bg-black/[0.02] p-1.5 rounded-lg">
-                                <span className="text-[9px] text-zinc-400 block uppercase">Simulated Loss</span>
+                              <div className="bg-black/[0.02] p-2 rounded-xl">
+                                <span className="text-[9px] text-zinc-400 block uppercase font-medium">Simulated Loss</span>
                                 <span className="font-semibold text-zinc-800">${p.stressTest.simulatedLossUsd.toLocaleString()}</span>
                               </div>
                             </div>
                             {p.stressTest.mitigationSteps.length > 0 && (
-                              <p className="text-[10.5px] text-zinc-600 bg-amber-500/[0.06] p-2 rounded-lg border border-amber-500/20">
+                              <p className="text-[10.5px] text-zinc-600 bg-amber-500/[0.04] p-2 rounded-xl border border-amber-500/15">
                                 🛡️ {p.stressTest.mitigationSteps[0]}
                               </p>
                             )}
@@ -404,30 +416,30 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
                               <span className="font-semibold text-zinc-900">Value-Weighted DCA ({p.dcaPlan.asset})</span>
-                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-mono rounded-md">
+                              <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-800 text-[10px] font-mono rounded-full">
                                 ${p.dcaPlan.baseAmountUsd}/{p.dcaPlan.frequency}
                               </span>
                             </div>
                             <div className="flex flex-wrap gap-1.5 text-[10.5px] font-mono">
-                              <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100">
+                              <span className="px-2 py-1 bg-emerald-500/[0.06] text-emerald-800 rounded-lg border border-emerald-500/10">
                                 Dip Scaler: {p.dcaPlan.oversoldMultiplier}x on RSI &lt; 35
                               </span>
-                              <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded-md border border-amber-100">
-                                Peak Pause: RSI &gt; {p.dcaPlan.pauseThresholdRsi}
+                              <span className="px-2 py-1 bg-amber-500/[0.06] text-amber-800 rounded-lg border border-amber-500/10">
+                                Top Pause: RSI &gt; {p.dcaPlan.pauseThresholdRsi}
                               </span>
                             </div>
-                            <p className="text-[11px] text-zinc-500">{p.rationale}</p>
+                            <p className="text-[11px] text-zinc-500 leading-relaxed">{p.rationale}</p>
                           </div>
                         )}
 
                         {p.type === 'token_compare' && p.tokenComparison && (
                           <div className="space-y-2">
-                            <p className="text-[11.5px] font-semibold text-indigo-700">{p.tokenComparison.verdict}</p>
+                            <p className="text-[11.5px] font-semibold text-zinc-900">{p.tokenComparison.verdict}</p>
                             <div className="space-y-1">
                               {p.tokenComparison.tokens.map((t: any) => (
-                                <div key={t.asset} className="flex justify-between text-[11px] font-mono p-1 rounded bg-black/[0.02]">
+                                <div key={t.asset} className="flex justify-between text-[11px] font-mono p-1.5 rounded-xl bg-black/[0.02]">
                                   <span className="font-bold text-zinc-900">{t.asset}</span>
-                                  <span className="text-zinc-500">Sharpe: {t.sharpeEstimate} • Vol: {t.volAnnualizedPct}% • Beta: {t.betaToBtc}</span>
+                                  <span className="text-zinc-500">Sharpe {t.sharpeEstimate} • Vol {t.volAnnualizedPct}% • Beta {t.betaToBtc}</span>
                                 </div>
                               ))}
                             </div>
@@ -448,8 +460,8 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                                 <span className="text-[10px] font-mono uppercase text-zinc-400">Defensive Maneuvers:</span>
                                 {p.rebalanceSteps.slice(0, 3).map((step: any, sIdx: number) => (
                                   <div key={sIdx} className="flex justify-between text-[11px]">
-                                    <span className="font-semibold text-rose-700">SELL {step.amount} {step.asset}</span>
-                                    <span className="text-zinc-500">~${money(step.estimatedNotional)} to cash buffer</span>
+                                    <span className="font-mono text-zinc-700">{step.action.toUpperCase()} {step.amount} {step.asset}</span>
+                                    <span className="text-zinc-500 font-mono">${step.targetValueUsd?.toFixed(0)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -458,38 +470,15 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                         )}
 
                         {p.type === 'rebalance' && (
-                          <div className="space-y-2">
-                            <p className="text-zinc-600 text-[11.5px] leading-relaxed">{p.rationale}</p>
-                            {p.rebalanceTargets && (
-                              <div className="flex flex-wrap gap-1.5 pt-1">
-                                {Object.entries(p.rebalanceTargets)
-                                  .filter(([, w]) => Number(w) > 0)
-                                  .map(([asset, weight]) => (
-                                    <span
-                                      key={asset}
-                                      className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-mono text-[10px] rounded-md border border-indigo-100"
-                                    >
-                                      {asset}: {String(weight)}%
-                                    </span>
-                                  ))}
-                                {p.cashTargetPct && (
-                                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-mono text-[10px] rounded-md border border-emerald-100">
-                                    Cash: {p.cashTargetPct}%
-                                  </span>
-                                )}
-                              </div>
-                            )}
+                          <div className="space-y-1.5">
+                            <p className="text-zinc-600 text-[11px] leading-relaxed">{p.rationale}</p>
                             {p.rebalanceSteps && p.rebalanceSteps.length > 0 && (
-                              <div className="pt-1.5 border-t border-black/[0.04] space-y-1">
-                                <span className="text-[10px] font-mono uppercase text-zinc-400">
-                                  Execution Sequence ({p.rebalanceSteps.length} steps):
-                                </span>
+                              <div className="pt-1 border-t border-black/[0.04] space-y-1">
+                                <span className="text-[10px] font-mono uppercase text-zinc-400">Optimal Allocation Steps:</span>
                                 {p.rebalanceSteps.slice(0, 3).map((step: any, sIdx: number) => (
                                   <div key={sIdx} className="flex justify-between text-[11px]">
-                                    <span className={step.action === 'sell' ? 'font-semibold text-rose-600' : 'font-semibold text-emerald-600'}>
-                                      {step.action.toUpperCase()} {step.amount} {step.asset}
-                                    </span>
-                                    <span className="text-zinc-500">~${money(step.estimatedNotional)}</span>
+                                    <span className="font-mono text-zinc-700">{step.action.toUpperCase()} {step.amount} {step.asset}</span>
+                                    <span className="text-zinc-500 font-mono">${step.targetValueUsd?.toFixed(0)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -499,14 +488,14 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
                         {p.type === 'order' && (
                           <>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center text-[11.5px]">
                               <span className="text-zinc-500">Proposed Trade:</span>
-                              <strong className="uppercase font-semibold text-zinc-900">
+                              <strong className="uppercase font-semibold text-zinc-900 font-mono">
                                 {p.side} {p.amount} {p.asset}
                               </strong>
                             </div>
                             {p.rationale && (
-                              <p className="text-[11px] text-zinc-500 pt-1 border-t border-black/[0.04]">
+                              <p className="text-[11px] text-zinc-500 pt-1 border-t border-black/[0.04] leading-relaxed">
                                 {p.rationale}
                               </p>
                             )}
@@ -515,14 +504,14 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
                         {p.type === 'alert' && (
                           <>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center text-[11.5px]">
                               <span className="text-zinc-500">Trigger Target:</span>
-                              <strong className="font-semibold text-zinc-900">
+                              <strong className="font-semibold text-zinc-900 font-mono">
                                 {p.asset} {p.alertType} ${p.value}
                               </strong>
                             </div>
                             {p.rationale && (
-                              <p className="text-[11px] text-zinc-500 pt-1 border-t border-black/[0.04]">
+                              <p className="text-[11px] text-zinc-500 pt-1 border-t border-black/[0.04] leading-relaxed">
                                 {p.rationale}
                               </p>
                             )}
@@ -530,24 +519,16 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                         )}
                       </div>
 
-                      {/* Safety Gate Action Trigger Button */}
+                      {/* Safety Gate Action Trigger Button - Apple Obsidian Pill */}
                       <button
                         type="button"
                         onClick={() => handleActionClick(p, i)}
-                        className={`w-full py-2.5 px-3 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm ${
-                          p.type === 'emergency_defend'
-                            ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20'
-                            : p.type === 'deploy_strategy'
-                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'
-                            : p.type === 'smart_dca'
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
-                            : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
-                        }`}
+                        className="w-full py-2.5 px-4 text-xs font-semibold rounded-xl text-white bg-zinc-950 hover:bg-black active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 transition-all"
                       >
-                        <ShieldCheck className="w-4 h-4 text-amber-300" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                         <span>
                           {p.type === 'emergency_defend'
-                            ? 'Inspect Defense Protocol in Safety Gate'
+                            ? 'Inspect Defense in Safety Gate'
                             : p.type === 'deploy_strategy'
                             ? 'Authorize & Deploy Strategy Bot'
                             : p.type === 'smart_dca'
@@ -562,24 +543,18 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     </div>
                   )}
                 </div>
-
-                {isUser && (
-                  <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
-                    <User className="w-4 h-4" />
-                  </div>
-                )}
               </div>
             );
           })}
 
           {chatLoading && (
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-zinc-900 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Bot className="w-4 h-4" />
+            <div className="flex items-center gap-2.5">
+              <div className="w-6 h-6 rounded-xl bg-zinc-950 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                <Sparkles className="w-3 h-3 text-white" />
               </div>
-              <div className="px-4 py-3 bg-white/80 border border-black/[0.06] rounded-2xl text-xs text-zinc-500 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
-                Lumen Nexus is computing quantitative telemetry &amp; execution gates...
+              <div className="liquid-glass-subtle px-4 py-3 rounded-2xl text-xs text-zinc-500 flex items-center gap-2.5 border border-white/80 shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-950 animate-ping" />
+                <span>Nexus is computing quantitative telemetry &amp; risk bounds...</span>
               </div>
             </div>
           )}
@@ -589,18 +564,18 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
         {/* Floating Capabilities Hub Menu (Opened via '+') */}
         {capabilitiesOpen && (
-          <div className="p-4 bg-white/95 border-t border-black/[0.08] shadow-xl backdrop-blur-xl animate-in slide-in-from-bottom-2 duration-200">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                Nexus Agentic Capabilities Hub
+          <div className="mx-4 mb-2 p-4 liquid-glass-floating rounded-3xl border border-white/90 shadow-2xl space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-semibold text-zinc-900 tracking-tight flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-zinc-900" />
+                Nexus Capabilities
               </span>
               <button
                 type="button"
                 onClick={() => setCapabilitiesOpen(false)}
-                className="text-zinc-400 hover:text-zinc-700 text-xs font-semibold"
+                className="text-[11px] font-medium text-zinc-400 hover:text-zinc-800 transition-colors"
               >
-                Close
+                Done
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
@@ -611,17 +586,17 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     key={c.id}
                     type="button"
                     onClick={() => handleSend(c.prompt)}
-                    className="p-2.5 rounded-xl border border-black/[0.06] bg-white hover:bg-indigo-50/50 hover:border-indigo-200 text-left transition-all group flex flex-col justify-between"
+                    className="p-3 rounded-2xl bg-white/70 hover:bg-white/95 border border-black/[0.04] hover:border-black/[0.08] text-left transition-all group flex flex-col justify-between shadow-xs active:scale-[0.98]"
                   >
                     <div className="flex items-center gap-2 mb-1.5">
-                      <div className={`w-6 h-6 rounded-lg bg-gradient-to-br ${c.color} text-white flex items-center justify-center shadow-xs`}>
+                      <div className="w-6 h-6 rounded-lg bg-black/[0.04] text-zinc-800 flex items-center justify-center">
                         <Icon className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-[11.5px] font-semibold text-zinc-900 group-hover:text-indigo-700 leading-tight">
+                      <span className="text-xs font-semibold text-zinc-900 group-hover:text-black leading-tight">
                         {c.title}
                       </span>
                     </div>
-                    <p className="text-[10px] text-zinc-500 leading-tight line-clamp-2">{c.desc}</p>
+                    <p className="text-[10px] text-zinc-400 leading-tight line-clamp-2">{c.desc}</p>
                   </button>
                 );
               })}
@@ -631,13 +606,13 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
         {/* Quick Action Prompt Chips */}
         {!capabilitiesOpen && (
-          <div className="px-4 py-2 bg-white/50 border-t border-black/[0.04] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <div className="px-4 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             {quickPrompts.map((q, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => handleSend(q.prompt)}
-                className="flex-shrink-0 px-3 py-1.5 text-[11px] font-medium text-zinc-700 bg-white/90 hover:bg-white hover:text-indigo-600 border border-black/[0.08] rounded-full shadow-xs transition-all"
+                className="flex-shrink-0 px-3 py-1.5 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 bg-white/60 hover:bg-white/90 border border-black/[0.05] rounded-full shadow-xs transition-all active:scale-[0.98]"
               >
                 {q.label}
               </button>
@@ -645,46 +620,49 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
           </div>
         )}
 
-        {/* Input Bar with '+' Capabilities Button */}
-        <div className="p-4 border-t border-black/[0.06] bg-white/80">
+        {/* Input Bar with '+' Capabilities Button - Apple Floating Pill */}
+        <div className="p-4 pt-1 border-t border-black/[0.03] bg-white/30 backdrop-blur-md">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSend();
             }}
-            className="flex items-center gap-2"
+            className="flex items-center"
           >
-            <button
-              type="button"
-              onClick={() => setCapabilitiesOpen(!capabilitiesOpen)}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shadow-xs border ${
-                capabilitiesOpen
-                  ? 'bg-indigo-600 text-white border-indigo-600 rotate-45'
-                  : 'bg-white hover:bg-zinc-100 text-zinc-700 border-black/[0.08]'
-              }`}
-              title="Browse Agentic Capabilities"
-            >
-              <Plus className="w-4 h-4 transition-transform duration-200" />
-            </button>
-            <input
-              type="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Ask Nexus: stress tests, deploy bots, DCA, rebalance..."
-              className="flex-1 px-4 py-2.5 text-xs bg-white/95 border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 placeholder:text-zinc-400 transition-all shadow-xs"
-            />
-            <button
-              type="submit"
-              disabled={!text.trim() || chatLoading}
-              className="w-9 h-9 rounded-xl bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white flex items-center justify-center transition-all shadow-sm"
-              title="Send to Nexus"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+            <div className="w-full liquid-glass-floating rounded-full p-1.5 flex items-center gap-1.5 border border-white/90 shadow-[0_8px_32px_rgba(0,0,0,0.06)]">
+              <button
+                type="button"
+                onClick={() => setCapabilitiesOpen(!capabilitiesOpen)}
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                  capabilitiesOpen
+                    ? 'bg-zinc-900 text-white rotate-45'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.04]'
+                }`}
+                title="Browse Capabilities"
+              >
+                <Plus className="w-4 h-4 transition-transform duration-200" />
+              </button>
+              <input
+                type="text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Ask Nexus: models, stress-tests, bots..."
+                className="flex-1 bg-transparent border-none outline-none text-xs text-zinc-900 placeholder:text-zinc-400 px-3 py-1 font-normal"
+              />
+              <button
+                type="submit"
+                disabled={!text.trim() || chatLoading}
+                className="w-9 h-9 rounded-full bg-zinc-950 hover:bg-black disabled:opacity-20 text-white flex items-center justify-center transition-all active:scale-95 shadow-xs"
+                title="Send"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </form>
         </div>
       </aside>
     </div>
   );
 }
+
 

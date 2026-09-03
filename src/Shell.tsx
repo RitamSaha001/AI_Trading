@@ -328,14 +328,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            {/* AI Nexus Header Trigger */}
+            {/* AI Nexus Header Trigger - Apple Minimalist Pill */}
             <button
               type="button"
               onClick={() => (chatOpen ? closeChat() : openChat())}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-xl shadow-xs transition-all"
+              className="group relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold text-zinc-900 bg-white/70 hover:bg-white/95 border border-black/[0.08] hover:border-black/[0.15] rounded-full shadow-xs backdrop-blur-xl transition-all active:scale-95"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Nexus AI</span>
+              <div className="relative flex items-center justify-center">
+                <Sparkles className="w-3.5 h-3.5 text-zinc-900 transition-transform group-hover:rotate-12" />
+              </div>
+              <span className="tracking-tight hidden sm:inline">Nexus</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             </button>
           </div>
         </header>
@@ -366,39 +369,44 @@ export function Shell({ children }: { children: React.ReactNode }) {
         })}
       </nav>
 
-      {/* Floating Lumen Nexus Capsule Button (on desktop or tablet) */}
+      {/* Floating Lumen Nexus Capsule Button - Apple Siri Intelligence Capsule */}
       {(() => {
         const danger = senseMarketDanger(state, markets);
         return (
           <button
             type="button"
             onClick={() => (chatOpen ? closeChat() : openChat())}
-            className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-30 flex items-center gap-2.5 px-4 py-2.5 bg-zinc-950/95 text-white backdrop-blur-xl border border-white/20 rounded-full shadow-2xl hover:scale-105 transition-all duration-200 group"
+            className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-30 flex items-center gap-3 px-4 py-2.5 bg-zinc-950/90 text-white backdrop-blur-2xl border border-white/20 rounded-full shadow-[0_16px_40px_rgba(0,0,0,0.3)] hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 group"
           >
-            <div className="relative">
-              <Sparkles className="w-4 h-4 text-indigo-400 group-hover:rotate-12 transition-transform" />
-              {danger.dangerLevel === 'CRITICAL' ? (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              ) : danger.dangerLevel === 'HIGH' ? (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500" />
-              ) : (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500" />
-              )}
+            <div className="relative flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center relative z-10">
+                <Sparkles className="w-3.5 h-3.5 text-white group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="absolute inset-0 rounded-full siri-aurora-glow scale-150 pointer-events-none" />
             </div>
-            <span className="text-xs font-semibold">Lumen Nexus</span>
-            {danger.dangerLevel === 'CRITICAL' ? (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
-                Hazard Alert
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-semibold tracking-tight text-white flex items-center gap-1.5">
+                Nexus Intelligence
               </span>
-            ) : danger.dangerLevel === 'HIGH' ? (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                Elevated Risk
+              <span className="text-[10px] text-zinc-400 font-mono flex items-center gap-1">
+                {danger.dangerLevel === 'CRITICAL' ? (
+                  <span className="text-rose-400 font-semibold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                    Critical Hazard
+                  </span>
+                ) : danger.dangerLevel === 'HIGH' ? (
+                  <span className="text-amber-400 font-semibold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Elevated Risk
+                  </span>
+                ) : (
+                  <span className="text-emerald-400 font-medium flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Autonomous Quant
+                  </span>
+                )}
               </span>
-            ) : (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                Agentic Active
-              </span>
-            )}
+            </div>
           </button>
         );
       })()}
