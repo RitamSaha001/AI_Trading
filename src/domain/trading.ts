@@ -61,19 +61,23 @@ export function rsi(history: number[], period = 14): number {
 
 export type Indicators = { sma10: number | null; sma30: number | null; rsi: number; vol: number; pctChange: number; score: number };
 
-export function indicatorsFor(asset: Asset, state: PortfolioState): Indicators {
-  const history = state.prices[asset].history;
+export function indicatorsFromHistory(history: number[]): Indicators {
   const sma10 = sma(history, 10);
   const sma30 = sma(history, Math.min(30, history.length));
   const currentRsi = rsi(history);
   const vol = stdev(computeReturns(history.slice(-20)));
   const base = history.length > 25 ? history[history.length - 25] : history[0];
-  const pctChange = ((history[history.length - 1] - base) / base) * 100;
+  const latest = history[history.length - 1];
+  const pctChange = base ? ((latest - base) / base) * 100 : 0;
   let score = 0;
   if (sma10 !== null && sma30 !== null) score += sma10 > sma30 ? 1 : -1;
   if (currentRsi > 60) score += 1;
   else if (currentRsi < 40) score -= 1;
   return { sma10, sma30, rsi: currentRsi, vol, pctChange, score };
+}
+
+export function indicatorsFor(asset: Asset, state: PortfolioState): Indicators {
+  return indicatorsFromHistory(state.prices[asset].history);
 }
 
 export function portfolioValue(state: PortfolioState): number {
