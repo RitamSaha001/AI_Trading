@@ -3,7 +3,6 @@ import { TICK_MS } from '../domain/trading';
 import { usePortfolioStore } from '../store/portfolio';
 
 let timer: ReturnType<typeof setInterval> | null = null;
-let unsubscribe: (() => void) | null = null;
 let lastStatus: AppStateStatus = AppState.currentState;
 
 function start() {
@@ -19,16 +18,15 @@ function stop() {
 
 export function startMarketFeed(): () => void {
   start();
-  unsubscribe = AppState.addEventListener('change', (status) => {
+  const subscription = AppState.addEventListener('change', (status) => {
     lastStatus = status;
     if (status === 'active') start();
     else stop();
-  }).remove;
+  });
 
   return () => {
     stop();
-    unsubscribe?.();
-    unsubscribe = null;
+    subscription.remove();
   };
 }
 
