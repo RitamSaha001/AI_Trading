@@ -2,6 +2,7 @@ import { config } from '../config';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 // Unified Database Interface
 export interface DBClient {
@@ -27,7 +28,8 @@ class SQLiteClient implements DBClient {
     this.db.exec('PRAGMA foreign_keys = ON;');
   }
 
-  private txDepth = 0;
+  private txStorage = new AsyncLocalStorage<{ depth: number }>();
+  private txMutex: Promise<void> = Promise.resolve();
 
   async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
     const stmt = this.db.prepare(sql);
@@ -49,31 +51,48 @@ class SQLiteClient implements DBClient {
   }
 
   async transaction<T>(fn: (tx: DBClient) => Promise<T>): Promise<T> {
-    const depth = this.txDepth++;
-    const savepointName = `sp_${depth}`;
-    if (depth === 0) {
-      this.db.exec('BEGIN TRANSACTION;');
-    } else {
+    const parent = this.txStorage.getStore();
+    if (parent) {
+      // Nested transaction within the same async context -> SAVEPOINT
+      const depth = parent.depth + 1;
+      const savepointName = `sp_${depth}`;
       this.db.exec(`SAVEPOINT ${savepointName};`);
+      return this.txStorage.run({ depth }, async () => {
+        try {
+          const result = await fn(this);
+          this.db.exec(`RELEASE SAVEPOINT ${savepointName};`);
+          return result;
+        } catch (err) {
+          try { this.db.exec(`ROLLBACK TO SAVEPOINT ${savepointName};`); } catch {}
+          throw err;
+        }
+      });
     }
 
+    // Top-level transaction -> serialize via mutex to prevent concurrent BEGIN/COMMIT races
+    let releaseLock: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const prevMutex = this.txMutex;
+    this.txMutex = this.txMutex.then(() => lockPromise, () => lockPromise);
+
+    await prevMutex.catch(() => {});
+
     try {
-      const result = await fn(this);
-      if (depth === 0) {
-        this.db.exec('COMMIT;');
-      } else {
-        this.db.exec(`RELEASE SAVEPOINT ${savepointName};`);
-      }
-      return result;
-    } catch (err) {
-      if (depth === 0) {
-        this.db.exec('ROLLBACK;');
-      } else {
-        this.db.exec(`ROLLBACK TO SAVEPOINT ${savepointName};`);
-      }
-      throw err;
+      this.db.exec('BEGIN TRANSACTION;');
+      return await this.txStorage.run({ depth: 0 }, async () => {
+        try {
+          const result = await fn(this);
+          this.db.exec('COMMIT;');
+          return result;
+        } catch (err) {
+          try { this.db.exec('ROLLBACK;'); } catch {}
+          throw err;
+        }
+      });
     } finally {
-      this.txDepth--;
+      releaseLock!();
     }
   }
 
@@ -201,7 +220,67 @@ export function getDb(): DBClient {
     }
   }
 
+  // Run non-destructive migrations for newly added exact precision columns
+  runSchemaMigrations(activeDbClient);
+
   return activeDbClient;
+}
+
+/**
+ * Non-destructive, idempotent migrations for financial execution schema updates.
+ */
+function runSchemaMigrations(db: DBClient): void {
+  const migrations = [
+    // exchange_orders exact precision columns
+    `ALTER TABLE exchange_orders ADD COLUMN orig_qty_exact TEXT;`,
+    `ALTER TABLE exchange_orders ADD COLUMN executed_qty_exact TEXT DEFAULT '0';`,
+    `ALTER TABLE exchange_orders ADD COLUMN price_exact TEXT;`,
+    `ALTER TABLE exchange_orders ADD COLUMN avg_price_exact TEXT DEFAULT '0';`,
+    `ALTER TABLE exchange_orders ADD COLUMN cumulative_quote_exact TEXT DEFAULT '0';`,
+    `ALTER TABLE exchange_orders ADD COLUMN notional_exact TEXT;`,
+    `ALTER TABLE exchange_orders ADD COLUMN fee_exact TEXT DEFAULT '0';`,
+    `ALTER TABLE exchange_orders ADD COLUMN fee_asset TEXT;`,
+    `ALTER TABLE exchange_orders ADD COLUMN reserved_cash_minor BIGINT DEFAULT 0;`,
+    `ALTER TABLE exchange_orders ADD COLUMN reserved_qty_minor BIGINT DEFAULT 0;`,
+    // exchange_fills exact precision columns
+    `ALTER TABLE exchange_fills ADD COLUMN price_exact TEXT;`,
+    `ALTER TABLE exchange_fills ADD COLUMN qty_exact TEXT;`,
+    `ALTER TABLE exchange_fills ADD COLUMN commission_exact TEXT;`,
+    `ALTER TABLE exchange_fills ADD COLUMN quote_qty_exact TEXT;`,
+    // order_reservations table
+    `CREATE TABLE IF NOT EXISTS order_reservations (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      account_mode TEXT NOT NULL DEFAULT 'live',
+      asset_or_currency TEXT NOT NULL,
+      amount_minor BIGINT NOT NULL CHECK (amount_minor >= 0),
+      status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'PARTIALLY_CONSUMED', 'CONSUMED', 'RELEASED')),
+      consumed_minor BIGINT NOT NULL DEFAULT 0 CHECK (consumed_minor >= 0),
+      released_minor BIGINT NOT NULL DEFAULT 0 CHECK (released_minor >= 0),
+      created_at BIGINT NOT NULL,
+      updated_at BIGINT NOT NULL,
+      UNIQUE(order_id, account_id),
+      CHECK (consumed_minor + released_minor <= amount_minor)
+    );`,
+    `ALTER TABLE order_reservations ADD COLUMN account_mode TEXT DEFAULT 'live';`,
+    `CREATE INDEX IF NOT EXISTS idx_order_reservations_order ON order_reservations(order_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_order_reservations_user ON order_reservations(user_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_order_reservations_status ON order_reservations(status);`,
+  ];
+
+  for (const sql of migrations) {
+    try {
+      if ('execRaw' in (db as any)) {
+        (db as any).execRaw(sql);
+      } else {
+        db.execute(sql);
+      }
+    } catch {
+      // Column or table already exists; silently ignore
+    }
+  }
 }
 
 /**

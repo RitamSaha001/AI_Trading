@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS exchange_orders (
   symbol TEXT NOT NULL,
   side TEXT NOT NULL, -- 'BUY' | 'SELL'
   type TEXT NOT NULL, -- 'LIMIT' | 'MARKET' | 'STOP_LOSS_LIMIT'
-  status TEXT NOT NULL, -- 'CREATED' | 'VALIDATING' | 'RISK_APPROVED' | 'SUBMITTING' | 'OPEN' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELED' | 'REJECTED' | 'EXPIRED' | 'UNKNOWN' | 'RECONCILED'
+  status TEXT NOT NULL, -- 'CREATED' | 'VALIDATING' | 'RISK_APPROVED' | 'SUBMITTING' | 'OPEN' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCEL_REQUESTED' | 'CANCELLED' | 'CANCELED' | 'REJECTED' | 'EXPIRED' | 'UNKNOWN' | 'RECONCILING' | 'RECONCILED' | 'FAILED'
   orig_qty REAL NOT NULL,
   executed_qty REAL NOT NULL DEFAULT 0.0,
   price REAL NOT NULL,
@@ -197,6 +197,16 @@ CREATE TABLE IF NOT EXISTS exchange_orders (
   fee REAL NOT NULL DEFAULT 0.0,
   reserved_cash REAL NOT NULL DEFAULT 0.0,
   reserved_qty REAL NOT NULL DEFAULT 0.0,
+  orig_qty_exact TEXT,
+  executed_qty_exact TEXT DEFAULT '0',
+  price_exact TEXT,
+  avg_price_exact TEXT DEFAULT '0',
+  cumulative_quote_exact TEXT DEFAULT '0',
+  notional_exact TEXT,
+  fee_exact TEXT DEFAULT '0',
+  fee_asset TEXT,
+  reserved_cash_minor BIGINT NOT NULL DEFAULT 0,
+  reserved_qty_minor BIGINT NOT NULL DEFAULT 0,
   idempotency_key TEXT UNIQUE NOT NULL,
   reject_reason TEXT,
   created_at BIGINT NOT NULL,
@@ -206,6 +216,27 @@ CREATE INDEX IF NOT EXISTS idx_exchange_orders_client_id ON exchange_orders(clie
 CREATE INDEX IF NOT EXISTS idx_exchange_orders_user ON exchange_orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_exchange_orders_status ON exchange_orders(status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_orders_user_idemp ON exchange_orders(user_id, idempotency_key);
+
+-- Authoritative Order Reservations (Atomic & Invariant Protected)
+CREATE TABLE IF NOT EXISTS order_reservations (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  account_mode TEXT NOT NULL DEFAULT 'live',
+  asset_or_currency TEXT NOT NULL,
+  amount_minor BIGINT NOT NULL CHECK (amount_minor >= 0),
+  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'PARTIALLY_CONSUMED', 'CONSUMED', 'RELEASED')),
+  consumed_minor BIGINT NOT NULL DEFAULT 0 CHECK (consumed_minor >= 0),
+  released_minor BIGINT NOT NULL DEFAULT 0 CHECK (released_minor >= 0),
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE(order_id, account_id),
+  CHECK (consumed_minor + released_minor <= amount_minor)
+);
+CREATE INDEX IF NOT EXISTS idx_order_reservations_order ON order_reservations(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_reservations_user ON order_reservations(user_id);
+CREATE INDEX IF NOT EXISTS idx_order_reservations_status ON order_reservations(status);
 
 -- Individual Fills for Partial Fills Accounting
 CREATE TABLE IF NOT EXISTS exchange_fills (
@@ -218,6 +249,10 @@ CREATE TABLE IF NOT EXISTS exchange_fills (
   commission REAL NOT NULL,
   commission_asset TEXT NOT NULL,
   quote_qty REAL NOT NULL,
+  price_exact TEXT,
+  qty_exact TEXT,
+  commission_exact TEXT,
+  quote_qty_exact TEXT,
   ledger_processed BOOLEAN NOT NULL DEFAULT 0,
   ledger_transaction_id TEXT,
   executed_at BIGINT NOT NULL,

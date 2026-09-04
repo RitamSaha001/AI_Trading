@@ -3,6 +3,9 @@ import { config } from '../config';
 import { AuditService } from './auditService';
 import { ServerRiskEngine } from './riskEngine';
 import { LedgerService } from './ledgerService';
+import { ExactDecimal, fromCashMinor } from './precision';
+import { SymbolRulesService } from './symbolRules';
+import { OrderStateMachine } from './orderStateMachine';
 import crypto from 'node:crypto';
 
 export interface BinanceCredentials {
@@ -490,10 +493,16 @@ export class BinanceGateway {
     if (input.type === 'LIMIT' && (!input.price || input.price <= 0)) {
       return 'Price is required and must be positive for LIMIT orders';
     }
-    const price = input.price || 50000;
-    const notional = input.quantity * price;
-    if (notional < this.MIN_NOTIONAL_USDT) {
-      return `Order notional $${notional.toFixed(2)} is below minimum $${this.MIN_NOTIONAL_USDT}`;
+    try {
+      SymbolRulesService.validateAndNormalize({
+        symbol: input.symbol,
+        side: input.side,
+        type: input.type,
+        quantity: input.quantity,
+        price: input.price,
+      });
+    } catch (err: any) {
+      return err.message;
     }
     return null;
   }
@@ -550,8 +559,18 @@ export class BinanceGateway {
     }
 
     const clientOrderId = this.generateClientOrderId(input.userId, input.idempotencyKey);
-    const orderPrice = input.price || 50000;
-    const notional = input.quantity * orderPrice;
+    const normalized = SymbolRulesService.validateAndNormalize({
+      symbol: input.symbol,
+      side: input.side,
+      type: input.type,
+      quantity: input.quantity,
+      price: input.price,
+    });
+
+    const orderPrice = Number(normalized.priceStr);
+    const notional = Number(normalized.notionalStr);
+
+    OrderStateMachine.validateTransition('CREATED', 'RESERVING', clientOrderId);
 
     // 3. Server Risk Policy Validation
     const riskDecision = await ServerRiskEngine.evaluateTrade({
@@ -567,6 +586,7 @@ export class BinanceGateway {
     });
 
     if (!riskDecision.approved) {
+      OrderStateMachine.validateTransition('RESERVING', 'REJECTED', clientOrderId);
       const now = Date.now();
       const rejectedOrder: OrderStateRecord = {
         id: clientOrderId,
@@ -594,8 +614,9 @@ export class BinanceGateway {
       await db.execute(
         `INSERT INTO exchange_orders (
           id, user_id, client_order_id, symbol, side, type, status, orig_qty,
-          price, quote_asset, notional, idempotency_key, reject_reason, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'REJECTED', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          orig_qty_exact, price, price_exact, quote_asset, notional, notional_exact,
+          idempotency_key, reject_reason, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'REJECTED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           rejectedOrder.id,
           rejectedOrder.userId,
@@ -604,9 +625,12 @@ export class BinanceGateway {
           rejectedOrder.side,
           rejectedOrder.type,
           rejectedOrder.origQty,
+          normalized.quantityStr,
           rejectedOrder.price,
+          normalized.priceStr,
           rejectedOrder.quoteAsset,
           rejectedOrder.notional,
+          normalized.notionalStr,
           input.idempotencyKey,
           rejectedOrder.rejectReason,
           now,
@@ -618,30 +642,35 @@ export class BinanceGateway {
     }
 
     // 4. Quote-Asset Specific Liquidity & Atomic Reservation
-    const reservedCashMinor = input.side === 'BUY' ? Math.round(notional * 1.002 * 100) : 0; // notional + 0.2% fee buffer
-    const reservedQtyMinor = input.side === 'SELL' ? Math.round(input.quantity * 1e8) : 0;
+    const reservedCashMinor = input.side === 'BUY'
+      ? normalized.notional.mul(ExactDecimal.from('1.002')).toMinor(2)
+      : 0n;
+    const reservedQtyMinor = input.side === 'SELL'
+      ? normalized.quantity.toMinor(8)
+      : 0n;
 
     try {
       if (input.side === 'BUY') {
-        await LedgerService.reserveBalance({
+        await LedgerService.reserveOrderFunds({
           userId: input.userId,
+          orderId: clientOrderId,
           accountMode: 'live',
           accountType: 'trading_allocated',
           assetOrCurrency: input.quoteAsset,
           amountMinor: reservedCashMinor,
-          referenceId: clientOrderId,
         });
       } else {
-        await LedgerService.reserveBalance({
+        await LedgerService.reserveOrderFunds({
           userId: input.userId,
+          orderId: clientOrderId,
           accountMode: 'live',
           accountType: 'crypto_holdings',
           assetOrCurrency: input.asset,
           amountMinor: reservedQtyMinor,
-          referenceId: clientOrderId,
         });
       }
     } catch (reserveErr: any) {
+      OrderStateMachine.validateTransition('RESERVING', 'REJECTED', clientOrderId);
       const now = Date.now();
       const rejectedOrder: OrderStateRecord = {
         id: clientOrderId,
@@ -669,8 +698,9 @@ export class BinanceGateway {
       await db.execute(
         `INSERT INTO exchange_orders (
           id, user_id, client_order_id, symbol, side, type, status, orig_qty,
-          price, quote_asset, notional, idempotency_key, reject_reason, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'REJECTED', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          orig_qty_exact, price, price_exact, quote_asset, notional, notional_exact,
+          idempotency_key, reject_reason, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'REJECTED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           rejectedOrder.id,
           rejectedOrder.userId,
@@ -679,9 +709,12 @@ export class BinanceGateway {
           rejectedOrder.side,
           rejectedOrder.type,
           rejectedOrder.origQty,
+          normalized.quantityStr,
           rejectedOrder.price,
+          normalized.priceStr,
           rejectedOrder.quoteAsset,
           rejectedOrder.notional,
+          normalized.notionalStr,
           input.idempotencyKey,
           rejectedOrder.rejectReason,
           now,
@@ -691,13 +724,17 @@ export class BinanceGateway {
       return rejectedOrder;
     }
 
+    OrderStateMachine.validateTransition('RESERVING', 'RESERVED', clientOrderId);
+    OrderStateMachine.validateTransition('RESERVED', 'SUBMITTING', clientOrderId);
+
     const now = Date.now();
     await db.execute(
       `INSERT INTO exchange_orders (
         id, user_id, client_order_id, symbol, side, type, status, orig_qty,
-        price, quote_asset, notional, reserved_cash, reserved_qty, idempotency_key,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        orig_qty_exact, price, price_exact, quote_asset, notional, notional_exact,
+        reserved_cash, reserved_cash_minor, reserved_qty, reserved_qty_minor,
+        idempotency_key, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         clientOrderId,
         input.userId,
@@ -706,11 +743,16 @@ export class BinanceGateway {
         input.side,
         input.type,
         input.quantity,
+        normalized.quantityStr,
         orderPrice,
+        normalized.priceStr,
         input.quoteAsset,
         notional,
-        reservedCashMinor / 100,
-        reservedQtyMinor / 1e8,
+        normalized.notionalStr,
+        Number(reservedCashMinor) / 100,
+        Number(reservedCashMinor),
+        Number(reservedQtyMinor) / 1e8,
+        Number(reservedQtyMinor),
         input.idempotencyKey,
         now,
         now,
@@ -723,67 +765,87 @@ export class BinanceGateway {
 
       // Successfully acknowledged by exchange
       const finalStatus = exchangeResponse.status === 'FILLED' ? 'FILLED' : 'OPEN';
+      OrderStateMachine.validateTransition('SUBMITTING', finalStatus, clientOrderId);
+
       const executedQty = exchangeResponse.executedQty || (finalStatus === 'FILLED' ? input.quantity : 0);
       const avgPrice = exchangeResponse.avgPrice || orderPrice;
 
-      await db.execute(
-        `UPDATE exchange_orders SET
-          status = ?, exchange_order_id = ?, executed_qty = ?, avg_price = ?,
-          cumulative_quote_qty = ?, updated_at = ?
-         WHERE client_order_id = ?`,
-        [
-          finalStatus,
-          exchangeResponse.exchangeOrderId || `ex_${Date.now()}`,
-          executedQty,
-          avgPrice,
-          executedQty * avgPrice,
-          Date.now(),
-          clientOrderId,
-        ]
-      );
+      const executedQtyDec = ExactDecimal.from(executedQty);
+      const avgPriceDec = ExactDecimal.from(avgPrice);
+      const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
+      const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
 
-      // Record any fills and settle directly into the authoritative financial ledger
-      if (executedQty > 0) {
-        const tradeId = `trd_${clientOrderId}_${executedQty}`;
-        const fillId = `fill_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-        const feeAmount = executedQty * avgPrice * 0.00075;
-
-        await db.execute(
-          `INSERT INTO exchange_fills (
-            id, order_id, exchange_trade_id, symbol, price, qty, commission,
-            commission_asset, quote_qty, executed_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      // Atomic ACID transaction for status update, fill recording, and ledger settlement
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          `UPDATE exchange_orders SET
+            status = ?, exchange_order_id = ?, executed_qty = ?, executed_qty_exact = ?,
+            avg_price = ?, avg_price_exact = ?, cumulative_quote_qty = ?, cumulative_quote_exact = ?,
+            updated_at = ?
+           WHERE client_order_id = ?`,
           [
-            fillId,
-            clientOrderId,
-            tradeId,
-            input.symbol,
-            avgPrice,
+            finalStatus,
+            exchangeResponse.exchangeOrderId || `ex_${Date.now()}`,
             executedQty,
-            feeAmount,
-            input.quoteAsset,
+            executedQtyDec.toString(),
+            avgPrice,
+            avgPriceDec.toString(),
             executedQty * avgPrice,
+            notionalSettledDec.toString(),
             Date.now(),
+            clientOrderId,
           ]
         );
 
-        // Authoritative double-entry ledger settlement
-        await LedgerService.processFill({
-          userId: input.userId,
-          accountMode: 'live',
-          orderId: clientOrderId,
-          fillId: tradeId,
-          symbol: input.symbol,
-          baseAsset: input.asset,
-          quoteAsset: input.quoteAsset,
-          side: input.side,
-          price: avgPrice,
-          quantity: executedQty,
-          fee: feeAmount,
-          feeAsset: input.quoteAsset,
-          executedAt: Date.now(),
-        });
-      }
+        if (executedQty > 0) {
+          const tradeId = `trd_${clientOrderId}_${executedQty}`;
+          const fillId = `fill_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+          await tx.execute(
+            `INSERT INTO exchange_fills (
+              id, order_id, exchange_trade_id, symbol, price, price_exact, qty, qty_exact,
+              commission, commission_exact, commission_asset, quote_qty, quote_qty_exact, executed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              fillId,
+              clientOrderId,
+              tradeId,
+              input.symbol,
+              avgPrice,
+              avgPriceDec.toString(),
+              executedQty,
+              executedQtyDec.toString(),
+              Number(feeAmountDec.toMinor(2)) / 100,
+              feeAmountDec.toString(),
+              input.quoteAsset,
+              executedQty * avgPrice,
+              notionalSettledDec.toString(),
+              Date.now(),
+            ]
+          );
+
+          // Authoritative double-entry ledger settlement
+          await LedgerService.processFill({
+            userId: input.userId,
+            accountMode: 'live',
+            orderId: clientOrderId,
+            fillId: tradeId,
+            symbol: input.symbol,
+            baseAsset: input.asset,
+            quoteAsset: input.quoteAsset,
+            side: input.side,
+            price: avgPriceDec,
+            quantity: executedQtyDec,
+            fee: feeAmountDec,
+            feeAsset: input.quoteAsset,
+            executedAt: Date.now(),
+          });
+        }
+
+        if (finalStatus === 'FILLED') {
+          await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx });
+        }
+      });
 
       await AuditService.logEvent({
         userId: input.userId,
@@ -815,6 +877,7 @@ export class BinanceGateway {
         err.message?.includes('Insufficient balance');
 
       if (isExplicitRejection) {
+        OrderStateMachine.validateTransition('SUBMITTING', 'REJECTED', clientOrderId);
         // Explicit rejection: safely release reservation
         if (input.side === 'BUY' && reservedCashMinor > 0) {
           await LedgerService.releaseReservation({
@@ -835,6 +898,7 @@ export class BinanceGateway {
             referenceId: clientOrderId,
           });
         }
+        await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});
 
         await db.execute(
           `UPDATE exchange_orders SET status = 'REJECTED', reserved_cash = 0, reserved_qty = 0, reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
@@ -848,8 +912,9 @@ export class BinanceGateway {
         return this.mapOrderRecord(rejected);
       }
 
-      // Timeout or Network Failure Handling
-      // Mark UNKNOWN and query Binance for reconciliation
+      // Timeout or Network Failure Handling:
+      // Transition to UNKNOWN state without releasing capital reservations
+      OrderStateMachine.validateTransition('SUBMITTING', 'UNKNOWN', clientOrderId);
       console.warn(`[BinanceGateway] Order submission ambiguous network state for ${clientOrderId}:`, err.message);
 
       await db.execute(
@@ -866,55 +931,83 @@ export class BinanceGateway {
         result: 'BLOCKED',
       });
 
-      // Immediate reconciliation check
+      // Immediate reconciliation check against venue
       const recResult = await this.reconcileUnknownOrder(clientOrderId, input.symbol, input.userId);
       if (recResult.found) {
         const recStatus = recResult.status === 'FILLED' ? 'FILLED' : 'OPEN';
+        OrderStateMachine.validateTransition('UNKNOWN', recStatus, clientOrderId);
         const executedQty = recResult.executedQty || 0;
-        await db.execute(
-          `UPDATE exchange_orders SET status = ?, exchange_order_id = ?, executed_qty = ?, updated_at = ? WHERE client_order_id = ?`,
-          [recStatus, recResult.exchangeOrderId || `ex_rec_${Date.now()}`, executedQty, Date.now(), clientOrderId]
-        );
+        const avgPrice = recResult.avgPrice || orderPrice;
+        const executedQtyDec = ExactDecimal.from(executedQty);
+        const avgPriceDec = ExactDecimal.from(avgPrice);
+        const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
+        const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
 
-        if (executedQty > 0) {
-          const tradeId = `trd_rec_${clientOrderId}_${executedQty}`;
-          const feeAmount = executedQty * (recResult.avgPrice || orderPrice) * 0.00075;
-          await db.execute(
-            `INSERT INTO exchange_fills (
-              id, order_id, exchange_trade_id, symbol, price, qty, commission,
-              commission_asset, quote_qty, executed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(order_id, exchange_trade_id) DO NOTHING`,
+        await db.transaction(async (tx) => {
+          await tx.execute(
+            `UPDATE exchange_orders SET
+              status = ?, exchange_order_id = ?, executed_qty = ?, executed_qty_exact = ?,
+              avg_price = ?, avg_price_exact = ?, cumulative_quote_qty = ?, cumulative_quote_exact = ?,
+              updated_at = ?
+             WHERE client_order_id = ?`,
             [
-              `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
-              clientOrderId,
-              tradeId,
-              input.symbol,
-              recResult.avgPrice || orderPrice,
+              recStatus,
+              recResult.exchangeOrderId || `ex_rec_${Date.now()}`,
               executedQty,
-              feeAmount,
-              input.quoteAsset,
-              executedQty * (recResult.avgPrice || orderPrice),
+              executedQtyDec.toString(),
+              avgPrice,
+              avgPriceDec.toString(),
+              executedQty * avgPrice,
+              notionalSettledDec.toString(),
               Date.now(),
+              clientOrderId,
             ]
           );
 
-          await LedgerService.processFill({
-            userId: input.userId,
-            accountMode: 'live',
-            orderId: clientOrderId,
-            fillId: tradeId,
-            symbol: input.symbol,
-            baseAsset: input.asset,
-            quoteAsset: input.quoteAsset,
-            side: input.side,
-            price: recResult.avgPrice || orderPrice,
-            quantity: executedQty,
-            fee: feeAmount,
-            feeAsset: input.quoteAsset,
-            executedAt: Date.now(),
-          });
-        }
+          if (executedQty > 0) {
+            const tradeId = `trd_rec_${clientOrderId}_${executedQty}`;
+            const fillId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+            await tx.execute(
+              `INSERT INTO exchange_fills (
+                id, order_id, exchange_trade_id, symbol, price, price_exact, qty, qty_exact,
+                commission, commission_exact, commission_asset, quote_qty, quote_qty_exact, executed_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(order_id, exchange_trade_id) DO NOTHING`,
+              [
+                fillId,
+                clientOrderId,
+                tradeId,
+                input.symbol,
+                avgPrice,
+                avgPriceDec.toString(),
+                executedQty,
+                executedQtyDec.toString(),
+                Number(feeAmountDec.toMinor(2)) / 100,
+                feeAmountDec.toString(),
+                input.quoteAsset,
+                executedQty * avgPrice,
+                notionalSettledDec.toString(),
+                Date.now(),
+              ]
+            );
+
+            await LedgerService.processFill({
+              userId: input.userId,
+              accountMode: 'live',
+              orderId: clientOrderId,
+              fillId: tradeId,
+              symbol: input.symbol,
+              baseAsset: input.asset,
+              quoteAsset: input.quoteAsset,
+              side: input.side,
+              price: avgPriceDec,
+              quantity: executedQtyDec,
+              fee: feeAmountDec,
+              feeAsset: input.quoteAsset,
+              executedAt: Date.now(),
+            });
+          }
+        });
 
         const reconciled = await db.queryOne<any>(
           `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
@@ -923,6 +1016,7 @@ export class BinanceGateway {
         return this.mapOrderRecord(reconciled);
       } else if (recResult.notFoundConfirmed) {
         // Order confirmed NOT on Binance: release reservations and mark REJECTED
+        OrderStateMachine.validateTransition('UNKNOWN', 'REJECTED', clientOrderId);
         if (input.side === 'BUY' && reservedCashMinor > 0) {
           await LedgerService.releaseReservation({
             userId: input.userId,
@@ -942,6 +1036,7 @@ export class BinanceGateway {
             referenceId: clientOrderId,
           });
         }
+        await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});
 
         await db.execute(
           `UPDATE exchange_orders SET status = 'REJECTED', reserved_cash = 0, reserved_qty = 0, reject_reason = 'Order not received by exchange (network timeout confirmed)', updated_at = ? WHERE client_order_id = ?`,
@@ -1130,41 +1225,65 @@ export class BinanceGateway {
 
     if (!order) throw new Error(`Order ${clientOrderId} not found`);
 
-    // In test environment, resolve cleanly
+    const currentStatus = OrderStateMachine.normalizeStatus(order.status);
     const reconciledStatus = 'FILLED';
+    OrderStateMachine.validateTransition(currentStatus, reconciledStatus, clientOrderId);
+
     const now = Date.now();
-    const executedQty = Number(order.orig_qty);
-    const avgPrice = Number(order.price);
+    const executedQtyDec = order.orig_qty_exact ? ExactDecimal.from(order.orig_qty_exact) : ExactDecimal.from(order.orig_qty);
+    const avgPriceDec = order.price_exact ? ExactDecimal.from(order.price_exact) : ExactDecimal.from(order.price);
+    const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
+    const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
 
-    await db.execute(
-      `UPDATE exchange_orders SET status = ?, executed_qty = ?, avg_price = ?, cumulative_quote_qty = ?, updated_at = ? WHERE client_order_id = ?`,
-      [reconciledStatus, executedQty, avgPrice, executedQty * avgPrice, now, clientOrderId]
-    );
-
-    // Record fill and settle into authoritative ledger
+    const executedQty = executedQtyDec.toNumber();
+    const avgPrice = avgPriceDec.toNumber();
     const tradeId = `trd_rec_${clientOrderId}`;
-    const feeAmount = executedQty * avgPrice * 0.00075;
     const baseAsset = order.symbol.replace(order.quote_asset, '');
 
-    await db.execute(
-      `INSERT INTO exchange_fills (
-        id, order_id, exchange_trade_id, symbol, price, qty, commission,
-        commission_asset, quote_qty, executed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(order_id, exchange_trade_id) DO NOTHING`,
-      [
-        `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
-        clientOrderId,
-        tradeId,
-        order.symbol,
-        avgPrice,
-        executedQty,
-        feeAmount,
-        order.quote_asset,
-        executedQty * avgPrice,
-        now,
-      ]
-    );
+    await db.transaction(async (tx) => {
+      await tx.execute(
+        `UPDATE exchange_orders SET
+          status = ?, executed_qty = ?, executed_qty_exact = ?, avg_price = ?, avg_price_exact = ?,
+          cumulative_quote_qty = ?, cumulative_quote_exact = ?, updated_at = ?
+         WHERE client_order_id = ?`,
+        [
+          reconciledStatus,
+          executedQty,
+          executedQtyDec.toString(),
+          avgPrice,
+          avgPriceDec.toString(),
+          executedQty * avgPrice,
+          notionalSettledDec.toString(),
+          now,
+          clientOrderId,
+        ]
+      );
+
+      const fillId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      await tx.execute(
+        `INSERT INTO exchange_fills (
+          id, order_id, exchange_trade_id, symbol, price, price_exact, qty, qty_exact,
+          commission, commission_exact, commission_asset, quote_qty, quote_qty_exact, executed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(order_id, exchange_trade_id) DO NOTHING`,
+        [
+          fillId,
+          clientOrderId,
+          tradeId,
+          order.symbol,
+          avgPrice,
+          avgPriceDec.toString(),
+          executedQty,
+          executedQtyDec.toString(),
+          Number(feeAmountDec.toMinor(2)) / 100,
+          feeAmountDec.toString(),
+          order.quote_asset,
+          executedQty * avgPrice,
+          notionalSettledDec.toString(),
+          now,
+        ]
+      );
+    });
 
     try {
       await LedgerService.processFill({
@@ -1176,9 +1295,9 @@ export class BinanceGateway {
         baseAsset,
         quoteAsset: order.quote_asset,
         side: order.side,
-        price: avgPrice,
-        quantity: executedQty,
-        fee: feeAmount,
+        price: avgPriceDec,
+        quantity: executedQtyDec,
+        fee: feeAmountDec,
         feeAsset: order.quote_asset,
         executedAt: now,
       });
@@ -1215,9 +1334,12 @@ export class BinanceGateway {
       throw new Error(`Order ${clientOrderId} not found or unauthorized`);
     }
 
-    if (['CANCELED', 'FILLED', 'REJECTED', 'EXPIRED'].includes(order.status)) {
+    const currentNormalized = OrderStateMachine.normalizeStatus(order.status);
+    if (['CANCELED', 'CANCELLED', 'FILLED', 'REJECTED', 'EXPIRED'].includes(currentNormalized)) {
       return this.mapOrderRecord(order);
     }
+
+    OrderStateMachine.validateTransition(order.status, 'CANCELLED', clientOrderId);
 
     const creds = await this.getCredentials(userId);
 
@@ -1273,6 +1395,7 @@ export class BinanceGateway {
         referenceId: clientOrderId,
       });
     }
+    await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});
 
     const now = Date.now();
     await db.execute(

@@ -2,6 +2,7 @@ import { getDb } from '../db';
 import { AuditService, logger } from './auditService';
 import { BinanceGateway } from './binanceGateway';
 import { LedgerService } from './ledgerService';
+import { ExactDecimal } from './precision';
 import crypto from 'node:crypto';
 
 export interface ReconciliationResult {
@@ -13,8 +14,22 @@ export interface ReconciliationResult {
   durationMs: number;
 }
 
+export type DiscrepancyClassification = 'EXACT_MATCH' | 'WITHIN_PRECISION' | 'MATERIAL_MISMATCH';
+
 export class ReconciliationWorker {
   private static isRunning = false;
+
+  /**
+   * Classifies difference between local ledger and exchange state.
+   */
+  static classifyDiscrepancy(
+    diff: ExactDecimal,
+    tolerance: ExactDecimal = ExactDecimal.from('0.00000001')
+  ): DiscrepancyClassification {
+    if (diff.isZero()) return 'EXACT_MATCH';
+    if (diff.lte(tolerance)) return 'WITHIN_PRECISION';
+    return 'MATERIAL_MISMATCH';
+  }
 
   /**
    * Executes an authoritative reconciliation run against exchange venues and local ledger projections.
@@ -82,7 +97,7 @@ export class ReconciliationWorker {
 
       for (const ord of openOrders) {
         ordersChecked++;
-        // Check for stale orders (e.g. older than 24h still in submitting)
+        // Check for stale orders (e.g. older than 10 minutes still in submitting)
         if (ord.status === 'SUBMITTING' && Date.now() - Number(ord.created_at) > 10 * 60 * 1000) {
           mismatchesFound++;
           await this.recordMismatch({
@@ -98,9 +113,11 @@ export class ReconciliationWorker {
         }
       }
 
-      // 3. Balance Sanity & Negative Balance Check
+      // 3. Balance Sanity & Negative Balance Check (client cash and asset accounts must strictly be non-negative)
       const ledgerAccounts = await db.query<any>(
-        `SELECT * FROM ledger_accounts ${userId ? 'WHERE user_id = ?' : ''}`,
+        `SELECT * FROM ledger_accounts 
+         WHERE account_type IN ('sovereign_cash', 'user_vault', 'trading_allocated', 'crypto_holdings')
+         ${userId ? 'AND user_id = ?' : ''}`,
         userId ? [userId] : []
       );
 
@@ -165,18 +182,18 @@ export class ReconciliationWorker {
   }
 
   /**
-   * Reconciles local authoritative balances against exchange balances.
+   * Reconciles local authoritative balances against exchange balances using ExactDecimal.
    * Discrepancies generate auditable RECONCILIATION_MISMATCH incidents without silently overwriting the ledger.
    */
   static async reconcileBalancesAgainstExchange(
     userId: string,
     runId: string = `rec_run_${Date.now()}`,
-    mockExchangeBalances?: Record<string, number>
+    mockExchangeBalances?: Record<string, number | string>
   ): Promise<number> {
     let mismatches = 0;
     const localProjection = await LedgerService.getAuthoritativeProjection(userId, 'live');
 
-    let exchangeBalances: Record<string, number> | null = mockExchangeBalances || null;
+    let exchangeBalances: Record<string, number | string> | null = mockExchangeBalances || null;
 
     if (!exchangeBalances) {
       const creds = await BinanceGateway.getCredentials(userId);
@@ -203,7 +220,7 @@ export class ReconciliationWorker {
             for (const b of data.balances || []) {
               const free = parseFloat(b.free || '0');
               if (free > 0) {
-                exchangeBalances[b.asset] = free;
+                exchangeBalances[b.asset] = b.free;
               }
             }
           }
@@ -218,32 +235,41 @@ export class ReconciliationWorker {
     }
 
     // 1. Reconcile Cash
-    const localCash = localProjection.cash.available;
+    const localCashDec = ExactDecimal.from(localProjection.cash.available);
     const quoteAsset = localProjection.cash.currency || 'USDT';
-    const exchangeCash = exchangeBalances[quoteAsset] ?? 0;
-    const cashDiff = Math.abs(localCash - exchangeCash);
+    const rawExchangeCash = exchangeBalances[quoteAsset] ?? '0';
+    const exchangeCashDec = ExactDecimal.from(rawExchangeCash);
+    const cashDiffDec = localCashDec.sub(exchangeCashDec).abs();
 
-    if (cashDiff > 0.01) {
+    const cashTolerance = ExactDecimal.from('0.01'); // 1 cent tolerance
+    const cashClassification = this.classifyDiscrepancy(cashDiffDec, cashTolerance);
+
+    if (cashClassification === 'MATERIAL_MISMATCH') {
       mismatches++;
+      const isCritical = cashDiffDec.gt(ExactDecimal.from('100.00'));
       await this.recordMismatch({
         runId,
         userId,
         entityType: 'BALANCE',
         entityId: quoteAsset,
-        severity: cashDiff > 100 ? 'CRITICAL' : 'HIGH',
-        localState: { availableCash: localCash, currency: quoteAsset },
-        exchangeState: { availableCash: exchangeCash, diff: cashDiff },
-        notes: `RECONCILIATION_MISMATCH: Cash discrepancy of ${cashDiff.toFixed(2)} ${quoteAsset} detected between local ledger and exchange venue.`,
+        severity: isCritical ? 'CRITICAL' : 'HIGH',
+        localState: { availableCash: localCashDec.toString(), currency: quoteAsset },
+        exchangeState: { availableCash: exchangeCashDec.toString(), diff: cashDiffDec.toString() },
+        notes: `RECONCILIATION_MISMATCH: Cash discrepancy of ${cashDiffDec.toFixed(2)} ${quoteAsset} detected between local ledger and exchange venue.`,
       });
     }
 
-    // 2. Reconcile Crypto Positions
-    for (const [asset, pos] of Object.entries(localProjection.positions)) {
-      const localUnits = pos.availableQuantity;
-      const exchangeUnits = exchangeBalances[asset] ?? 0;
-      const assetDiff = Math.abs(localUnits - exchangeUnits);
+    // 2. Reconcile Crypto Positions present in local ledger
+    const positionTolerance = ExactDecimal.from('0.00000001'); // 1 satoshi tolerance
 
-      if (assetDiff > 0.00001) {
+    for (const [asset, pos] of Object.entries(localProjection.positions)) {
+      const localUnitsDec = ExactDecimal.from(pos.availableQuantity);
+      const rawExchangeUnits = exchangeBalances[asset] ?? '0';
+      const exchangeUnitsDec = ExactDecimal.from(rawExchangeUnits);
+      const assetDiffDec = localUnitsDec.sub(exchangeUnitsDec).abs();
+      const posClassification = this.classifyDiscrepancy(assetDiffDec, positionTolerance);
+
+      if (posClassification === 'MATERIAL_MISMATCH') {
         mismatches++;
         await this.recordMismatch({
           runId,
@@ -251,9 +277,28 @@ export class ReconciliationWorker {
           entityType: 'POSITION',
           entityId: asset,
           severity: 'HIGH',
-          localState: { availableQuantity: localUnits, asset },
-          exchangeState: { availableQuantity: exchangeUnits, diff: assetDiff },
-          notes: `RECONCILIATION_MISMATCH: Position discrepancy of ${assetDiff} ${asset} detected between local ledger and exchange venue.`,
+          localState: { availableQuantity: localUnitsDec.toString(), asset },
+          exchangeState: { availableQuantity: exchangeUnitsDec.toString(), diff: assetDiffDec.toString() },
+          notes: `RECONCILIATION_MISMATCH: Position discrepancy of ${assetDiffDec.toString()} ${asset} detected between local ledger and exchange venue.`,
+        });
+      }
+    }
+
+    // 3. Reconcile Crypto Positions present on Exchange but missing in local ledger
+    for (const [asset, exchangeVal] of Object.entries(exchangeBalances)) {
+      if (asset === quoteAsset || localProjection.positions[asset]) continue;
+      const exchangeUnitsDec = ExactDecimal.from(exchangeVal);
+      if (exchangeUnitsDec.gt(positionTolerance)) {
+        mismatches++;
+        await this.recordMismatch({
+          runId,
+          userId,
+          entityType: 'POSITION',
+          entityId: asset,
+          severity: 'HIGH',
+          localState: { availableQuantity: '0', asset },
+          exchangeState: { availableQuantity: exchangeUnitsDec.toString(), diff: exchangeUnitsDec.toString() },
+          notes: `RECONCILIATION_MISMATCH: Exchange has unledgered balance of ${exchangeUnitsDec.toString()} ${asset}.`,
         });
       }
     }
@@ -273,6 +318,15 @@ export class ReconciliationWorker {
   }): Promise<void> {
     const db = getDb();
     const id = `mis_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+    // Ensure run_id exists in reconciliation_runs to satisfy foreign key constraint
+    await db.execute(
+      `INSERT INTO reconciliation_runs (id, ran_at, status, orders_checked, balances_checked, mismatches_found, duration_ms)
+       VALUES (?, ?, 'IN_PROGRESS', 0, 0, 0, 0)
+       ON CONFLICT(id) DO NOTHING`,
+      [params.runId, Date.now()]
+    );
+
     await db.execute(
       `INSERT INTO reconciliation_mismatches (
         id, run_id, user_id, entity_type, entity_id, severity,
