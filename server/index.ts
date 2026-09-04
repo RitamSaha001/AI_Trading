@@ -2,7 +2,7 @@ import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import sensible from '@fastify/sensible';
-import { config } from './config';
+import { config, auditServerSecurityConfig } from './config';
 import { getDb } from './db';
 import { ServerAuthService } from './services/authService';
 import { requireAuth, requireActive, requireKYC, extractSessionToken } from './middleware/authMiddleware';
@@ -514,12 +514,25 @@ export function buildServer(): FastifyInstance {
 
 const isMain = process.argv[1]?.endsWith('server/index.ts') || process.argv[1]?.endsWith('server/index.js');
 if (isMain || process.env.START_SERVER === 'true') {
+  // Fail-closed startup security preflight audit
+  const audit = auditServerSecurityConfig(config, process.env);
+  if (config.NODE_ENV === 'production' && !audit.productionSafe) {
+    console.error('================================================================================');
+    console.error('FATAL: Production configuration security audit failed. Server refusing to start:');
+    for (const issue of audit.issues) {
+      console.error(`  - ${issue}`);
+    }
+    console.error('================================================================================');
+    process.exit(1);
+  }
+
   const server = buildServer();
   server.listen({ port: config.PORT, host: config.HOST }, (err, address) => {
     if (err) {
       console.error('Server failed to start:', err);
       process.exit(1);
     }
-    console.log(`Lumen Enterprise Server running at ${address}`);
+    console.log(`Lumen Enterprise Server running at ${address} [ENV: ${config.NODE_ENV}]`);
   });
 }
+
