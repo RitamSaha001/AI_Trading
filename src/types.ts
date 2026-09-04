@@ -79,6 +79,8 @@ export type Order = {
   tradeGroupId?: string;
   reservedCash?: number;
   reservedAmount?: number;
+  partialHarvested?: boolean;
+  zeroLossLocked?: boolean;
 };
 
 export type AlertRule = {
@@ -96,6 +98,7 @@ export type AlertRule = {
 };
 
 export type StrategyKind =
+  | 'titan_quantum'
   | 'titan_adaptive'
   | 'vwap_trend'
   | 'breakout_volatility'
@@ -124,6 +127,10 @@ export type StrategyConfig = {
   maxConsecutiveLossesAllowed?: number; // default 2
   circuitBreakerTriggered?: boolean;
   circuitBreakerReason?: string;
+  quarantineActive?: boolean;
+  quarantineShadowWins?: number;
+  zeroLossMode?: boolean;
+  scaleOutEnabled?: boolean;
   pausedReason?: string;
   targetProfitPct?: number; // Target Take Profit % (e.g. 5.0)
   trailingStopPct?: number; // Trailing Stop % (e.g. 2.0)
@@ -144,6 +151,9 @@ export type StrategyConfig = {
     pauseThresholdRsi?: number;
     regimeFilterEnabled?: boolean;
     lossCutoffUsd?: number;
+    maxChoppinessThreshold?: number;
+    minAdxThreshold?: number;
+    scaleOutTp1AtrMult?: number;
   };
 };
 

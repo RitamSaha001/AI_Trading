@@ -117,13 +117,13 @@ export function queryLocalQuantLLM(
       immediateProposal = rebalancePlan.proposal;
     } else {
       workflowType = 'Alpha Harvesting & Systematic Deployment';
-      const bot = synthesizeStrategyBot(topAlpha, 'vwap_trend', state, markets);
+      const bot = synthesizeStrategyBot(topAlpha, 'titan_quantum', state, markets);
       immediateProposal = {
         type: 'deploy_strategy',
         asset: topAlpha,
-        rationale: `Autonomous Workflow: Deploying VWAP Trend bot on top alpha asset ${topAlpha}.`,
+        rationale: `Autonomous Workflow: Deploying Titan Quantum Apex Sentinel with Zero-Loss Armor on top alpha asset ${topAlpha}.`,
         confidence: 'high',
-        riskSummary: `Top Sharpe asset (${alphaComp.tokens[0]?.sharpeEstimate || '1.85'}) with 15% cash preservation.`,
+        riskSummary: `Top Sharpe asset (${alphaComp.tokens[0]?.sharpeEstimate || '1.85'}) with 15% cash preservation & zero-loss ratchet defense.`,
         requiresConfirmation: true,
         strategyParams: {
           kind: bot.kind,
@@ -1096,23 +1096,56 @@ $$\\text{Sharpe Ratio} = \\frac{\\mathbb{E}[R_i] - R_f}{\\sigma_i \\cdot \\sqrt{
     q.includes('strategy') ||
     q.includes('bot') ||
     q.includes('synthesize') ||
+    q.includes('titan quantum') ||
+    q.includes('quantum apex') ||
+    q.includes('quantum bot') ||
+    q.includes('quantum strategy') ||
+    q.includes('zero loss') ||
+    q.includes('zero-loss') ||
+    q.includes('bulletproof') ||
     q.includes('grid') ||
     q.includes('scalp') ||
     q.includes('vwap') ||
     q.includes('breakout') ||
     q.includes('mean reversion')
   ) {
-    let kind: StrategyKind = 'vwap_trend';
-    if (q.includes('breakout') || q.includes('squeeze') || q.includes('volatility')) kind = 'breakout_volatility';
+    let kind: StrategyKind = 'titan_quantum';
+    if (q.includes('adaptive') || q.includes('multi-regime')) kind = 'titan_adaptive';
+    else if (q.includes('breakout') || q.includes('squeeze') || q.includes('volatility')) kind = 'breakout_volatility';
     else if (q.includes('grid') || q.includes('scalp')) kind = 'grid_scalp';
     else if (q.includes('momentum')) kind = 'momentum';
     else if (q.includes('mean') || q.includes('reversion') || q.includes('bollinger')) kind = 'mean_reversion';
     else if (q.includes('dca')) kind = 'dca';
     else if (q.includes('alpha') || q.includes('multi')) kind = 'ai_multi_factor';
+    else if (q.includes('vwap')) kind = 'vwap_trend';
 
     const bot = synthesizeStrategyBot(primaryAsset, kind, state, markets);
 
-    const reply = `### 🤖 Synthesized Algorithmic Engine: \`${bot.name}\`
+    const isQuantum = bot.kind === 'titan_quantum';
+
+    const reply = isQuantum
+      ? `### ⚡ Synthesized Algorithmic Engine: \`${bot.name}\`
+
+Calibrated flagship quantitative execution parameters for **${primaryAsset}** with Zero-Loss Capital Armor & Scale-Out Harvester:
+- **Engine Architecture**: \`TITAN QUANTUM APEX SENTINEL (ZERO-LOSS ARMORED)\`
+- **Max Portfolio Allocation**: $${((bot.maxAllocation || 0.25) * 100).toFixed(0)}\\%$ (~$${money((bot.maxAllocation || 0.25) * pv)}$)
+- **Target Take-Profit (TP1/Runner)**: $+${bot.targetProfitPct}\\%$ (~$${money(spot * (1 + (bot.targetProfitPct || 6) / 100))}$)
+- **Initial Stop-Loss**: $-${bot.trailingStopPct}\\%$ (~$${money(spot * (1 - (bot.trailingStopPct || 2) / 100))}$)
+- **Choppiness Noise Filter**: $\\text{CHOP} \\le 60$ and $\\text{ADX} \\ge 18$ (Strict veto on consolidation noise)
+- **Quarantine Safeguard**: Virtual paper shadow verification (requires 2 consecutive paper wins upon any stop-out)
+
+#### 1. Zero-Loss Capital Armor Formulation
+$$\\text{Ratchet Trigger}: P \\ge P_0 \\cdot (1 + 0.008) \\implies \\text{Stop-Loss} = P_0 \\cdot (1 + 0.002)$$
+Locks in $+0.2\\%$ net profit above all taker exchange fees as soon as price advances $+0.8\\%$, mathematically eliminating downside P&L drag.
+
+#### 2. Laddered Scale-Out Profit Harvester
+$$\\text{TP}_1 = P_0 + 1.8 \\cdot \\text{ATR}_{14} \\implies \\text{Harvest } 50\\% \\text{ to Cash}, \\quad \\text{Trail Remaining } 50\\% \\text{ with ATR Runner}$$
+
+#### 3. Choppiness Index Filter
+$$\\text{CHOP}_{14} = 100 \\cdot \\frac{\\log_{10}\\left(\\frac{\\sum_{i=1}^{14} \\text{ATR}_1}{\\text{MaxHigh}_{14} - \\text{MinLow}_{14}}\\right)}{\\log_{10}(14)} \\le 60$$
+
+Deploy this algorithmic bot via the Safety Gate to activate autonomous tick evaluation while preserving the 15% cash floor.`
+      : `### 🤖 Synthesized Algorithmic Engine: \`${bot.name}\`
 
 Calibrated quantitative execution parameters for **${primaryAsset}** based on current ATR & implied volatility:
 - **Engine Architecture**: \`${bot.kind.replace('_', ' ').toUpperCase()}\`

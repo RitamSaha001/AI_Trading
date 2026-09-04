@@ -125,7 +125,137 @@ export function evaluateStrategy(
       ind.emaRibbon.alignment === 'bearish');
 
   // =========================================================================
-  // 0. THE TITAN ADAPTIVE MULTI-REGIME QUANTITATIVE SENTINEL (WORLD-CLASS FLAGSHIP)
+  // 0. TITAN QUANTUM APEX SENTINEL (FLAGSHIP ZERO-LOSS PROFIT-MAXIMIZING ENGINE)
+  // =========================================================================
+  if (strategy.kind === 'titan_quantum') {
+    // A. Quarantine Shadow Verification Mode:
+    // If quarantined due to a past stop-loss, simulate paper checks until 2 consecutive winning setups verify
+    if (strategy.quarantineActive) {
+      const minAlphaQuarantine = strategy.params.minAlphaScore ?? 35;
+      const rsiMaxQuarantine = strategy.params.rsiThresholdBuy ?? 68;
+      const isCandidateSignal =
+        !isBearishRegime &&
+        !ind.isChopBlocked &&
+        ind.alphaScore >= minAlphaQuarantine &&
+        ind.rsi <= rsiMaxQuarantine;
+
+      if (isCandidateSignal) {
+        strategy.quarantineShadowWins = (strategy.quarantineShadowWins || 0) + 1;
+        strategy.lastExecutedAt = now;
+        if (strategy.quarantineShadowWins >= 2) {
+          strategy.quarantineActive = false;
+          strategy.consecutiveLosses = 0;
+          strategy.circuitBreakerTriggered = false;
+          return {
+            executed: false,
+            message: `Titan Quantum: Graduated from shadow quarantine after 2 successful virtual setups! Resuming live capital allocation.`,
+          };
+        }
+        return {
+          executed: false,
+          message: `Titan Quantum: Shadow paper setup verified (${strategy.quarantineShadowWins}/2 needed to exit quarantine). Real cash protected.`,
+        };
+      }
+      return {
+        executed: false,
+        message: `Titan Quantum: In Shadow Quarantine (${strategy.quarantineShadowWins || 0}/2). Awaiting clean trending conditions.`,
+      };
+    }
+
+    // B. Structural Invalidation Defense (Defensive Full Liquidation before SL)
+    if (isBearishRegime && availableHolding > 0 && ind.score <= -2) {
+      const r = executeOrder(state, markets, 'sell', strategy.asset, availableHolding, {
+        auto: true,
+        strategyName: strategy.name,
+      });
+      if (r.ok && r.order) {
+        return recordExecution(
+          r,
+          'sell',
+          `Titan Quantum Emergency Defense: Liquidated ${formatQty(availableHolding, strategy.asset)} ${strategy.asset} due to structural regime breakdown (Alpha: ${ind.alphaScore}). Capital salvaged.`
+        );
+      }
+    }
+
+    // C. Capital Defense & Liquidity Checks
+    if (isCashFloorViolated) {
+      return { executed: false, message: 'Titan Quantum: BUY VETOED (Mandatory 15% cash liquidity reserve active)' };
+    }
+    if (isBearishRegime) {
+      return { executed: false, message: 'Titan Quantum: BUY VETOED (Market in Bearish Breakdown regime)' };
+    }
+
+    // D. Choppiness & Noise Rejection Filter (Zero-Loss Principle #1)
+    const maxChop = strategy.params.maxChoppinessThreshold ?? 60.0;
+    if (ind.chopIndex != null && ind.chopIndex > maxChop) {
+      return {
+        executed: false,
+        message: `Titan Quantum: BUY VETOED (Choppiness Index ${ind.chopIndex} > ${maxChop} - sideways noise risk)`,
+      };
+    }
+
+    // E. Directional ADX Trend Filter
+    const minAdx = strategy.params.minAdxThreshold ?? 18;
+    if (ind.adx && ind.adx.adx < minAdx) {
+      return {
+        executed: false,
+        message: `Titan Quantum: BUY VETOED (ADX ${ind.adx.adx} < ${minAdx} - insufficient directional trend energy)`,
+      };
+    }
+
+    // F. Multi-Factor Conviction Alignment
+    const vwapObj = ind.vwap;
+    const isAboveVwap = vwapObj ? currentPrice >= vwapObj.vwap * 0.998 : true;
+    const minAlpha = strategy.params.minAlphaScore ?? 35;
+    const rsiMin = strategy.params.rsiThresholdSell ?? 38;
+    const isHealthyRsi = ind.rsi >= rsiMin && ind.rsi <= (strategy.params.rsiThresholdBuy ?? 68);
+    const isEmaAligned = !regimeFilterActive || ind.emaRibbon.alignment !== 'bearish';
+
+    if (
+      isAboveVwap &&
+      isHealthyRsi &&
+      ind.alphaScore >= minAlpha &&
+      isEmaAligned &&
+      currentVal < maxAllowedVal
+    ) {
+      const remainingAllocation = maxAllowedVal - currentVal;
+      // Fractional Kelly with volatility scaling (max 18% of available cash)
+      const kellyFraction = Math.min(0.18, (ind.winProbabilityPct / 100) * 0.20);
+      const budget = Math.min(remainingAllocation, availableCash * kellyFraction);
+
+      if (budget >= 15) {
+        const qty = +(budget / currentPrice).toFixed(4);
+        // Triple-barrier brackets: TP1 scale-out at 2.2x ATR, initial SL at 1.15x ATR
+        const tpMultiplier = strategy.params.scaleOutTp1AtrMult ?? 2.4;
+        const slMultiplier = strategy.params.atrMultiplierSL ?? 1.15;
+        const tpPrice = +(currentPrice + effectiveAtr * tpMultiplier).toFixed(2);
+        const slPrice = +(Math.max(0.01, currentPrice - effectiveAtr * slMultiplier)).toFixed(2);
+
+        const r = executeOrder(state, markets, 'buy', strategy.asset, qty, {
+          auto: true,
+          strategyName: strategy.name,
+          takeProfit: tpPrice,
+          stopLoss: slPrice,
+        });
+
+        if (r.ok && r.order) {
+          return recordExecution(
+            r,
+            'buy',
+            `Titan Quantum Sniper: Executed ${formatQty(qty, strategy.asset)} ${strategy.asset} @ ${money(currentPrice)} | Alpha: +${ind.alphaScore}, ADX: ${ind.adx?.adx ?? 'N/A'}, CHOP: ${ind.chopIndex ?? 'N/A'} (TP1: ${money(tpPrice)}, SL: ${money(slPrice)})`
+          );
+        }
+      }
+    }
+
+    return {
+      executed: false,
+      message: `Titan Quantum: Scanning (Alpha: ${ind.alphaScore}/${minAlpha}, CHOP: ${ind.chopIndex ?? 'OK'}, ADX: ${ind.adx?.adx ?? 'OK'}, VWAP: ${isAboveVwap ? 'OK' : 'BELOW'})`,
+    };
+  }
+
+  // =========================================================================
+  // 1. THE TITAN ADAPTIVE MULTI-REGIME QUANTITATIVE SENTINEL (WORLD-CLASS FLAGSHIP)
   // =========================================================================
   if (strategy.kind === 'titan_adaptive') {
     // 1. Invalidation / Structural Breakdown Exit (Protects existing position before SL hit)

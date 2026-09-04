@@ -246,7 +246,7 @@ describe('Autonomous Algorithmic Strategy Suite', () => {
 
   it('blocks new strategy buys when 15% cash liquidity floor is violated', () => {
     const state = freshState(50000, 'clean');
-    state.positions = { BTC: 1.0 }; // $65,000 position
+    state.positions = { ...state.positions, BTC: 1.0 }; // $65,000 position
     state.cash = 4000; // Equity = $69,000; cash ratio = 4,000 / 69,000 = 5.8% (< 15%)
     const markets = { BTC: createMockMarket(65000, 'BTC') } as any;
 
@@ -299,5 +299,116 @@ describe('Autonomous Algorithmic Strategy Suite', () => {
     expect(res.orderResult?.order?.takeProfit).toBeGreaterThan(65000);
     expect(res.orderResult?.order?.stopLoss).toBeLessThan(65000);
     expect(strat.tradesExecuted).toBe(1);
+  });
+
+  it('executes Titan Quantum Apex Sentinel with Zero-Loss Armor and ATR scale-out brackets when clean setup aligns', () => {
+    const state = freshState(50000, 'clean');
+    const market = createMockMarket(65000, 'BTC');
+    const markets = { BTC: market } as any;
+
+    const strat: StrategyConfig = {
+      id: 'titan_quantum_btc_test',
+      asset: 'BTC',
+      kind: 'titan_quantum',
+      name: 'Titan Quantum BTC',
+      enabled: true,
+      maxAllocation: 0.35,
+      cooldownSec: 0,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      zeroLossMode: true,
+      scaleOutEnabled: true,
+      consecutiveLosses: 0,
+      maxConsecutiveLossesAllowed: 2,
+      params: {
+        minAlphaScore: -100,
+        minAdxThreshold: 0,
+        maxChoppinessThreshold: 100,
+        regimeFilterEnabled: false,
+        rsiThresholdBuy: 100,
+        rsiThresholdSell: 0,
+      },
+    };
+
+    const res = evaluateStrategy(strat, state, markets);
+    expect(res.executed).toBe(true);
+    expect(res.type).toBe('buy');
+    expect(res.orderResult?.ok).toBe(true);
+    expect(res.orderResult?.order?.takeProfit).toBeGreaterThan(65000);
+    expect(res.orderResult?.order?.stopLoss).toBeLessThan(65000);
+    expect(strat.tradesExecuted).toBe(1);
+  });
+
+  it('blocks Titan Quantum buy execution when Choppiness Index detects choppy consolidation whipsaw', () => {
+    const state = freshState(50000, 'clean');
+    const market = createMockMarket(65000, 'BTC');
+    const markets = { BTC: market } as any;
+
+    const strat: StrategyConfig = {
+      id: 'titan_quantum_chop_test',
+      asset: 'BTC',
+      kind: 'titan_quantum',
+      name: 'Titan Quantum BTC',
+      enabled: true,
+      maxAllocation: 0.35,
+      cooldownSec: 0,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      params: { minAlphaScore: -100, maxChoppinessThreshold: 10 }, // strict chop threshold (10) guaranteed to trigger
+    };
+
+    const res = evaluateStrategy(strat, state, markets);
+    expect(res.executed).toBe(false);
+    expect(res.message).toContain('sideways noise risk');
+  });
+
+  it('manages Quarantine Shadow Verification mode, recording paper wins and graduating to live execution after 2 wins', () => {
+    const state = freshState(50000, 'clean');
+    const market = createMockMarket(65000, 'BTC');
+    const markets = { BTC: market } as any;
+
+    const strat: StrategyConfig = {
+      id: 'titan_quantum_quarantine_test',
+      asset: 'BTC',
+      kind: 'titan_quantum',
+      name: 'Titan Quantum BTC',
+      enabled: true,
+      maxAllocation: 0.35,
+      cooldownSec: 0,
+      tradesExecuted: 0,
+      totalPnl: -100,
+      realizedPnl: -100,
+      feesPaid: 10,
+      quarantineActive: true,
+      quarantineShadowWins: 0,
+      consecutiveLosses: 1,
+      params: {
+        minAlphaScore: -100,
+        minAdxThreshold: 0,
+        maxChoppinessThreshold: 100,
+        regimeFilterEnabled: false,
+        rsiThresholdBuy: 100,
+      },
+    };
+
+    // First shadow evaluation
+    const res1 = evaluateStrategy(strat, state, markets);
+    expect(res1.executed).toBe(false);
+    expect(strat.quarantineShadowWins).toBe(1);
+    expect(strat.quarantineActive).toBe(true);
+
+    // Second shadow evaluation (reset cooldown)
+    strat.lastExecutedAt = 0;
+    const res2 = evaluateStrategy(strat, state, markets);
+    expect(res2.executed).toBe(false);
+    expect(strat.quarantineShadowWins).toBe(2);
+    // After 2 shadow wins, quarantine is deactivated and consecutive losses reset!
+    expect(strat.quarantineActive).toBe(false);
+    expect(strat.consecutiveLosses).toBe(0);
+    expect(res2.message).toContain('Graduated from shadow quarantine');
   });
 });

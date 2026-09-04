@@ -1854,17 +1854,17 @@ export function Strategies() {
     openChat,
   } = useLumen();
 
-  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'titan' | 'ai' | 'trend' | 'breakout' | 'grid' | 'breaker'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'quantum' | 'titan' | 'ai' | 'trend' | 'breakout' | 'grid' | 'breaker'>('all');
   const [showDeployModal, setShowDeployModal] = useState(false);
 
   // New Strategy Form State
   const [newAsset, setNewAsset] = useState<Asset>('BTC');
-  const [newKind, setNewKind] = useState<StrategyKind>('titan_adaptive');
-  const [newName, setNewName] = useState('Bitcoin Titan Adaptive Multi-Regime Sentinel');
+  const [newKind, setNewKind] = useState<StrategyKind>('titan_quantum');
+  const [newName, setNewName] = useState('Bitcoin Titan Quantum Apex Sentinel');
   const [newAlloc, setNewAlloc] = useState(25);
-  const [newCooldown, setNewCooldown] = useState(180);
-  const [newTp, setNewTp] = useState(5.5);
-  const [newSl, setNewSl] = useState(2.2);
+  const [newCooldown, setNewCooldown] = useState(120);
+  const [newTp, setNewTp] = useState(6.0);
+  const [newSl, setNewSl] = useState(2.0);
 
   // Aggregate Metrics across all strategies
   const totalTrades = state.strategies.reduce((acc, s) => acc + (s.tradesExecuted || 0), 0);
@@ -1885,6 +1885,7 @@ export function Strategies() {
 
   const filteredStrategies = state.strategies.filter((s) => {
     if (activeTab === 'active') return s.enabled;
+    if (activeTab === 'quantum') return s.kind === 'titan_quantum';
     if (activeTab === 'titan') return s.kind === 'titan_adaptive';
     if (activeTab === 'ai') return s.kind === 'ai_multi_factor';
     if (activeTab === 'trend') return s.kind === 'vwap_trend' || s.kind === 'momentum';
@@ -1896,6 +1897,8 @@ export function Strategies() {
 
   const handleDeploy = (e: React.FormEvent) => {
     e.preventDefault();
+    const isQuantum = newKind === 'titan_quantum';
+    const isTitan = newKind === 'titan_adaptive';
     addStrategy({
       asset: newAsset,
       kind: newKind,
@@ -1905,11 +1908,18 @@ export function Strategies() {
       cooldownSec: newCooldown,
       targetProfitPct: newTp,
       trailingStopPct: newSl,
+      zeroLossMode: isQuantum ? true : undefined,
+      scaleOutEnabled: isQuantum ? true : undefined,
+      quarantineActive: false,
+      quarantineShadowWins: 0,
       params: {
-        atrMultiplierTP: newKind === 'titan_adaptive' ? 3.5 : 3.2,
-        atrMultiplierSL: newKind === 'titan_adaptive' ? 1.35 : 1.3,
+        atrMultiplierTP: isQuantum ? 3.6 : isTitan ? 3.5 : 3.2,
+        atrMultiplierSL: isQuantum ? 1.3 : isTitan ? 1.35 : 1.3,
         minAlphaScore: 35,
         regimeFilterEnabled: true,
+        maxChoppinessThreshold: isQuantum ? 60 : undefined,
+        minAdxThreshold: isQuantum ? 18 : undefined,
+        scaleOutTp1AtrMult: isQuantum ? 1.8 : undefined,
       },
     });
     setShowDeployModal(false);
@@ -2164,6 +2174,25 @@ export function Strategies() {
                   </span>
                 </div>
 
+                <div className="mt-1.5 flex items-center justify-between text-[10px]">
+                  <span className="text-zinc-400">Choppiness:</span>
+                  <span className="font-mono font-semibold">
+                    {ind?.chopIndex !== null && ind?.chopIndex !== undefined ? ind.chopIndex.toFixed(1) : 'N/A'}{' '}
+                    {ind?.isChopBlocked ? (
+                      <span className="text-rose-600 font-bold ml-1">🚫 CHOP VETO</span>
+                    ) : (
+                      <span className="text-emerald-600 font-bold ml-1">✅ CLEAN</span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="mt-1 flex items-center justify-between text-[10px]">
+                  <span className="text-zinc-400">Trend (ADX):</span>
+                  <span className="font-mono font-semibold text-zinc-700">
+                    {ind?.adx ? `${ind.adx.adx.toFixed(1)} (${ind.adx.adx >= 25 ? 'Strong Trend' : ind.adx.adx >= 18 ? 'Moderate' : 'Weak/Ranging'})` : 'N/A'}
+                  </span>
+                </div>
+
                 {/* Per-Market Buttons */}
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   {isMarketPaused ? (
@@ -2209,7 +2238,8 @@ export function Strategies() {
         {[
           { id: 'all', label: `All (${state.strategies.length})` },
           { id: 'active', label: `Active (${activeCount})` },
-          { id: 'titan', label: 'Titan Adaptive (World-Class)' },
+          { id: 'quantum', label: '⚡ Titan Quantum (Zero-Loss)' },
+          { id: 'titan', label: 'Titan Adaptive' },
           { id: 'ai', label: 'Composite Alpha AI' },
           { id: 'trend', label: 'VWAP & Trend' },
           { id: 'breakout', label: 'Volatility Breakout' },
@@ -2239,6 +2269,7 @@ export function Strategies() {
           const m = markets[s.asset];
           const ind = m ? indicators(m.history, m.candles) : null;
           const currentPrice = m?.price || 0;
+          const isQuantum = s.kind === 'titan_quantum';
           const isTitan = s.kind === 'titan_adaptive';
           const isMarketPaused = state.pausedMarkets?.includes(s.asset);
           const consecutiveLosses = s.consecutiveLosses || 0;
@@ -2253,7 +2284,11 @@ export function Strategies() {
             <GlassCard
               key={s.id}
               className={`flex flex-col justify-between space-y-4 transition-all ${
-                isTitan ? 'ring-2 ring-emerald-500/30 border-emerald-300/80 bg-gradient-to-br from-white via-emerald-50/10 to-indigo-50/10' : ''
+                isQuantum
+                  ? 'ring-2 ring-indigo-500/50 border-indigo-400/80 bg-gradient-to-br from-white via-indigo-50/20 to-emerald-50/15 shadow-sm'
+                  : isTitan
+                  ? 'ring-2 ring-emerald-500/30 border-emerald-300/80 bg-gradient-to-br from-white via-emerald-50/10 to-indigo-50/10'
+                  : ''
               } ${s.circuitBreakerTriggered ? 'border-rose-300/70 bg-rose-50/20' : ''}`}
             >
               <div className="space-y-4">
@@ -2269,18 +2304,35 @@ export function Strategies() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-sm text-zinc-900">{s.name}</h3>
-                        {isTitan && (
+                        {isQuantum && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-gradient-to-r from-indigo-600 to-emerald-600 text-white shadow-2xs">
+                            ⚡ ZERO-LOSS APEX
+                          </span>
+                        )}
+                        {isTitan && !isQuantum && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-600 text-white shadow-2xs">
                             FLAGSHIP
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <span className="text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold bg-zinc-100 text-zinc-700 uppercase tracking-wider">
                           {s.kind.replace('_', ' ')}
                         </span>
+                        {s.zeroLossMode !== false && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 flex items-center gap-1">
+                            <Shield className="w-2.5 h-2.5 text-indigo-600" />
+                            Zero-Loss Armor
+                          </span>
+                        )}
+                        {s.scaleOutEnabled !== false && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
+                            <Target className="w-2.5 h-2.5 text-emerald-600" />
+                            50% Scale-Out
+                          </span>
+                        )}
                         {m && (
-                          <span className="text-xs font-mono font-bold text-zinc-900">
+                          <span className="text-xs font-mono font-bold text-zinc-900 ml-auto">
                             {money(currentPrice)}
                           </span>
                         )}
@@ -2336,7 +2388,33 @@ export function Strategies() {
                   </div>
                 )}
 
-                {isMarketPaused && !s.circuitBreakerTriggered && (
+                {/* Quarantine Shadow Mode Banner */}
+                {s.quarantineActive && !s.circuitBreakerTriggered && (
+                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <div>
+                        <span className="font-bold">Shadow Quarantine Active:</span> Bot took a stop-out loss. Running virtual paper verification ({s.quarantineShadowWins || 0} / 2 paper wins before live re-arm).
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateStrategy(s.id, {
+                          quarantineActive: false,
+                          quarantineShadowWins: 2,
+                          consecutiveLosses: 0,
+                          circuitBreakerTriggered: false,
+                        })
+                      }
+                      className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg font-semibold shrink-0 text-[11px] transition-colors"
+                    >
+                      Bypass to Live
+                    </button>
+                  </div>
+                )}
+
+                {isMarketPaused && !s.circuitBreakerTriggered && !s.quarantineActive && (
                   <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
                     <Pause className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                     <span>Market {s.asset} is currently paused by operator. Bot is standing by.</span>
@@ -2393,7 +2471,7 @@ export function Strategies() {
                     </div>
 
                     {/* Technical details badge row */}
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-[10px]">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[10px]">
                       <div className="bg-white px-2 py-1 rounded-lg border border-zinc-200 flex justify-between items-center">
                         <span className="text-zinc-500">VWAP</span>
                         <span className="font-mono font-bold text-zinc-900">
@@ -2411,7 +2489,13 @@ export function Strategies() {
                         </span>
                       </div>
                       <div className="bg-white px-2 py-1 rounded-lg border border-zinc-200 flex justify-between items-center">
-                        <span className="text-zinc-500">Consecutive Losses</span>
+                        <span className="text-zinc-500">CHOP / ADX</span>
+                        <span className="font-mono font-bold text-zinc-900">
+                          {ind.chopIndex !== null ? ind.chopIndex.toFixed(0) : '-'} / {ind.adx ? ind.adx.adx.toFixed(0) : '-'}
+                        </span>
+                      </div>
+                      <div className="bg-white px-2 py-1 rounded-lg border border-zinc-200 flex justify-between items-center">
+                        <span className="text-zinc-500">Losses</span>
                         <span
                           className={`font-mono font-bold ${
                             consecutiveLosses >= maxConsecutive
@@ -2430,8 +2514,10 @@ export function Strategies() {
 
                 {/* Strategy Mechanism Description */}
                 <p className="text-xs text-zinc-600 leading-relaxed">
+                  {s.kind === 'titan_quantum' &&
+                    'Flagship Apex Sentinel with Zero-Loss Capital Armor: Ratchets stop-loss to locked breakeven (+0.2% net) at +0.8% gain, executes 50% partial profit scale-outs at TP1 while trailing runners, strictly blocks trades during market chop (CHOP > 60 / ADX < 18), and quarantines into shadow verification upon any loss.'}
                   {s.kind === 'titan_adaptive' &&
-                    'Flagship institutional multi-regime quantitative engine: Detects bull trends, low-volatility ranges, and volatility squeezes. Automatically blocks buy orders during bear market breakdowns, enforces Kelly sizing, and locks profits via dynamic ATR brackets.'}
+                    'Institutional multi-regime quantitative engine: Detects bull trends, low-volatility ranges, and volatility squeezes. Automatically blocks buy orders during bear market breakdowns, enforces Kelly sizing, and locks profits via dynamic ATR brackets.'}
                   {s.kind === 'vwap_trend' &&
                     'Accumulates on institutional pullbacks towards Volume Weighted Average Price (VWAP) with bullish EMA alignment, locking profits with dynamic 3.0x ATR profit brackets.'}
                   {s.kind === 'breakout_volatility' &&
@@ -2636,7 +2722,12 @@ export function Strategies() {
                     onChange={(e) => {
                       const k = e.target.value as StrategyKind;
                       setNewKind(k);
-                      if (k === 'titan_adaptive') {
+                      if (k === 'titan_quantum') {
+                        setNewName(`${newAsset} Titan Quantum Apex Sentinel`);
+                        setNewCooldown(120);
+                        setNewTp(6.0);
+                        setNewSl(2.0);
+                      } else if (k === 'titan_adaptive') {
                         setNewName(`${newAsset} Titan Adaptive Multi-Regime Sentinel`);
                         setNewCooldown(180);
                         setNewTp(5.5);
@@ -2647,7 +2738,8 @@ export function Strategies() {
                     }}
                     className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl outline-none font-medium"
                   >
-                    <option value="titan_adaptive">👑 Titan Adaptive Multi-Regime Sentinel (Flagship)</option>
+                    <option value="titan_quantum">⚡ Titan Quantum Apex Sentinel (Zero-Loss Flagship)</option>
+                    <option value="titan_adaptive">👑 Titan Adaptive Multi-Regime Sentinel</option>
                     <option value="ai_multi_factor">Composite Alpha Quant (AI Multi-Factor)</option>
                     <option value="vwap_trend">Institutional VWAP Trend Engine</option>
                     <option value="breakout_volatility">Adaptive Volatility Squeeze Breakout</option>

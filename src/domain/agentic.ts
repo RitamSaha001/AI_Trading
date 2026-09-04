@@ -534,6 +534,7 @@ export function synthesizeStrategyBot(
   const effectiveAtr = ind?.atr || currentPrice * 0.02;
 
   const names: Record<StrategyKind, string> = {
+    titan_quantum: `${asset} Titan Quantum Apex Sentinel`,
     titan_adaptive: `${asset} Titan Adaptive Multi-Regime Sentinel`,
     vwap_trend: `${asset} Institutional VWAP Momentum Engine`,
     breakout_volatility: `${asset} Dynamic Squeeze & Volatility Breakout`,
@@ -567,14 +568,21 @@ export function synthesizeStrategyBot(
     maxConsecutiveLossesAllowed: 2,
     targetProfitPct,
     trailingStopPct,
+    zeroLossMode: kind === 'titan_quantum' ? (options?.zeroLossMode ?? true) : options?.zeroLossMode,
+    scaleOutEnabled: kind === 'titan_quantum' ? (options?.scaleOutEnabled ?? true) : options?.scaleOutEnabled,
+    quarantineActive: false,
+    quarantineShadowWins: 0,
     params: {
-      atrMultiplierTP: 3.5,
-      atrMultiplierSL: 1.35,
+      atrMultiplierTP: kind === 'titan_quantum' ? 3.6 : 3.5,
+      atrMultiplierSL: kind === 'titan_quantum' ? 1.3 : 1.35,
       minAlphaScore: 35,
       rsiThresholdBuy: 65,
       rsiThresholdSell: 38,
       dcaAmountUsd: 150,
       regimeFilterEnabled: true,
+      maxChoppinessThreshold: kind === 'titan_quantum' ? 60 : undefined,
+      minAdxThreshold: kind === 'titan_quantum' ? 18 : undefined,
+      scaleOutTp1AtrMult: kind === 'titan_quantum' ? 1.8 : undefined,
       ...(options?.params || {}),
     },
   };

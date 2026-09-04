@@ -141,4 +141,76 @@ describe('Domain: Paper Trading Engine Execution', () => {
     expect(state.positions.BTC).toBe(0.2);
     expect(state.orders[0].status).toBe('filled');
   });
+
+  it('ratchets stop loss to breakeven (+0.2% net profit) when position advances >= +0.8%', () => {
+    const state = createFreshState(50000);
+    // 1. Buy 0.5 BTC at $50,000 with SL $49,000 (-2.0%) and TP $55,000 (+10%)
+    const buyRes = executeOrder(state, mockMarkets as any, 'buy', 'BTC', 0.5, {
+      type: 'market',
+      stopLoss: 49000,
+      takeProfit: 55000,
+    });
+    expect(buyRes.ok).toBe(true);
+    const lot = state.orders.find((o) => o.id === buyRes.order?.id)!;
+    expect(lot.stopLoss).toBe(49000);
+    expect(lot.zeroLossLocked).toBeFalsy();
+
+    // 2. Price advances by +0.9% to $50,450 (which is >= +0.8%)
+    const advancedMarkets: any = {
+      ...mockMarkets,
+      BTC: { ...mockMarkets.BTC, price: 50450 },
+    };
+    checkPendingOrders(state, advancedMarkets);
+
+    // Stop loss should now be ratcheted up to entryPrice * 1.002 = 50,000 * 1.002 = $50,100 (+0.2% net profit)
+    expect(lot.zeroLossLocked).toBe(true);
+    expect(lot.stopLoss).toBe(+(lot.price * 1.002).toFixed(2));
+    expect(lot.stopLoss).toBeGreaterThan(lot.price); // Guaranteed profit locked!
+
+    // 3. Price advances further to +2.2% ($51,100 >= +2.0% Level 2 anchor)
+    const profitMarkets: any = {
+      ...mockMarkets,
+      BTC: { ...mockMarkets.BTC, price: 51100 },
+    };
+    checkPendingOrders(state, profitMarkets);
+
+    // Stop loss should ratchet to entryPrice * 1.010 = +1.0% profit anchor
+    expect(lot.stopLoss).toBe(+(lot.price * 1.010).toFixed(2));
+  });
+
+  it('executes 50% partial scale-out profit harvesting at TP1, trailing remaining runner with ratcheted stop', () => {
+    const state = createFreshState(50000);
+    // Buy 0.4 BTC at $50,000 with TP1 at $52,000 (+4%) and SL at $49,000
+    const buyRes = executeOrder(state, mockMarkets as any, 'buy', 'BTC', 0.4, {
+      type: 'market',
+      stopLoss: 49000,
+      takeProfit: 52000,
+    });
+    expect(buyRes.ok).toBe(true);
+    const lot = state.orders.find((o) => o.id === buyRes.order?.id)!;
+    const initialCash = state.cash;
+
+    // Price spikes to $52,200 (crossing TP1 of $52,000)
+    const spikeMarkets: any = {
+      ...mockMarkets,
+      BTC: { ...mockMarkets.BTC, price: 52200 },
+    };
+
+    const checkResult = checkPendingOrders(state, spikeMarkets);
+
+    // 1. Partial harvest executed
+    expect(lot.partialHarvested).toBe(true);
+    // 2. Position size halved (0.4 * 0.5 = 0.2 remaining)
+    expect(lot.amount).toBe(0.2);
+    // 3. Stop loss on remainder moved to at least +0.8% ($50,400)
+    expect(lot.stopLoss).toBeGreaterThanOrEqual(+(lot.price * 1.008).toFixed(2));
+    // 4. Take profit extended by +6% on the runner
+    expect(lot.takeProfit).toBe(+(52200 * 1.06).toFixed(2));
+    // 5. Cash credited from 50% liquidation
+    expect(state.cash).toBeGreaterThan(initialCash);
+    // 6. Realized PnL is positive
+    expect(state.realizedPnl).toBeGreaterThan(0);
+    // 7. Alert notification generated
+    expect(checkResult.triggeredAlerts.some((a) => a.includes('Scale-Out TP1'))).toBe(true);
+  });
 });

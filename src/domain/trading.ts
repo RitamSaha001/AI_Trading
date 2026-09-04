@@ -398,36 +398,76 @@ export function checkPendingOrders(
     const closeQty = Math.min(lot.amount, availableToSell);
     if (closeQty <= 1e-6) continue;
 
-    let closeReason: string | null = null;
-    if (lot.takeProfit && m.price >= lot.takeProfit) {
-      closeReason = `Take-Profit reached at ${money(m.price)} (Target: ${money(lot.takeProfit)})`;
-    } else if (lot.stopLoss && m.price <= lot.stopLoss) {
-      closeReason = `Stop-Loss triggered at ${money(m.price)} (Stop: ${money(lot.stopLoss)})`;
-    } else if (lot.stopLoss && m.price > lot.price * 1.025) {
-      // Dynamic Trailing Stop Ratchet:
-      // Give adequate breathing room (3.5% or wider) so normal noise doesn't trigger early stops,
-      // while locking in breakeven (+0.2% fee coverage) once position reaches >= 2.5% gain.
-      const gainRatio = (m.price - lot.price) / lot.price;
-      let dynamicTrailStop = lot.stopLoss;
+    const gainRatio = (m.price - lot.price) / lot.price;
+    let dynamicTrailStop = lot.stopLoss;
 
-      // Breakeven lock once in >= 2.5% profit
+    // Zero-Loss Multi-Stage Defense Ratchet:
+    // Level 1: Zero-Loss Armor Ratchet at >= +0.8% gain
+    // Covers double taker fee (0.1% buy + 0.1% sell = 0.2%) + slippage -> locks +0.2% net gain after fees
+    if (gainRatio >= 0.008) {
       const breakevenFloor = +(lot.price * 1.002).toFixed(2);
-      if (breakevenFloor > dynamicTrailStop) {
+      if (breakevenFloor > (dynamicTrailStop || 0)) {
         dynamicTrailStop = breakevenFloor;
+        lot.zeroLossLocked = true;
       }
+    }
 
-      // Trailing ratchet with 3.5% breathing room on sustained runs
-      if (gainRatio >= 0.04) {
-        const profitTrailingStop = +(m.price * 0.965).toFixed(2);
-        if (profitTrailingStop > dynamicTrailStop) {
-          dynamicTrailStop = profitTrailingStop;
+    // Level 2: Profit Anchor Ratchet at >= +2.0% gain -> locks +1.0% net gain
+    if (gainRatio >= 0.020) {
+      const profitFloor = +(lot.price * 1.010).toFixed(2);
+      if (profitFloor > (dynamicTrailStop || 0)) {
+        dynamicTrailStop = profitFloor;
+      }
+    }
+
+    // Level 3: Hyper-Trailing Parabolic Ratchet at >= +3.5% gain
+    if (gainRatio >= 0.035) {
+      const profitTrailingStop = +(m.price * 0.975).toFixed(2);
+      if (profitTrailingStop > (dynamicTrailStop || 0)) {
+        dynamicTrailStop = profitTrailingStop;
+      }
+    }
+
+    if (dynamicTrailStop && (!lot.stopLoss || dynamicTrailStop > lot.stopLoss)) {
+      lot.stopLoss = dynamicTrailStop;
+      changed = true;
+    }
+
+    let closeReason: string | null = null;
+
+    // Laddered Scale-Out Profit Taking (TP1 Harvester)
+    if (lot.takeProfit && m.price >= lot.takeProfit) {
+      const isScaleOut = !lot.partialHarvested && closeQty >= 0.0002;
+      if (isScaleOut) {
+        // Harvest 50% of the position to bank guaranteed profit into cash
+        const harvestQty = +(closeQty * 0.5).toFixed(4);
+        if (harvestQty > 0) {
+          const sellResult = executeOrder(state, markets, 'sell', lot.asset, harvestQty, {
+            auto: true,
+            strategyName: `Scale-Out TP1 (50%) [${lot.positionLotId || lot.id.slice(-6)}]`,
+          });
+
+          if (sellResult.ok && sellResult.order) {
+            lot.partialHarvested = true;
+            lot.amount = +(closeQty - harvestQty).toFixed(4);
+            // Move stop on the remaining 50% to guaranteed profit (+0.8%)
+            lot.stopLoss = Math.max(lot.stopLoss || 0, +(lot.price * 1.008).toFixed(2));
+            // Extend TP on runner to capture extended trend expansion (+6%)
+            lot.takeProfit = +(m.price * 1.06).toFixed(2);
+            changed = true;
+
+            const profitUsd = (sellResult.order.price - lot.price) * harvestQty - sellResult.order.fee;
+            triggeredAlerts.push(
+              `${lot.asset} Scale-Out TP1: 50% harvested (+${money(profitUsd)}). Stop moved to +0.8%, runner seeking ${money(lot.takeProfit)}.`
+            );
+            continue; // Remaining runner rides risk-free!
+          }
         }
       }
 
-      if (dynamicTrailStop > lot.stopLoss) {
-        lot.stopLoss = dynamicTrailStop;
-        changed = true;
-      }
+      closeReason = `Take-Profit reached at ${money(m.price)} (Target: ${money(lot.takeProfit)})`;
+    } else if (lot.stopLoss && m.price <= lot.stopLoss) {
+      closeReason = `Stop-Loss triggered at ${money(m.price)} (Stop: ${money(lot.stopLoss)})`;
     }
 
     if (closeReason) {
@@ -442,7 +482,12 @@ export function checkPendingOrders(
       changed = true;
 
       if (sellResult.ok && sellResult.order && state.strategies && lot.strategyName) {
-        const strat = state.strategies.find((s) => s.name === lot.strategyName);
+        const strat = state.strategies.find(
+          (s) =>
+            s.name === lot.strategyName ||
+            (lot.strategyName && s.name.startsWith(lot.strategyName)) ||
+            (lot.strategyName && lot.strategyName.startsWith(s.name))
+        );
         if (strat) {
           const tradePnl = (sellResult.order.price - lot.price) * closeQty - sellResult.order.fee;
           strat.realizedPnl = (strat.realizedPnl || 0) + tradePnl;
@@ -450,9 +495,13 @@ export function checkPendingOrders(
           if (tradePnl > 0) {
             strat.winCount = (strat.winCount || 0) + 1;
             strat.consecutiveLosses = 0;
+            strat.quarantineActive = false;
           } else {
             strat.lossCount = (strat.lossCount || 0) + 1;
             strat.consecutiveLosses = (strat.consecutiveLosses || 0) + 1;
+            // Activate Quarantine Shadow Mode after any stop loss
+            strat.quarantineActive = true;
+            strat.quarantineShadowWins = 0;
 
             // Loss Minimization Circuit Breaker: auto-pause strategy on consecutive losses
             const maxAllowed = strat.maxConsecutiveLossesAllowed || 2;

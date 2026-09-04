@@ -36,6 +36,34 @@ export function freshState(customCash = 50000, mode: SimulationMode = 'clean'): 
 
   const initialStrategies: StrategyConfig[] = [
     {
+      id: 'strat_titan_quantum_btc',
+      asset: 'BTC',
+      kind: 'titan_quantum',
+      name: 'Titan Quantum Apex Sentinel (Zero-Loss Armor)',
+      enabled: true,
+      maxAllocation: 0.30,
+      cooldownSec: 180,
+      tradesExecuted: 0,
+      totalPnl: 0,
+      realizedPnl: 0,
+      feesPaid: 0,
+      consecutiveLosses: 0,
+      maxConsecutiveLossesAllowed: 2,
+      zeroLossMode: true,
+      scaleOutEnabled: true,
+      targetProfitPct: 6.5,
+      trailingStopPct: 2.0,
+      params: {
+        atrMultiplierTP: 3.8,
+        atrMultiplierSL: 1.15,
+        scaleOutTp1AtrMult: 2.2,
+        minAlphaScore: 35,
+        maxChoppinessThreshold: 60.0,
+        minAdxThreshold: 18,
+        regimeFilterEnabled: true,
+      },
+    },
+    {
       id: 'strat_titan_btc',
       asset: 'BTC',
       kind: 'titan_adaptive',
@@ -307,6 +335,10 @@ export function migrateState(rawState: any): AppState {
         consecutiveLosses: typeof s.consecutiveLosses === 'number' ? s.consecutiveLosses : 0,
         circuitBreakerTriggered: Boolean(s.circuitBreakerTriggered),
         circuitBreakerReason: s.circuitBreakerReason || undefined,
+        quarantineActive: Boolean(s.quarantineActive),
+        quarantineShadowWins: typeof s.quarantineShadowWins === 'number' ? s.quarantineShadowWins : 0,
+        zeroLossMode: s.zeroLossMode !== undefined ? Boolean(s.zeroLossMode) : true,
+        scaleOutEnabled: s.scaleOutEnabled !== undefined ? Boolean(s.scaleOutEnabled) : true,
       }));
       const existingIds = new Set(existing.map((x: any) => x.id));
       const additions = base.strategies.filter((b) => !existingIds.has(b.id));

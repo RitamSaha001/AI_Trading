@@ -222,6 +222,92 @@ export function emaRibbon(v: number[]): {
   return { ema8, ema21, ema55, alignment };
 }
 
+/**
+ * Computes the Choppiness Index (CHOP, 0-100) across recent candles.
+ * CHOP = 100 * LOG10(Sum(TrueRange, n) / (MaxHigh(n) - MinLow(n))) / LOG10(n)
+ * Values > 61.8 indicate choppy, erratic consolidation (refuse to trade).
+ * Values < 38.2 indicate a strong directional, efficient trend.
+ */
+export function choppinessIndex(candles: Candle[], period = 14): number | null {
+  if (!candles || candles.length < period + 1) return null;
+  const slice = candles.slice(-period - 1);
+  let trSum = 0;
+  let maxHigh = -Infinity;
+  let minLow = Infinity;
+
+  for (let i = 1; i < slice.length; i++) {
+    const c = slice[i];
+    const prevC = slice[i - 1];
+    const tr = Math.max(
+      c.high - c.low,
+      Math.abs(c.high - prevC.close),
+      Math.abs(c.low - prevC.close)
+    );
+    trSum += tr;
+    if (c.high > maxHigh) maxHigh = c.high;
+    if (c.low < minLow) minLow = c.low;
+  }
+
+  const range = maxHigh - minLow;
+  if (range <= 0 || trSum <= 0) return 50;
+
+  const chop = 100 * (Math.log10(trSum / range) / Math.log10(period));
+  return Math.max(0, Math.min(100, +chop.toFixed(1)));
+}
+
+/**
+ * Computes the Average Directional Index (ADX) and Directional Indicators (+DI, -DI).
+ * ADX > 25 confirms trend acceleration; ADX < 20 indicates sideways non-directional chop.
+ */
+export function adx(
+  candles: Candle[],
+  period = 14
+): { adx: number; plusDI: number; minusDI: number } | null {
+  if (!candles || candles.length < period + 1) return null;
+
+  const n = Math.min(candles.length - 1, period);
+  const slice = candles.slice(-n - 1);
+
+  let trSum = 0;
+  let plusDmSum = 0;
+  let minusDmSum = 0;
+
+  for (let i = 1; i < slice.length; i++) {
+    const curr = slice[i];
+    const prev = slice[i - 1];
+
+    const tr = Math.max(
+      curr.high - curr.low,
+      Math.abs(curr.high - prev.close),
+      Math.abs(curr.low - prev.close)
+    );
+    trSum += tr;
+
+    const upMove = curr.high - prev.high;
+    const downMove = prev.low - curr.low;
+
+    if (upMove > downMove && upMove > 0) {
+      plusDmSum += upMove;
+    }
+    if (downMove > upMove && downMove > 0) {
+      minusDmSum += downMove;
+    }
+  }
+
+  if (trSum <= 0) return { adx: 20, plusDI: 20, minusDI: 20 };
+
+  const plusDI = +((plusDmSum / trSum) * 100).toFixed(1);
+  const minusDI = +((minusDmSum / trSum) * 100).toFixed(1);
+  const diSum = plusDI + minusDI;
+  const dx = diSum > 0 ? (Math.abs(plusDI - minusDI) / diSum) * 100 : 0;
+
+  return {
+    adx: Math.round(dx),
+    plusDI,
+    minusDI,
+  };
+}
+
 export interface TechnicalIndicators {
   s10: number | null;
   s30: number | null;
@@ -236,6 +322,9 @@ export interface TechnicalIndicators {
   vwap: { vwap: number; upperBand: number; lowerBand: number; dev: number } | null;
   stochastic: { k: number; d: number } | null;
   atr: number | null;
+  chopIndex: number | null;
+  adx: { adx: number; plusDI: number; minusDI: number } | null;
+  isChopBlocked: boolean;
   emaRibbon: {
     ema8: number | null;
     ema21: number | null;
@@ -272,6 +361,9 @@ export function indicators(h: number[], candles?: Candle[]): TechnicalIndicators
       vwap: null,
       stochastic: null,
       atr: null,
+      chopIndex: null,
+      adx: null,
+      isChopBlocked: false,
       emaRibbon: { ema8: null, ema21: null, ema55: null, alignment: 'tangled' },
       alphaScore: 0,
       winProbabilityPct: 50,
@@ -292,6 +384,9 @@ export function indicators(h: number[], candles?: Candle[]): TechnicalIndicators
   const vwapVal = candles && candles.length >= 5 ? vwap(candles) : null;
   const stochVal = candles && candles.length >= 17 ? stochastic(candles) : null;
   const atrVal = candles && candles.length >= 15 ? atr(candles, 14) : null;
+  const chopIndex = candles && candles.length >= 15 ? choppinessIndex(candles, 14) : null;
+  const adxVal = candles && candles.length >= 15 ? adx(candles, 14) : null;
+  const isChopBlocked = Boolean(chopIndex != null && chopIndex > 61.8);
   const ribbon = emaRibbon(h);
 
   const lastPrice = h[h.length - 1];
@@ -365,6 +460,20 @@ export function indicators(h: number[], candles?: Candle[]): TechnicalIndicators
     else alpha -= 10;
   }
 
+  // Factor E: Choppiness Rejection & ADX Directional Trend Velocity (+20 / -20)
+  if (chopIndex != null) {
+    if (chopIndex > 61.8) alpha -= 20; // Heavy chop penalty
+    else if (chopIndex < 38.2) alpha += 15; // Clean trending efficiency boost
+  }
+  if (adxVal) {
+    if (adxVal.adx > 25) {
+      if (adxVal.plusDI > adxVal.minusDI) alpha += 15; // Strong directional bull push
+      else if (adxVal.minusDI > adxVal.plusDI) alpha -= 20; // Strong directional bear drop
+    } else if (adxVal.adx < 18) {
+      alpha -= 10; // Non-directional drift
+    }
+  }
+
   const alphaScore = Math.max(-100, Math.min(100, Math.round(alpha)));
 
   // Market Regime Classification
@@ -412,6 +521,9 @@ export function indicators(h: number[], candles?: Candle[]): TechnicalIndicators
     vwap: vwapVal,
     stochastic: stochVal,
     atr: atrVal,
+    chopIndex,
+    adx: adxVal,
+    isChopBlocked,
     emaRibbon: ribbon,
     alphaScore,
     winProbabilityPct,
