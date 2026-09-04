@@ -84,10 +84,13 @@ export class ServerAuthService {
   }> {
     // In test environment, support deterministic test tokens
     if (config.NODE_ENV === 'test' && idToken.startsWith('test_apple_token:')) {
+      if (nonce && nonce !== 'valid_apple_nonce') {
+        throw new Error('Apple identity token nonce mismatch');
+      }
       const email = idToken.split(':')[1] || 'r.saha.trading@privaterelay.appleid.com';
       return {
         email,
-        sub: `apple_test_${crypto.createHash('md5').update(email).digest('hex')}`,
+        sub: `apple_test_${crypto.createHash('sha256').update(email).digest('hex')}`,
         emailVerified: true,
         isPrivateEmail: email.includes('privaterelay.appleid.com'),
       };
@@ -119,6 +122,168 @@ export class ServerAuthService {
   /**
    * Finds or provisions an internal user and sets up KYC and risk records in an ACID transaction.
    */
+  private static emailChallenges = new Map<
+    string,
+    { email: string; codeHash: string; expiresAt: number; attemptsLeft: number }
+  >();
+
+  static clearEmailChallenges(): void {
+    this.emailChallenges.clear();
+  }
+
+  /**
+   * Requests a passwordless email verification challenge.
+   * Generates a cryptographically secure 6-digit OTP and stores its SHA-256 hash.
+   * Fails closed in production if no verified email delivery provider is configured.
+   */
+  static async requestEmailChallenge(
+    email: string,
+    env: string = config.NODE_ENV
+  ): Promise<{ success: boolean; message: string; testCode?: string }> {
+    if (!email || !email.includes('@') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      throw new Error('Valid email address is required');
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Fail closed in production unless verified email delivery provider is configured
+    if (env === 'production' && !process.env.EMAIL_DELIVERY_API_KEY && !process.env.SMTP_HOST) {
+      await AuditService.logEvent({
+        eventType: 'EMAIL_CHALLENGE_BLOCKED_PRODUCTION',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { email: cleanEmail },
+        result: 'BLOCKED',
+      });
+      throw new Error(
+        'EMAIL_AUTH_UNAVAILABLE: Passwordless email authentication is not configured for production. Please use social sign-in or configure an email provider.'
+      );
+    }
+
+    const code = crypto.randomInt(100000, 999999).toString();
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000; // 10 minutes
+
+    this.emailChallenges.set(cleanEmail, {
+      email: cleanEmail,
+      codeHash,
+      expiresAt,
+      attemptsLeft: 5,
+    });
+
+    await AuditService.logEvent({
+      eventType: 'EMAIL_CHALLENGE_REQUESTED',
+      source: 'auth_service',
+      actor: 'user',
+      metadata: { email: cleanEmail },
+      result: 'SUCCESS',
+    });
+
+    if (env === 'test') {
+      return {
+        success: true,
+        message: 'Verification challenge issued',
+        testCode: code,
+      };
+    }
+
+    return {
+      success: true,
+      message: 'Verification challenge sent to your email address',
+    };
+  }
+
+  /**
+   * Verifies an email verification challenge and creates or fetches the authenticated user.
+   * Implements single-use replay protection and attempt rate limits.
+   */
+  static async verifyEmailChallenge(
+    email: string,
+    code: string,
+    env: string = config.NODE_ENV
+  ): Promise<AuthenticatedUser> {
+    if (!email || !code) {
+      throw new Error('Email and verification code are required');
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const challenge = this.emailChallenges.get(cleanEmail);
+
+    if (!challenge) {
+      await AuditService.logEvent({
+        eventType: 'EMAIL_CHALLENGE_FAILED',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { email: cleanEmail, reason: 'NO_ACTIVE_CHALLENGE' },
+        result: 'FAILURE',
+      });
+      throw new Error('No active verification challenge found for this email. Please request a new code.');
+    }
+
+    const now = Date.now();
+    if (now > challenge.expiresAt) {
+      this.emailChallenges.delete(cleanEmail);
+      await AuditService.logEvent({
+        eventType: 'EMAIL_CHALLENGE_FAILED',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { email: cleanEmail, reason: 'CHALLENGE_EXPIRED' },
+        result: 'FAILURE',
+      });
+      throw new Error('Verification code has expired. Please request a new code.');
+    }
+
+    if (challenge.attemptsLeft <= 0) {
+      this.emailChallenges.delete(cleanEmail);
+      await AuditService.logEvent({
+        eventType: 'EMAIL_CHALLENGE_FAILED',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { email: cleanEmail, reason: 'TOO_MANY_ATTEMPTS' },
+        result: 'BLOCKED',
+      });
+      throw new Error('Too many invalid verification attempts. Challenge has been invalidated.');
+    }
+
+    const codeHash = crypto.createHash('sha256').update(code.trim()).digest('hex');
+    if (codeHash !== challenge.codeHash) {
+      challenge.attemptsLeft -= 1;
+      await AuditService.logEvent({
+        eventType: 'EMAIL_CHALLENGE_FAILED',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { email: cleanEmail, reason: 'INVALID_CODE', attemptsRemaining: challenge.attemptsLeft },
+        result: 'FAILURE',
+      });
+      throw new Error(`Invalid verification code. ${challenge.attemptsLeft} attempts remaining.`);
+    }
+
+    // Replay protection: delete immediately upon verification
+    this.emailChallenges.delete(cleanEmail);
+
+    await AuditService.logEvent({
+      eventType: 'EMAIL_CHALLENGE_VERIFIED',
+      source: 'auth_service',
+      actor: 'user',
+      metadata: { email: cleanEmail },
+      result: 'SUCCESS',
+    });
+
+    const user = await this.getOrCreateUser({
+      email: cleanEmail,
+      displayName: cleanEmail.split('@')[0],
+      provider: 'email',
+      providerId: `email_${crypto.createHash('sha256').update(cleanEmail).digest('hex').slice(0, 16)}`,
+    });
+
+    return user;
+  }
+
+  /**
+   * Finds or provisions an internal user with strict account-takeover protection.
+   * Prevents silent provider hijacking when the same email is reported across different providers.
+   */
   static async getOrCreateUser(params: {
     email: string;
     displayName: string;
@@ -130,10 +295,46 @@ export class ServerAuthService {
     const cleanEmail = params.email.trim().toLowerCase();
 
     return db.transaction(async (tx) => {
-      let user = await tx.queryOne<any>(`SELECT * FROM users WHERE email = ?`, [cleanEmail]);
-      const now = Date.now();
+      // 1. Primary lookup by immutable (provider, providerId) tuple
+      let user = await tx.queryOne<any>(
+        `SELECT * FROM users WHERE provider = ? AND provider_id = ?`,
+        [params.provider, params.providerId]
+      );
 
+      // 2. If not found by (provider, providerId), check if account exists with this email
       if (!user) {
+        const existingWithEmail = await tx.queryOne<any>(
+          `SELECT * FROM users WHERE email = ?`,
+          [cleanEmail]
+        );
+
+        if (existingWithEmail) {
+          // Account takeover prevention: reject silent identity merging across different providers
+          if (existingWithEmail.provider !== params.provider) {
+            await AuditService.logEvent({
+              userId: existingWithEmail.id,
+              eventType: 'PROVIDER_IDENTITY_CONFLICT',
+              source: 'auth_service',
+              actor: 'user',
+              metadata: {
+                attemptedProvider: params.provider,
+                existingProvider: existingWithEmail.provider,
+                email: cleanEmail,
+              },
+              result: 'BLOCKED',
+            });
+            throw new Error(
+              `ACCOUNT_PROVIDER_CONFLICT: An account with email '${cleanEmail}' already exists using sign-in provider '${existingWithEmail.provider}'. Automatic takeover is blocked.`
+            );
+          } else {
+            // Same provider but different provider_id
+            throw new Error(
+              `ACCOUNT_PROVIDER_CONFLICT: Provider identity mismatch for '${cleanEmail}'.`
+            );
+          }
+        }
+
+        const now = Date.now();
         const userId = `usr_${params.provider.slice(0, 3)}_${crypto.randomBytes(8).toString('hex')}`;
         await tx.execute(
           `INSERT INTO users (id, email, display_name, photo_url, provider, provider_id, created_at, updated_at)

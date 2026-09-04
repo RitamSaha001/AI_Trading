@@ -5,7 +5,9 @@ import sensible from '@fastify/sensible';
 import { config, auditServerSecurityConfig } from './config';
 import { getDb } from './db';
 import { ServerAuthService } from './services/authService';
-import { requireAuth, requireActive, requireKYC, extractSessionToken } from './middleware/authMiddleware';
+import { requireAuth, requireActive, requireKYC, extractSessionToken, verifyOriginOrCsrf } from './middleware/authMiddleware';
+import { isValidAllowedOrigin } from './utils/originValidator';
+import { AuthRateLimiter } from './middleware/rateLimiter';
 import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
 import { BinanceGateway } from './services/binanceGateway';
@@ -20,15 +22,20 @@ export function buildServer(): FastifyInstance {
 
   server.register(sensible);
 
-  // CORS Configuration
-  const allowedOrigins = config.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
+  // Strict Fail-Closed CORS Configuration
   server.register(cors, {
     origin: (origin, cb) => {
-      if (!origin || allowedOrigins.includes(origin) || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      // Non-browser or server-to-server requests without Origin pass through CORS
+      if (!origin) {
         cb(null, true);
         return;
       }
-      cb(null, true); // Permissive in dev
+      const isAllowed = isValidAllowedOrigin(origin, config.NODE_ENV, config.ALLOWED_ORIGINS);
+      if (isAllowed) {
+        cb(null, true);
+      } else {
+        cb(null, false);
+      }
     },
     credentials: true,
   });
@@ -39,6 +46,24 @@ export function buildServer(): FastifyInstance {
     parseOptions: {},
   });
 
+  // Helper: Secure HttpOnly Session Cookie setter
+  const setSessionCookie = (reply: FastifyReply, rawToken: string) => {
+    reply.setCookie('lumen_session', rawToken, {
+      path: '/',
+      httpOnly: true,
+      secure: config.NODE_ENV === 'production' || config.NODE_ENV === 'staging',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+  };
+
+  // Global CSRF / Origin Verification for State-Changing Requests
+  server.addHook('preHandler', async (req: FastifyRequest, reply: FastifyReply) => {
+    // Webhook routes use dedicated cryptographic HMAC signature verification
+    if (req.url.startsWith('/api/webhooks/')) return;
+    await verifyOriginOrCsrf(req, reply);
+  });
+
   // Health check
   server.get('/health', async () => ({ status: 'UP', env: config.NODE_ENV, timestamp: Date.now() }));
 
@@ -47,13 +72,19 @@ export function buildServer(): FastifyInstance {
   // ==========================================================================
 
   server.post('/api/auth/google', async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { credential: string };
-    if (!body?.credential) {
+    const ip = req.ip || '127.0.0.1';
+    if (!AuthRateLimiter.isAllowed(`auth_oauth_${ip}`, 30, 60_000)) {
+      return reply.status(429).send({ success: false, error: 'Too many authentication attempts. Please try again later.' });
+    }
+
+    const body = req.body as { credential?: string; idToken?: string };
+    const credential = body?.credential || body?.idToken;
+    if (!credential) {
       return reply.status(400).send({ success: false, error: 'Google credential token is required' });
     }
 
     try {
-      const verified = await ServerAuthService.verifyGoogleIdToken(body.credential);
+      const verified = await ServerAuthService.verifyGoogleIdToken(credential);
       const user = await ServerAuthService.getOrCreateUser({
         email: verified.email,
         displayName: verified.name || 'Investor',
@@ -68,22 +99,44 @@ export function buildServer(): FastifyInstance {
         req.ip
       );
 
-      reply.setCookie('lumen_session', session.rawToken, {
-        path: '/',
-        httpOnly: true,
-        secure: config.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
+      setSessionCookie(reply, session.rawToken);
+
+      await AuditService.logEvent({
+        userId: user.id,
+        eventType: 'LOGIN_SUCCESS',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { provider: 'google', email: user.email },
+        result: 'SUCCESS',
       });
 
-      return { success: true, user, token: session.rawToken };
+      // Browser receives ONLY user/session metadata; raw session token is NEVER returned in JSON
+      return { success: true, user };
     } catch (err: any) {
-      return reply.status(401).send({ success: false, error: err.message });
+      await AuditService.logEvent({
+        eventType: 'LOGIN_FAILURE',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { provider: 'google' },
+        result: 'FAILURE',
+        error: err.message,
+      });
+
+      const isConflict = err.message?.startsWith('ACCOUNT_PROVIDER_CONFLICT');
+      const clientError = isConflict
+        ? err.message
+        : 'Google authentication failed. Please verify your credentials.';
+      return reply.status(401).send({ success: false, error: clientError });
     }
   });
 
   server.post('/api/auth/apple', async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { identityToken: string; nonce?: string; displayName?: string };
+    const ip = req.ip || '127.0.0.1';
+    if (!AuthRateLimiter.isAllowed(`auth_oauth_${ip}`, 30, 60_000)) {
+      return reply.status(429).send({ success: false, error: 'Too many authentication attempts. Please try again later.' });
+    }
+
+    const body = req.body as { identityToken?: string; nonce?: string; displayName?: string };
     if (!body?.identityToken) {
       return reply.status(400).send({ success: false, error: 'Apple identity token is required' });
     }
@@ -105,48 +158,129 @@ export function buildServer(): FastifyInstance {
         req.ip
       );
 
-      reply.setCookie('lumen_session', session.rawToken, {
-        path: '/',
-        httpOnly: true,
-        secure: config.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
+      setSessionCookie(reply, session.rawToken);
+
+      await AuditService.logEvent({
+        userId: user.id,
+        eventType: 'LOGIN_SUCCESS',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { provider: 'apple', email: user.email },
+        result: 'SUCCESS',
       });
 
-      return { success: true, user, token: session.rawToken };
+      // Browser receives ONLY user/session metadata; raw session token is NEVER returned in JSON
+      return { success: true, user };
+    } catch (err: any) {
+      await AuditService.logEvent({
+        eventType: 'LOGIN_FAILURE',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { provider: 'apple' },
+        result: 'FAILURE',
+        error: err.message,
+      });
+
+      const isConflict = err.message?.startsWith('ACCOUNT_PROVIDER_CONFLICT');
+      const clientError = isConflict
+        ? err.message
+        : 'Apple authentication failed. Please verify your credentials.';
+      return reply.status(401).send({ success: false, error: clientError });
+    }
+  });
+
+  // Passwordless Email Challenge Request
+  server.post('/api/auth/email/request', async (req: FastifyRequest, reply: FastifyReply) => {
+    const ip = req.ip || '127.0.0.1';
+    const body = req.body as { email?: string };
+    if (!body?.email) {
+      return reply.status(400).send({ success: false, error: 'Valid email address required' });
+    }
+
+    const cleanEmail = body.email.trim().toLowerCase();
+    if (!AuthRateLimiter.isAllowed(`email_req_ip_${ip}`, 5, 60_000) ||
+        !AuthRateLimiter.isAllowed(`email_req_em_${cleanEmail}`, 5, 60_000)) {
+      return reply.status(429).send({ success: false, error: 'Too many email verification requests. Please try again later.' });
+    }
+
+    try {
+      const challengeResult = await ServerAuthService.requestEmailChallenge(cleanEmail, config.NODE_ENV);
+      return { success: true, message: challengeResult.message, ...(challengeResult.testCode ? { testCode: challengeResult.testCode } : {}) };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  // Passwordless Email Challenge Verification
+  server.post('/api/auth/email/verify', async (req: FastifyRequest, reply: FastifyReply) => {
+    const ip = req.ip || '127.0.0.1';
+    const body = req.body as { email?: string; code?: string };
+    if (!body?.email || !body?.code) {
+      return reply.status(400).send({ success: false, error: 'Email and verification code are required' });
+    }
+
+    if (!AuthRateLimiter.isAllowed(`email_ver_ip_${ip}`, 10, 60_000)) {
+      return reply.status(429).send({ success: false, error: 'Too many verification attempts. Please try again later.' });
+    }
+
+    try {
+      const user = await ServerAuthService.verifyEmailChallenge(body.email, body.code, config.NODE_ENV);
+      const session = await ServerAuthService.createSession(
+        user.id,
+        req.headers['user-agent'] || 'Browser',
+        req.ip
+      );
+
+      setSessionCookie(reply, session.rawToken);
+
+      await AuditService.logEvent({
+        userId: user.id,
+        eventType: 'LOGIN_SUCCESS',
+        source: 'auth_service',
+        actor: 'user',
+        metadata: { provider: 'email', email: user.email },
+        result: 'SUCCESS',
+      });
+
+      return { success: true, user };
     } catch (err: any) {
       return reply.status(401).send({ success: false, error: err.message });
     }
   });
 
+  // Direct passwordless email login (Disabled in production; dev/test only)
   server.post('/api/auth/email', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (config.NODE_ENV === 'production') {
+      return reply.status(403).send({
+        success: false,
+        error: 'Direct email login is disabled in production. Please request a verification challenge via /api/auth/email/request.',
+      });
+    }
+
     const body = req.body as { email: string; displayName?: string };
     if (!body?.email || !body.email.includes('@')) {
       return reply.status(400).send({ success: false, error: 'Valid email address required' });
     }
 
-    const user = await ServerAuthService.getOrCreateUser({
-      email: body.email,
-      displayName: body.displayName || body.email.split('@')[0],
-      provider: 'email',
-      providerId: `email_${crypto.createHash('md5').update(body.email).digest('hex')}`,
-    });
+    try {
+      const user = await ServerAuthService.getOrCreateUser({
+        email: body.email,
+        displayName: body.displayName || body.email.split('@')[0],
+        provider: 'email',
+        providerId: `email_${crypto.createHash('sha256').update(body.email.toLowerCase()).digest('hex').slice(0, 16)}`,
+      });
 
-    const session = await ServerAuthService.createSession(
-      user.id,
-      req.headers['user-agent'] || 'Browser',
-      req.ip
-    );
+      const session = await ServerAuthService.createSession(
+        user.id,
+        req.headers['user-agent'] || 'Browser',
+        req.ip
+      );
 
-    reply.setCookie('lumen_session', session.rawToken, {
-      path: '/',
-      httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-    });
-
-    return { success: true, user, token: session.rawToken };
+      setSessionCookie(reply, session.rawToken);
+      return { success: true, user };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
   });
 
   server.get('/api/auth/me', { preHandler: requireAuth }, async (req: FastifyRequest) => {

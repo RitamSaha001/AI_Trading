@@ -1050,14 +1050,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
         const token = options?.credential || options?.idToken;
         const serverRes = await ApiClient.loginGoogle(token).catch(() => null);
         let session = await signInWithGoogle(options);
-        if (serverRes?.ok && serverRes?.data?.token) {
+        if (serverRes?.ok && serverRes?.data?.user) {
           session = {
             ...session,
-            token: serverRes.data.token,
             user: {
               ...session.user!,
               uid: serverRes.data.user?.id || session.user!.uid,
-              kycTier: serverRes.data.user?.kyc_tier || session.user!.kycTier,
+              kycTier: serverRes.data.user?.kycTier || serverRes.data.user?.kyc_tier || session.user!.kycTier,
             },
           };
         }
@@ -1086,14 +1085,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
           ? await ApiClient.loginApple(options.identityToken, undefined, options?.displayName).catch(() => null)
           : null;
         let session = await signInWithApple(options);
-        if (serverRes?.ok && serverRes?.data?.token) {
+        if (serverRes?.ok && serverRes?.data?.user) {
           session = {
             ...session,
-            token: serverRes.data.token,
             user: {
               ...session.user!,
               uid: serverRes.data.user?.id || session.user!.uid,
-              kycTier: serverRes.data.user?.kyc_tier || session.user!.kycTier,
+              kycTier: serverRes.data.user?.kycTier || serverRes.data.user?.kyc_tier || session.user!.kycTier,
             },
           };
         }

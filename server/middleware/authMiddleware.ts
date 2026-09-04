@@ -1,5 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { ServerAuthService, AuthenticatedUser } from '../services/authService';
+import { isValidAllowedOrigin, normalizeOrigin } from '../utils/originValidator';
+import { config } from '../config';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -7,20 +9,71 @@ declare module 'fastify' {
   }
 }
 
+/**
+ * Extracts session token from incoming request.
+ * Prioritizes HttpOnly cookie for browser sessions, with Bearer header fallback for API/non-browser clients.
+ */
 export function extractSessionToken(req: FastifyRequest): string | null {
-  // 1. From Authorization Bearer header
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7).trim();
-  }
-
-  // 2. From Cookie
+  // 1. Primary: From HttpOnly Cookie
   const cookies = (req as any).cookies;
   if (cookies && cookies.lumen_session) {
     return cookies.lumen_session;
   }
 
+  // 2. Secondary: From Authorization Bearer header (for headless/programmatic API clients)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7).trim();
+  }
+
   return null;
+}
+
+/**
+ * CSRF / Origin Defense for State-Changing Requests (POST, PUT, PATCH, DELETE).
+ * Verifies that incoming requests originate from an allowed origin.
+ */
+export async function verifyOriginOrCsrf(req: FastifyRequest, reply: FastifyReply) {
+  const method = req.method.toUpperCase();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    return;
+  }
+
+  const rawOrigin = req.headers.origin;
+  const rawReferer = req.headers.referer;
+
+  let requestOrigin: string | null = null;
+  if (rawOrigin) {
+    requestOrigin = normalizeOrigin(rawOrigin);
+  } else if (rawReferer) {
+    try {
+      requestOrigin = new URL(rawReferer).origin.toLowerCase();
+    } catch {
+      requestOrigin = null;
+    }
+  }
+
+  // If an Origin or Referer is present, it MUST be an allowed origin
+  if (requestOrigin) {
+    const isAllowed = isValidAllowedOrigin(requestOrigin, config.NODE_ENV, config.ALLOWED_ORIGINS);
+    if (!isAllowed) {
+      return reply.status(403).send({
+        success: false,
+        error: 'Cross-origin state-changing request blocked by CSRF / Origin policy.',
+      });
+    }
+    return;
+  }
+
+  // If neither Origin nor Referer is present, check if request uses browser cookie credentials
+  const hasCookieSession = Boolean((req as any).cookies?.lumen_session);
+  if (hasCookieSession && (config.NODE_ENV === 'production' || config.NODE_ENV === 'staging')) {
+    // In production/staging, browser state-changing requests using cookie authentication MUST provide Origin or Referer
+    return reply.status(403).send({
+      success: false,
+      error: 'State-changing cookie requests must provide a valid Origin header.',
+    });
+  }
 }
 
 export async function authenticate(req: FastifyRequest, reply: FastifyReply) {

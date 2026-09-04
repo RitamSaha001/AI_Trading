@@ -5,37 +5,20 @@
 
 const API_BASE = '';
 
-function getSessionToken(): string | null {
-  try {
-    const raw = localStorage.getItem('lumen_auth_session_v1');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return parsed.token || null;
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
 async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   try {
-    const token = getSessionToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {}),
     };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     const res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
+      credentials: 'include', // Ensures HttpOnly lumen_session cookie is transmitted with every request
     });
 
     const data = await res.json().catch(() => ({}));
@@ -51,7 +34,7 @@ async function apiRequest<T = any>(
 export const ApiClient = {
   async checkHealth(): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/api/health`);
+      const res = await fetch(`${API_BASE}/api/health`, { credentials: 'include' });
       const data = await res.json();
       return data.status === 'ok';
     } catch {
@@ -70,6 +53,20 @@ export const ApiClient = {
     return apiRequest('/api/auth/apple', {
       method: 'POST',
       body: JSON.stringify({ identityToken, nonce, displayName }),
+    });
+  },
+
+  async requestEmailChallenge(email: string) {
+    return apiRequest('/api/auth/email/request', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async verifyEmailChallenge(email: string, code: string) {
+    return apiRequest('/api/auth/email/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
     });
   },
 
