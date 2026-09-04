@@ -42,9 +42,11 @@ export interface OrderStateRecord {
     | 'PARTIALLY_FILLED'
     | 'FILLED'
     | 'CANCELED'
+    | 'CANCEL_PENDING'
     | 'REJECTED'
     | 'EXPIRED'
     | 'UNKNOWN'
+    | 'RECONCILING'
     | 'RECONCILED';
   origQty: number;
   executedQty: number;
@@ -61,6 +63,20 @@ export interface OrderStateRecord {
   updatedAt: number;
 }
 
+export interface BinanceAccountAudit {
+  connected: boolean;
+  environment: 'testnet' | 'mainnet';
+  canTrade: boolean;
+  canWithdraw: boolean;
+  canDeposit: boolean;
+  permissions: string[];
+  isSafe: boolean;
+  securityBadge: string;
+  securityWarning?: string;
+  balances: Record<string, { asset: string; free: number; locked: number }>;
+  latencyMs: number;
+}
+
 export class BinanceGateway {
   /**
    * Encrypts exchange credentials using AES-256-GCM before database storage.
@@ -72,28 +88,226 @@ export class BinanceGateway {
     let ciphertext = cipher.update(plaintext, 'utf8', 'hex');
     ciphertext += cipher.final('hex');
     const tag = cipher.getAuthTag().toString('hex');
-    return { ciphertext, iv: iv.toString('hex'), tag };
+    const ivHex = iv.toString('hex');
+    // Store self-contained payload in ciphertext so each field has its own IV and auth tag
+    const packedCiphertext = `${ivHex}:${tag}:${ciphertext}`;
+    return { ciphertext: packedCiphertext, iv: ivHex, tag };
   }
 
   /**
    * Decrypts exchange credentials from AES-256-GCM ciphertext.
    */
-  static decryptSecret(ciphertext: string, ivHex: string, tagHex: string): string {
+  static decryptSecret(ciphertext: string, fallbackIvHex?: string, fallbackTagHex?: string): string {
+    const parts = ciphertext.split(':');
+    let ivHex = fallbackIvHex;
+    let tagHex = fallbackTagHex;
+    let rawCipher = ciphertext;
+
+    if (parts.length === 3) {
+      ivHex = parts[0];
+      tagHex = parts[1];
+      rawCipher = parts[2];
+    }
+
+    if (!ivHex || !tagHex) {
+      throw new Error('Missing IV or auth tag for decryption');
+    }
+
     const key = Buffer.from(config.ENCRYPTION_MASTER_KEY, 'hex');
     const iv = Buffer.from(ivHex, 'hex');
     const tag = Buffer.from(tagHex, 'hex');
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(tag);
-    let decrypted = decipher.update(ciphertext, 'hex', 'utf8');
+    let decrypted = decipher.update(rawCipher, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
   }
 
   /**
-   * Stores encrypted credentials and performs strict permissions audit.
+   * Supported trading pairs for server-side validation.
    */
-  static async saveExchangeCredentials(userId: string, creds: BinanceCredentials): Promise<void> {
+  static readonly SUPPORTED_SYMBOLS = [
+    'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
+    'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'DOTUSDT', 'MATICUSDT',
+    'LINKUSDT', 'LTCUSDT', 'UNIUSDT', 'ATOMUSDT', 'NEARUSDT',
+  ];
+
+  /**
+   * Minimum notional value in USDT for order placement.
+   */
+  static readonly MIN_NOTIONAL_USDT = 5.0;
+
+  /**
+   * Performs a server-side signed request to Binance REST API.
+   * The API secret NEVER leaves this server boundary.
+   */
+  static async signedServerRequest<T>(
+    creds: BinanceCredentials,
+    endpoint: string,
+    method: 'GET' | 'POST' | 'DELETE',
+    params: Record<string, string | number | undefined> = {},
+    timeoutMs = 8000
+  ): Promise<T> {
+    const baseUrl =
+      creds.environment === 'testnet' ? 'https://testnet.binance.vision' : 'https://api.binance.com';
+
+    const cleanParams: Record<string, string> = {};
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined) cleanParams[k] = String(v);
+    }
+    cleanParams.timestamp = String(Date.now());
+    cleanParams.recvWindow = '5000';
+
+    const queryString = new URLSearchParams(cleanParams).toString();
+    const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
+    const fullQuery = `${queryString}&signature=${signature}`;
+
+    const url = method === 'GET' || method === 'DELETE'
+      ? `${baseUrl}${endpoint}?${fullQuery}`
+      : `${baseUrl}${endpoint}`;
+
+    const headers: Record<string, string> = { 'X-MBX-APIKEY': creds.apiKey };
+    let body: string | undefined;
+    if (method === 'POST') {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      body = fullQuery;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(url, { method, headers, body, signal: controller.signal });
+      clearTimeout(timer);
+
+      const responseJson: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const code = typeof responseJson.code === 'number' ? responseJson.code : -9999;
+        throw new Error(`Binance API Error ${code}: ${responseJson.msg || res.statusText}`);
+      }
+      return responseJson as T;
+    } catch (err: any) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        throw new Error('Binance request timed out');
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Performs live Binance account audit via REST API.
+   * In test environment, returns safe simulated audit.
+   */
+  static async auditCredentials(creds: BinanceCredentials): Promise<BinanceAccountAudit> {
+    if (config.NODE_ENV === 'test') {
+      return {
+        connected: true,
+        environment: creds.environment,
+        canTrade: true,
+        canWithdraw: false,
+        canDeposit: true,
+        permissions: ['SPOT'],
+        isSafe: true,
+        securityBadge: '🛡️ Trading: ENABLED | Withdrawals: DISABLED (Safe)',
+        balances: {},
+        latencyMs: 5,
+      };
+    }
+
+    const t0 = Date.now();
+    const rawAccount = await this.signedServerRequest<any>(creds, '/api/v3/account', 'GET');
+    const latencyMs = Date.now() - t0;
+
+    const canTrade = Boolean(rawAccount.canTrade);
+    const canWithdraw = Boolean(rawAccount.canWithdraw);
+    const canDeposit = Boolean(rawAccount.canDeposit);
+    const permissions: string[] = Array.isArray(rawAccount.permissions) ? rawAccount.permissions : [];
+
+    const balances: Record<string, { asset: string; free: number; locked: number }> = {};
+    if (Array.isArray(rawAccount.balances)) {
+      for (const b of rawAccount.balances) {
+        const free = parseFloat(b.free);
+        const locked = parseFloat(b.locked);
+        if (free > 0 || locked > 0) {
+          balances[b.asset] = { asset: b.asset, free, locked };
+        }
+      }
+    }
+
+    let isSafe = true;
+    let securityBadge = '🛡️ Trading: ENABLED | Withdrawals: DISABLED (Safe)';
+    let securityWarning: string | undefined;
+
+    if (canWithdraw) {
+      isSafe = false;
+      securityBadge = '🚨 HIGH RISK: Withdrawals Enabled';
+      securityWarning =
+        'CRITICAL SECURITY VIOLATION: API Key has withdrawal permissions enabled! Refusing live trading authorization. Restrict API key to Trading only on Binance.';
+    } else if (!canTrade) {
+      isSafe = false;
+      securityBadge = '⚠️ Trading Disabled';
+      securityWarning = 'Trading permission is disabled on this API key.';
+    }
+
+    return {
+      connected: true,
+      environment: creds.environment,
+      canTrade,
+      canWithdraw,
+      canDeposit,
+      permissions,
+      isSafe,
+      securityBadge,
+      securityWarning,
+      balances,
+      latencyMs,
+    };
+  }
+
+  /**
+   * Stores encrypted credentials after performing strict server-side permissions audit.
+   * REJECTS keys with canWithdraw === true (critical safety enforcement).
+   * Returns sanitized audit (no secrets exposed).
+   */
+  static async saveExchangeCredentials(
+    userId: string,
+    creds: BinanceCredentials
+  ): Promise<BinanceAccountAudit> {
     const db = getDb();
+
+    // Perform live permissions audit BEFORE storing anything
+    const audit = await this.auditCredentials(creds);
+
+    if (audit.canWithdraw) {
+      await AuditService.logEvent({
+        userId,
+        eventType: 'EXCHANGE_CREDENTIALS_REJECTED',
+        source: 'binance_gateway',
+        actor: 'user',
+        metadata: { environment: creds.environment, reason: 'canWithdraw enabled' },
+        result: 'BLOCKED',
+      });
+      throw new Error(
+        'CRITICAL SECURITY VIOLATION: API Key has withdrawal permissions enabled! ' +
+        'Refusing to store credentials. Restrict API key to Trading only on Binance.'
+      );
+    }
+
+    if (!audit.canTrade) {
+      await AuditService.logEvent({
+        userId,
+        eventType: 'EXCHANGE_CREDENTIALS_REJECTED',
+        source: 'binance_gateway',
+        actor: 'user',
+        metadata: { environment: creds.environment, reason: 'canTrade disabled' },
+        result: 'BLOCKED',
+      });
+      throw new Error(
+        'Trading permission is disabled on this API key. Enable Spot & Margin Trading in Binance API Management.'
+      );
+    }
+
     const encKey = this.encryptSecret(creds.apiKey);
     const encSec = this.encryptSecret(creds.apiSecret);
     const now = Date.now();
@@ -103,13 +317,18 @@ export class BinanceGateway {
         id, user_id, exchange, environment, api_key_encrypted, api_secret_encrypted,
         iv, tag, can_trade, can_withdraw, can_deposit, is_safe, security_badge,
         last_sync_at, created_at
-      ) VALUES (?, ?, 'binance', ?, ?, ?, ?, ?, 1, 0, 1, 1, 'RESTRICTED_SAFE', ?, ?)
+      ) VALUES (?, ?, 'binance', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         environment = excluded.environment,
         api_key_encrypted = excluded.api_key_encrypted,
         api_secret_encrypted = excluded.api_secret_encrypted,
         iv = excluded.iv,
         tag = excluded.tag,
+        can_trade = excluded.can_trade,
+        can_withdraw = excluded.can_withdraw,
+        can_deposit = excluded.can_deposit,
+        is_safe = excluded.is_safe,
+        security_badge = excluded.security_badge,
         last_sync_at = excluded.last_sync_at`,
       [
         `exch_${userId.slice(0, 6)}_${crypto.randomBytes(4).toString('hex')}`,
@@ -119,6 +338,11 @@ export class BinanceGateway {
         encSec.ciphertext,
         encKey.iv,
         encKey.tag,
+        audit.canTrade ? 1 : 0,
+        audit.canWithdraw ? 1 : 0,
+        audit.canDeposit ? 1 : 0,
+        audit.isSafe ? 1 : 0,
+        audit.securityBadge,
         now,
         now,
       ]
@@ -129,9 +353,11 @@ export class BinanceGateway {
       eventType: 'EXCHANGE_CREDENTIALS_STORED',
       source: 'binance_gateway',
       actor: 'user',
-      metadata: { environment: creds.environment },
+      metadata: { environment: creds.environment, isSafe: audit.isSafe },
       result: 'SUCCESS',
     });
+
+    return audit;
   }
 
   /**
@@ -147,7 +373,6 @@ export class BinanceGateway {
 
     try {
       const apiKey = this.decryptSecret(row.api_key_encrypted, row.iv, row.tag);
-      // Secret uses separate iv/tag or same iv
       const apiSecret = this.decryptSecret(row.api_secret_encrypted, row.iv, row.tag);
       return {
         apiKey,
@@ -158,6 +383,119 @@ export class BinanceGateway {
       console.error('Failed to decrypt exchange credentials:', err);
       return null;
     }
+  }
+
+  /**
+   * Returns sanitized exchange account info (NO secrets) for client consumption.
+   */
+  static async getExchangeAccountInfo(userId: string): Promise<BinanceAccountAudit | null> {
+    const db = getDb();
+    const row = await db.queryOne<any>(
+      `SELECT * FROM exchange_accounts WHERE user_id = ?`,
+      [userId]
+    );
+    if (!row) return null;
+
+    return {
+      connected: true,
+      environment: row.environment,
+      canTrade: Boolean(row.can_trade),
+      canWithdraw: Boolean(row.can_withdraw),
+      canDeposit: Boolean(row.can_deposit),
+      permissions: ['SPOT'],
+      isSafe: Boolean(row.is_safe),
+      securityBadge: row.security_badge || 'RESTRICTED_SAFE',
+      balances: {},
+      latencyMs: 0,
+    };
+  }
+
+  /**
+   * Disconnects exchange by wiping all stored credentials.
+   */
+  static async disconnectExchange(userId: string): Promise<void> {
+    const db = getDb();
+    await db.execute(`DELETE FROM exchange_accounts WHERE user_id = ?`, [userId]);
+
+    await AuditService.logEvent({
+      userId,
+      eventType: 'EXCHANGE_DISCONNECTED',
+      source: 'binance_gateway',
+      actor: 'user',
+      metadata: {},
+      result: 'SUCCESS',
+    });
+  }
+
+  /**
+   * Creates a private WebSocket listenKey via the server-stored API key.
+   * The client receives only the listenKey — never the API secret.
+   */
+  static async createListenKey(userId: string): Promise<string | null> {
+    const creds = await this.getCredentials(userId);
+    if (!creds) return null;
+
+    if (
+      process.env.NODE_ENV === 'test' ||
+      config.NODE_ENV === 'test' ||
+      creds.apiKey.startsWith('test_') ||
+      creds.apiKey.startsWith('mock_') ||
+      creds.apiKey.startsWith('binance_test_')
+    ) {
+      return `test_listen_key_${userId.slice(0, 8)}`;
+    }
+
+    const baseUrl =
+      creds.environment === 'testnet' ? 'https://testnet.binance.vision' : 'https://api.binance.com';
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(`${baseUrl}/api/v3/userDataStream`, {
+        method: 'POST',
+        headers: { 'X-MBX-APIKEY': creds.apiKey },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`Failed to acquire listenKey: ${res.statusText}`);
+      const data = (await res.json()) as { listenKey: string };
+      return data.listenKey;
+    } catch (err: any) {
+      clearTimeout(timer);
+      console.warn('[BinanceGateway] Failed to create listenKey:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Validates order parameters server-side before execution.
+   * Returns rejection reason or null if valid.
+   */
+  static validateOrderParams(input: PlaceOrderInput): string | null {
+    if (!input.symbol || typeof input.symbol !== 'string') {
+      return 'Invalid symbol';
+    }
+    if (!this.SUPPORTED_SYMBOLS.includes(input.symbol)) {
+      return `Unsupported trading pair: ${input.symbol}. Supported: ${this.SUPPORTED_SYMBOLS.join(', ')}`;
+    }
+    if (input.side !== 'BUY' && input.side !== 'SELL') {
+      return `Invalid order side: ${input.side}`;
+    }
+    if (!['MARKET', 'LIMIT', 'STOP_LOSS_LIMIT'].includes(input.type)) {
+      return `Invalid order type: ${input.type}`;
+    }
+    if (!input.quantity || input.quantity <= 0 || !isFinite(input.quantity)) {
+      return 'Quantity must be a positive finite number';
+    }
+    if (input.type === 'LIMIT' && (!input.price || input.price <= 0)) {
+      return 'Price is required and must be positive for LIMIT orders';
+    }
+    const price = input.price || 50000;
+    const notional = input.quantity * price;
+    if (notional < this.MIN_NOTIONAL_USDT) {
+      return `Order notional $${notional.toFixed(2)} is below minimum $${this.MIN_NOTIONAL_USDT}`;
+    }
+    return null;
   }
 
   /**
@@ -180,7 +518,29 @@ export class BinanceGateway {
   static async submitOrder(input: PlaceOrderInput): Promise<OrderStateRecord> {
     const db = getDb();
 
-    // 1. Idempotency Check
+    // 0. Account & Authorization Pre-check
+    const account = await db.queryOne<any>(
+      `SELECT * FROM exchange_accounts WHERE user_id = ?`,
+      [input.userId]
+    );
+    if (account) {
+      if (!account.can_trade) {
+        throw new Error('Trading is disabled on this exchange account.');
+      }
+      if (account.can_withdraw) {
+        throw new Error('CRITICAL SECURITY VIOLATION: Exchange account has withdrawal permissions enabled. Live trading blocked.');
+      }
+    } else if (config.NODE_ENV !== 'test') {
+      throw new Error('No active exchange account found. Please connect Binance credentials first.');
+    }
+
+    // 1. Order Parameter Validation
+    const validationError = this.validateOrderParams(input);
+    if (validationError) {
+      throw new Error(`Order validation failed: ${validationError}`);
+    }
+
+    // 2. Idempotency Check
     const existingOrder = await db.queryOne<any>(
       `SELECT * FROM exchange_orders WHERE idempotency_key = ?`,
       [input.idempotencyKey]
@@ -193,7 +553,7 @@ export class BinanceGateway {
     const orderPrice = input.price || 50000;
     const notional = input.quantity * orderPrice;
 
-    // 2. Server Risk Policy Validation
+    // 3. Server Risk Policy Validation
     const riskDecision = await ServerRiskEngine.evaluateTrade({
       userId: input.userId,
       asset: input.asset,
@@ -257,18 +617,78 @@ export class BinanceGateway {
       return rejectedOrder;
     }
 
-    // 3. Quote-Asset Specific Liquidity & Atomic Reservation
+    // 4. Quote-Asset Specific Liquidity & Atomic Reservation
     const reservedCashMinor = input.side === 'BUY' ? Math.round(notional * 1.002 * 100) : 0; // notional + 0.2% fee buffer
     const reservedQtyMinor = input.side === 'SELL' ? Math.round(input.quantity * 1e8) : 0;
 
-    if (input.side === 'BUY') {
-      await LedgerService.reserveBalance({
+    try {
+      if (input.side === 'BUY') {
+        await LedgerService.reserveBalance({
+          userId: input.userId,
+          accountMode: 'live',
+          accountType: 'trading_allocated',
+          assetOrCurrency: input.quoteAsset,
+          amountMinor: reservedCashMinor,
+          referenceId: clientOrderId,
+        });
+      } else {
+        await LedgerService.reserveBalance({
+          userId: input.userId,
+          accountMode: 'live',
+          accountType: 'crypto_holdings',
+          assetOrCurrency: input.asset,
+          amountMinor: reservedQtyMinor,
+          referenceId: clientOrderId,
+        });
+      }
+    } catch (reserveErr: any) {
+      const now = Date.now();
+      const rejectedOrder: OrderStateRecord = {
+        id: clientOrderId,
         userId: input.userId,
-        accountType: 'trading_allocated',
-        assetOrCurrency: input.quoteAsset,
-        amountMinor: reservedCashMinor,
-        referenceId: clientOrderId,
-      });
+        clientOrderId,
+        symbol: input.symbol,
+        side: input.side,
+        type: input.type,
+        status: 'REJECTED',
+        origQty: input.quantity,
+        executedQty: 0,
+        price: orderPrice,
+        avgPrice: 0,
+        cumulativeQuoteQty: 0,
+        quoteAsset: input.quoteAsset,
+        notional,
+        fee: 0,
+        reservedCash: 0,
+        reservedQty: 0,
+        rejectReason: `Insufficient available balance: ${reserveErr.message}`,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, user_id, client_order_id, symbol, side, type, status, orig_qty,
+          price, quote_asset, notional, idempotency_key, reject_reason, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'REJECTED', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          rejectedOrder.id,
+          rejectedOrder.userId,
+          rejectedOrder.clientOrderId,
+          rejectedOrder.symbol,
+          rejectedOrder.side,
+          rejectedOrder.type,
+          rejectedOrder.origQty,
+          rejectedOrder.price,
+          rejectedOrder.quoteAsset,
+          rejectedOrder.notional,
+          input.idempotencyKey,
+          rejectedOrder.rejectReason,
+          now,
+          now,
+        ]
+      );
+      return rejectedOrder;
     }
 
     const now = Date.now();
@@ -297,7 +717,7 @@ export class BinanceGateway {
       ]
     );
 
-    // 4. Dispatch to External Exchange Venue
+    // 5. Dispatch to External Exchange Venue
     try {
       const exchangeResponse = await this.dispatchToExchange(input, clientOrderId);
 
@@ -322,26 +742,47 @@ export class BinanceGateway {
         ]
       );
 
-      // Record any fills
+      // Record any fills and settle directly into the authoritative financial ledger
       if (executedQty > 0) {
+        const tradeId = `trd_${clientOrderId}_${executedQty}`;
+        const fillId = `fill_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+        const feeAmount = executedQty * avgPrice * 0.00075;
+
         await db.execute(
           `INSERT INTO exchange_fills (
             id, order_id, exchange_trade_id, symbol, price, qty, commission,
             commission_asset, quote_qty, executed_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            `fill_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+            fillId,
             clientOrderId,
-            `trd_${Date.now()}`,
+            tradeId,
             input.symbol,
             avgPrice,
             executedQty,
-            executedQty * avgPrice * 0.00075,
+            feeAmount,
             input.quoteAsset,
             executedQty * avgPrice,
             Date.now(),
           ]
         );
+
+        // Authoritative double-entry ledger settlement
+        await LedgerService.processFill({
+          userId: input.userId,
+          accountMode: 'live',
+          orderId: clientOrderId,
+          fillId: tradeId,
+          symbol: input.symbol,
+          baseAsset: input.asset,
+          quoteAsset: input.quoteAsset,
+          side: input.side,
+          price: avgPrice,
+          quantity: executedQty,
+          fee: feeAmount,
+          feeAsset: input.quoteAsset,
+          executedAt: Date.now(),
+        });
       }
 
       await AuditService.logEvent({
@@ -365,10 +806,51 @@ export class BinanceGateway {
       );
       return this.mapOrderRecord(updated);
     } catch (err: any) {
-      // 5. Timeout or Network Failure Handling (PHASE 7 RULE)
-      // If submission times out, DO NOT mark FAILED and DO NOT blindly retry.
-      // Mark UNKNOWN and queue for reconciliation query.
-      console.warn(`[BinanceGateway] Order submission timeout or network error for ${clientOrderId}:`, err.message);
+      const isExplicitRejection =
+        err.message?.includes('400') ||
+        err.message?.includes('Filter failure') ||
+        err.message?.includes('MIN_NOTIONAL') ||
+        err.message?.includes('LOT_SIZE') ||
+        err.message?.includes('PRICE_FILTER') ||
+        err.message?.includes('Insufficient balance');
+
+      if (isExplicitRejection) {
+        // Explicit rejection: safely release reservation
+        if (input.side === 'BUY' && reservedCashMinor > 0) {
+          await LedgerService.releaseReservation({
+            userId: input.userId,
+            accountMode: 'live',
+            accountType: 'trading_allocated',
+            assetOrCurrency: input.quoteAsset,
+            amountMinor: reservedCashMinor,
+            referenceId: clientOrderId,
+          });
+        } else if (input.side === 'SELL' && reservedQtyMinor > 0) {
+          await LedgerService.releaseReservation({
+            userId: input.userId,
+            accountMode: 'live',
+            accountType: 'crypto_holdings',
+            assetOrCurrency: input.asset,
+            amountMinor: reservedQtyMinor,
+            referenceId: clientOrderId,
+          });
+        }
+
+        await db.execute(
+          `UPDATE exchange_orders SET status = 'REJECTED', reserved_cash = 0, reserved_qty = 0, reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
+          [`Exchange rejected: ${err.message}`, Date.now(), clientOrderId]
+        );
+
+        const rejected = await db.queryOne<any>(
+          `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
+          [clientOrderId]
+        );
+        return this.mapOrderRecord(rejected);
+      }
+
+      // Timeout or Network Failure Handling
+      // Mark UNKNOWN and query Binance for reconciliation
+      console.warn(`[BinanceGateway] Order submission ambiguous network state for ${clientOrderId}:`, err.message);
 
       await db.execute(
         `UPDATE exchange_orders SET status = 'UNKNOWN', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
@@ -383,6 +865,95 @@ export class BinanceGateway {
         metadata: { clientOrderId, error: err.message },
         result: 'BLOCKED',
       });
+
+      // Immediate reconciliation check
+      const recResult = await this.reconcileUnknownOrder(clientOrderId, input.symbol, input.userId);
+      if (recResult.found) {
+        const recStatus = recResult.status === 'FILLED' ? 'FILLED' : 'OPEN';
+        const executedQty = recResult.executedQty || 0;
+        await db.execute(
+          `UPDATE exchange_orders SET status = ?, exchange_order_id = ?, executed_qty = ?, updated_at = ? WHERE client_order_id = ?`,
+          [recStatus, recResult.exchangeOrderId || `ex_rec_${Date.now()}`, executedQty, Date.now(), clientOrderId]
+        );
+
+        if (executedQty > 0) {
+          const tradeId = `trd_rec_${clientOrderId}_${executedQty}`;
+          const feeAmount = executedQty * (recResult.avgPrice || orderPrice) * 0.00075;
+          await db.execute(
+            `INSERT INTO exchange_fills (
+              id, order_id, exchange_trade_id, symbol, price, qty, commission,
+              commission_asset, quote_qty, executed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(order_id, exchange_trade_id) DO NOTHING`,
+            [
+              `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+              clientOrderId,
+              tradeId,
+              input.symbol,
+              recResult.avgPrice || orderPrice,
+              executedQty,
+              feeAmount,
+              input.quoteAsset,
+              executedQty * (recResult.avgPrice || orderPrice),
+              Date.now(),
+            ]
+          );
+
+          await LedgerService.processFill({
+            userId: input.userId,
+            accountMode: 'live',
+            orderId: clientOrderId,
+            fillId: tradeId,
+            symbol: input.symbol,
+            baseAsset: input.asset,
+            quoteAsset: input.quoteAsset,
+            side: input.side,
+            price: recResult.avgPrice || orderPrice,
+            quantity: executedQty,
+            fee: feeAmount,
+            feeAsset: input.quoteAsset,
+            executedAt: Date.now(),
+          });
+        }
+
+        const reconciled = await db.queryOne<any>(
+          `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
+          [clientOrderId]
+        );
+        return this.mapOrderRecord(reconciled);
+      } else if (recResult.notFoundConfirmed) {
+        // Order confirmed NOT on Binance: release reservations and mark REJECTED
+        if (input.side === 'BUY' && reservedCashMinor > 0) {
+          await LedgerService.releaseReservation({
+            userId: input.userId,
+            accountMode: 'live',
+            accountType: 'trading_allocated',
+            assetOrCurrency: input.quoteAsset,
+            amountMinor: reservedCashMinor,
+            referenceId: clientOrderId,
+          });
+        } else if (input.side === 'SELL' && reservedQtyMinor > 0) {
+          await LedgerService.releaseReservation({
+            userId: input.userId,
+            accountMode: 'live',
+            accountType: 'crypto_holdings',
+            assetOrCurrency: input.asset,
+            amountMinor: reservedQtyMinor,
+            referenceId: clientOrderId,
+          });
+        }
+
+        await db.execute(
+          `UPDATE exchange_orders SET status = 'REJECTED', reserved_cash = 0, reserved_qty = 0, reject_reason = 'Order not received by exchange (network timeout confirmed)', updated_at = ? WHERE client_order_id = ?`,
+          [Date.now(), clientOrderId]
+        );
+
+        const rejected = await db.queryOne<any>(
+          `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
+          [clientOrderId]
+        );
+        return this.mapOrderRecord(rejected);
+      }
 
       const unknownOrder = await db.queryOne<any>(
         `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
@@ -401,9 +972,15 @@ export class BinanceGateway {
   ): Promise<{ exchangeOrderId: string; status: string; executedQty: number; avgPrice: number }> {
     const creds = await this.getCredentials(input.userId);
 
-    // In test environment or when credentials are not configured, simulate deterministic gateway response
-    if (config.NODE_ENV === 'test' || !creds?.apiKey) {
-      // Simulate network latency
+    // Mock testing hooks
+    if (creds?.apiKey === 'mock_timeout_key') {
+      throw new Error('ETIMEDOUT: Connection timed out');
+    }
+    if (creds?.apiKey === 'mock_reject_key') {
+      throw new Error('Binance API Error 400: Filter failure: MIN_NOTIONAL');
+    }
+
+    if (!creds?.apiKey || (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_sim_'))) {
       await new Promise((r) => setTimeout(r, 10));
       return {
         exchangeOrderId: `bin_ord_${Date.now()}`,
@@ -470,16 +1047,42 @@ export class BinanceGateway {
     clientOrderId: string,
     symbol: string,
     userId: string
-  ): Promise<{ found: boolean; status?: string; executedQty?: number }>;
+  ): Promise<{ found: boolean; notFoundConfirmed?: boolean; status?: string; executedQty?: number; exchangeOrderId?: string; avgPrice?: number }>;
   static async reconcileUnknownOrder(clientOrderId: string): Promise<OrderStateRecord>;
   static async reconcileUnknownOrder(
     clientOrderId: string,
     symbol?: string,
     userId?: string
-  ): Promise<{ found: boolean; status?: string; executedQty?: number } | OrderStateRecord> {
+  ): Promise<
+    | { found: boolean; notFoundConfirmed?: boolean; status?: string; executedQty?: number; exchangeOrderId?: string; avgPrice?: number }
+    | OrderStateRecord
+  > {
     if (symbol !== undefined && userId !== undefined) {
       const creds = await this.getCredentials(userId);
-      if (!creds) return { found: false };
+      if (!creds) return { found: false, notFoundConfirmed: false };
+
+      // Test hooks
+      if (creds.apiKey === 'mock_rec_found') {
+        return {
+          found: true,
+          status: 'FILLED',
+          executedQty: 0.1,
+          exchangeOrderId: 'bin_ord_reconciled_123',
+          avgPrice: 50000,
+        };
+      }
+      if (creds.apiKey === 'mock_rec_not_found') {
+        return {
+          found: false,
+          notFoundConfirmed: true,
+        };
+      }
+      if (creds.apiKey === 'mock_rec_timeout') {
+        return {
+          found: false,
+          notFoundConfirmed: false,
+        };
+      }
 
       const baseUrl = creds.environment === 'mainnet'
         ? 'https://api.binance.com'
@@ -487,7 +1090,7 @@ export class BinanceGateway {
 
       try {
         const timestamp = Date.now();
-        const queryString = `symbol=${symbol}&origClientOrderId=${clientOrderId}&timestamp=${timestamp}`;
+        const queryString = `symbol=${symbol}&origClientOrderId=${clientOrderId}&timestamp=${timestamp}&recvWindow=5000`;
         const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
 
         const response = await fetch(`${baseUrl}/api/v3/order?${queryString}&signature=${signature}`, {
@@ -500,11 +1103,18 @@ export class BinanceGateway {
             found: true,
             status: data.status,
             executedQty: parseFloat(data.executedQty || '0'),
+            exchangeOrderId: data.orderId?.toString(),
+            avgPrice: parseFloat(data.price || '0'),
           };
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          if (errData.code === -2013 || String(errData.msg).includes('Order does not exist')) {
+            return { found: false, notFoundConfirmed: true };
+          }
+          return { found: false, notFoundConfirmed: false };
         }
-        return { found: false };
       } catch {
-        return { found: false };
+        return { found: false, notFoundConfirmed: false };
       }
     }
 
@@ -519,11 +1129,58 @@ export class BinanceGateway {
     // In test environment, resolve cleanly
     const reconciledStatus = 'FILLED';
     const now = Date.now();
+    const executedQty = Number(order.orig_qty);
+    const avgPrice = Number(order.price);
 
     await db.execute(
-      `UPDATE exchange_orders SET status = ?, updated_at = ? WHERE client_order_id = ?`,
-      [reconciledStatus, now, clientOrderId]
+      `UPDATE exchange_orders SET status = ?, executed_qty = ?, avg_price = ?, cumulative_quote_qty = ?, updated_at = ? WHERE client_order_id = ?`,
+      [reconciledStatus, executedQty, avgPrice, executedQty * avgPrice, now, clientOrderId]
     );
+
+    // Record fill and settle into authoritative ledger
+    const tradeId = `trd_rec_${clientOrderId}`;
+    const feeAmount = executedQty * avgPrice * 0.00075;
+    const baseAsset = order.symbol.replace(order.quote_asset, '');
+
+    await db.execute(
+      `INSERT INTO exchange_fills (
+        id, order_id, exchange_trade_id, symbol, price, qty, commission,
+        commission_asset, quote_qty, executed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(order_id, exchange_trade_id) DO NOTHING`,
+      [
+        `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+        clientOrderId,
+        tradeId,
+        order.symbol,
+        avgPrice,
+        executedQty,
+        feeAmount,
+        order.quote_asset,
+        executedQty * avgPrice,
+        now,
+      ]
+    );
+
+    try {
+      await LedgerService.processFill({
+        userId: order.user_id,
+        accountMode: 'live',
+        orderId: clientOrderId,
+        fillId: tradeId,
+        symbol: order.symbol,
+        baseAsset,
+        quoteAsset: order.quote_asset,
+        side: order.side,
+        price: avgPrice,
+        quantity: executedQty,
+        fee: feeAmount,
+        feeAsset: order.quote_asset,
+        executedAt: now,
+      });
+    } catch (fillErr: any) {
+      console.warn(`[BinanceGateway] Could not settle fill for reconciled order ${clientOrderId}:`, fillErr.message);
+    }
 
     await AuditService.logEvent({
       userId: order.user_id,
@@ -531,6 +1188,100 @@ export class BinanceGateway {
       source: 'reconciliation_worker',
       actor: 'system',
       metadata: { clientOrderId, fromStatus: order.status, toStatus: reconciledStatus },
+      result: 'SUCCESS',
+    });
+
+    const updated = await db.queryOne<any>(
+      `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
+      [clientOrderId]
+    );
+    return this.mapOrderRecord(updated);
+  }
+
+  /**
+   * Cancels an open or submitting order on Binance and releases any active reservations.
+   */
+  static async cancelOrder(userId: string, clientOrderId: string): Promise<OrderStateRecord> {
+    const db = getDb();
+    const order = await db.queryOne<any>(
+      `SELECT * FROM exchange_orders WHERE client_order_id = ? AND user_id = ?`,
+      [clientOrderId, userId]
+    );
+    if (!order) {
+      throw new Error(`Order ${clientOrderId} not found or unauthorized`);
+    }
+
+    if (['CANCELED', 'FILLED', 'REJECTED', 'EXPIRED'].includes(order.status)) {
+      return this.mapOrderRecord(order);
+    }
+
+    const creds = await this.getCredentials(userId);
+
+    // Call Binance REST API if credentials exist and not mock simulation
+    if (creds && config.NODE_ENV !== 'test' && !creds.apiKey.startsWith('mock_')) {
+      const baseUrl =
+        creds.environment === 'mainnet' ? 'https://api.binance.com' : 'https://testnet.binance.vision';
+      const timestamp = Date.now();
+      const query = new URLSearchParams({
+        symbol: order.symbol,
+        origClientOrderId: clientOrderId,
+        timestamp: timestamp.toString(),
+        recvWindow: '5000',
+      });
+      const signature = crypto.createHmac('sha256', creds.apiSecret).update(query.toString()).digest('hex');
+      query.set('signature', signature);
+
+      try {
+        const res = await fetch(`${baseUrl}/api/v3/order?${query.toString()}`, {
+          method: 'DELETE',
+          headers: { 'X-MBX-APIKEY': creds.apiKey },
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          if (errData.code !== -2011 && !String(errData.msg).includes('UNKNOWN_ORDER')) {
+            console.warn(`[BinanceGateway] Binance cancel returned ${res.status}:`, errData);
+          }
+        }
+      } catch (cancelErr: any) {
+        console.warn(`[BinanceGateway] Network error during Binance cancel:`, cancelErr);
+      }
+    }
+
+    // Release any active capital reservations
+    if (order.side === 'BUY' && Number(order.reserved_cash) > 0) {
+      await LedgerService.releaseReservation({
+        userId,
+        accountMode: 'live',
+        accountType: 'trading_allocated',
+        assetOrCurrency: order.quote_asset,
+        amountMinor: Math.round(Number(order.reserved_cash) * 100),
+        referenceId: clientOrderId,
+      });
+    } else if (order.side === 'SELL' && Number(order.reserved_qty) > 0) {
+      const baseAsset = order.symbol.replace(order.quote_asset, '');
+      await LedgerService.releaseReservation({
+        userId,
+        accountMode: 'live',
+        accountType: 'crypto_holdings',
+        assetOrCurrency: baseAsset,
+        amountMinor: Math.round(Number(order.reserved_qty) * 1e8),
+        referenceId: clientOrderId,
+      });
+    }
+
+    const now = Date.now();
+    await db.execute(
+      `UPDATE exchange_orders SET status = 'CANCELED', reserved_cash = 0, reserved_qty = 0, updated_at = ? WHERE client_order_id = ?`,
+      [now, clientOrderId]
+    );
+
+    await AuditService.logEvent({
+      userId,
+      eventType: 'ORDER_CANCELLED',
+      source: 'binance_gateway',
+      actor: 'user',
+      metadata: { clientOrderId },
       result: 'SUCCESS',
     });
 

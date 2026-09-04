@@ -172,15 +172,33 @@ export function buildServer(): FastifyInstance {
   // ==========================================================================
 
   server.get('/api/wallet/balances', { preHandler: requireAuth }, async (req: FastifyRequest) => {
-    const balances = await LedgerService.getUserBalances(req.user!.id);
+    const query = req.query as { mode?: 'live' | 'paper' };
+    const mode = query?.mode === 'paper' ? 'paper' : 'live';
+    const balances = await LedgerService.getUserBalances(req.user!.id, mode);
     return { success: true, balances };
   });
 
+  server.get('/api/accounting/summary', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const query = req.query as { mode?: 'live' | 'paper' };
+    const mode = query?.mode === 'paper' ? 'paper' : 'live';
+    const summary = await LedgerService.getAuthoritativeProjection(req.user!.id, mode);
+    return { success: true, summary };
+  });
+
+  server.post('/api/accounting/replay', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const query = req.query as { mode?: 'live' | 'paper' };
+    const mode = query?.mode === 'paper' ? 'paper' : 'live';
+    const verification = await LedgerService.replayAccountState(req.user!.id, mode);
+    return { success: true, verification };
+  });
+
   server.get('/api/wallet/ledger', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const query = req.query as { mode?: 'live' | 'paper' };
+    const mode = query?.mode === 'paper' ? 'paper' : 'live';
     const db = getDb();
     const entries = await db.query(
-      `SELECT * FROM ledger_entries WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`,
-      [req.user!.id]
+      `SELECT * FROM ledger_entries WHERE user_id = ? AND account_mode = ? ORDER BY created_at DESC LIMIT 100`,
+      [req.user!.id, mode]
     );
     return { success: true, entries };
   });
@@ -381,8 +399,38 @@ export function buildServer(): FastifyInstance {
     }
 
     try {
-      await BinanceGateway.saveExchangeCredentials(req.user!.id, body);
-      return { success: true, message: 'Exchange credentials securely stored and encrypted at rest on backend.' };
+      const audit = await BinanceGateway.saveExchangeCredentials(req.user!.id, body);
+      return { success: true, audit, message: 'Exchange credentials securely audited and encrypted at rest.' };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await BinanceGateway.disconnectExchange(req.user!.id);
+      return { success: true, message: 'Exchange disconnected and credentials wiped.' };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/exchange/account', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const info = await BinanceGateway.getExchangeAccountInfo(req.user!.id);
+      return { success: true, account: info || { connected: false } };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.post('/api/exchange/listen-key', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const listenKey = await BinanceGateway.createListenKey(req.user!.id);
+      if (!listenKey) {
+        return reply.status(400).send({ success: false, error: 'Could not create listenKey. Verify exchange credentials.' });
+      }
+      return { success: true, listenKey };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }
@@ -432,6 +480,19 @@ export function buildServer(): FastifyInstance {
       [req.user!.id]
     );
     return { success: true, orders };
+  });
+
+  server.post('/api/orders/cancel', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as { clientOrderId: string };
+    if (!body?.clientOrderId) {
+      return reply.status(400).send({ success: false, error: 'clientOrderId is required' });
+    }
+    try {
+      const order = await BinanceGateway.cancelOrder(req.user!.id, body.clientOrderId);
+      return { success: true, order };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
   });
 
   // ==========================================================================

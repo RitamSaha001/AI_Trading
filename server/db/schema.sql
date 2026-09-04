@@ -66,15 +66,17 @@ CREATE INDEX IF NOT EXISTS idx_limits_user_id ON account_limits(user_id);
 CREATE TABLE IF NOT EXISTS ledger_accounts (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  account_type TEXT NOT NULL, -- 'sovereign_cash' | 'trading_allocated' | 'crypto_holdings' | 'reserve_escrow'
+  account_mode TEXT NOT NULL DEFAULT 'live', -- 'live' | 'paper'
+  account_type TEXT NOT NULL, -- 'sovereign_cash' | 'trading_allocated' | 'crypto_holdings' | 'reserve_escrow' | 'fee_treasury' | 'realized_pnl'
   asset_or_currency TEXT NOT NULL, -- 'USD' | 'INR' | 'BTC' | 'ETH' | 'USDT' etc.
   balance_minor BIGINT NOT NULL DEFAULT 0, -- Minor units (cents/paise/satoshis/wei)
   reserved_minor BIGINT NOT NULL DEFAULT 0,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL,
-  UNIQUE(user_id, account_type, asset_or_currency)
+  UNIQUE(user_id, account_mode, account_type, asset_or_currency)
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_accounts_user ON ledger_accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_accounts_user_mode ON ledger_accounts(user_id, account_mode);
 
 -- Double-Entry Ledger Immutable Journal Entries
 CREATE TABLE IF NOT EXISTS ledger_entries (
@@ -82,18 +84,26 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
   transaction_id TEXT NOT NULL,
   account_id TEXT NOT NULL REFERENCES ledger_accounts(id),
   user_id TEXT NOT NULL REFERENCES users(id),
+  account_mode TEXT NOT NULL DEFAULT 'live', -- 'live' | 'paper'
   entry_type TEXT NOT NULL, -- 'debit' | 'credit'
   amount_minor BIGINT NOT NULL,
   balance_after_minor BIGINT NOT NULL,
   currency_or_asset TEXT NOT NULL,
-  reference_type TEXT NOT NULL, -- 'deposit' | 'withdrawal' | 'allocation' | 'recall' | 'trade_fill' | 'fee'
+  reference_type TEXT NOT NULL, -- 'deposit' | 'withdrawal' | 'allocation' | 'recall' | 'trade_fill' | 'fee' | 'realized_pnl' | 'adjustment' | 'reversal'
   reference_id TEXT NOT NULL,
+  idempotency_key TEXT,
+  order_id TEXT,
+  fill_id TEXT,
   description TEXT NOT NULL,
   created_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_entries_tx ON ledger_entries(transaction_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_entries_account ON ledger_entries(account_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_entries_user ON ledger_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_entries_user_mode ON ledger_entries(user_id, account_mode);
+CREATE INDEX IF NOT EXISTS idx_ledger_entries_idemp ON ledger_entries(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_ledger_entries_order_id ON ledger_entries(order_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_entries_fill_id ON ledger_entries(fill_id);
 
 -- Payment Orders (Card & UPI)
 CREATE TABLE IF NOT EXISTS payment_orders (
@@ -208,10 +218,31 @@ CREATE TABLE IF NOT EXISTS exchange_fills (
   commission REAL NOT NULL,
   commission_asset TEXT NOT NULL,
   quote_qty REAL NOT NULL,
+  ledger_processed BOOLEAN NOT NULL DEFAULT 0,
+  ledger_transaction_id TEXT,
   executed_at BIGINT NOT NULL,
   UNIQUE(order_id, exchange_trade_id)
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_fills_order ON exchange_fills(order_id);
+CREATE INDEX IF NOT EXISTS idx_exchange_fills_processed ON exchange_fills(ledger_processed);
+
+-- Authoritative Position Projections with Cost Basis & Realized P&L
+CREATE TABLE IF NOT EXISTS authoritative_positions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  account_mode TEXT NOT NULL DEFAULT 'live', -- 'live' | 'paper'
+  asset TEXT NOT NULL,
+  total_quantity_minor BIGINT NOT NULL DEFAULT 0, -- 1e8 satoshis
+  reserved_quantity_minor BIGINT NOT NULL DEFAULT 0,
+  cost_basis_minor BIGINT NOT NULL DEFAULT 0, -- Total cash cost in cents (volume-weighted)
+  realized_pnl_minor BIGINT NOT NULL DEFAULT 0, -- Cumulative realized P&L in cents
+  total_fees_minor BIGINT NOT NULL DEFAULT 0, -- Cumulative fees paid in cents
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE(user_id, account_mode, asset)
+);
+CREATE INDEX IF NOT EXISTS idx_authoritative_positions_user ON authoritative_positions(user_id);
+CREATE INDEX IF NOT EXISTS idx_authoritative_positions_user_mode ON authoritative_positions(user_id, account_mode);
 
 -- Reconciliation Runs & Mismatches
 CREATE TABLE IF NOT EXISTS reconciliation_runs (

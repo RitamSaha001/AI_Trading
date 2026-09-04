@@ -1,6 +1,7 @@
 import { getDb } from '../db';
 import { AuditService, logger } from './auditService';
 import { BinanceGateway } from './binanceGateway';
+import { LedgerService } from './ledgerService';
 import crypto from 'node:crypto';
 
 export interface ReconciliationResult {
@@ -35,6 +36,13 @@ export class ReconciliationWorker {
     const startTime = Date.now();
     const runId = `rec_run_${startTime}_${crypto.randomBytes(4).toString('hex')}`;
     const db = getDb();
+
+    // Initialize reconciliation run record so foreign keys in mismatches are satisfied
+    await db.execute(
+      `INSERT INTO reconciliation_runs (id, ran_at, status, orders_checked, balances_checked, mismatches_found, duration_ms)
+       VALUES (?, ?, 'IN_PROGRESS', 0, 0, 0, 0)`,
+      [runId, startTime]
+    );
 
     let ordersChecked = 0;
     let balancesChecked = 0;
@@ -119,13 +127,18 @@ export class ReconciliationWorker {
         }
       }
 
+      // 4. Reconcile Local Authoritative Account State vs Exchange State
+      if (userId) {
+        const mismatchCount = await this.reconcileBalancesAgainstExchange(userId, runId);
+        mismatchesFound += mismatchCount;
+      }
+
       const durationMs = Date.now() - startTime;
       const status = mismatchesFound > 0 ? 'MISMATCH_DETECTED' : 'SUCCESS';
 
       await db.execute(
-        `INSERT INTO reconciliation_runs (id, ran_at, status, orders_checked, balances_checked, mismatches_found, duration_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [runId, startTime, status, ordersChecked, balancesChecked, mismatchesFound, durationMs]
+        `UPDATE reconciliation_runs SET status = ?, orders_checked = ?, balances_checked = ?, mismatches_found = ?, duration_ms = ? WHERE id = ?`,
+        [status, ordersChecked, balancesChecked, mismatchesFound, durationMs, runId]
       );
 
       await AuditService.logEvent({
@@ -151,7 +164,104 @@ export class ReconciliationWorker {
     }
   }
 
-  private static async recordMismatch(params: {
+  /**
+   * Reconciles local authoritative balances against exchange balances.
+   * Discrepancies generate auditable RECONCILIATION_MISMATCH incidents without silently overwriting the ledger.
+   */
+  static async reconcileBalancesAgainstExchange(
+    userId: string,
+    runId: string = `rec_run_${Date.now()}`,
+    mockExchangeBalances?: Record<string, number>
+  ): Promise<number> {
+    let mismatches = 0;
+    const localProjection = await LedgerService.getAuthoritativeProjection(userId, 'live');
+
+    let exchangeBalances: Record<string, number> | null = mockExchangeBalances || null;
+
+    if (!exchangeBalances) {
+      const creds = await BinanceGateway.getCredentials(userId);
+      if (creds?.apiKey) {
+        try {
+          const baseUrl =
+            creds.environment === 'mainnet'
+              ? 'https://api.binance.com'
+              : 'https://testnet.binance.vision';
+          const timestamp = Date.now();
+          const queryString = `timestamp=${timestamp}`;
+          const signature = crypto
+            .createHmac('sha256', creds.apiSecret)
+            .update(queryString)
+            .digest('hex');
+
+          const response = await fetch(`${baseUrl}/api/v3/account?${queryString}&signature=${signature}`, {
+            headers: { 'X-MBX-APIKEY': creds.apiKey },
+          });
+
+          if (response.ok) {
+            const data = (await response.json()) as any;
+            exchangeBalances = {};
+            for (const b of data.balances || []) {
+              const free = parseFloat(b.free || '0');
+              if (free > 0) {
+                exchangeBalances[b.asset] = free;
+              }
+            }
+          }
+        } catch (e: any) {
+          logger.warn(`Could not query Binance account balances for reconciliation: ${e.message}`);
+        }
+      }
+    }
+
+    if (!exchangeBalances) {
+      return 0;
+    }
+
+    // 1. Reconcile Cash
+    const localCash = localProjection.cash.available;
+    const quoteAsset = localProjection.cash.currency || 'USDT';
+    const exchangeCash = exchangeBalances[quoteAsset] ?? 0;
+    const cashDiff = Math.abs(localCash - exchangeCash);
+
+    if (cashDiff > 0.01) {
+      mismatches++;
+      await this.recordMismatch({
+        runId,
+        userId,
+        entityType: 'BALANCE',
+        entityId: quoteAsset,
+        severity: cashDiff > 100 ? 'CRITICAL' : 'HIGH',
+        localState: { availableCash: localCash, currency: quoteAsset },
+        exchangeState: { availableCash: exchangeCash, diff: cashDiff },
+        notes: `RECONCILIATION_MISMATCH: Cash discrepancy of ${cashDiff.toFixed(2)} ${quoteAsset} detected between local ledger and exchange venue.`,
+      });
+    }
+
+    // 2. Reconcile Crypto Positions
+    for (const [asset, pos] of Object.entries(localProjection.positions)) {
+      const localUnits = pos.availableQuantity;
+      const exchangeUnits = exchangeBalances[asset] ?? 0;
+      const assetDiff = Math.abs(localUnits - exchangeUnits);
+
+      if (assetDiff > 0.00001) {
+        mismatches++;
+        await this.recordMismatch({
+          runId,
+          userId,
+          entityType: 'POSITION',
+          entityId: asset,
+          severity: 'HIGH',
+          localState: { availableQuantity: localUnits, asset },
+          exchangeState: { availableQuantity: exchangeUnits, diff: assetDiff },
+          notes: `RECONCILIATION_MISMATCH: Position discrepancy of ${assetDiff} ${asset} detected between local ledger and exchange venue.`,
+        });
+      }
+    }
+
+    return mismatches;
+  }
+
+  static async recordMismatch(params: {
     runId: string;
     userId: string;
     entityType: 'BALANCE' | 'ORDER' | 'POSITION';

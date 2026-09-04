@@ -84,7 +84,7 @@ import {
   encryptApiKey,
   isEncryptedApiKey,
 } from './services/keyVault';
-import { BinanceConnector } from './services/binanceConnector';
+import { BinanceConnector, BinanceAccountBalance } from './services/binanceConnector';
 import {
   signInWithGoogle,
   signInWithApple,
@@ -135,7 +135,7 @@ type Ctx = {
       stopLoss?: number;
     }
   ) => { ok: boolean; error?: string; order?: Order };
-  cancelPendingOrder: (orderId: string) => boolean;
+  cancelPendingOrder: (orderId: string) => boolean | Promise<boolean>;
   toggleStrategy: (id: string) => void;
   updateStrategy: (id: string, p: Partial<StrategyConfig>) => void;
   addStrategy: (x: Omit<StrategyConfig, 'id' | 'tradesExecuted' | 'totalPnl' | 'realizedPnl' | 'feesPaid'>) => void;
@@ -467,23 +467,18 @@ export function Provider({ children }: { children: React.ReactNode }) {
   }, [triggerToast]);
 
   const connectExchange = useCallback(
-    async (creds: ExchangeCredentials, passphrase: string) => {
+    async (creds: ExchangeCredentials, _passphrase?: string) => {
       try {
-        let effectiveCreds = creds;
-        if (!creds.apiKey || !creds.apiSecret) {
-          effectiveCreds = await unlockVault(passphrase);
-        } else {
-          await saveCredentials(creds, passphrase);
+        const res = await ApiClient.connectExchange(creds);
+        if (!res.ok || !res.data?.audit) {
+          triggerToast('Connection Failed', res.error || 'Could not verify exchange credentials', 'warn');
+          return { ok: false, error: res.error || 'Connection failed' };
         }
 
-        const connector = new BinanceConnector(effectiveCreds);
-        connectorRef.current = connector;
-
-        const audit = await connector.testConnection();
-
+        const audit = res.data.audit;
         const accountInfo: ExchangeAccountInfo = {
           connected: true,
-          environment: effectiveCreds.environment,
+          environment: creds.environment,
           canTrade: audit.canTrade,
           canWithdraw: audit.canWithdraw,
           canDeposit: audit.canDeposit,
@@ -508,47 +503,55 @@ export function Provider({ children }: { children: React.ReactNode }) {
           return { ok: false, error: audit.securityWarning, audit };
         }
 
-        // Start private WebSocket stream
+        // Start private WebSocket stream using server-issued listenKey
         try {
-          const listenKey = await connector.startUserDataStream();
-          accountInfo.listenKey = listenKey;
-          if (wsCleanupRef.current) wsCleanupRef.current();
+          const lkRes = await ApiClient.getExchangeListenKey();
+          if (lkRes.ok && lkRes.data?.listenKey) {
+            const listenKey = lkRes.data.listenKey;
+            accountInfo.listenKey = listenKey;
+            if (wsCleanupRef.current) wsCleanupRef.current();
 
-          wsCleanupRef.current = connector.connectUserStream(listenKey, {
-            onBalanceUpdate: (balances) => {
-              setExchangeAccount((prev) => {
-                if (!prev) return prev;
-                const updated = { ...prev.balances, ...balances };
-                return { ...prev, balances: updated, lastSyncAt: Date.now() };
-              });
-              setState((s) => {
-                if (!s.exchangeAccount) return s;
-                return {
-                  ...s,
-                  exchangeAccount: {
-                    ...s.exchangeAccount,
-                    balances: { ...s.exchangeAccount.balances, ...balances },
-                    lastSyncAt: Date.now(),
-                  },
-                };
-              });
-            },
-            onExecutionReport: (report) => {
-              triggerToast(
-                `Exchange Fill: ${report.side} ${report.symbol}`,
-                `Executed ${report.executedQty} @ $${report.lastPrice.toLocaleString()}`,
-                'info'
-              );
-            },
-            onError: (err) => {
-              console.warn('Binance WebSocket stream error:', err);
-            },
-          });
+            if (typeof WebSocket !== 'undefined') {
+              const wsBase = creds.environment === 'testnet'
+                ? 'wss://stream.testnet.binance.vision/ws'
+                : 'wss://stream.binance.com:9443/ws';
+              const ws = new WebSocket(`${wsBase}/${listenKey}`);
+
+              ws.onmessage = (event) => {
+                try {
+                  const msg = JSON.parse(event.data);
+                  if (msg.e === 'outboundAccountPosition' && Array.isArray(msg.B)) {
+                    const balances: Record<string, BinanceAccountBalance> = {};
+                    for (const item of msg.B) {
+                      const free = parseFloat(item.f);
+                      const locked = parseFloat(item.l);
+                      if (free > 0 || locked > 0) {
+                        balances[item.a] = { asset: item.a, free, locked };
+                      }
+                    }
+                    setExchangeAccount((prev) => prev ? { ...prev, balances: { ...prev.balances, ...balances }, lastSyncAt: Date.now() } : null);
+                  }
+                  if (msg.e === 'executionReport') {
+                    triggerToast(
+                      `Exchange Fill: ${msg.S} ${msg.s}`,
+                      `Executed ${msg.z} @ $${parseFloat(msg.L || '0').toLocaleString()}`,
+                      'info'
+                    );
+                    syncExchangeBalances();
+                  }
+                } catch {}
+              };
+
+              wsCleanupRef.current = () => {
+                try { ws.close(); } catch {}
+              };
+            }
+          }
         } catch (wsErr) {
           console.warn('Could not initialize WebSocket user stream; falling back to REST polling:', wsErr);
         }
 
-        triggerToast('Binance Connected', `Authenticated to Binance ${effectiveCreds.environment.toUpperCase()} with active safety audit.`, 'success');
+        triggerToast('Binance Connected', `Authenticated to Binance ${creds.environment.toUpperCase()} via secure server gateway.`, 'success');
         return { ok: true, audit };
       } catch (err: any) {
         console.error('Failed to connect exchange:', err);
@@ -558,29 +561,48 @@ export function Provider({ children }: { children: React.ReactNode }) {
     [triggerToast]
   );
 
-  const disconnectExchange = useCallback(() => {
+  const disconnectExchange = useCallback(async () => {
     if (wsCleanupRef.current) {
       wsCleanupRef.current();
       wsCleanupRef.current = null;
     }
     connectorRef.current = null;
     purgeVault();
+    try {
+      await ApiClient.disconnectExchange();
+    } catch {}
     setExchangeAccount(null);
     setState((s) => ({
       ...s,
       accountMode: 'paper',
       exchangeAccount: undefined,
     }));
-    triggerToast('Exchange Disconnected', 'Encrypted vault purged and switched back to Simulated Desk.', 'info');
+    triggerToast('Exchange Disconnected', 'Exchange disconnected and switched back to Simulated Desk.', 'info');
   }, [triggerToast]);
 
   const syncExchangeBalances = useCallback(async () => {
-    if (!connectorRef.current) return;
     try {
-      const balances = await connectorRef.current.fetchAccountBalances();
-      setExchangeAccount((prev) => (prev ? { ...prev, balances, lastSyncAt: Date.now() } : null));
-      setState((s) => (s.exchangeAccount ? { ...s, exchangeAccount: { ...s.exchangeAccount, balances, lastSyncAt: Date.now() } } : s));
-      triggerToast('Balances Synced', 'Verified exchange wallet balances refreshed.', 'info');
+      const res = await ApiClient.getAuthoritativeAccountingSummary('live');
+      if (res.ok && res.data?.summary) {
+        const summary = res.data.summary;
+        const balances: Record<string, BinanceAccountBalance> = {
+          USDT: {
+            asset: 'USDT',
+            free: summary.cash.available,
+            locked: summary.cash.reserved,
+          },
+        };
+        for (const pos of summary.positions) {
+          balances[pos.asset] = {
+            asset: pos.asset,
+            free: pos.availableQuantity,
+            locked: pos.reservedQuantity,
+          };
+        }
+        setExchangeAccount((prev) => (prev ? { ...prev, balances, lastSyncAt: Date.now() } : null));
+        setState((s) => (s.exchangeAccount ? { ...s, exchangeAccount: { ...s.exchangeAccount, balances, lastSyncAt: Date.now() } } : s));
+        triggerToast('Balances Synced', 'Verified exchange balances refreshed from server.', 'info');
+      }
     } catch (e: any) {
       triggerToast('Sync Failed', e?.message || 'Could not fetch exchange balances', 'warn');
     }
@@ -1557,9 +1579,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
       const isExchange = stateRef.current.accountMode === 'exchange';
 
       if (isExchange) {
-        if (!connectorRef.current) {
-          triggerToast('Exchange Error', 'Binance connector is not active. Please connect your keys.', 'warn');
-          return { ok: false, error: 'Binance connector is not initialized' };
+        if (!stateRef.current.exchangeAccount?.connected) {
+          triggerToast('Exchange Error', 'Binance exchange is not connected. Please connect your keys.', 'warn');
+          return { ok: false, error: 'Binance exchange is not connected' };
         }
         if (!stateRef.current.exchangeAccount?.isSafe) {
           triggerToast('Security Sentinel Alert', 'Trading blocked due to unsafe exchange permissions.', 'warn');
@@ -1572,7 +1594,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
         const quoteAgeMs = Date.now() - (marketsRef.current[a]?.lastUpdated || Date.now());
 
-        // Route through authoritative server risk engine and execution gateway first
+        // Route exclusively through authoritative server risk engine and execution gateway
         ApiClient.submitOrder({
           symbol,
           asset: a,
@@ -1586,68 +1608,41 @@ export function Provider({ children }: { children: React.ReactNode }) {
         })
           .then(async (backendRes) => {
             if (backendRes.ok && backendRes.data?.order) {
+              const ord = backendRes.data.order;
               triggerToast(
                 `Order Placed via Authoritative Gateway`,
-                `Dispatched ${side.toUpperCase()} ${qty} ${a} to Binance (${backendRes.data.order.status})`,
-                'success'
+                `Dispatched ${side.toUpperCase()} ${qty} ${a} to Binance (${ord.status})`,
+                ord.status === 'REJECTED' ? 'warn' : 'success'
               );
               syncExchangeBalances();
+
+              // Emergency Hard Stop placement through server gateway
+              if (options?.stopLoss && options.stopLoss > 0 && ord.status !== 'REJECTED') {
+                try {
+                  const stopPrice = options.stopLoss;
+                  const limitPrice = side === 'buy' ? stopPrice * 0.999 : stopPrice * 1.001;
+                  await ApiClient.submitOrder({
+                    symbol,
+                    asset: a,
+                    quoteAsset: 'USDT',
+                    side: side === 'buy' ? 'SELL' : 'BUY',
+                    type: 'STOP_LOSS_LIMIT',
+                    quantity: qty,
+                    price: parseFloat(limitPrice.toFixed(2)),
+                    marketQuoteAgeMs: 0,
+                    idempotencyKey: `stop_${clientOrderId}`,
+                  });
+                  triggerToast('Hard Stop Placed', `Native stop-loss limit placed on Binance at $${stopPrice}`, 'info');
+                } catch (stopErr: any) {
+                  console.warn('Failed to place native stop loss via gateway:', stopErr);
+                }
+              }
               return;
             }
             if (backendRes.error) {
               triggerToast('Risk Engine Blocked', backendRes.error, 'warn');
               return;
             }
-            return connectorRef.current?.placeOrder({
-              symbol,
-              side: side === 'buy' ? 'BUY' : 'SELL',
-              type: binanceOrderType,
-              quantity: qty,
-              price: options?.limitPrice,
-              timeInForce: 'GTC',
-              newClientOrderId: clientOrderId,
-            });
-          })
-          .catch(() => {
-            return connectorRef.current?.placeOrder({
-              symbol,
-              side: side === 'buy' ? 'BUY' : 'SELL',
-              type: binanceOrderType,
-              quantity: qty,
-              price: options?.limitPrice,
-              timeInForce: 'GTC',
-              newClientOrderId: clientOrderId,
-            });
-          })
-          .then(async (res: any) => {
-            if (!res) return;
-            triggerToast(
-              `Binance Order Placed`,
-              `Dispatched ${side.toUpperCase()} ${qty} ${a} to Binance (${res.status})`,
-              'success'
-            );
-
-            // Emergency Hard Stop placement on Binance Order Book
-            if (options?.stopLoss && options.stopLoss > 0) {
-              try {
-                const stopPrice = options.stopLoss;
-                const limitPrice = side === 'buy' ? stopPrice * 0.999 : stopPrice * 1.001;
-                await connectorRef.current?.placeOrder({
-                  symbol,
-                  side: side === 'buy' ? 'SELL' : 'BUY',
-                  type: 'STOP_LOSS_LIMIT',
-                  quantity: qty,
-                  price: parseFloat(limitPrice.toFixed(2)),
-                  stopPrice: parseFloat(stopPrice.toFixed(2)),
-                  timeInForce: 'GTC',
-                });
-                triggerToast('Hard Stop Placed', `Native stop-loss limit placed on Binance at $${stopPrice}`, 'info');
-              } catch (stopErr: any) {
-                console.warn('Failed to place native stop loss on Binance:', stopErr);
-              }
-            }
-
-            syncExchangeBalances();
           })
           .catch((err: any) => {
             triggerToast('Binance Order Rejected', err?.message || 'Order execution failed on Binance', 'warn');
@@ -1866,7 +1861,29 @@ export function Provider({ children }: { children: React.ReactNode }) {
   );
 
   const cancelPendingOrder = useCallback(
-    (orderId: string) => {
+    async (orderId: string) => {
+      const isExchange = stateRef.current.accountMode === 'exchange';
+      if (isExchange) {
+        try {
+          const res = await ApiClient.cancelOrder(orderId);
+          if (res.ok && res.data?.order) {
+            triggerToast('Order Cancelled', `Binance order ${orderId.slice(0, 10)} cancelled on exchange.`, 'info');
+            syncExchangeBalances();
+            setState((s) => ({
+              ...s,
+              orders: s.orders.map((o) => (o.id === orderId ? { ...o, status: 'cancelled' } : o)),
+            }));
+            return true;
+          } else {
+            triggerToast('Cancellation Failed', res.error || 'Could not cancel order on exchange', 'warn');
+            return false;
+          }
+        } catch (err: any) {
+          triggerToast('Cancellation Error', err.message || 'Network error during cancellation', 'warn');
+          return false;
+        }
+      }
+
       const s: AppState = {
         ...stateRef.current,
         orders: stateRef.current.orders.map((o) => ({ ...o })),
@@ -1886,7 +1903,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
       return ok;
     },
-    [triggerToast]
+    [triggerToast, syncExchangeBalances]
   );
 
   const toggleStrategy = useCallback((id: string) => {

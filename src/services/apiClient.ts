@@ -157,12 +157,46 @@ export const ApiClient = {
     });
   },
 
+  async getAuthoritativeAccountingSummary(mode: 'live' | 'paper' = 'live') {
+    return apiRequest(`/api/accounting/summary?mode=${mode}`);
+  },
+
+  async replayAccountingState(mode: 'live' | 'paper' = 'live') {
+    return apiRequest(`/api/accounting/replay?mode=${mode}`, { method: 'POST' });
+  },
+
   async getOrders() {
     return apiRequest('/api/orders');
   },
 
+  async cancelOrder(clientOrderId: string) {
+    return apiRequest('/api/orders/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ clientOrderId }),
+    });
+  },
+
   async runReconciliation() {
     return apiRequest('/api/reconciliation/run', { method: 'POST' });
+  },
+
+  async connectExchange(creds: { apiKey: string; apiSecret: string; environment: 'testnet' | 'mainnet' }) {
+    return apiRequest<{ audit: any; message: string }>('/api/exchange/connect', {
+      method: 'POST',
+      body: JSON.stringify(creds),
+    });
+  },
+
+  async disconnectExchange() {
+    return apiRequest('/api/exchange/disconnect', { method: 'POST' });
+  },
+
+  async getExchangeAccount() {
+    return apiRequest<{ account: any }>('/api/exchange/account');
+  },
+
+  async getExchangeListenKey() {
+    return apiRequest<{ listenKey: string }>('/api/exchange/listen-key', { method: 'POST' });
   },
 
   async getAuditEvents() {
