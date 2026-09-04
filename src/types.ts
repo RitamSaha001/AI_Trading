@@ -315,8 +315,35 @@ export type AISafetyValidation = {
   };
 };
 
+export type AccountMode = 'paper' | 'exchange';
+
+export type ExchangeBalance = {
+  asset: string;
+  free: number;
+  locked: number;
+};
+
+export type ExchangeAccountInfo = {
+  connected: boolean;
+  environment: 'testnet' | 'mainnet';
+  canTrade: boolean;
+  canWithdraw: boolean;
+  canDeposit: boolean;
+  permissions: string[];
+  isSafe: boolean;
+  securityBadge: string;
+  securityWarning?: string;
+  balances: Record<string, ExchangeBalance>;
+  lastSyncAt: number;
+  latencyMs?: number;
+  listenKey?: string;
+};
+
 export type AppState = {
   schemaVersion: number;
+  accountMode?: AccountMode;
+  exchangeAccount?: ExchangeAccountInfo;
+  exchangeOrders?: Order[];
   cash: number;
   reservedCash?: number;
   reservedPositions?: Partial<Record<Asset, number>>;

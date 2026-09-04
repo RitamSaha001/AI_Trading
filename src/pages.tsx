@@ -49,6 +49,7 @@ import {
   ShieldAlert,
   Compass,
   Scale,
+  Coins,
 } from 'lucide-react';
 import { senseMarketDanger } from './domain/agentic';
 
@@ -1114,7 +1115,15 @@ export function Markets() {
 // PORTFOLIO
 // ----------------------------------------------------
 export function Portfolio() {
-  const { state, markets, openChat } = useLumen();
+  const {
+    state,
+    markets,
+    openChat,
+    accountMode,
+    exchangeAccount,
+    openExchangeDrawer,
+    syncExchangeBalances,
+  } = useLumen();
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
   const riskProfile = calculatePortfolioRisk(state, markets);
@@ -1156,6 +1165,84 @@ export function Portfolio() {
           </div>
         }
       />
+
+      {/* Live Exchange Verified Wallet Card (When in Exchange Mode) */}
+      {accountMode === 'exchange' && (
+        <div className="p-6 rounded-[28px] bg-zinc-900 text-white shadow-xl space-y-4 border border-zinc-800 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                <Coins className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-white tracking-tight">
+                    Binance {exchangeAccount?.environment?.toUpperCase() || 'TESTNET'} Wallet
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    🟢 Live Synced
+                  </span>
+                  {exchangeAccount?.latencyMs !== undefined && (
+                    <span className="text-[10px] font-mono text-zinc-400">
+                      {exchangeAccount.latencyMs}ms ping
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {exchangeAccount?.securityBadge || 'Client-Side Encrypted Execution Bridge'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => syncExchangeBalances()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all"
+                title="Refresh Balances"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Refresh</span>
+              </button>
+              <button
+                type="button"
+                onClick={openExchangeDrawer}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all"
+              >
+                <span>Manage Keys</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Balance Metrics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] text-zinc-400 font-medium block">Total Liquid USDT</span>
+              <span className="text-lg font-bold font-mono text-emerald-400 mt-1 block">
+                ${(exchangeAccount?.balances?.['USDT']?.free || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] text-zinc-400 font-medium block">USDT In Orders</span>
+              <span className="text-lg font-bold font-mono text-amber-400 mt-1 block">
+                ${(exchangeAccount?.balances?.['USDT']?.locked || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] text-zinc-400 font-medium block">Active Tokens</span>
+              <span className="text-lg font-bold font-mono text-white mt-1 block">
+                {Object.keys(exchangeAccount?.balances || {}).filter((k) => k !== 'USDT').length} Assets
+              </span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] text-zinc-400 font-medium block">Withdrawal Safety</span>
+              <span className={`text-xs font-semibold mt-1.5 block ${exchangeAccount?.canWithdraw ? 'text-rose-400' : 'text-emerald-400'}`}>
+                {exchangeAccount?.canWithdraw ? '🚨 DANGEROUS: ENABLED' : '🛡️ DISABLED (Safe)'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sentinel Capital Defense & Real-Time Danger Gauge Deck - Apple Liquid Glass */}
       <div className="liquid-glass rounded-[28px] p-5 border border-white/90 shadow-xs relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1852,6 +1939,7 @@ export function Strategies() {
     resetAllCircuitBreakers,
     setLossPreventionMode,
     openChat,
+    accountMode,
   } = useLumen();
 
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'quantum' | 'titan' | 'ai' | 'trend' | 'breakout' | 'grid' | 'breaker'>('all');
@@ -2318,6 +2406,15 @@ export function Strategies() {
                       <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <span className="text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold bg-zinc-100 text-zinc-700 uppercase tracking-wider">
                           {s.kind.replace('_', ' ')}
+                        </span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold ${
+                            accountMode === 'exchange'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-zinc-100 text-zinc-600'
+                          }`}
+                        >
+                          {accountMode === 'exchange' ? '🟢 Live Binance Target' : '📊 Paper Sim Target'}
                         </span>
                         {s.zeroLossMode !== false && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 flex items-center gap-1">

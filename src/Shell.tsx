@@ -5,6 +5,7 @@ import { SettingsModal } from './Settings';
 import { ChatDrawer } from './ChatDrawer';
 import { DataSourceBadge } from './components/DataSourceBadge';
 import { AISafetyModal } from './components/AISafetyModal';
+import { ExchangeOnboardingDrawer } from './components/ExchangeOnboardingDrawer';
 import {
   LayoutDashboard,
   BarChart3,
@@ -21,6 +22,7 @@ import {
   Volume2,
   VolumeX,
   Menu,
+  Coins,
 } from 'lucide-react';
 import { money, portfolioValue, totalPortfolioPnl } from './trading';
 import { senseMarketDanger } from './domain/agentic';
@@ -80,6 +82,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
     chatOpen,
     openChat,
     closeChat,
+    accountMode,
+    setAccountMode,
+    exchangeAccount,
+    exchangeDrawerOpen,
+    openExchangeDrawer,
+    closeExchangeDrawer,
   } = useLumen();
   const route = useRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -270,6 +278,66 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-1.5 sm:gap-3">
+            {/* Dual-Account Desk Switcher & Exchange Trigger */}
+            <div className="flex items-center bg-black/[0.04] p-0.5 rounded-full border border-black/[0.06]">
+              <button
+                type="button"
+                onClick={() => setAccountMode('paper')}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+                  accountMode === 'paper'
+                    ? 'bg-white text-zinc-900 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+                title="Switch to Simulated Paper Desk ($50,000 Sandbox)"
+              >
+                <span>📊</span>
+                <span className="hidden sm:inline">Simulated</span> Desk
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!exchangeAccount?.connected) {
+                    openExchangeDrawer();
+                  } else {
+                    setAccountMode('exchange');
+                  }
+                }}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+                  accountMode === 'exchange'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : exchangeAccount?.connected
+                    ? 'text-emerald-700 hover:text-emerald-900'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+                title={exchangeAccount?.connected ? 'Switch to Live Binance Account' : 'Connect Binance Exchange'}
+              >
+                {exchangeAccount?.connected ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="hidden sm:inline">Binance</span>
+                    <span className="text-[10px] opacity-80 uppercase font-mono">
+                      {exchangeAccount.environment === 'testnet' ? 'Test' : 'Live'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Coins className="w-3 h-3 text-amber-500" />
+                    <span>Connect Exchange</span>
+                  </>
+                )}
+              </button>
+              {exchangeAccount?.connected && (
+                <button
+                  type="button"
+                  onClick={openExchangeDrawer}
+                  className="px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-700 transition-colors"
+                  title="Exchange Settings & Security Audit"
+                >
+                  ⚙️
+                </button>
+              )}
+            </div>
+
             {/* Live Data Source Indicator (hidden on smallest screens to preserve space) */}
             <div className="hidden sm:block">
               <DataSourceBadge
@@ -416,6 +484,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Nexus AI Drawer */}
       <ChatDrawer open={chatOpen} onClose={closeChat} />
+
+      {/* Binance Exchange Onboarding Drawer */}
+      <ExchangeOnboardingDrawer open={exchangeDrawerOpen} onClose={closeExchangeDrawer} />
 
       {/* AI Safety Authorization Gate Modal */}
       {pendingAIProposal && pendingAIValidation && (

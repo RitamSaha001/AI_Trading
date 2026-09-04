@@ -155,4 +155,108 @@ describe('Service: AI Safety Gate Verification', () => {
     expect(validation.valid).toBe(false);
     expect(validation.errors.some((e) => /diversification cap/i.test(e))).toBe(true);
   });
+
+  describe('Exchange Mode Safety Rules', () => {
+    const exchangeState: AppState = {
+      ...mockState,
+      accountMode: 'exchange',
+      exchangeAccount: {
+        connected: true,
+        environment: 'testnet',
+        canTrade: true,
+        canWithdraw: false,
+        canDeposit: true,
+        permissions: ['SPOT'],
+        isSafe: true,
+        securityBadge: 'Safe',
+        balances: {
+          USDT: { asset: 'USDT', free: 25.0, locked: 0 },
+          BTC: { asset: 'BTC', free: 0.001, locked: 0 },
+        },
+        lastSyncAt: Date.now(),
+      },
+    };
+
+    it('blocks exchange order below $10.00 minimum notional limit', () => {
+      // DOGE price = 0.12, 10 units = $1.20 notional (< $10.00)
+      const proposal: AIActionProposal = {
+        type: 'order',
+        asset: 'DOGE',
+        side: 'buy',
+        amount: 10,
+        orderType: 'market',
+        rationale: 'Small test order',
+        confidence: 'medium',
+        riskSummary: 'Low risk',
+        requiresConfirmation: true,
+      };
+
+      const validation = validateAIProposal(proposal, exchangeState, mockMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /below Binance minimum \$10\.00/i.test(e))).toBe(true);
+    });
+
+    it('blocks exchange order if liquid USDT balance is insufficient', () => {
+      // Exchange has $25 USDT. Buying 1 ETH ($3000) exceeds balance.
+      const proposal: AIActionProposal = {
+        type: 'order',
+        asset: 'ETH',
+        side: 'buy',
+        amount: 1,
+        orderType: 'market',
+        rationale: 'Accumulate ETH',
+        confidence: 'medium',
+        riskSummary: 'High capital',
+        requiresConfirmation: true,
+      };
+
+      const validation = validateAIProposal(proposal, exchangeState, mockMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /Insufficient available exchange USDT/i.test(e))).toBe(true);
+    });
+
+    it('blocks exchange order if market data feed is older than 45 seconds', () => {
+      const staleMarkets = {
+        ...mockMarkets,
+        BTC: {
+          ...mockMarkets.BTC,
+          lastUpdated: Date.now() - 50000, // 50s old
+        },
+      };
+
+      const proposal: AIActionProposal = {
+        type: 'order',
+        asset: 'BTC',
+        side: 'buy',
+        amount: 0.001,
+        orderType: 'market',
+        rationale: 'Buy BTC',
+        confidence: 'high',
+        riskSummary: 'Freshness test',
+        requiresConfirmation: true,
+      };
+
+      const validation = validateAIProposal(proposal, exchangeState, staleMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /stale/i.test(e))).toBe(true);
+    });
+
+    it('enforces requiresConfirmation on live exchange orders', () => {
+      const proposal: AIActionProposal = {
+        type: 'order',
+        asset: 'DOGE',
+        side: 'buy',
+        amount: 100, // $12 notional
+        orderType: 'market',
+        rationale: 'Bypass confirmation attempt',
+        confidence: 'high',
+        riskSummary: 'Autonomous execution attempt',
+        requiresConfirmation: false,
+      };
+
+      const validation = validateAIProposal(proposal, exchangeState, mockMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /mandatory 2-step human confirmation/i.test(e))).toBe(true);
+    });
+  });
 });

@@ -8,6 +8,18 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     allowedHosts: true,
+    proxy: {
+      '/api/binance-mainnet': {
+        target: 'https://api.binance.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/binance-mainnet/, ''),
+      },
+      '/api/binance-testnet': {
+        target: 'https://testnet.binance.vision',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/binance-testnet/, ''),
+      },
+    },
   },
   preview: {
     host: '0.0.0.0',

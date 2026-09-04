@@ -231,6 +231,7 @@ export function freshState(customCash = 50000, mode: SimulationMode = 'clean'): 
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    accountMode: 'paper',
     cash: customCash,
     initialCash: customCash,
     startingEquity,
@@ -305,6 +306,9 @@ export function migrateState(rawState: any): AppState {
   const migrated: AppState = {
     ...base,
     schemaVersion: SCHEMA_VERSION,
+    accountMode: rawState.accountMode === 'exchange' ? 'exchange' : 'paper',
+    exchangeAccount: rawState.exchangeAccount || undefined,
+    exchangeOrders: Array.isArray(rawState.exchangeOrders) ? rawState.exchangeOrders : [],
     cash: typeof rawState.cash === 'number' && Number.isFinite(rawState.cash) ? rawState.cash : base.cash,
     initialCash: typeof rawState.initialCash === 'number' ? rawState.initialCash : base.initialCash,
     startingEquity: typeof rawState.startingEquity === 'number' && rawState.startingEquity > 0

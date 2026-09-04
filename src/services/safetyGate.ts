@@ -196,14 +196,41 @@ export function validateAIProposal(
 
   // Financial & Execution Modeling
   const quote = calculateExecutionQuote(market.price, side, amount);
+
+  // Exchange-Specific Checks (Requirement R4)
+  const isExchangeMode = state.accountMode === 'exchange';
+  if (isExchangeMode) {
+    if (proposal.requiresConfirmation === false) {
+      errors.push('Safety Gate: Live exchange orders require mandatory 2-step human confirmation.');
+    }
+    const envLabel = state.exchangeAccount?.environment?.toUpperCase() || 'TESTNET';
+    warnings.push(`⚠️ DISPATCHING TO LIVE BINANCE [${envLabel}]`);
+
+    // Minimum notional enforcement ($10.00 minimum on Binance Spot)
+    if (quote.notional < 10.0) {
+      errors.push(
+        `Exchange minimum notional rejection: Order notional ($${quote.notional.toFixed(2)}) is below Binance minimum $10.00 requirement.`
+      );
+    }
+  }
+
+  // Financial & Execution Modeling
   const totalPortVal = portfolioValue(state, markets);
-  const currentCash = state.cash;
-  const availableCash = getAvailableCash(state);
-  const reservedCash = getReservedCash(state);
-  const currentHolding = state.positions[asset] || 0;
-  const availableHolding = getAvailablePosition(state, asset);
-  const reservedHolding = getReservedPosition(state, asset);
-  const currentAssetVal = positionValue(state, markets, asset);
+  const currentCash = isExchangeMode
+    ? (state.exchangeAccount?.balances['USDT']?.free || 0)
+    : state.cash;
+  const availableCash = isExchangeMode
+    ? (state.exchangeAccount?.balances['USDT']?.free || 0)
+    : getAvailableCash(state);
+  const reservedCash = isExchangeMode ? 0 : getReservedCash(state);
+  const currentHolding = isExchangeMode
+    ? (state.exchangeAccount?.balances[asset]?.free || 0)
+    : (state.positions[asset] || 0);
+  const availableHolding = isExchangeMode
+    ? (state.exchangeAccount?.balances[asset]?.free || 0)
+    : getAvailablePosition(state, asset);
+  const reservedHolding = isExchangeMode ? 0 : getReservedPosition(state, asset);
+  const currentAssetVal = currentHolding * market.price;
 
   // Maximum Slippage Hard Limit (Requirement 19)
   // quote.slippagePct is in percent (e.g. 0.02 for 2 bps). policy.maxSlippagePct is decimal (e.g. 0.01 for 1%).
@@ -216,9 +243,10 @@ export function validateAIProposal(
   // Capital & Holdings Checks
   if (side === 'buy') {
     if (quote.totalCashRequired > availableCash + 0.01) {
-      errors.push(
-        `Insufficient available liquid cash. Order requires ${money(quote.totalCashRequired)} (incl. fee), but available cash is ${money(availableCash)} (${money(reservedCash)} reserved for pending orders).`
-      );
+      const msg = isExchangeMode
+        ? `Insufficient available exchange USDT. Order requires ${money(quote.totalCashRequired)} (incl. fee), but available balance is ${money(availableCash)}.`
+        : `Insufficient available liquid cash. Order requires ${money(quote.totalCashRequired)} (incl. fee), but available cash is ${money(availableCash)} (${money(reservedCash)} reserved for pending orders).`;
+      errors.push(msg);
     }
 
     // Single order size cap

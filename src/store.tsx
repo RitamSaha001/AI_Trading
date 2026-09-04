@@ -13,6 +13,8 @@ import {
   AIActionProposal,
   AISafetyValidation,
   ExecutionReceipt,
+  AccountMode,
+  ExchangeAccountInfo,
 } from './types';
 import { fetchAll, fetchMarket, MarketStreamService } from './services/market';
 import {
@@ -28,6 +30,18 @@ import { evaluateAlert } from './domain/alerts';
 import { validateAIProposal } from './services/safetyGate';
 import { freshState, loadState, resetState, saveState, SimulationMode } from './storage';
 import { fetchAIInsight, sendAIChat } from './gemini';
+import {
+  saveCredentials,
+  unlockVault,
+  lockVault,
+  purgeVault,
+  isVaultConfigured,
+  isVaultUnlocked,
+  getUnlockedCredentials,
+  ExchangeCredentials,
+  onVaultLock,
+} from './services/keyVault';
+import { BinanceConnector } from './services/binanceConnector';
 
 type Ctx = {
   state: AppState;
@@ -89,6 +103,15 @@ type Ctx = {
   executeActionProposal: (proposal: any) => { ok: boolean; error?: string };
   reset: (startingCash?: number, mode?: SimulationMode) => void;
   refreshMarkets: () => Promise<void>;
+  accountMode: 'paper' | 'exchange';
+  setAccountMode: (mode: 'paper' | 'exchange') => void;
+  exchangeAccount: ExchangeAccountInfo | null;
+  exchangeDrawerOpen: boolean;
+  openExchangeDrawer: () => void;
+  closeExchangeDrawer: () => void;
+  connectExchange: (creds: ExchangeCredentials, passphrase: string) => Promise<{ ok: boolean; error?: string; audit?: any }>;
+  disconnectExchange: () => void;
+  syncExchangeBalances: () => Promise<void>;
 };
 
 const Context = createContext<Ctx | null>(null);
@@ -179,6 +202,151 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const dismissToast = useCallback(() => {
     setActiveToast(null);
   }, []);
+
+  // Live Exchange Bridge State
+  const [exchangeAccount, setExchangeAccount] = useState<ExchangeAccountInfo | null>(() => state.exchangeAccount || null);
+  const [exchangeDrawerOpen, setExchangeDrawerOpen] = useState(false);
+  const connectorRef = useRef<BinanceConnector | null>(null);
+  const wsCleanupRef = useRef<(() => void) | null>(null);
+
+  const openExchangeDrawer = useCallback(() => setExchangeDrawerOpen(true), []);
+  const closeExchangeDrawer = useCallback(() => setExchangeDrawerOpen(false), []);
+
+  const setAccountMode = useCallback((mode: 'paper' | 'exchange') => {
+    setState((s) => ({ ...s, accountMode: mode }));
+    triggerToast(
+      'Account Mode Switched',
+      `Active Desk: ${mode === 'exchange' ? '🟢 Live Binance Exchange' : '📊 Simulated Paper Desk'}.`,
+      'info'
+    );
+  }, [triggerToast]);
+
+  const connectExchange = useCallback(
+    async (creds: ExchangeCredentials, passphrase: string) => {
+      try {
+        let effectiveCreds = creds;
+        if (!creds.apiKey || !creds.apiSecret) {
+          effectiveCreds = await unlockVault(passphrase);
+        } else {
+          await saveCredentials(creds, passphrase);
+        }
+
+        const connector = new BinanceConnector(effectiveCreds);
+        connectorRef.current = connector;
+
+        const audit = await connector.testConnection();
+
+        const accountInfo: ExchangeAccountInfo = {
+          connected: true,
+          environment: effectiveCreds.environment,
+          canTrade: audit.canTrade,
+          canWithdraw: audit.canWithdraw,
+          canDeposit: audit.canDeposit,
+          permissions: audit.permissions,
+          isSafe: audit.isSafe,
+          securityBadge: audit.securityBadge,
+          securityWarning: audit.securityWarning,
+          balances: audit.balances,
+          lastSyncAt: Date.now(),
+          latencyMs: audit.latencyMs,
+        };
+
+        setExchangeAccount(accountInfo);
+        setState((s) => ({
+          ...s,
+          exchangeAccount: accountInfo,
+          accountMode: audit.isSafe ? 'exchange' : 'paper',
+        }));
+
+        if (!audit.isSafe) {
+          triggerToast('Security Sentinel Alert', audit.securityWarning || 'Exchange keys lack safe permissions.', 'warn');
+          return { ok: false, error: audit.securityWarning, audit };
+        }
+
+        // Start private WebSocket stream
+        try {
+          const listenKey = await connector.startUserDataStream();
+          accountInfo.listenKey = listenKey;
+          if (wsCleanupRef.current) wsCleanupRef.current();
+
+          wsCleanupRef.current = connector.connectUserStream(listenKey, {
+            onBalanceUpdate: (balances) => {
+              setExchangeAccount((prev) => {
+                if (!prev) return prev;
+                const updated = { ...prev.balances, ...balances };
+                return { ...prev, balances: updated, lastSyncAt: Date.now() };
+              });
+              setState((s) => {
+                if (!s.exchangeAccount) return s;
+                return {
+                  ...s,
+                  exchangeAccount: {
+                    ...s.exchangeAccount,
+                    balances: { ...s.exchangeAccount.balances, ...balances },
+                    lastSyncAt: Date.now(),
+                  },
+                };
+              });
+            },
+            onExecutionReport: (report) => {
+              triggerToast(
+                `Exchange Fill: ${report.side} ${report.symbol}`,
+                `Executed ${report.executedQty} @ $${report.lastPrice.toLocaleString()}`,
+                'info'
+              );
+            },
+            onError: (err) => {
+              console.warn('Binance WebSocket stream error:', err);
+            },
+          });
+        } catch (wsErr) {
+          console.warn('Could not initialize WebSocket user stream; falling back to REST polling:', wsErr);
+        }
+
+        triggerToast('Binance Connected', `Authenticated to Binance ${effectiveCreds.environment.toUpperCase()} with active safety audit.`, 'success');
+        return { ok: true, audit };
+      } catch (err: any) {
+        console.error('Failed to connect exchange:', err);
+        return { ok: false, error: err?.message || 'Connection failed' };
+      }
+    },
+    [triggerToast]
+  );
+
+  const disconnectExchange = useCallback(() => {
+    if (wsCleanupRef.current) {
+      wsCleanupRef.current();
+      wsCleanupRef.current = null;
+    }
+    connectorRef.current = null;
+    purgeVault();
+    setExchangeAccount(null);
+    setState((s) => ({
+      ...s,
+      accountMode: 'paper',
+      exchangeAccount: undefined,
+    }));
+    triggerToast('Exchange Disconnected', 'Encrypted vault purged and switched back to Simulated Desk.', 'info');
+  }, [triggerToast]);
+
+  const syncExchangeBalances = useCallback(async () => {
+    if (!connectorRef.current) return;
+    try {
+      const balances = await connectorRef.current.fetchAccountBalances();
+      setExchangeAccount((prev) => (prev ? { ...prev, balances, lastSyncAt: Date.now() } : null));
+      setState((s) => (s.exchangeAccount ? { ...s, exchangeAccount: { ...s.exchangeAccount, balances, lastSyncAt: Date.now() } } : s));
+      triggerToast('Balances Synced', 'Verified exchange wallet balances refreshed.', 'info');
+    } catch (e: any) {
+      triggerToast('Sync Failed', e?.message || 'Could not fetch exchange balances', 'warn');
+    }
+  }, [triggerToast]);
+
+  useEffect(() => {
+    const unsub = onVaultLock(() => {
+      triggerToast('Vault Auto-Locked', 'Key vault locked due to 30-minute inactivity.', 'info');
+    });
+    return () => unsub();
+  }, [triggerToast]);
 
   useEffect(() => {
     stateRef.current = state;
@@ -409,6 +577,93 @@ export function Provider({ children }: { children: React.ReactNode }) {
         stopLoss?: number;
       }
     ) => {
+      const isExchange = stateRef.current.accountMode === 'exchange';
+
+      if (isExchange) {
+        if (!connectorRef.current) {
+          triggerToast('Exchange Error', 'Binance connector is not active. Please connect your keys.', 'warn');
+          return { ok: false, error: 'Binance connector is not initialized' };
+        }
+        if (!stateRef.current.exchangeAccount?.isSafe) {
+          triggerToast('Security Sentinel Alert', 'Trading blocked due to unsafe exchange permissions.', 'warn');
+          return { ok: false, error: 'Exchange account permissions are unsafe' };
+        }
+
+        const symbol = `${a}USDT`;
+        const binanceOrderType = options?.type === 'limit' ? 'LIMIT' : 'MARKET';
+        const clientOrderId = 'lumen_' + Date.now().toString(36);
+
+        // Async placement handled with immediate optimistic notification
+        connectorRef.current
+          .placeOrder({
+            symbol,
+            side: side === 'buy' ? 'BUY' : 'SELL',
+            type: binanceOrderType,
+            quantity: qty,
+            price: options?.limitPrice,
+            timeInForce: 'GTC',
+            newClientOrderId: clientOrderId,
+          })
+          .then(async (res) => {
+            triggerToast(
+              `Binance Order Placed`,
+              `Dispatched ${side.toUpperCase()} ${qty} ${a} to Binance (${res.status})`,
+              'success'
+            );
+
+            // Emergency Hard Stop placement on Binance Order Book
+            if (options?.stopLoss && options.stopLoss > 0) {
+              try {
+                const stopPrice = options.stopLoss;
+                const limitPrice = side === 'buy' ? stopPrice * 0.999 : stopPrice * 1.001;
+                await connectorRef.current?.placeOrder({
+                  symbol,
+                  side: side === 'buy' ? 'SELL' : 'BUY',
+                  type: 'STOP_LOSS_LIMIT',
+                  quantity: qty,
+                  price: parseFloat(limitPrice.toFixed(2)),
+                  stopPrice: parseFloat(stopPrice.toFixed(2)),
+                  timeInForce: 'GTC',
+                });
+                triggerToast('Hard Stop Placed', `Native stop-loss limit placed on Binance at $${stopPrice}`, 'info');
+              } catch (stopErr: any) {
+                console.warn('Failed to place native stop loss on Binance:', stopErr);
+              }
+            }
+
+            syncExchangeBalances();
+          })
+          .catch((err: any) => {
+            triggerToast('Binance Order Rejected', err?.message || 'Order execution failed on Binance', 'warn');
+          });
+
+        const newOrder: Order = {
+          id: clientOrderId,
+          ts: Date.now(),
+          side,
+          type: options?.type || 'market',
+          asset: a,
+          amount: qty,
+          price: options?.limitPrice || marketsRef.current[a]?.price || 0,
+          limitPrice: options?.limitPrice,
+          fee: (options?.limitPrice || marketsRef.current[a]?.price || 0) * qty * 0.0008,
+          notional: (options?.limitPrice || marketsRef.current[a]?.price || 0) * qty,
+          auto: Boolean(options?.auto),
+          strategyName: options?.strategyName,
+          status: 'pending',
+          stopLoss: options?.stopLoss,
+          takeProfit: options?.takeProfit,
+        };
+
+        setState((s) => ({
+          ...s,
+          orders: [newOrder, ...s.orders],
+        }));
+
+        return { ok: true, order: newOrder };
+      }
+
+      // Paper Simulation Execution
       const s: AppState = {
         ...stateRef.current,
         positions: { ...stateRef.current.positions },
@@ -441,7 +696,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
       return r;
     },
-    [triggerToast]
+    [triggerToast, syncExchangeBalances]
   );
 
   const cancelPendingOrder = useCallback(
@@ -1181,6 +1436,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
       executeActionProposal,
       reset,
       refreshMarkets,
+      accountMode: state.accountMode || 'paper',
+      setAccountMode,
+      exchangeAccount,
+      exchangeDrawerOpen,
+      openExchangeDrawer,
+      closeExchangeDrawer,
+      connectExchange,
+      disconnectExchange,
+      syncExchangeBalances,
     }),
     [
       state,
@@ -1229,6 +1493,14 @@ export function Provider({ children }: { children: React.ReactNode }) {
       executeActionProposal,
       reset,
       refreshMarkets,
+      setAccountMode,
+      exchangeAccount,
+      exchangeDrawerOpen,
+      openExchangeDrawer,
+      closeExchangeDrawer,
+      connectExchange,
+      disconnectExchange,
+      syncExchangeBalances,
     ]
   );
 

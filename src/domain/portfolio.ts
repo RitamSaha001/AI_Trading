@@ -138,18 +138,58 @@ export const formatQty = (qty: number, asset: Asset): string => {
 
 /**
  * Calculates current total portfolio liquidation value (cash + mark-to-market positions).
+ * Seamlessly supports dual-account segregation:
+ * When accountMode === 'exchange', evaluates verified exchange USDT cash + active exchange asset holdings.
+ * When accountMode === 'paper' (default), evaluates virtual cash and positions.
  */
 export function portfolioValue(
-  state: Pick<AppState, 'cash' | 'positions'>,
+  state: Pick<AppState, 'cash' | 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount'>>,
   markets: Record<Asset, Market | undefined>
 ): number {
+  if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
+    const balances = state.exchangeAccount.balances;
+    const usdtCash = (balances['USDT']?.free || 0) + (balances['USDT']?.locked || 0);
+    const cryptoVal = ASSETS.reduce((sum, a) => {
+      const b = balances[a];
+      const units = (b?.free || 0) + (b?.locked || 0);
+      const price = markets[a]?.price || 0;
+      return sum + (units > 0 && price > 0 ? units * price : 0);
+    }, 0);
+    return usdtCash + cryptoVal;
+  }
+
   const cash = Number.isFinite(state.cash) ? state.cash : 0;
   const positionsVal = ASSETS.reduce((sum, a) => {
-    const units = state.positions[a] || 0;
+    const units = state.positions?.[a] || 0;
     const price = markets[a]?.price || 0;
     return sum + (units > 0 && price > 0 ? units * price : 0);
   }, 0);
   return cash + positionsVal;
+}
+
+/**
+ * Returns active liquid cash based on account mode (USDT for exchange, cash for paper).
+ */
+export function getActiveLiquidCash(
+  state: Pick<AppState, 'cash'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount'>>
+): number {
+  if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
+    return state.exchangeAccount.balances['USDT']?.free || 0;
+  }
+  return Number.isFinite(state.cash) ? state.cash : 0;
+}
+
+/**
+ * Returns active position units for an asset based on account mode.
+ */
+export function getActiveAssetUnits(
+  state: Pick<AppState, 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount'>>,
+  asset: Asset
+): number {
+  if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
+    return state.exchangeAccount.balances[asset]?.free || 0;
+  }
+  return state.positions?.[asset] || 0;
 }
 
 /**
