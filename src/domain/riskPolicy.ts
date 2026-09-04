@@ -55,7 +55,7 @@ export function getRiskPolicy(state?: AppState): RiskPolicy {
   const policy = { ...DEFAULT_RISK_POLICY };
 
   if (state?.settings?.maxSlippageBps) {
-    policy.maxSlippagePct = state.settings.maxSlippageBps / 10000;
+    policy.maxSlippagePct = Math.min(0.05, Math.max(0.0001, state.settings.maxSlippageBps / 10000));
   }
 
   if (state?.lossPreventionMode === 'strict') {

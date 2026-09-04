@@ -18,6 +18,41 @@ export const MAX_ASSET_ALLOCATION_PCT = DEFAULT_RISK_POLICY.maxSingleAssetPct; /
 export const MIN_CASH_RESERVE_PCT = DEFAULT_RISK_POLICY.minCashReservePct; // Hard policy: Minimum 15% liquid cash reserve for capital preservation
 export const STALE_DATA_THRESHOLD_MS = DEFAULT_RISK_POLICY.staleDataThresholdMs; // 45 seconds
 
+/** In-memory pending order lock to prevent race-condition duplicate submissions */
+const pendingOrderLocks = new Map<string, number>();
+const LOCK_TTL_MS = 10_000; // 10 second lock
+
+export function acquireOrderLock(asset: string, side: string): boolean {
+  const key = `${asset}-${side}`;
+  const now = Date.now();
+  const existing = pendingOrderLocks.get(key);
+  if (existing && now - existing < LOCK_TTL_MS) {
+    return false; // Lock held
+  }
+  pendingOrderLocks.set(key, now);
+  return true;
+}
+
+export function isOrderLocked(asset: string, side: string): boolean {
+  const key = `${asset}-${side}`;
+  const existing = pendingOrderLocks.get(key);
+  if (existing && Date.now() - existing < LOCK_TTL_MS) {
+    return true;
+  }
+  if (existing) {
+    pendingOrderLocks.delete(key);
+  }
+  return false;
+}
+
+export function releaseOrderLock(asset: string, side: string): void {
+  pendingOrderLocks.delete(`${asset}-${side}`);
+}
+
+export function clearOrderLocks(): void {
+  pendingOrderLocks.clear();
+}
+
 /**
  * Validates any AI-generated proposal against financial sanity, portfolio risk caps,
  * minimum cash liquidity reserves, pending order reservations, and market freshness before authorization.
@@ -25,7 +60,8 @@ export const STALE_DATA_THRESHOLD_MS = DEFAULT_RISK_POLICY.staleDataThresholdMs;
 export function validateAIProposal(
   proposal: any,
   state: AppState,
-  markets: Record<Asset, Market | undefined>
+  markets: Record<Asset, Market | undefined>,
+  options?: { acquireLock?: boolean }
 ): AISafetyValidation {
   const policy: RiskPolicy = getRiskPolicy(state);
   const errors: string[] = [];
@@ -69,6 +105,40 @@ export function validateAIProposal(
         if (!Number.isFinite(s.amount) || s.amount <= 0) {
           errors.push(`Invalid amount in rebalance step for ${s.asset}: ${s.amount}`);
         }
+        
+        // Validate sufficient balance for rebalance step
+        const stepMarket = markets[s.asset as Asset];
+        if (stepMarket && stepMarket.price > 0) {
+          if (s.action === 'buy') {
+            const stepNotional = s.amount * stepMarket.price;
+            const isExch = state.accountMode === 'exchange';
+            const cashAvail = isExch
+              ? (['USDT','USDC','BUSD','FDUSD','USD'] as const).reduce((sum, c) => sum + (state.exchangeAccount?.balances[c]?.free || 0), 0)
+              : getAvailableCash(state);
+            if (stepNotional > cashAvail * 0.95) {
+              errors.push(`Rebalance buy step for ${s.asset}: notional $${stepNotional.toFixed(2)} exceeds available cash $${cashAvail.toFixed(2)}.`);
+            }
+          } else if (s.action === 'sell') {
+            const isExch = state.accountMode === 'exchange';
+            const holdingAvail = isExch
+              ? (state.exchangeAccount?.balances[s.asset]?.free || 0)
+              : getAvailablePosition(state, s.asset as Asset);
+            if (s.amount > holdingAvail + 1e-6) {
+              errors.push(`Rebalance sell step for ${s.asset}: amount ${s.amount} exceeds available holding ${holdingAvail.toFixed(6)}.`);
+            }
+          }
+        }
+      }
+    }
+
+    // Stale data check for rebalance steps
+    for (const s of steps) {
+      const stepMkt = markets[s.asset as Asset];
+      if (stepMkt?.lastUpdated) {
+        const age = Date.now() - stepMkt.lastUpdated;
+        if (age > policy.staleDataThresholdMs) {
+          errors.push(`Stale market data for ${s.asset} (${Math.round(age/1000)}s old). Rebalance blocked for capital safety.`);
+        }
       }
     }
 
@@ -94,6 +164,12 @@ export function validateAIProposal(
     if (currentActiveAlloc + maxAlloc > 1.0) {
       warnings.push(`Total active algorithmic allocation would reach ${((currentActiveAlloc + maxAlloc) * 100).toFixed(0)}% of portfolio capacity.`);
     }
+
+    const stratMarket = markets[proposal.asset as Asset];
+    if (stratMarket?.lastUpdated && Date.now() - stratMarket.lastUpdated > policy.staleDataThresholdMs) {
+      errors.push(`Stale market data for ${proposal.asset}. Strategy deployment blocked for capital safety.`);
+    }
+
     return { valid: errors.length === 0, errors, warnings };
   }
 
@@ -117,6 +193,12 @@ export function validateAIProposal(
     if (baseAmount > state.cash) {
       warnings.push(`Base DCA amount ($${baseAmount}) exceeds currently available cash ($${state.cash.toFixed(2)}). Ensure cash buffer is maintained.`);
     }
+
+    const dcaMarket = markets[proposal.asset as Asset];
+    if (dcaMarket?.lastUpdated && Date.now() - dcaMarket.lastUpdated > policy.staleDataThresholdMs) {
+      errors.push(`Stale market data for ${proposal.asset}. Smart DCA blocked for capital safety.`);
+    }
+
     return { valid: errors.length === 0, errors, warnings };
   }
 
@@ -183,14 +265,24 @@ export function validateAIProposal(
   // Duplicate-order protection (Requirement 19)
   if (Array.isArray(state.orders) && state.orders.length > 0 && Number.isFinite(amount) && amount > 0) {
     const isDuplicate = state.orders.some(
-      (o) => o.status === 'pending' && o.asset === asset && o.side === side && Math.abs(o.amount - amount) / Math.max(amount, 0.0001) < 0.05
+      (o) => o.status === 'pending' && o.asset === asset && o.side === side && Math.abs(o.amount - amount) / Math.max(amount, 0.0001) < 0.10
     );
     if (isDuplicate) {
       errors.push(`Duplicate order protection: An open ${side.toUpperCase()} order for ${asset} of matching size is already pending execution.`);
     }
   }
 
+  // Temporal lock: prevent concurrent same-asset same-side submissions
+  if (options?.acquireLock) {
+    if (!acquireOrderLock(asset, side)) {
+      errors.push(`Order throttle: A ${side.toUpperCase()} order for ${asset} was submitted within the last 10 seconds. Please wait.`);
+    }
+  }
+
   if (errors.length > 0) {
+    if (options?.acquireLock) {
+      releaseOrderLock(asset, side);
+    }
     return { valid: false, errors, warnings };
   }
 
@@ -240,6 +332,13 @@ export function validateAIProposal(
     );
   }
 
+  // Single order notional cap (applies to both buy and sell)
+  if (quote.notional > totalPortVal * policy.maxSingleOrderPortfolioPct) {
+    errors.push(
+      `Order exceeds maximum safe single-trade cap (${(policy.maxSingleOrderPortfolioPct * 100).toFixed(0)}% of portfolio). Trade notional: ${money(quote.notional)}, max allowed: ${money(totalPortVal * policy.maxSingleOrderPortfolioPct)}.`
+    );
+  }
+
   // Capital & Holdings Checks
   if (side === 'buy') {
     if (quote.totalCashRequired > availableCash + 0.01) {
@@ -247,13 +346,6 @@ export function validateAIProposal(
         ? `Insufficient available exchange USDT. Order requires ${money(quote.totalCashRequired)} (incl. fee), but available balance is ${money(availableCash)}.`
         : `Insufficient available liquid cash. Order requires ${money(quote.totalCashRequired)} (incl. fee), but available cash is ${money(availableCash)} (${money(reservedCash)} reserved for pending orders).`;
       errors.push(msg);
-    }
-
-    // Single order size cap
-    if (quote.notional > totalPortVal * policy.maxSingleOrderPortfolioPct) {
-      errors.push(
-        `Order exceeds maximum safe single-trade cap (${(policy.maxSingleOrderPortfolioPct * 100).toFixed(0)}% of portfolio). Trade notional: ${money(quote.notional)}, max allowed: ${money(totalPortVal * policy.maxSingleOrderPortfolioPct)}.`
-      );
     }
 
     // Cash Liquidity Reserve Enforcement (Policy minimum liquid buffer)

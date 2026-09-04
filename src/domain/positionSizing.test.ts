@@ -119,4 +119,46 @@ describe('Domain: Risk-Based Position Sizing Engine', () => {
 
     expect(res.notional).toBeGreaterThanOrEqual(10);
   });
+
+  it('safely rejects invalid or zero entry prices without fake fallback', () => {
+    const resZero = calculateRiskBasedPositionSize({
+      asset: 'BTC',
+      side: 'buy',
+      entryPrice: 0,
+      portfolioEquity: 50000,
+      availableCash: 25000,
+      currentHolding: 0,
+      currentHoldingNotional: 0,
+    });
+    expect(resZero.quantity).toBe(0);
+    expect(resZero.constrainedBy).toContain('invalid_price');
+    expect(resZero.rationale).toMatch(/REJECTED.*Invalid or zero entry price/i);
+
+    const resNegative = calculateRiskBasedPositionSize({
+      asset: 'BTC',
+      side: 'buy',
+      entryPrice: -500,
+      portfolioEquity: 50000,
+      availableCash: 25000,
+      currentHolding: 0,
+      currentHoldingNotional: 0,
+    });
+    expect(resNegative.quantity).toBe(0);
+    expect(resNegative.constrainedBy).toContain('invalid_price');
+  });
+
+  it('zeros out order if min size bump would violate asset concentration cap', () => {
+    // Portfolio is $100. Min order is $10. But asset cap is 50% = $50.
+    // If user already holds $48 of the asset, adding $10 = $58 (58% > 50%), so boundedQty must be 0!
+    const res = calculateRiskBasedPositionSize({
+      asset: 'SOL',
+      side: 'buy',
+      entryPrice: 100,
+      portfolioEquity: 100,
+      availableCash: 50,
+      currentHolding: 0.48,
+      currentHoldingNotional: 48,
+    });
+    expect(res.quantity).toBe(0);
+  });
 });

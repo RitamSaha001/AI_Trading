@@ -29,6 +29,7 @@ import {
   allocateToTrading,
   recallFromTrading,
   swapWalletToCrypto,
+  hashPin,
 } from './domain/wallet';
 import { fetchAll, fetchMarket, MarketStreamService } from './services/market';
 import {
@@ -42,7 +43,7 @@ import {
 import { evaluateStrategy } from './domain/strategies';
 import { evaluateAlert } from './domain/alerts';
 import { validateAIProposal } from './services/safetyGate';
-import { freshState, loadState, resetState, saveState, SimulationMode } from './storage';
+import { freshState, loadState, resetState, saveState, initCrossTabSync, SimulationMode } from './storage';
 import { fetchAIInsight, sendAIChat } from './gemini';
 import {
   saveCredentials,
@@ -573,14 +574,18 @@ export function Provider({ children }: { children: React.ReactNode }) {
   );
 
   const updateWalletSecurity = useCallback(
-    (sec: Partial<NativeWalletSecurity>) => {
+    async (sec: Partial<NativeWalletSecurity>) => {
+      let finalSec = { ...sec };
+      if (sec.pinHash) {
+        finalSec.pinHash = await hashPin(sec.pinHash);
+      }
       setState((s) => {
         const currentWallet = s.wallet || createDefaultWallet();
         return {
           ...s,
           wallet: {
             ...currentWallet,
-            security: { ...currentWallet.security, ...sec },
+            security: { ...currentWallet.security, ...finalSec },
           },
         };
       });
@@ -678,10 +683,23 @@ export function Provider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(pollId);
   }, [refreshMarkets]);
 
+  // Cross-tab synchronization
+  useEffect(() => {
+    return initCrossTabSync((newState) => {
+      setState(newState);
+    });
+  }, []);
+
   // Price Tick Engine: Pending Orders, Limit Executions, Stop Loss & Take Profit, Strategies, Alerts
+  // SAFETY: Uses functional setState(prev => ...) to prevent race conditions with user actions.
   useEffect(() => {
     const loopId = setInterval(() => {
-      const s: AppState = {
+      const m = marketsRef.current;
+      const hasAnyMarket = Object.values(m).some((market) => market && market.price > 0);
+      if (!hasAnyMarket) return;
+
+      // Compute mutations on a snapshot, then apply atomically
+      const snapshot: AppState = {
         ...stateRef.current,
         positions: { ...stateRef.current.positions },
         avgBuyPrice: { ...(stateRef.current.avgBuyPrice || {}) },
@@ -690,35 +708,33 @@ export function Provider({ children }: { children: React.ReactNode }) {
         strategies: stateRef.current.strategies.map((x) => ({ ...x })),
         notifications: [...stateRef.current.notifications],
       };
-      const m = marketsRef.current;
-      const hasAnyMarket = Object.values(m).some((market) => market && market.price > 0);
-      if (!hasAnyMarket) return;
 
       let changed = false;
+      const newNotifications: AppState['notifications'] = [];
 
       // 1. Evaluate Pending Limit & Bracket Orders
-      const orderResults = checkPendingOrders(s, m);
+      const orderResults = checkPendingOrders(snapshot, m);
       if (orderResults.changed) {
         changed = true;
       }
       if (orderResults.filledOrders.length > 0) {
         for (const order of orderResults.filledOrders) {
           const msg = `Order Executed: ${order.side.toUpperCase()} ${order.amount} ${order.asset} @ ${money(order.price)}`;
-          s.notifications.unshift({
+          newNotifications.push({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
             ts: Date.now(),
             title: `Order Filled (${order.type.toUpperCase()})`,
             body: msg,
             type: 'order',
           });
-          if (s.settings.soundEnabled) playChime('trade');
+          if (snapshot.settings.soundEnabled) playChime('trade');
           triggerToast(`Limit Order Filled`, msg, 'success');
         }
       }
       if (orderResults.rejectedOrders.length > 0) {
         for (const order of orderResults.rejectedOrders) {
           const msg = `Order Rejected: ${order.side.toUpperCase()} ${order.amount} ${order.asset} (${order.rejectReason || 'Validation failed'})`;
-          s.notifications.unshift({
+          newNotifications.push({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
             ts: Date.now(),
             title: `Order Rejected (${order.type.toUpperCase()})`,
@@ -731,54 +747,65 @@ export function Provider({ children }: { children: React.ReactNode }) {
       if (orderResults.triggeredBrackets.length > 0) {
         for (const bracket of orderResults.triggeredBrackets) {
           const msg = `${bracket.order.asset} Bracket Triggered: ${bracket.reason}`;
-          s.notifications.unshift({
+          newNotifications.push({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
             ts: Date.now(),
             title: `Bracket Order Executed`,
             body: msg,
             type: 'strategy',
           });
-          if (s.settings.soundEnabled) playChime('trade');
+          if (snapshot.settings.soundEnabled) playChime('trade');
           triggerToast(`Bracket Triggered`, msg, 'info');
         }
       }
 
       // 2. Evaluate Alerts
-      for (const rule of s.alerts) {
+      for (const rule of snapshot.alerts) {
         const trigger = evaluateAlert(rule, m[rule.asset]);
         if (trigger) {
-          s.notifications.unshift({
+          newNotifications.push({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
             ts: Date.now(),
             title: `Price Alert: ${rule.asset}`,
             body: trigger.message,
             type: 'alert',
           });
-          if (s.settings.soundEnabled) playChime('alert');
+          if (snapshot.settings.soundEnabled) playChime('alert');
           triggerToast(`Price Alert: ${rule.asset}`, trigger.message, 'info');
           changed = true;
         }
       }
 
       // 3. Evaluate Automated Strategies
-      for (const strat of s.strategies) {
-        const stratResult = evaluateStrategy(strat, s, m);
+      for (const strat of snapshot.strategies) {
+        const stratResult = evaluateStrategy(strat, snapshot, m);
         if (stratResult.executed && stratResult.message) {
-          s.notifications.unshift({
+          newNotifications.push({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
             ts: Date.now(),
             title: strat.name,
             body: stratResult.message,
             type: 'strategy',
           });
-          if (s.settings.soundEnabled) playChime('trade');
+          if (snapshot.settings.soundEnabled) playChime('trade');
           triggerToast(strat.name, stratResult.message, stratResult.type === 'buy' ? 'success' : 'info');
           changed = true;
         }
       }
 
       if (changed) {
-        setState(s);
+        // ATOMIC UPDATE: Merge tick mutations onto the LATEST state, not the stale snapshot.
+        // This prevents overwriting user actions (orders, cancellations) that occurred during the tick.
+        setState((prev) => ({
+          ...prev,
+          positions: { ...prev.positions, ...snapshot.positions },
+          avgBuyPrice: { ...prev.avgBuyPrice, ...snapshot.avgBuyPrice },
+          cash: snapshot.cash,
+          orders: snapshot.orders,
+          alerts: snapshot.alerts,
+          strategies: snapshot.strategies,
+          notifications: [...newNotifications, ...prev.notifications],
+        }));
       }
     }, 2500);
 

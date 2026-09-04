@@ -81,6 +81,7 @@ export type Order = {
   reservedAmount?: number;
   partialHarvested?: boolean;
   zeroLossLocked?: boolean;
+  accountMode?: 'paper' | 'exchange';
 };
 
 export type AlertRule = {

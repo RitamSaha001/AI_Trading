@@ -142,20 +142,25 @@ export const formatQty = (qty: number, asset: Asset): string => {
  * When accountMode === 'exchange', evaluates verified exchange USDT cash + active exchange asset holdings.
  * When accountMode === 'paper' (default), evaluates virtual cash and positions.
  */
+export const STABLECOINS = ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const;
+
 export function portfolioValue(
   state: Pick<AppState, 'cash' | 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount'>>,
   markets: Record<Asset, Market | undefined>
 ): number {
   if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
     const balances = state.exchangeAccount.balances;
-    const usdtCash = (balances['USDT']?.free || 0) + (balances['USDT']?.locked || 0);
+    const stableCash = STABLECOINS.reduce(
+      (sum, coin) => sum + (balances[coin]?.free || 0) + (balances[coin]?.locked || 0),
+      0
+    );
     const cryptoVal = ASSETS.reduce((sum, a) => {
       const b = balances[a];
       const units = (b?.free || 0) + (b?.locked || 0);
       const price = markets[a]?.price || 0;
       return sum + (units > 0 && price > 0 ? units * price : 0);
     }, 0);
-    return usdtCash + cryptoVal;
+    return stableCash + cryptoVal;
   }
 
   const cash = Number.isFinite(state.cash) ? state.cash : 0;
@@ -168,13 +173,16 @@ export function portfolioValue(
 }
 
 /**
- * Returns active liquid cash based on account mode (USDT for exchange, cash for paper).
+ * Returns active liquid cash based on account mode (stablecoins for exchange, cash for paper).
  */
 export function getActiveLiquidCash(
   state: Pick<AppState, 'cash'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount'>>
 ): number {
   if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
-    return state.exchangeAccount.balances['USDT']?.free || 0;
+    return STABLECOINS.reduce(
+      (sum, coin) => sum + (state.exchangeAccount?.balances[coin]?.free || 0),
+      0
+    );
   }
   return Number.isFinite(state.cash) ? state.cash : 0;
 }

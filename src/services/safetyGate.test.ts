@@ -259,4 +259,65 @@ describe('Service: AI Safety Gate Verification', () => {
       expect(validation.errors.some((e) => /mandatory 2-step human confirmation/i.test(e))).toBe(true);
     });
   });
+
+  describe('Hardening & Real-Money Boundary Guard Tests', () => {
+    it('blocks rebalance proposals if buy step exceeds available cash', () => {
+      const proposal = {
+        type: 'rebalance',
+        rebalanceSteps: [
+          { asset: 'BTC', action: 'buy', amount: 10 }, // 10 * 60,000 = $600,000, available cash is only $10,000
+        ],
+      };
+      const validation = validateAIProposal(proposal, mockState, mockMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /exceeds available cash/i.test(e))).toBe(true);
+    });
+
+    it('blocks rebalance proposals if sell step exceeds available holdings', () => {
+      const proposal = {
+        type: 'rebalance',
+        rebalanceSteps: [
+          { asset: 'BTC', action: 'sell', amount: 5 }, // Holding is only 0.5 BTC
+        ],
+      };
+      const validation = validateAIProposal(proposal, mockState, mockMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /exceeds available holding/i.test(e))).toBe(true);
+    });
+
+    it('blocks sell orders that exceed the single-trade notional cap (40% of portfolio)', () => {
+      // Total portfolio is $40,000 ($10k cash + 0.5 BTC = $30k). Max single trade is 40% = $16,000.
+      // Attempting to sell 0.35 BTC ($21,000) exceeds $16,000!
+      const proposal: AIActionProposal = {
+        type: 'order',
+        asset: 'BTC',
+        side: 'sell',
+        amount: 0.35,
+        orderType: 'market',
+        rationale: 'Massive liquidation',
+        confidence: 'high',
+        riskSummary: 'Sell-side slippage hazard',
+        requiresConfirmation: true,
+      };
+      const validation = validateAIProposal(proposal, mockState, mockMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /exceeds maximum safe single-trade cap/i.test(e))).toBe(true);
+    });
+
+    it('blocks rebalance when asset quote is stale', () => {
+      const staleMarkets = {
+        ...mockMarkets,
+        BTC: { ...mockMarkets.BTC, lastUpdated: Date.now() - 60000 },
+      };
+      const proposal = {
+        type: 'rebalance',
+        rebalanceSteps: [
+          { asset: 'BTC', action: 'buy', amount: 0.01 },
+        ],
+      };
+      const validation = validateAIProposal(proposal, mockState, staleMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /Stale market data/i.test(e))).toBe(true);
+    });
+  });
 });

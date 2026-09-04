@@ -1,7 +1,17 @@
 import { AppState, Asset, Market, StrategyConfig } from '../types';
-import { portfolioValue, positionValue, getAvailableCash, getAvailablePosition, money, formatQty } from './portfolio';
+import { portfolioValue, positionValue, getAvailableCash, getAvailablePosition, money, formatQty, META } from './portfolio';
 import { indicators, TechnicalIndicators } from './indicators';
 import { executeOrder, ExecuteOrderResult } from './trading';
+
+/**
+ * Rounds a quantity to the correct per-asset decimal precision using Math.floor
+ * to avoid rounding up beyond available budget. Uses META[asset].decimals.
+ */
+function toAssetPrecision(qty: number, asset: Asset): number {
+  const decimals = META[asset]?.decimals ?? 4;
+  const factor = Math.pow(10, decimals);
+  return Math.floor(qty * factor) / factor;
+}
 
 export interface StrategyExecutionResult {
   executed: boolean;
@@ -224,7 +234,7 @@ export function evaluateStrategy(
       const budget = Math.min(remainingAllocation, availableCash * kellyFraction);
 
       if (budget >= 15) {
-        const qty = +(budget / currentPrice).toFixed(4);
+        const qty = toAssetPrecision(budget / currentPrice, strategy.asset);
         // Triple-barrier brackets: TP1 scale-out at 2.2x ATR, initial SL at 1.15x ATR
         const tpMultiplier = strategy.params.scaleOutTp1AtrMult ?? 2.4;
         const slMultiplier = strategy.params.atrMultiplierSL ?? 1.15;
@@ -260,7 +270,7 @@ export function evaluateStrategy(
   if (strategy.kind === 'titan_adaptive') {
     // 1. Invalidation / Structural Breakdown Exit (Protects existing position before SL hit)
     if (isBearishRegime && availableHolding > 0 && ind.score <= -2) {
-      const trimQty = +(availableHolding * 0.4).toFixed(4);
+      const trimQty = toAssetPrecision(availableHolding * 0.4, strategy.asset);
       if (trimQty > 0) {
         const r = executeOrder(state, markets, 'sell', strategy.asset, trimQty, {
           auto: true,
@@ -308,7 +318,7 @@ export function evaluateStrategy(
       const budget = Math.min(remainingAllocation, availableCash * kellyScale);
 
       if (budget >= 15) {
-        const qty = +(budget / currentPrice).toFixed(4);
+        const qty = toAssetPrecision(budget / currentPrice, strategy.asset);
         const brackets = calculateBrackets(
           currentPrice,
           strategy.params.atrMultiplierTP ?? 3.5,
@@ -363,7 +373,7 @@ export function evaluateStrategy(
       const remainingAllocation = maxAllowedVal - currentVal;
       const budget = Math.min(remainingAllocation, availableCash * 0.20);
       if (budget >= 15) {
-        const qty = +(budget / currentPrice).toFixed(4);
+        const qty = toAssetPrecision(budget / currentPrice, strategy.asset);
         const brackets = calculateBrackets(
           currentPrice,
           strategy.params.atrMultiplierTP ?? 3.0,
@@ -391,7 +401,7 @@ export function evaluateStrategy(
 
     // Exit / Trim condition: Severe breakdown below lower VWAP band with bearish momentum
     if (vwapObj && currentPrice < vwapObj.lowerBand * 0.99 && ind.rsi < 38 && availableHolding > 0) {
-      const trimQty = +(availableHolding * 0.35).toFixed(4);
+      const trimQty = toAssetPrecision(availableHolding * 0.35, strategy.asset);
       if (trimQty > 0) {
         const r = executeOrder(state, markets, 'sell', strategy.asset, trimQty, {
           auto: true,
@@ -428,7 +438,7 @@ export function evaluateStrategy(
       const remainingAllocation = maxAllowedVal - currentVal;
       const budget = Math.min(remainingAllocation, availableCash * 0.22);
       if (budget >= 15) {
-        const qty = +(budget / currentPrice).toFixed(4);
+        const qty = toAssetPrecision(budget / currentPrice, strategy.asset);
         const brackets = calculateBrackets(
           currentPrice,
           strategy.params.atrMultiplierTP ?? 3.5,
@@ -468,7 +478,7 @@ export function evaluateStrategy(
       const budget = Math.min(remainingAllocation, availableCash * convictionMultiplier);
 
       if (budget >= 15) {
-        const qty = +(budget / currentPrice).toFixed(4);
+        const qty = toAssetPrecision(budget / currentPrice, strategy.asset);
         const brackets = calculateBrackets(
           currentPrice,
           strategy.params.atrMultiplierTP ?? 3.2,
@@ -496,7 +506,7 @@ export function evaluateStrategy(
 
     // Sell / Capital preservation trim on alpha collapse
     if (ind.alphaScore <= -35 && availableHolding > 0) {
-      const trimQty = +(availableHolding * 0.4).toFixed(4);
+      const trimQty = toAssetPrecision(availableHolding * 0.4, strategy.asset);
       if (trimQty > 0) {
         const r = executeOrder(state, markets, 'sell', strategy.asset, trimQty, {
           auto: true,
@@ -533,7 +543,7 @@ export function evaluateStrategy(
       const budget = Math.min(remainingAllocation, availableCash * 0.15);
 
       if (budget >= 15) {
-        const qty = +(budget / currentPrice).toFixed(4);
+        const qty = toAssetPrecision(budget / currentPrice, strategy.asset);
         const brackets = calculateBrackets(
           currentPrice,
           1.8,
@@ -561,7 +571,7 @@ export function evaluateStrategy(
 
     // Grid Sell: price reached upper 20% of range
     if (percentB >= 0.82 && availableHolding > 0) {
-      const trimQty = +(availableHolding * 0.3).toFixed(4);
+      const trimQty = toAssetPrecision(availableHolding * 0.3, strategy.asset);
       if (trimQty > 0) {
         const r = executeOrder(state, markets, 'sell', strategy.asset, trimQty, {
           auto: true,
@@ -595,7 +605,7 @@ export function evaluateStrategy(
     if (isBullish && currentVal < maxAllowedVal) {
       const budget = Math.min(maxAllowedVal - currentVal, availableCash * 0.20);
       if (budget >= 15) {
-        const qty = +(budget / currentPrice).toFixed(4);
+        const qty = toAssetPrecision(budget / currentPrice, strategy.asset);
         const brackets = calculateBrackets(
           currentPrice,
           strategy.params.atrMultiplierTP ?? 3.0,
@@ -624,7 +634,7 @@ export function evaluateStrategy(
     // Bearish Exit / Profit Trim
     const sellRsi = strategy.params.rsiThresholdSell ?? 38;
     if (ind.score <= -1 && ind.rsi < sellRsi && availableHolding > 0) {
-      const trimQty = +(availableHolding * 0.3).toFixed(4);
+      const trimQty = toAssetPrecision(availableHolding * 0.3, strategy.asset);
       if (trimQty > 0) {
         const r = executeOrder(state, markets, 'sell', strategy.asset, trimQty, {
           auto: true,
@@ -659,7 +669,7 @@ export function evaluateStrategy(
     if (isOversold && currentVal < maxAllowedVal) {
       const budget = Math.min(maxAllowedVal - currentVal, availableCash * 0.18);
       if (budget >= 15) {
-        const qty = +(budget / currentPrice).toFixed(4);
+        const qty = toAssetPrecision(budget / currentPrice, strategy.asset);
         const targetTp = ind.bb ? ind.bb.middle : currentPrice * 1.04;
         const targetSl = +(Math.max(0.01, currentPrice - effectiveAtr * 1.2)).toFixed(2);
 
@@ -703,7 +713,7 @@ export function evaluateStrategy(
 
     const dcaAmount = baseDcaAmount * dcaMultiplier;
     if (availableCash >= dcaAmount && currentVal < maxAllowedVal) {
-      const qty = +(dcaAmount / currentPrice).toFixed(4);
+      const qty = toAssetPrecision(dcaAmount / currentPrice, strategy.asset);
       if (qty > 0) {
         const brackets = calculateBrackets(currentPrice, 3.2, 1.5, 6.5, 3.0);
         const r = executeOrder(state, markets, 'buy', strategy.asset, qty, {

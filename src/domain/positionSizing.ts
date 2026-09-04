@@ -50,7 +50,23 @@ export function calculateRiskBasedPositionSize(
     : policy.maxTradeRiskPct;
   const riskBudget = equity * maxRiskPct;
 
-  const entry = req.entryPrice > 0 ? req.entryPrice : 1;
+  if (req.entryPrice <= 0 || !Number.isFinite(req.entryPrice)) {
+    return {
+      quantity: 0,
+      notional: 0,
+      portfolioPct: 0,
+      theoreticalMaxLoss: 0,
+      entryPrice: 0,
+      stopPrice: 0,
+      targetPrice: 0,
+      riskRewardRatio: 0,
+      riskBudget: 0,
+      unitRisk: 0,
+      constrainedBy: ['invalid_price' as any],
+      rationale: 'REJECTED: Invalid or zero entry price. Position sizing aborted for safety.',
+    };
+  }
+  const entry = req.entryPrice;
   const decimals = META[req.asset]?.decimals ?? 4;
 
   // Determine Stop Loss price if not provided
@@ -130,6 +146,14 @@ export function calculateRiskBasedPositionSize(
       } else {
         boundedQty = minQty;
         constrainedBy.push('minimum_size');
+        // Re-validate: min-size must not violate risk caps
+        const minNotional = minQty * entry;
+        const minResultingAssetVal = req.currentHoldingNotional + minNotional;
+        if (minResultingAssetVal > equity * policy.maxSingleAssetPct) {
+          boundedQty = 0; // Would exceed concentration limit
+        } else if (minNotional > equity * policy.maxSingleOrderPortfolioPct) {
+          boundedQty = 0; // Would exceed single order cap
+        }
       }
     } else {
       // For sell, if holdings are smaller than $10, can liquidate all

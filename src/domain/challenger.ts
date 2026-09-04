@@ -23,7 +23,8 @@ export function challengeTradingDecision(
   decision: Partial<TradingDecision>,
   state: AppState,
   markets: Record<Asset, Market | undefined>,
-  policy: RiskPolicy = DEFAULT_RISK_POLICY
+  policy: RiskPolicy = DEFAULT_RISK_POLICY,
+  timeframeMinutes: number = 1440
 ): ChallengerResult {
   const concerns: string[] = [];
   const mitigations: string[] = [];
@@ -109,10 +110,17 @@ export function challengeTradingDecision(
     }
     const ind = indicators(m.history, m.candles);
     const r = returns(m.history);
-    const dailyVol = stdev(r);
+    const rawVol = stdev(r);
+    const periodsPerYear = (365 * 24 * 60) / Math.max(1, timeframeMinutes);
+    const annualizedVol = rawVol * Math.sqrt(periodsPerYear);
+
+    if (ind.rsi === undefined || Number.isNaN(ind.rsi)) {
+      concerns.push('RSI indicator unavailable — insufficient price data for momentum safety validation.');
+      mitigations.push('Wait for additional ticks/candles to confirm oscillator regime.');
+    }
 
     if (action === 'BUY') {
-      if (ind.rsi > 72) {
+      if (ind.rsi !== undefined && !Number.isNaN(ind.rsi) && ind.rsi > 72) {
         concerns.push(`Overbought oscillator hazard: 14-period RSI is elevated at ${ind.rsi.toFixed(1)}, creating immediate mean-reversion pull-back vulnerability.`);
         mitigations.push('Wait for a retest of the 10-period SMA or RSI cool-down towards 50.');
       }
@@ -120,12 +128,12 @@ export function challengeTradingDecision(
         concerns.push(`Trend conflict: Spot price ($${m.price.toLocaleString()}) remains below 30-period trend SMA ($${ind.s30.toFixed(2)}). Buying constitutes catching a falling knife.`);
         mitigations.push('Require price recovery above SMA30 before confirming directional trend entry.');
       }
-      if (dailyVol > 0.055) {
-        concerns.push(`Excessive volatility regime: Return volatility is ${(dailyVol * 100).toFixed(2)}% daily (${(dailyVol * Math.sqrt(365) * 100).toFixed(0)}% annualized). Wide ATR increases stop-out probability.`);
+      if (annualizedVol > 0.85) {
+        concerns.push(`Excessive volatility regime: Annualized volatility is ${(annualizedVol * 100).toFixed(1)}%. Wide swings increase stop-out probability.`);
         mitigations.push('Widen stop-loss distance to 2.5x ATR and scale down position size proportionally.');
       }
     } else if (action === 'SELL') {
-      if (ind.rsi < 28) {
+      if (ind.rsi !== undefined && !Number.isNaN(ind.rsi) && ind.rsi < 28) {
         concerns.push(`Oversold capitulation hazard: RSI is depressed at ${ind.rsi.toFixed(1)}. Selling into panic runs the risk of bottom-ticking the local reversal.`);
         mitigations.push('Sell only a partial tranche (e.g. 33%) and place resting limit orders higher for the remainder.');
       }

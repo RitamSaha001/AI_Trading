@@ -77,6 +77,8 @@ export interface UserStreamHandlers {
     commission?: number;
   }) => void;
   onError?: (err: Error) => void;
+  onReconnect?: (attempt: number) => void;
+  onDisconnect?: () => void;
 }
 
 // Typed Errors
@@ -205,7 +207,10 @@ export class BinanceConnector {
   public async syncTime(): Promise<number> {
     const t0 = Date.now();
     try {
-      const res = await fetch(`${this.getBaseUrl()}/api/v3/time`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(`${this.getBaseUrl()}/api/v3/time`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
@@ -216,6 +221,9 @@ export class BinanceConnector {
       this.lastTimeSync = Date.now();
       return this.serverTimeOffset;
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new BinanceNetworkError('Request timed out after 10s');
+      }
       throw new BinanceNetworkError(`Failed to sync server time: ${err?.message || err}`);
     }
   }
@@ -259,47 +267,82 @@ export class BinanceConnector {
       }
     }
 
-    cleanParams.timestamp = String(this.getTimestamp());
-    cleanParams.recvWindow = '5000';
+    let retryCount429 = 0;
+    let retryCount5xx = 0;
 
-    const searchParams = new URLSearchParams(cleanParams);
-    const queryString = searchParams.toString();
-    const signature = await createSignature(queryString, this.credentials.apiSecret);
-    const fullQuery = `${queryString}&signature=${signature}`;
+    while (true) {
+      cleanParams.timestamp = String(this.getTimestamp());
+      cleanParams.recvWindow = '5000';
 
-    const url = `${this.getBaseUrl()}${endpoint}${method === 'GET' || method === 'DELETE' ? `?${fullQuery}` : ''}`;
+      const searchParams = new URLSearchParams(cleanParams);
+      const queryString = searchParams.toString();
+      const signature = await createSignature(queryString, this.credentials.apiSecret);
+      const fullQuery = `${queryString}&signature=${signature}`;
 
-    const headers: Record<string, string> = {
-      'X-MBX-APIKEY': this.credentials.apiKey,
-    };
+      const url = `${this.getBaseUrl()}${endpoint}${method === 'GET' || method === 'DELETE' ? `?${fullQuery}` : ''}`;
 
-    let body: string | undefined = undefined;
-    if (method === 'POST' || method === 'PUT') {
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      body = fullQuery;
-    }
+      const headers: Record<string, string> = {
+        'X-MBX-APIKEY': this.credentials.apiKey,
+      };
 
-    try {
-      const res = await fetch(url, {
-        method,
-        headers,
-        body,
-      });
-
-      const responseJson = await res.json();
-
-      if (!res.ok) {
-        const code = typeof responseJson.code === 'number' ? responseJson.code : -9999;
-        const msg = responseJson.msg || res.statusText;
-        throw parseBinanceError(code, msg);
+      let body: string | undefined = undefined;
+      if (method === 'POST' || method === 'PUT') {
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        body = fullQuery;
       }
 
-      return responseJson as T;
-    } catch (err: any) {
-      if (err instanceof BinanceApiError || err instanceof BinanceWithdrawalPermissionError) {
-        throw err;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const res = await fetch(url, {
+          method,
+          headers,
+          body,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (res.status === 429) {
+          if (retryCount429 >= 3) {
+            throw new BinanceNetworkError('Max retries reached for 429 Rate Limit');
+          }
+          const retryAfter = res.headers.get('Retry-After');
+          let delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * Math.pow(2, retryCount429);
+          if (isNaN(delay)) delay = 1000 * Math.pow(2, retryCount429);
+          retryCount429++;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        if (res.status >= 500 && res.status < 600) {
+          if (retryCount5xx >= 2) {
+            throw new BinanceNetworkError(`Max retries reached for 5xx Error: ${res.status}`);
+          }
+          retryCount5xx++;
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
+        }
+
+        const responseJson = await res.json();
+
+        if (!res.ok) {
+          const code = typeof responseJson.code === 'number' ? responseJson.code : -9999;
+          const msg = responseJson.msg || res.statusText;
+          throw parseBinanceError(code, msg);
+        }
+
+        return responseJson as T;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+          throw new BinanceNetworkError('Request timed out after 10s');
+        }
+        if (err instanceof BinanceApiError || err instanceof BinanceWithdrawalPermissionError || err instanceof BinanceNetworkError) {
+          throw err;
+        }
+        throw new BinanceNetworkError(err?.message || String(err));
       }
-      throw new BinanceNetworkError(err?.message || String(err));
     }
   }
 
@@ -442,17 +485,29 @@ export class BinanceConnector {
    */
   public async startUserDataStream(): Promise<string> {
     const url = `${this.getBaseUrl()}/api/v3/userDataStream`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'X-MBX-APIKEY': this.credentials.apiKey,
-      },
-    });
-    if (!res.ok) {
-      throw new BinanceNetworkError(`Failed to acquire listenKey: ${res.statusText}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-MBX-APIKEY': this.credentials.apiKey,
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        throw new BinanceNetworkError(`Failed to acquire listenKey: ${res.statusText}`);
+      }
+      const data = (await res.json()) as { listenKey: string };
+      return data.listenKey;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new BinanceNetworkError('Request timed out after 10s');
+      }
+      throw err;
     }
-    const data = (await res.json()) as { listenKey: string };
-    return data.listenKey;
   }
 
   /**
@@ -460,14 +515,26 @@ export class BinanceConnector {
    */
   public async keepAliveUserDataStream(listenKey: string): Promise<void> {
     const url = `${this.getBaseUrl()}/api/v3/userDataStream?listenKey=${encodeURIComponent(listenKey)}`;
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'X-MBX-APIKEY': this.credentials.apiKey,
-      },
-    });
-    if (!res.ok) {
-      throw new BinanceNetworkError(`Failed to keepalive listenKey: ${res.statusText}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'X-MBX-APIKEY': this.credentials.apiKey,
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        throw new BinanceNetworkError(`Failed to keepalive listenKey: ${res.statusText}`);
+      }
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new BinanceNetworkError('Request timed out after 10s');
+      }
+      throw err;
     }
   }
 
@@ -476,96 +543,147 @@ export class BinanceConnector {
    */
   public async closeUserDataStream(listenKey: string): Promise<void> {
     const url = `${this.getBaseUrl()}/api/v3/userDataStream?listenKey=${encodeURIComponent(listenKey)}`;
-    await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'X-MBX-APIKEY': this.credentials.apiKey,
-      },
-    }).catch(() => {});
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+      await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'X-MBX-APIKEY': this.credentials.apiKey,
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (err) {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**
    * Connects to private WebSocket user data stream for real-time balance & order fills.
    * Returns a cleanup / disconnect function.
    */
-  public connectUserStream(listenKey: string, handlers: UserStreamHandlers): () => void {
+  public connectUserStream(initialListenKey: string, handlers: UserStreamHandlers): () => void {
     if (typeof WebSocket === 'undefined') {
       return () => {};
     }
 
-    const wsUrl = `${this.getWsBaseUrl()}/${listenKey}`;
     let ws: WebSocket | null = null;
     let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
     let closed = false;
+    let listenKey = initialListenKey;
+    let retryCount = 0;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    try {
-      ws = new WebSocket(wsUrl);
+    const scheduleReconnect = () => {
+      if (closed) return;
+      if (retryCount >= 10) {
+        handlers.onError?.(new Error('WebSocket reconnect failed after 10 attempts'));
+        handlers.onDisconnect?.();
+        return;
+      }
+      const backoff = Math.min(1000 * Math.pow(2, retryCount), 30000);
+      retryCount++;
+      handlers.onReconnect?.(retryCount);
 
-      ws.onmessage = (event) => {
+      reconnectTimeout = setTimeout(async () => {
+        if (closed) return;
         try {
-          const msg = JSON.parse(event.data);
-          const eventType = msg.e;
-
-          // outboundAccountPosition: Balance updates
-          if (eventType === 'outboundAccountPosition') {
-            const balances: Record<string, BinanceAccountBalance> = {};
-            if (Array.isArray(msg.B)) {
-              for (const item of msg.B) {
-                const asset = item.a;
-                const free = parseFloat(item.f);
-                const locked = parseFloat(item.l);
-                balances[asset] = { asset, free, locked };
-              }
-            }
-            handlers.onBalanceUpdate?.(balances);
-          }
-
-          // executionReport: Order lifecycle events
-          if (eventType === 'executionReport') {
-            handlers.onExecutionReport?.({
-              symbol: msg.s,
-              orderId: msg.i,
-              clientOrderId: msg.c,
-              side: msg.S,
-              orderType: msg.o,
-              orderStatus: msg.X,
-              origQty: parseFloat(msg.q),
-              executedQty: parseFloat(msg.z),
-              lastPrice: parseFloat(msg.L || '0'),
-              commission: msg.n ? parseFloat(msg.n) : undefined,
-            });
-          }
+          listenKey = await this.startUserDataStream();
+          connect();
         } catch (err: any) {
           handlers.onError?.(err);
+          scheduleReconnect();
         }
-      };
+      }, backoff);
+    };
 
-      ws.onerror = (event) => {
-        handlers.onError?.(new Error('Binance WebSocket error'));
-      };
+    const connect = () => {
+      if (closed) return;
+      const wsUrl = `${this.getWsBaseUrl()}/${listenKey}`;
+      try {
+        ws = new WebSocket(wsUrl);
 
-      // Set 30-minute keepalive timer
-      keepAliveTimer = setInterval(() => {
-        if (!closed) {
-          this.keepAliveUserDataStream(listenKey).catch((err) => {
+        ws.onopen = () => {
+          retryCount = 0;
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            const eventType = msg.e;
+
+            // outboundAccountPosition: Balance updates
+            if (eventType === 'outboundAccountPosition') {
+              const balances: Record<string, BinanceAccountBalance> = {};
+              if (Array.isArray(msg.B)) {
+                for (const item of msg.B) {
+                  const asset = item.a;
+                  const free = parseFloat(item.f);
+                  const locked = parseFloat(item.l);
+                  balances[asset] = { asset, free, locked };
+                }
+              }
+              handlers.onBalanceUpdate?.(balances);
+            }
+
+            // executionReport: Order lifecycle events
+            if (eventType === 'executionReport') {
+              handlers.onExecutionReport?.({
+                symbol: msg.s,
+                orderId: msg.i,
+                clientOrderId: msg.c,
+                side: msg.S,
+                orderType: msg.o,
+                orderStatus: msg.X,
+                origQty: parseFloat(msg.q),
+                executedQty: parseFloat(msg.z),
+                lastPrice: parseFloat(msg.L || '0'),
+                commission: msg.n ? parseFloat(msg.n) : undefined,
+              });
+            }
+          } catch (err: any) {
             handlers.onError?.(err);
-          });
-        }
-      }, 30 * 60 * 1000);
-    } catch (err: any) {
-      handlers.onError?.(err);
-    }
+          }
+        };
+
+        ws.onerror = (event) => {
+          handlers.onError?.(new Error('Binance WebSocket error'));
+        };
+
+        ws.onclose = () => {
+          if (closed) return;
+          scheduleReconnect();
+        };
+
+        // Set 30-minute keepalive timer
+        if (keepAliveTimer) clearInterval(keepAliveTimer);
+        keepAliveTimer = setInterval(() => {
+          if (!closed) {
+            this.keepAliveUserDataStream(listenKey).catch((err) => {
+              handlers.onError?.(err);
+            });
+          }
+        }, 30 * 60 * 1000);
+      } catch (err: any) {
+        handlers.onError?.(err);
+      }
+    };
+
+    connect();
 
     // Return disconnect function
     return () => {
       closed = true;
       if (keepAliveTimer) clearInterval(keepAliveTimer);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (ws) {
         try {
           ws.close();
         } catch {}
       }
       this.closeUserDataStream(listenKey).catch(() => {});
+      handlers.onDisconnect?.();
     };
   }
 }

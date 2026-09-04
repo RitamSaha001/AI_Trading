@@ -150,6 +150,7 @@ export function executeOrder(
         positionLotId: lotId,
         bracketId: brkId,
         reservedCash: requiredCash,
+        accountMode: state.accountMode || 'paper',
       };
 
       state.orders = [order, ...state.orders].slice(0, 300);
@@ -187,6 +188,7 @@ export function executeOrder(
         positionLotId: lotId,
         bracketId: brkId,
         reservedAmount: qty,
+        accountMode: state.accountMode || 'paper',
       };
 
       state.orders = [order, ...state.orders].slice(0, 300);
@@ -268,6 +270,7 @@ export function executeOrder(
     stopLoss: options?.stopLoss,
     positionLotId: lotId,
     bracketId: brkId,
+    accountMode: state.accountMode || 'paper',
   };
 
   state.orders = [order, ...state.orders].slice(0, 300);
@@ -292,6 +295,8 @@ export function checkPendingOrders(
   // 1. Evaluate Pending Limit Orders
   for (const order of state.orders) {
     if (order.status !== 'pending') continue;
+    // Segregation: paper simulated tick engine only fills paper orders
+    if (order.accountMode && order.accountMode !== (state.accountMode || 'paper')) continue;
 
     const m = markets[order.asset];
     if (!m || m.price <= 0) continue;

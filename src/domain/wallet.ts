@@ -8,6 +8,19 @@ import {
 } from '../types';
 import { generateReceiptHash } from './walletLedger';
 
+/** Rounds monetary values to 8 decimal places to prevent IEEE 754 drift */
+function roundMoney(n: number): number {
+  return Math.round(n * 1e8) / 1e8;
+}
+
+export async function hashPin(pin: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin);
+  const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /**
  * Transparent, real-time FX Rates pegged to USD.
  * 1 USD = 87.20 INR
@@ -140,8 +153,8 @@ export async function depositFunds(
 
   return {
     ...wallet,
-    balanceUSD: wallet.balanceUSD + amountUSD,
-    totalDepositedUSD: wallet.totalDepositedUSD + amountUSD,
+    balanceUSD: roundMoney(wallet.balanceUSD + amountUSD),
+    totalDepositedUSD: roundMoney(wallet.totalDepositedUSD + amountUSD),
     transactions: [completedTx, ...wallet.transactions],
     lastActiveAt: now,
   };
@@ -179,7 +192,13 @@ export async function withdrawFunds(
 
   // Security PIN validation if configured
   if (wallet.security.pinConfigured && wallet.security.requirePinForWithdrawal) {
-    if (!enteredPin || wallet.security.pinHash !== enteredPin) {
+    if (!enteredPin) {
+      throw new Error('Security PIN required for withdrawal.');
+    }
+    const enteredHash = await hashPin(enteredPin);
+    const isPlainMatch = wallet.security.pinHash === enteredPin;
+    const isHashMatch = wallet.security.pinHash === enteredHash;
+    if (!isPlainMatch && !isHashMatch) {
       throw new Error('Invalid Security PIN. Withdrawal rejected for capital protection.');
     }
   }
@@ -213,8 +232,8 @@ export async function withdrawFunds(
 
   return {
     ...wallet,
-    balanceUSD: wallet.balanceUSD - amountUSD,
-    totalWithdrawnUSD: wallet.totalWithdrawnUSD + amountUSD,
+    balanceUSD: roundMoney(wallet.balanceUSD - amountUSD),
+    totalWithdrawnUSD: roundMoney(wallet.totalWithdrawnUSD + amountUSD),
     transactions: [completedTx, ...wallet.transactions],
     lastActiveAt: now,
   };
@@ -258,8 +277,8 @@ export async function allocateToTrading(
 
   const updatedWallet: NativeWalletState = {
     ...wallet,
-    balanceUSD: wallet.balanceUSD - amountUSD,
-    allocatedToTradingUSD: wallet.allocatedToTradingUSD + amountUSD,
+    balanceUSD: roundMoney(wallet.balanceUSD - amountUSD),
+    allocatedToTradingUSD: roundMoney(wallet.allocatedToTradingUSD + amountUSD),
     transactions: [completedTx, ...wallet.transactions],
     lastActiveAt: now,
   };
@@ -308,8 +327,8 @@ export async function recallFromTrading(
 
   const updatedWallet: NativeWalletState = {
     ...wallet,
-    balanceUSD: wallet.balanceUSD + amountUSD,
-    allocatedToTradingUSD: Math.max(0, wallet.allocatedToTradingUSD - amountUSD),
+    balanceUSD: roundMoney(wallet.balanceUSD + amountUSD),
+    allocatedToTradingUSD: roundMoney(Math.max(0, wallet.allocatedToTradingUSD - amountUSD)),
     transactions: [completedTx, ...wallet.transactions],
     lastActiveAt: now,
   };
@@ -370,7 +389,7 @@ export async function swapWalletToCrypto(
 
   const updatedWallet: NativeWalletState = {
     ...wallet,
-    balanceUSD: wallet.balanceUSD - amountUSD,
+    balanceUSD: roundMoney(wallet.balanceUSD - amountUSD),
     transactions: [completedTx, ...wallet.transactions],
     lastActiveAt: now,
   };

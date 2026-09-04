@@ -314,9 +314,19 @@ export function migrateState(rawState: any): AppState {
     wallet: rawState.wallet && typeof rawState.wallet === 'object' ? rawState.wallet : base.wallet,
     cash: typeof rawState.cash === 'number' && Number.isFinite(rawState.cash) ? rawState.cash : base.cash,
     initialCash: typeof rawState.initialCash === 'number' ? rawState.initialCash : base.initialCash,
-    startingEquity: typeof rawState.startingEquity === 'number' && rawState.startingEquity > 0
-      ? rawState.startingEquity
-      : (typeof rawState.cash === 'number' ? rawState.cash : base.startingEquity),
+    startingEquity: (() => {
+      if (typeof rawState.startingEquity === 'number' && rawState.startingEquity > 0) {
+        return rawState.startingEquity;
+      }
+      const cashPart = typeof rawState.cash === 'number' ? rawState.cash : base.cash;
+      const positionsObj = rawState.positions || {};
+      const positionsVal = ASSETS.reduce((sum, a) => {
+        const units = positionsObj[a] || 0;
+        const bp = META[a]?.basePrice || 0;
+        return sum + (units > 0 ? units * bp : 0);
+      }, 0);
+      return cashPart + positionsVal > 0 ? cashPart + positionsVal : base.startingEquity;
+    })(),
     realizedPnl: typeof rawState.realizedPnl === 'number' ? rawState.realizedPnl : 0,
     totalFees: typeof rawState.totalFees === 'number' ? rawState.totalFees : 0,
     positions: { ...base.positions, ...(rawState.positions || {}) },
@@ -386,9 +396,43 @@ export function loadState(): AppState {
 export function saveState(state: AppState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
+  } catch (e: any) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+      try {
+        const pruned: AppState = {
+          ...state,
+          orders: state.orders.slice(0, 50),
+          notifications: state.notifications.slice(0, 50),
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
+        console.warn('Storage quota exceeded. Auto-pruned older orders and notifications to preserve state.');
+        return;
+      } catch (retryErr) {
+        console.error('Failed to persist pruned state after quota exceeded:', retryErr);
+      }
+    }
     console.warn('Failed to persist simulation state to localStorage:', e);
   }
+}
+
+/**
+ * Listens for cross-tab localStorage updates and invokes callback to keep tabs synchronized.
+ */
+export function initCrossTabSync(onExternalUpdate: (newState: AppState) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const handler = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        const migrated = migrateState(parsed);
+        onExternalUpdate(migrated);
+      } catch (err) {
+        console.warn('Failed to parse cross-tab storage update:', err);
+      }
+    }
+  };
+  window.addEventListener('storage', handler);
+  return () => window.removeEventListener('storage', handler);
 }
 
 export function resetState(startingBalance = 50000, mode: SimulationMode = 'clean'): AppState {
