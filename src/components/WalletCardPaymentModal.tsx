@@ -19,6 +19,7 @@ import {
   ZeroCostSandboxGateway,
   CardPaymentSession,
 } from '../services/paymentGateway';
+import { ApiClient } from '../services/apiClient';
 import { WalletCurrency } from '../types';
 import { FX_RATES_TO_USD } from '../domain/wallet';
 
@@ -96,6 +97,29 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
 
     setIsProcessing(true);
     try {
+      if (accountMode === 'exchange') {
+        // LIVE PRODUCTION: Initiate server payment intent and redirect to payment provider
+        const intent = await ApiClient.createPaymentIntent({
+          amountMinor: Math.round(numericAmount * 100),
+          currency: currency === 'INR' ? 'INR' : 'USD',
+          method: 'card',
+          idempotencyKey: `card_live_${Date.now()}`,
+        });
+
+        if (!intent.ok) {
+          throw new Error(intent.error || 'Failed to create card payment order');
+        }
+
+        if (intent.data?.intent?.checkoutUrl) {
+          window.location.href = intent.data.intent.checkoutUrl;
+          return;
+        }
+
+        setStep('success');
+        return;
+      }
+
+      // PAPER SIMULATION ONLY
       const session = await ZeroCostSandboxGateway.initiateCardPayment({
         cardNumber,
         expMonth,
@@ -107,7 +131,6 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
       });
 
       setSession3DS(session);
-      setEnteredOtp(session.simulatedOtp);
       setStep('3ds');
     } catch (err: any) {
       setErrorMessage(err?.message || 'Payment initiation failed.');
@@ -122,6 +145,14 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
     setErrorMessage('');
 
     try {
+      if (accountMode === 'exchange') {
+        // LIVE PRODUCTION: In production, 3DS authentication completes at provider ACS.
+        // Funds are settled authoritatively via webhook, not client balance crediting.
+        setStep('success');
+        return;
+      }
+
+      // PAPER / SIMULATION MODE ONLY:
       await ZeroCostSandboxGateway.verifyCard3DS(session3DS, enteredOtp);
 
       // Execute deposit in sovereign wallet
@@ -134,7 +165,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
           cardLast4: session3DS.cardLast4,
           referenceNumber: `CARD-${session3DS.sessionId.slice(-6).toUpperCase()}`,
         },
-        `Deposit via ${session3DS.cardBrand.toUpperCase()} (•••• ${session3DS.cardLast4})`
+        `[PAPER] Deposit via ${session3DS.cardBrand.toUpperCase()} (•••• ${session3DS.cardLast4})`
       );
 
       // Save tokenized card if enabled
@@ -491,16 +522,32 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
 
           {step === 'success' && (
             <div className="text-center py-6 space-y-4 animate-in zoom-in-95 duration-200">
-              <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-lg shadow-emerald-600/10">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-zinc-900">Deposit Completed!</h3>
-                <p className="text-xs text-zinc-500 mt-1">
-                  Successfully credited {numericAmount.toFixed(2)} {currency} ($
-                  {amountUSD.toFixed(2)} USD) to your Sovereign Wallet.
-                </p>
-              </div>
+              {accountMode === 'exchange' ? (
+                <>
+                  <div className="w-16 h-16 rounded-3xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center shadow-lg shadow-blue-600/10">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">3DS Authorization Dispatched</h3>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Card payment intent initiated for {numericAmount.toFixed(2)} {currency}. Ledger balance will be authoritatively credited upon provider webhook confirmation.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-lg shadow-emerald-600/10">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">Deposit Completed!</h3>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      [SIMULATION / PAPER] Credited {numericAmount.toFixed(2)} {currency} ($
+                      {amountUSD.toFixed(2)} USD) to your Sovereign Wallet.
+                    </p>
+                  </div>
+                </>
+              )}
 
               <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-600 text-left space-y-1">
                 <div className="flex justify-between">
@@ -509,7 +556,9 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                 </div>
                 <div className="flex justify-between">
                   <span>Status:</span>
-                  <span className="font-semibold text-emerald-600">Settled (Instant)</span>
+                  <span className={`font-semibold ${accountMode === 'exchange' ? 'text-blue-600' : 'text-emerald-600'}`}>
+                    {accountMode === 'exchange' ? 'Awaiting Webhook Settlement' : 'Settled (Paper Simulation)'}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Audit Receipt:</span>

@@ -941,3 +941,269 @@ export function hexToBytes(hex: string): Uint8Array {
   }
   return bytes;
 }
+
+function bigIntToBytes(n: bigint): Uint8Array {
+  if (n === 0n) return new Uint8Array(0);
+  let hex = n.toString(16);
+  if (hex.length % 2 !== 0) hex = '0' + hex;
+  return hexToBytes(hex);
+}
+
+// ---------------------------------------------------------------------------
+// EIP-1559 RLP ENCODING & REAL ECDSA TRANSACTION SIGNING
+// ---------------------------------------------------------------------------
+
+export function encodeRlp(item: any): Uint8Array {
+  if (typeof item === 'bigint') {
+    if (item === 0n) return new Uint8Array([0x80]);
+    let hex = item.toString(16);
+    if (hex.length % 2 !== 0) hex = '0' + hex;
+    return encodeRlp(hexToBytes(hex));
+  }
+  if (typeof item === 'number') {
+    return encodeRlp(BigInt(item));
+  }
+  if (typeof item === 'string') {
+    if (item.startsWith('0x')) {
+      const clean = item.slice(2);
+      if (clean.length === 0) return new Uint8Array([0x80]);
+      return encodeRlp(hexToBytes(clean.length % 2 !== 0 ? '0' + clean : clean));
+    }
+    return encodeRlp(new TextEncoder().encode(item));
+  }
+  if (item instanceof Uint8Array) {
+    if (item.length === 1 && item[0] < 0x80) {
+      return item;
+    }
+    if (item.length <= 55) {
+      const res = new Uint8Array(1 + item.length);
+      res[0] = 0x80 + item.length;
+      res.set(item, 1);
+      return res;
+    }
+    const lenBytes = bigIntToBytes(BigInt(item.length));
+    const res = new Uint8Array(1 + lenBytes.length + item.length);
+    res[0] = 0xb7 + lenBytes.length;
+    res.set(lenBytes, 1);
+    res.set(item, 1 + lenBytes.length);
+    return res;
+  }
+  if (Array.isArray(item)) {
+    const encodedItems = item.map(encodeRlp);
+    const totalLen = encodedItems.reduce((acc, curr) => acc + curr.length, 0);
+    let prefix: Uint8Array;
+    if (totalLen <= 55) {
+      prefix = new Uint8Array([0xc0 + totalLen]);
+    } else {
+      const lenBytes = bigIntToBytes(BigInt(totalLen));
+      prefix = new Uint8Array(1 + lenBytes.length);
+      prefix[0] = 0xf7 + lenBytes.length;
+      prefix.set(lenBytes, 1);
+    }
+    const res = new Uint8Array(prefix.length + totalLen);
+    res.set(prefix, 0);
+    let offset = prefix.length;
+    for (const enc of encodedItems) {
+      res.set(enc, offset);
+      offset += enc.length;
+    }
+    return res;
+  }
+  return new Uint8Array([0x80]);
+}
+
+/**
+ * Signs an arbitrary 32-byte message hash with an Ethereum private key using secp256k1 ECDSA.
+ */
+export function signEcdsa(msgHash: Uint8Array, privateKeyHex: string): { r: bigint; s: bigint; v: number } {
+  const d = BigInt(`0x${privateKeyHex.replace(/^0x/i, '')}`);
+  if (d <= 0n || d >= N) throw new Error('Invalid private key scalar');
+
+  const m = BigInt(`0x${bytesToHex(msgHash)}`);
+
+  let k = 0n;
+  let r = 0n;
+  let s = 0n;
+  let v = 0;
+
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const randBytes = new Uint8Array(32);
+    if (globalThis.crypto?.getRandomValues) {
+      globalThis.crypto.getRandomValues(randBytes);
+    } else {
+      for (let i = 0; i < 32; i++) randBytes[i] = Math.floor(Math.random() * 256);
+    }
+    k = mod(BigInt(`0x${bytesToHex(randBytes)}`), N - 1n) + 1n;
+
+    const pt = toAffine(scalarMultiply(k));
+    if (!pt) continue;
+
+    r = pt.x % N;
+    if (r === 0n) continue;
+
+    const kInv = modInverse(k, N);
+    s = mod(kInv * (m + r * d), N);
+    if (s === 0n) continue;
+
+    v = Number(pt.y & 1n);
+
+    // EIP-2 malleability protection
+    if (s > N / 2n) {
+      s = N - s;
+      v = v ^ 1;
+    }
+
+    break;
+  }
+
+  return { r, s, v };
+}
+
+/**
+ * Estimates live on-chain gas units and EIP-1559 fees via JSON-RPC.
+ */
+export async function estimateGasAndFees(
+  network: Web3NetworkKey,
+  tx: { from: string; to: string; data?: string; value?: string }
+): Promise<{
+  gasLimit: bigint;
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+  estimatedGasCostNative: number;
+}> {
+  try {
+    const [gasHex, gasPriceHex] = await Promise.all([
+      rpcCall<string>(network, 'eth_estimateGas', [tx]).catch(() => '0x30d40'),
+      rpcCall<string>(network, 'eth_gasPrice', []).catch(() => '0x77359400'),
+    ]);
+
+    const estimatedGas = BigInt(gasHex || '0x30d40');
+    const gasLimit = (estimatedGas * 13n) / 10n; // 30% safety buffer
+    const baseGasPrice = BigInt(gasPriceHex || '0x77359400');
+
+    const priorityFeeGwei = network === 'arbitrum' ? 100_000_000n : 1_500_000_000n;
+    const maxPriorityFeePerGas = priorityFeeGwei;
+    const maxFeePerGas = (baseGasPrice * 12n) / 10n + maxPriorityFeePerGas;
+
+    const totalCostWei = gasLimit * maxFeePerGas;
+    const estimatedGasCostNative = Number(totalCostWei) / 1e18;
+
+    return {
+      gasLimit,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+      estimatedGasCostNative,
+    };
+  } catch {
+    return {
+      gasLimit: 150_000n,
+      maxFeePerGas: 30_000_000_000n,
+      maxPriorityFeePerGas: 1_500_000_000n,
+      estimatedGasCostNative: 0.0045,
+    };
+  }
+}
+
+/**
+ * Signs and broadcasts an authentic on-chain EIP-1559 transaction.
+ */
+export async function signAndBroadcastTransaction(
+  network: Web3NetworkKey,
+  privateKeyHex: string,
+  tx: {
+    to: string;
+    value?: bigint;
+    data?: string;
+    gasLimit?: bigint;
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+  }
+): Promise<string> {
+  const config = WEB3_NETWORKS[network];
+  const fromAddress = privateKeyToAddress(privateKeyHex);
+
+  const nonceHex = await rpcCall<string>(network, 'eth_getTransactionCount', [fromAddress, 'pending']);
+  const nonce = BigInt(nonceHex || '0x0');
+
+  const fees = await estimateGasAndFees(network, {
+    from: fromAddress,
+    to: tx.to,
+    data: tx.data || '0x',
+    value: tx.value ? `0x${tx.value.toString(16)}` : '0x0',
+  });
+
+  const chainId = BigInt(config.chainId);
+  const gasLimit = tx.gasLimit || fees.gasLimit;
+  const maxFeePerGas = tx.maxFeePerGas || fees.maxFeePerGas;
+  const maxPriorityFeePerGas = tx.maxPriorityFeePerGas || fees.maxPriorityFeePerGas;
+  const to = tx.to;
+  const value = tx.value || 0n;
+  const data = tx.data || '0x';
+  const accessList: any[] = [];
+
+  const txFields = [
+    chainId,
+    nonce,
+    maxPriorityFeePerGas,
+    maxFeePerGas,
+    gasLimit,
+    to,
+    value,
+    data,
+    accessList,
+  ];
+
+  const rlpEncoded = encodeRlp(txFields);
+  const rawType2Payload = new Uint8Array(1 + rlpEncoded.length);
+  rawType2Payload[0] = 0x02;
+  rawType2Payload.set(rlpEncoded, 1);
+
+  const sigHash = keccak256(rawType2Payload);
+  const sig = signEcdsa(sigHash, privateKeyHex);
+
+  const signedFields = [
+    ...txFields,
+    sig.v,
+    sig.r,
+    sig.s,
+  ];
+
+  const signedRlp = encodeRlp(signedFields);
+  const rawSignedTx = new Uint8Array(1 + signedRlp.length);
+  rawSignedTx[0] = 0x02;
+  rawSignedTx.set(signedRlp, 1);
+
+  const rawTxHex = `0x${bytesToHex(rawSignedTx)}`;
+  return rpcCall<string>(network, 'eth_sendRawTransaction', [rawTxHex]);
+}
+
+/**
+ * Polls for on-chain receipt and verifies transaction execution status.
+ */
+export async function waitForTransactionReceipt(
+  network: Web3NetworkKey,
+  txHash: string,
+  timeoutMs = 60000
+): Promise<{
+  blockNumber: number;
+  gasUsed: number;
+  status: boolean;
+  effectiveGasPrice: number;
+}> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    const receipt = await rpcCall<any>(network, 'eth_getTransactionReceipt', [txHash]).catch(() => null);
+    if (receipt && receipt.blockNumber) {
+      const status = receipt.status === '0x1' || receipt.status === 1 || receipt.status === '1';
+      return {
+        blockNumber: parseInt(receipt.blockNumber, 16),
+        gasUsed: parseInt(receipt.gasUsed, 16),
+        status,
+        effectiveGasPrice: receipt.effectiveGasPrice ? parseInt(receipt.effectiveGasPrice, 16) : 0,
+      };
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`Timeout waiting for transaction receipt for ${txHash} after ${timeoutMs}ms`);
+}
+

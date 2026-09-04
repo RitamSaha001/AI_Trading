@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
@@ -34,3 +34,6 @@ jobs:
 
       - name: Production Bundle Compilation
         run: npm run build
+
+      - name: Automated Financial Integrity & Fake-Money Audit
+        run: npm run audit

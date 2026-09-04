@@ -162,11 +162,29 @@ export async function signInWithGoogle(options?: {
   email?: string;
   displayName?: string;
   photoURL?: string;
+  credential?: string;
+  idToken?: string;
 }): Promise<AuthSession> {
-  const email = options?.email || 'trader.ritam@gmail.com';
-  const displayName = options?.displayName || 'Ritam Saha';
-  const photoURL =
-    options?.photoURL ||
+  let email = options?.email;
+  let displayName = options?.displayName;
+  let photoURL = options?.photoURL;
+
+  if ((!email || !displayName) && options?.credential) {
+    try {
+      const payloadBase64 = options.credential.split('.')[1];
+      const decoded = JSON.parse(atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/')));
+      email = email || decoded.email;
+      displayName = displayName || decoded.name;
+      photoURL = photoURL || decoded.picture;
+    } catch {
+      // Ignore JWT decode errors in client fallback
+    }
+  }
+
+  email = email || 'trader@lumen.io';
+  displayName = displayName || 'Investor';
+  photoURL =
+    photoURL ||
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
 
   const uid = await deriveUserUid('google', email);
@@ -211,12 +229,13 @@ export async function signInWithApple(options?: {
   email?: string;
   displayName?: string;
   hideEmail?: boolean;
+  identityToken?: string;
 }): Promise<AuthSession> {
   const isPrivateRelay = options?.hideEmail ?? false;
   const email = isPrivateRelay
-    ? 'r.saha.trading@privaterelay.appleid.com'
-    : options?.email || 'ritam.apple@icloud.com';
-  const displayName = options?.displayName || 'Ritam (Apple ID)';
+    ? (options?.email || 'investor.masked@privaterelay.appleid.com')
+    : options?.email || 'investor@apple.com';
+  const displayName = options?.displayName || 'Apple Investor';
   const photoURL = '';
 
   const uid = await deriveUserUid('apple', email);

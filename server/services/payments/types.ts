@@ -1,0 +1,63 @@
+export interface CreatePaymentIntentParams {
+  userId: string;
+  orderId: string;
+  amountMinor: number; // in paise for INR, cents for USD
+  currency: 'INR' | 'USD';
+  method: 'upi' | 'card';
+  redirectUrl?: string;
+  callbackUrl?: string;
+}
+
+export interface PaymentOrderResult {
+  provider: string;
+  providerOrderId: string;
+  checkoutUrl?: string;
+  upiIntentUri?: string;
+  qrPayload?: string;
+  additionalData?: Record<string, any>;
+}
+
+export interface WebhookVerificationResult {
+  isValid: boolean;
+  error?: string;
+  eventId?: string;
+  providerOrderId?: string;
+  providerPaymentId?: string;
+  status?: 'captured' | 'failed' | 'refunded';
+  amountMinor?: number;
+  currency?: string;
+  rawPayload?: Record<string, any>;
+}
+
+export interface PaymentStatusResult {
+  providerOrderId: string;
+  status: 'PENDING' | 'SUCCESS' | 'FAILED';
+  amountMinor: number;
+  currency: string;
+  providerPaymentId?: string;
+  utr?: string;
+}
+
+export interface RefundParams {
+  providerOrderId: string;
+  providerPaymentId?: string;
+  amountMinor: number;
+  reason: string;
+  idempotencyKey: string;
+}
+
+export interface RefundResult {
+  success: boolean;
+  refundId: string;
+  status: 'SUCCESS' | 'PENDING' | 'FAILED';
+  amountMinor: number;
+  error?: string;
+}
+
+export interface PaymentProvider {
+  name: string;
+  createOrder(params: CreatePaymentIntentParams): Promise<PaymentOrderResult>;
+  verifyWebhook(rawBody: string, headers: Record<string, string | string[] | undefined>): Promise<WebhookVerificationResult>;
+  checkStatus(providerOrderId: string, merchantTransactionId: string): Promise<PaymentStatusResult>;
+  refund(params: RefundParams): Promise<RefundResult>;
+}

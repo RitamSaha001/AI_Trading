@@ -151,7 +151,14 @@ export function challengeTradingDecision(
   }
 
   if (action === 'REBALANCE') {
-    const currentCashPct = pv > 0 ? (state.cash / pv) * 100 : 100;
+    const activeCash = state.accountMode === 'exchange'
+      ? (['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const).reduce(
+          (sum, c) => sum + (state.exchangeAccount?.balances[c]?.free || 0), 0
+        )
+      : state.accountMode === 'web3'
+      ? (state.web3Account?.balances?.['USDT'] || 0) + (state.web3Account?.balances?.['USDC'] || 0)
+      : state.cash;
+    const currentCashPct = pv > 0 ? (activeCash / pv) * 100 : 100;
     if (currentCashPct < policy.minCashReservePct * 100) {
       concerns.push(`Rebalancing starting with depressed cash reserves (${currentCashPct.toFixed(1)}%). Requires sequential two-stage execution (sell-first).`);
       mitigations.push('Execute sell transactions first to unlock liquidity before executing purchase steps.');

@@ -30,18 +30,52 @@ export function AuthModal() {
 
   if (!authModalOpen) return null;
 
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
   const handleGoogleClick = async () => {
     setIsProcessing(true);
     setErrorMessage(null);
     try {
-      await loginWithGoogle({
-        email: 'trader.ritam@gmail.com',
-        displayName: 'Ritam Saha',
-        photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      if (!googleClientId || googleClientId === 'mock-google-client-id.apps.googleusercontent.com') {
+        setErrorMessage('Google Sign-In is not configured. Set VITE_GOOGLE_CLIENT_ID in your .env file.');
+        setIsProcessing(false);
+        return;
+      }
+
+      // Load Google Identity Services script if not already loaded
+      if (!(window as any).google?.accounts?.id) {
+        await new Promise<void>((resolve, reject) => {
+          const existing = document.getElementById('google-gsi-script');
+          if (existing) { resolve(); return; }
+          const script = document.createElement('script');
+          script.id = 'google-gsi-script';
+          script.src = 'https://accounts.google.com/gsi/client';
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load Google Identity Services'));
+          document.head.appendChild(script);
+        });
+      }
+
+      // Trigger Google One-Tap / Sign-In
+      const google = (window as any).google;
+      google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response: { credential: string }) => {
+          try {
+            await loginWithGoogle({ credential: response.credential });
+          } catch (err: any) {
+            setErrorMessage(err?.message || 'Google sign-in verification failed');
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+        auto_select: false,
       });
-    } catch (e: any) {
-      setErrorMessage(e?.message || 'Google sign-in failed');
-    } finally {
+      google.accounts.id.prompt();
+      return; // Processing continues in callback
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Google sign-in failed');
       setIsProcessing(false);
     }
   };
@@ -50,10 +84,39 @@ export function AuthModal() {
     setIsProcessing(true);
     setErrorMessage(null);
     try {
+      // Apple Sign-In via official Apple JS SDK
+      const appleClientId = import.meta.env.VITE_APPLE_CLIENT_ID;
+      if (!appleClientId) {
+        setErrorMessage('Apple Sign-In is not configured. Set VITE_APPLE_CLIENT_ID in your .env file.');
+        setIsProcessing(false);
+        return;
+      }
+
+      if (!(window as any).AppleID) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js';
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load Apple Sign-In SDK'));
+          document.head.appendChild(script);
+        });
+      }
+
+      const AppleID = (window as any).AppleID;
+      AppleID.auth.init({
+        clientId: appleClientId,
+        scope: 'name email',
+        redirectURI: window.location.origin + '/auth/apple/callback',
+        usePopup: true,
+      });
+
+      const response = await AppleID.auth.signIn();
       await loginWithApple({
-        email: 'ritam.saha@icloud.com',
-        displayName: 'Ritam Saha',
-        hideEmail: false,
+        identityToken: response.authorization.id_token,
+        displayName: response.user?.name?.firstName
+          ? `${response.user.name.firstName} ${response.user.name.lastName || ''}`.trim()
+          : undefined,
       });
     } catch (e: any) {
       setErrorMessage(e?.message || 'Apple sign-in failed');

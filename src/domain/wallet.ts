@@ -25,10 +25,13 @@ export async function hashPin(pin: string): Promise<string> {
  * Constant-time string comparison to prevent timing attacks.
  */
 export function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const len = Math.max(a.length, b.length);
+  // Pad both strings to equal length so all comparisons take the same time
+  const aPadded = a.padEnd(len, '\0');
+  const bPadded = b.padEnd(len, '\0');
+  let diff = a.length !== b.length ? 1 : 0;
+  for (let i = 0; i < len; i++) {
+    diff |= aPadded.charCodeAt(i) ^ bPadded.charCodeAt(i);
   }
   return diff === 0;
 }
@@ -209,9 +212,9 @@ export async function withdrawFunds(
     }
     const enteredHash = await hashPin(enteredPin);
     const storedHash = wallet.security.pinHash || '';
-    const isHashMatch = timingSafeEqual(storedHash, enteredHash);
-    const isPlainMatch = timingSafeEqual(storedHash, enteredPin);
-    if (!isHashMatch && !isPlainMatch) {
+    const matchesHash = timingSafeEqual(storedHash, enteredHash);
+    const matchesPlain = timingSafeEqual(storedHash, enteredPin);
+    if (!matchesHash && !matchesPlain) {
       throw new Error('Invalid Security PIN. Withdrawal rejected for capital protection.');
     }
   }

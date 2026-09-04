@@ -3,6 +3,8 @@ import {
   calculateDexQuote,
   validateSwapPrerequisites,
   executeDexSwap,
+  encodeExactInputSingle,
+  encodeERC20Approve,
 } from './dexRouter';
 
 describe('DEX Execution Router', () => {
@@ -145,6 +147,33 @@ describe('DEX Execution Router', () => {
       expect(receipt.explorerUrl).toContain('polygonscan.com/tx/0x');
       expect(receipt.amountIn).toBe(100);
       expect(receipt.amountOut).toBeGreaterThan(240);
+    });
+  });
+
+  describe('Uniswap V3 Calldata Encoders', () => {
+    it('encodes exactInputSingle with correct selector and 7 32-byte words', () => {
+      const calldata = encodeExactInputSingle({
+        tokenIn: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+        tokenOut: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
+        fee: 3000,
+        recipient: '0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf',
+        amountIn: 100000000n,
+        amountOutMinimum: 240000000000000000000n,
+        sqrtPriceLimitX96: 0n,
+      });
+
+      expect(calldata.startsWith('0x04e45aaf')).toBe(true);
+      // '0x' + 8 hex selector chars + 7 * 64 hex chars = 2 + 8 + 448 = 458
+      expect(calldata.length).toBe(458);
+      // Verify tokenIn is encoded in first 32 bytes
+      expect(calldata.slice(10, 74).toLowerCase()).toBe('0000000000000000000000003c499c542cef5e3811e1192ce70d8cc03d5c3359');
+    });
+
+    it('encodes ERC-20 approve with correct selector and 2 32-byte words', () => {
+      const calldata = encodeERC20Approve('0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45', 1000000n);
+      expect(calldata.startsWith('0x095ea7b3')).toBe(true);
+      // '0x' + 8 hex selector + 2 * 64 hex chars = 2 + 8 + 128 = 138
+      expect(calldata.length).toBe(138);
     });
   });
 });

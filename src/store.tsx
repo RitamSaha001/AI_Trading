@@ -99,6 +99,7 @@ import {
   executeEmergencyFreeze,
   CreateGrievanceRequest,
 } from './services/grievanceService';
+import { ApiClient } from './services/apiClient';
 
 type Ctx = {
   state: AppState;
@@ -210,8 +211,8 @@ type Ctx = {
   userProfileDrawerOpen: boolean;
   openUserProfileDrawer: () => void;
   closeUserProfileDrawer: () => void;
-  loginWithGoogle: (options?: { email?: string; displayName?: string; photoURL?: string }) => Promise<void>;
-  loginWithApple: (options?: { email?: string; displayName?: string; hideEmail?: boolean }) => Promise<void>;
+  loginWithGoogle: (options?: { email?: string; displayName?: string; photoURL?: string; credential?: string; idToken?: string }) => Promise<void>;
+  loginWithApple: (options?: { email?: string; displayName?: string; hideEmail?: boolean; identityToken?: string }) => Promise<void>;
   loginWithEmail: (email: string, displayName?: string) => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
@@ -1021,9 +1022,23 @@ export function Provider({ children }: { children: React.ReactNode }) {
   );
 
   const loginWithGoogle = useCallback(
-    async (options?: { email?: string; displayName?: string; photoURL?: string }) => {
+    async (options?: { email?: string; displayName?: string; photoURL?: string; idToken?: string; credential?: string }) => {
       try {
-        const session = await signInWithGoogle(options);
+        // Synchronize with server-authoritative authentication
+        const token = options?.credential || options?.idToken;
+        const serverRes = await ApiClient.loginGoogle(token).catch(() => null);
+        let session = await signInWithGoogle(options);
+        if (serverRes?.ok && serverRes?.data?.token) {
+          session = {
+            ...session,
+            token: serverRes.data.token,
+            user: {
+              ...session.user!,
+              uid: serverRes.data.user?.id || session.user!.uid,
+              kycTier: serverRes.data.user?.kyc_tier || session.user!.kycTier,
+            },
+          };
+        }
         setAuthSession(session);
         const userState = loadState(session.user?.uid);
         userState.authSession = session;
@@ -1043,9 +1058,23 @@ export function Provider({ children }: { children: React.ReactNode }) {
   );
 
   const loginWithApple = useCallback(
-    async (options?: { email?: string; displayName?: string; hideEmail?: boolean }) => {
+    async (options?: { email?: string; displayName?: string; hideEmail?: boolean; identityToken?: string }) => {
       try {
-        const session = await signInWithApple(options);
+        const serverRes = options?.identityToken
+          ? await ApiClient.loginApple(options.identityToken, undefined, options?.displayName).catch(() => null)
+          : null;
+        let session = await signInWithApple(options);
+        if (serverRes?.ok && serverRes?.data?.token) {
+          session = {
+            ...session,
+            token: serverRes.data.token,
+            user: {
+              ...session.user!,
+              uid: serverRes.data.user?.id || session.user!.uid,
+              kycTier: serverRes.data.user?.kyc_tier || session.user!.kycTier,
+            },
+          };
+        }
         setAuthSession(session);
         const userState = loadState(session.user?.uid);
         userState.authSession = session;
@@ -1067,7 +1096,19 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const loginWithEmail = useCallback(
     async (email: string, displayName?: string) => {
       try {
-        const session = await signInWithEmail(email, displayName);
+        const serverRes = await ApiClient.loginEmail(email, displayName).catch(() => null);
+        let session = await signInWithEmail(email, displayName);
+        if (serverRes?.ok && serverRes?.data?.token) {
+          session = {
+            ...session,
+            token: serverRes.data.token,
+            user: {
+              ...session.user!,
+              uid: serverRes.data.user?.id || session.user!.uid,
+              kycTier: serverRes.data.user?.kyc_tier || session.user!.kycTier,
+            },
+          };
+        }
         setAuthSession(session);
         const userState = loadState(session.user?.uid);
         userState.authSession = session;
@@ -1088,6 +1129,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
     if (currentUid) {
       saveState(stateRef.current, currentUid);
     }
+    ApiClient.logout().catch(() => {});
     const emptySession = authSignOut();
     setAuthSession(emptySession);
     disconnectExchange();
@@ -1156,6 +1198,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
   );
 
   const triggerEmergencyFreezeAction = useCallback((): { cancelledCount: number } => {
+    ApiClient.emergencyFreeze().catch(() => {});
     const { updatedState, cancelledOrdersCount } = executeEmergencyFreeze(stateRef.current);
     if (authSession.user) {
       const lockedUser: UserProfile = { ...authSession.user, isEmergencyLocked: true };
@@ -1527,18 +1570,57 @@ export function Provider({ children }: { children: React.ReactNode }) {
         const binanceOrderType = options?.type === 'limit' ? 'LIMIT' : 'MARKET';
         const clientOrderId = 'lumen_' + Date.now().toString(36);
 
-        // Async placement handled with immediate optimistic notification
-        connectorRef.current
-          .placeOrder({
-            symbol,
-            side: side === 'buy' ? 'BUY' : 'SELL',
-            type: binanceOrderType,
-            quantity: qty,
-            price: options?.limitPrice,
-            timeInForce: 'GTC',
-            newClientOrderId: clientOrderId,
+        const quoteAgeMs = Date.now() - (marketsRef.current[a]?.lastUpdated || Date.now());
+
+        // Route through authoritative server risk engine and execution gateway first
+        ApiClient.submitOrder({
+          symbol,
+          asset: a,
+          quoteAsset: 'USDT',
+          side: side === 'buy' ? 'BUY' : 'SELL',
+          type: binanceOrderType,
+          quantity: qty,
+          price: options?.limitPrice || marketsRef.current[a]?.price,
+          marketQuoteAgeMs: quoteAgeMs,
+          idempotencyKey: `ord_${clientOrderId}`,
+        })
+          .then(async (backendRes) => {
+            if (backendRes.ok && backendRes.data?.order) {
+              triggerToast(
+                `Order Placed via Authoritative Gateway`,
+                `Dispatched ${side.toUpperCase()} ${qty} ${a} to Binance (${backendRes.data.order.status})`,
+                'success'
+              );
+              syncExchangeBalances();
+              return;
+            }
+            if (backendRes.error) {
+              triggerToast('Risk Engine Blocked', backendRes.error, 'warn');
+              return;
+            }
+            return connectorRef.current?.placeOrder({
+              symbol,
+              side: side === 'buy' ? 'BUY' : 'SELL',
+              type: binanceOrderType,
+              quantity: qty,
+              price: options?.limitPrice,
+              timeInForce: 'GTC',
+              newClientOrderId: clientOrderId,
+            });
           })
-          .then(async (res) => {
+          .catch(() => {
+            return connectorRef.current?.placeOrder({
+              symbol,
+              side: side === 'buy' ? 'BUY' : 'SELL',
+              type: binanceOrderType,
+              quantity: qty,
+              price: options?.limitPrice,
+              timeInForce: 'GTC',
+              newClientOrderId: clientOrderId,
+            });
+          })
+          .then(async (res: any) => {
+            if (!res) return;
             triggerToast(
               `Binance Order Placed`,
               `Dispatched ${side.toUpperCase()} ${qty} ${a} to Binance (${res.status})`,

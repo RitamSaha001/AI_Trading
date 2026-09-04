@@ -22,6 +22,7 @@ import {
   generateUPIQRCodeSvg,
   ZeroCostSandboxGateway,
 } from '../services/paymentGateway';
+import { ApiClient } from '../services/apiClient';
 import {
   generateUPIAppIntents,
   validateIndianUTR,
@@ -113,6 +114,28 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
     setErrorMessage('');
 
     try {
+      if (accountMode === 'exchange') {
+        const intentRes = await ApiClient.createPaymentIntent({
+          amountMinor: Math.round(numericAmountINR * 100),
+          currency: 'INR',
+          method: 'upi',
+          idempotencyKey: `upi_live_${Date.now()}`,
+        });
+
+        if (!intentRes.ok) {
+          throw new Error(intentRes.error || 'Failed to create payment intent');
+        }
+
+        setSuccessReceipt({
+          channel: 'UPI Direct / Intent (Live Production)',
+          ref: intentRes.data?.intent?.orderId || `UPI-${Date.now()}`,
+          status: 'AWAITING_PROVIDER_SETTLEMENT',
+          note: 'Payment order created. Complete payment in your banking app. Sovereign balance will be credited via provider webhook.',
+        });
+        setIsSuccess(true);
+        return;
+      }
+
       if (activeTab === 'vpa') {
         await ZeroCostSandboxGateway.initiateUPICollect(vpa, numericAmountINR);
       }
@@ -130,7 +153,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
           upiVpa: paymentVpa,
           referenceNumber: refNumber,
         },
-        `UPI Deposit of ₹${numericAmountINR.toLocaleString()} via ${selectedApp || 'NPCI UPI QR'}`
+        `[PAPER] UPI Deposit of ₹${numericAmountINR.toLocaleString()} via ${selectedApp || 'NPCI UPI QR'}`
       );
 
       if (saveVpa && activeTab === 'vpa') {
@@ -145,7 +168,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
       }
 
       setSuccessReceipt({
-        channel: 'UPI Direct / Intent',
+        channel: 'UPI Direct / Intent [PAPER / SIMULATION]',
         ref: refNumber,
         app: selectedApp || 'NPCI UPI QR',
       });
@@ -172,6 +195,28 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
     setErrorMessage('');
 
     try {
+      if (accountMode === 'exchange') {
+        // LIVE PRODUCTION MODE: Submit UTR to server for institutional compliance & settlement verification
+        const res = await ApiClient.submitUTR({
+          utr: utrNumber.trim(),
+          amountINR: numericAmountINR,
+        });
+
+        if (!res.ok) {
+          throw new Error(res.error || 'Failed to submit UTR for verification');
+        }
+
+        setSuccessReceipt({
+          channel: 'Authoritative Bank UTR Verification',
+          ref: utrNumber.trim(),
+          status: 'PENDING_MANUAL_SETTLEMENT',
+          note: 'Submitted to banking compliance desk. In strict accordance with institutional guidelines, wallet balance will be credited to your double-entry ledger only after bank statement confirmation.',
+        });
+        setIsSuccess(true);
+        return;
+      }
+
+      // SIMULATION / PAPER MODE ONLY
       const verification = await ZeroCostSandboxGateway.verifyUPIUTR(utrNumber.trim(), numericAmountINR);
 
       await depositToWallet(
@@ -182,14 +227,14 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
           upiVpa: 'verified@utr',
           referenceNumber: utrNumber.trim(),
         },
-        `Verified 12-Digit Indian UTR Deposit: ${utrNumber.trim()}`
+        `[PAPER] Verified 12-Digit Indian UTR Deposit: ${utrNumber.trim()}`
       );
 
       setSuccessReceipt({
-        channel: '12-Digit Indian UTR Verification',
+        channel: '12-Digit Indian UTR [PAPER / SIMULATION]',
         ref: utrNumber.trim(),
         sha256Proof: verification.settlementRef,
-        settlement: 'Instant Bank Ledger Match',
+        settlement: 'Instant Simulation Match',
       });
       setIsSuccess(true);
     } catch (err: any) {
@@ -584,18 +629,46 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
               )}
             </>
           ) : (
-            /* Success Receipt Screen */
+            /* Success / Pending Receipt Screen */
             <div className="text-center py-6 space-y-4 animate-in zoom-in-95 duration-200">
-              <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-lg shadow-emerald-600/10">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-zinc-900">UPI Payment Confirmed!</h3>
-                <p className="text-xs text-zinc-500 mt-1">
-                  Successfully credited ₹{numericAmountINR.toLocaleString()} INR ($
-                  {equivalentUSD.toFixed(2)} USD) to your Sovereign Wallet.
-                </p>
-              </div>
+              {successReceipt?.status === 'PENDING_MANUAL_SETTLEMENT' ? (
+                <>
+                  <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-600 mx-auto flex items-center justify-center shadow-lg shadow-amber-600/10">
+                    <Clock className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">UTR Submitted for Verification</h3>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      UTR ref <span className="font-mono font-bold text-zinc-800">{successReceipt?.ref}</span> registered with treasury desk. Wallet balance will be credited authoritatively upon bank statement clearing.
+                    </p>
+                  </div>
+                </>
+              ) : successReceipt?.status === 'AWAITING_PROVIDER_SETTLEMENT' ? (
+                <>
+                  <div className="w-16 h-16 rounded-3xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center shadow-lg shadow-blue-600/10">
+                    <Clock className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">Awaiting Provider Settlement</h3>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Payment order registered. Please complete the authorization in your banking app. The balance will update automatically upon webhook receipt.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-lg shadow-emerald-600/10">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900">UPI Payment Confirmed!</h3>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Successfully credited ₹{numericAmountINR.toLocaleString()} INR ($
+                      {equivalentUSD.toFixed(2)} USD) to your Sovereign Wallet.
+                    </p>
+                  </div>
+                </>
+              )}
 
               <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 text-xs text-zinc-600 text-left space-y-1.5">
                 <div className="flex justify-between">
@@ -606,6 +679,12 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                   <span>Reference ID:</span>
                   <span className="font-mono font-bold text-zinc-900">{successReceipt?.ref}</span>
                 </div>
+                {successReceipt?.status && (
+                  <div className="flex justify-between">
+                    <span>Status:</span>
+                    <span className="font-mono font-bold text-amber-600">{successReceipt.status}</span>
+                  </div>
+                )}
                 {successReceipt?.sha256Proof && (
                   <div className="flex justify-between">
                     <span>Ledger Hash:</span>
@@ -614,7 +693,9 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                 )}
                 <div className="flex justify-between">
                   <span>Settlement:</span>
-                  <span className="font-semibold text-emerald-600">Immediate Real-Time</span>
+                  <span className={`font-semibold ${successReceipt?.status ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {successReceipt?.status === 'PENDING_MANUAL_SETTLEMENT' ? 'Pending Bank Reconciliation' : successReceipt?.status === 'AWAITING_PROVIDER_SETTLEMENT' ? 'Awaiting Webhook' : 'Immediate Real-Time'}
+                  </span>
                 </div>
               </div>
 
