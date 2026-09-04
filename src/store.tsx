@@ -22,6 +22,9 @@ import {
   SavedPaymentMethod,
   NativeWalletSecurity,
   Web3AccountInfo,
+  UserProfile,
+  AuthSession,
+  GrievanceTicket,
 } from './types';
 import {
   createDefaultWallet,
@@ -82,6 +85,20 @@ import {
   isEncryptedApiKey,
 } from './services/keyVault';
 import { BinanceConnector } from './services/binanceConnector';
+import {
+  signInWithGoogle,
+  signInWithApple,
+  signInWithEmail,
+  signOut as authSignOut,
+  loadCurrentSession,
+  updateUserProfile,
+} from './services/authService';
+import {
+  createGrievanceTicket,
+  escalateTicket,
+  executeEmergencyFreeze,
+  CreateGrievanceRequest,
+} from './services/grievanceService';
 
 type Ctx = {
   state: AppState;
@@ -184,6 +201,28 @@ type Ctx = {
   savePaymentMethod: (method: SavedPaymentMethod) => void;
   deletePaymentMethod: (id: string) => void;
   updateWalletSecurity: (security: Partial<NativeWalletSecurity>) => void;
+  authSession: AuthSession;
+  user: UserProfile | null;
+  isAuthenticated: boolean;
+  authModalOpen: boolean;
+  openAuthModal: () => void;
+  closeAuthModal: () => void;
+  userProfileDrawerOpen: boolean;
+  openUserProfileDrawer: () => void;
+  closeUserProfileDrawer: () => void;
+  loginWithGoogle: (options?: { email?: string; displayName?: string; photoURL?: string }) => Promise<void>;
+  loginWithApple: (options?: { email?: string; displayName?: string; hideEmail?: boolean }) => Promise<void>;
+  loginWithEmail: (email: string, displayName?: string) => Promise<void>;
+  logout: () => void;
+  updateProfile: (updates: Partial<UserProfile>) => void;
+  grievanceTickets: GrievanceTicket[];
+  grievanceModalOpen: boolean;
+  openGrievanceModal: (prefill?: Partial<CreateGrievanceRequest>) => void;
+  closeGrievanceModal: () => void;
+  prefilledGrievance: Partial<CreateGrievanceRequest> | null;
+  submitGrievance: (req: CreateGrievanceRequest) => Promise<GrievanceTicket>;
+  escalateGrievanceTicketAction: (ticketId: string, reason: string) => void;
+  triggerEmergencyFreezeAction: () => { cancelledCount: number };
 };
 
 const Context = createContext<Ctx | null>(null);
@@ -300,7 +339,32 @@ export function mergeTickResults(prev: AppState, mutations: TickMutations): AppS
 }
 
 export function Provider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>(() => loadState());
+  const [authSession, setAuthSession] = useState<AuthSession>(() => loadCurrentSession());
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [userProfileDrawerOpen, setUserProfileDrawerOpen] = useState(false);
+  const [grievanceModalOpen, setGrievanceModalOpen] = useState(false);
+  const [prefilledGrievance, setPrefilledGrievance] = useState<Partial<CreateGrievanceRequest> | null>(null);
+
+  const openAuthModal = useCallback(() => setAuthModalOpen(true), []);
+  const closeAuthModal = useCallback(() => setAuthModalOpen(false), []);
+  const openUserProfileDrawer = useCallback(() => setUserProfileDrawerOpen(true), []);
+  const closeUserProfileDrawer = useCallback(() => setUserProfileDrawerOpen(false), []);
+
+  const openGrievanceModal = useCallback((prefill?: Partial<CreateGrievanceRequest>) => {
+    setPrefilledGrievance(prefill || null);
+    setGrievanceModalOpen(true);
+  }, []);
+  const closeGrievanceModal = useCallback(() => {
+    setGrievanceModalOpen(false);
+    setPrefilledGrievance(null);
+  }, []);
+
+  const [state, setState] = useState<AppState>(() => {
+    const session = loadCurrentSession();
+    const s = loadState(session.user?.uid);
+    s.authSession = session;
+    return s;
+  });
   const [markets, setMarkets] = useState<Record<Asset, Market | undefined>>(() =>
     Object.fromEntries(ASSETS.map((a) => [a, undefined])) as Record<Asset, Market | undefined>
   );
@@ -956,6 +1020,159 @@ export function Provider({ children }: { children: React.ReactNode }) {
     [triggerToast]
   );
 
+  const loginWithGoogle = useCallback(
+    async (options?: { email?: string; displayName?: string; photoURL?: string }) => {
+      try {
+        const session = await signInWithGoogle(options);
+        setAuthSession(session);
+        const userState = loadState(session.user?.uid);
+        userState.authSession = session;
+        setState(userState);
+        saveState(userState, session.user?.uid);
+        triggerToast(
+          'Authenticated with Google',
+          `Welcome back, ${session.user?.displayName}! Account data synchronized.`,
+          'success'
+        );
+        setAuthModalOpen(false);
+      } catch (e: any) {
+        triggerToast('Sign In Error', e?.message || 'Failed to sign in with Google', 'warn');
+      }
+    },
+    [triggerToast]
+  );
+
+  const loginWithApple = useCallback(
+    async (options?: { email?: string; displayName?: string; hideEmail?: boolean }) => {
+      try {
+        const session = await signInWithApple(options);
+        setAuthSession(session);
+        const userState = loadState(session.user?.uid);
+        userState.authSession = session;
+        setState(userState);
+        saveState(userState, session.user?.uid);
+        triggerToast(
+          'Authenticated with Apple',
+          `Signed in with Apple ID (${session.user?.email}).`,
+          'success'
+        );
+        setAuthModalOpen(false);
+      } catch (e: any) {
+        triggerToast('Sign In Error', e?.message || 'Failed to sign in with Apple', 'warn');
+      }
+    },
+    [triggerToast]
+  );
+
+  const loginWithEmail = useCallback(
+    async (email: string, displayName?: string) => {
+      try {
+        const session = await signInWithEmail(email, displayName);
+        setAuthSession(session);
+        const userState = loadState(session.user?.uid);
+        userState.authSession = session;
+        setState(userState);
+        saveState(userState, session.user?.uid);
+        triggerToast('Signed In', `Signed in as ${session.user?.email}.`, 'success');
+        setAuthModalOpen(false);
+      } catch (e: any) {
+        triggerToast('Sign In Error', e?.message || 'Failed to sign in', 'warn');
+        throw e;
+      }
+    },
+    [triggerToast]
+  );
+
+  const logout = useCallback(() => {
+    const currentUid = authSession.user?.uid;
+    if (currentUid) {
+      saveState(stateRef.current, currentUid);
+    }
+    const emptySession = authSignOut();
+    setAuthSession(emptySession);
+    disconnectExchange();
+    lockWeb3Wallet();
+    const guestState = loadState('guest');
+    guestState.authSession = emptySession;
+    setState(guestState);
+    saveState(guestState, 'guest');
+    setUserProfileDrawerOpen(false);
+    triggerToast('Signed Out', 'Your session has been securely closed. Keystores locked.', 'info');
+  }, [authSession.user?.uid, disconnectExchange, lockWeb3Wallet, triggerToast]);
+
+  const updateProfile = useCallback(
+    (updates: Partial<UserProfile>) => {
+      if (!authSession.user) return;
+      const updated = updateUserProfile(authSession, updates);
+      setAuthSession(updated);
+      setState((prev) => {
+        const next = { ...prev, authSession: updated };
+        saveState(next, updated.user?.uid);
+        return next;
+      });
+      triggerToast('Profile Updated', 'Compliance & security preferences saved.', 'success');
+    },
+    [authSession, triggerToast]
+  );
+
+  const submitGrievance = useCallback(
+    async (req: CreateGrievanceRequest): Promise<GrievanceTicket> => {
+      const ticket = await createGrievanceTicket({
+        ...req,
+        userUid: authSession.user?.uid || 'guest_user',
+      });
+      setState((prev) => {
+        const existing = prev.grievanceTickets || [];
+        const next = { ...prev, grievanceTickets: [ticket, ...existing] };
+        saveState(next, authSession.user?.uid);
+        return next;
+      });
+      triggerToast(
+        'Grievance Registered',
+        `Dispute #${ticket.ticketId} logged with Nodal Desk. SLA resolution within ${
+          ticket.priority === 'urgent' ? '24h' : '48h'
+        }.`,
+        'success'
+      );
+      return ticket;
+    },
+    [authSession.user?.uid, triggerToast]
+  );
+
+  const escalateGrievanceTicketAction = useCallback(
+    (ticketId: string, reason: string) => {
+      setState((prev) => {
+        const existing = prev.grievanceTickets || [];
+        const next = {
+          ...prev,
+          grievanceTickets: existing.map((t) => (t.ticketId === ticketId ? escalateTicket(t, reason) : t)),
+        };
+        saveState(next, authSession.user?.uid);
+        return next;
+      });
+      triggerToast('Ticket Escalated', `Ticket #${ticketId} escalated to Principal Nodal Officer.`, 'info');
+    },
+    [authSession.user?.uid, triggerToast]
+  );
+
+  const triggerEmergencyFreezeAction = useCallback((): { cancelledCount: number } => {
+    const { updatedState, cancelledOrdersCount } = executeEmergencyFreeze(stateRef.current);
+    if (authSession.user) {
+      const lockedUser: UserProfile = { ...authSession.user, isEmergencyLocked: true };
+      const nextAuth = { ...authSession, user: lockedUser };
+      updatedState.authSession = nextAuth;
+      setAuthSession(nextAuth);
+    }
+    setState(updatedState);
+    saveState(updatedState, authSession.user?.uid);
+    triggerToast(
+      'EMERGENCY FREEZE ENGAGED',
+      `${cancelledOrdersCount} pending orders cancelled. Strategies halted.`,
+      'warn'
+    );
+    return { cancelledCount: cancelledOrdersCount };
+  }, [authSession, triggerToast]);
+
   useEffect(() => {
     const unsub = onVaultLock(() => {
       triggerToast('Vault Auto-Locked', 'Key vault locked due to 30-minute inactivity.', 'info');
@@ -1289,6 +1506,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
         stopLoss?: number;
       }
     ) => {
+      if (stateRef.current.authSession?.user?.isEmergencyLocked) {
+        triggerToast('Trading Frozen', 'Emergency Capital Freeze is active on your account.', 'warn');
+        return { ok: false, error: 'Emergency capital freeze is active' };
+      }
+
       const isExchange = stateRef.current.accountMode === 'exchange';
 
       if (isExchange) {
@@ -2336,6 +2558,28 @@ export function Provider({ children }: { children: React.ReactNode }) {
       savePaymentMethod,
       deletePaymentMethod,
       updateWalletSecurity,
+      authSession,
+      user: authSession.user,
+      isAuthenticated: authSession.isAuthenticated,
+      authModalOpen,
+      openAuthModal,
+      closeAuthModal,
+      userProfileDrawerOpen,
+      openUserProfileDrawer,
+      closeUserProfileDrawer,
+      loginWithGoogle,
+      loginWithApple,
+      loginWithEmail,
+      logout,
+      updateProfile,
+      grievanceTickets: state.grievanceTickets || [],
+      grievanceModalOpen,
+      openGrievanceModal,
+      closeGrievanceModal,
+      prefilledGrievance,
+      submitGrievance,
+      escalateGrievanceTicketAction,
+      triggerEmergencyFreezeAction,
     }),
     [
       state,
@@ -2411,6 +2655,25 @@ export function Provider({ children }: { children: React.ReactNode }) {
       savePaymentMethod,
       deletePaymentMethod,
       updateWalletSecurity,
+      authSession,
+      authModalOpen,
+      openAuthModal,
+      closeAuthModal,
+      userProfileDrawerOpen,
+      openUserProfileDrawer,
+      closeUserProfileDrawer,
+      loginWithGoogle,
+      loginWithApple,
+      loginWithEmail,
+      logout,
+      updateProfile,
+      grievanceModalOpen,
+      openGrievanceModal,
+      closeGrievanceModal,
+      prefilledGrievance,
+      submitGrievance,
+      escalateGrievanceTicketAction,
+      triggerEmergencyFreezeAction,
     ]
   );
 

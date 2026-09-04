@@ -425,6 +425,9 @@ export type NativeWalletState = {
 export type AppState = {
   schemaVersion: number;
   accountMode?: AccountMode;
+  authSession?: AuthSession;
+  grievanceTickets?: GrievanceTicket[];
+  ledgerHistory?: UnifiedLedgerEntry[];
   exchangeAccount?: ExchangeAccountInfo;
   exchangeOrders?: Order[];
   web3Account?: Web3AccountInfo;
@@ -451,4 +454,115 @@ export type AppState = {
   timeframe: Timeframe;
   selectedAsset: Asset;
 };
+
+// ---------------------------------------------------------------------------
+// AUTHENTICATION & USER PROFILE TYPES
+// ---------------------------------------------------------------------------
+
+export type AuthProvider = 'google' | 'apple' | 'email';
+export type KYCTier = 'tier0_unverified' | 'tier1_basic' | 'tier2_verified';
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  provider: AuthProvider;
+  providerId: string;
+  verified: boolean;
+  createdAt: number;
+  lastLoginAt: number;
+  twoFactorEnabled: boolean;
+  kycTier: KYCTier;
+  panNumberMasked?: string;   // e.g. "ABCDE****F" for Indian financial compliance
+  phoneMasked?: string;       // e.g. "+91 98765*****"
+  country: string;
+  currencyPreference: 'USD' | 'INR';
+  isEmergencyLocked?: boolean;
+}
+
+export interface AuthSession {
+  user: UserProfile | null;
+  token?: string;
+  expiresAt: number;
+  isAuthenticated: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// GRIEVANCE REDRESSAL & FINANCIAL DISPUTE TYPES
+// ---------------------------------------------------------------------------
+
+export type GrievanceCategory =
+  | 'upi_deposit_pending'
+  | 'dex_swap_revert'
+  | 'binance_execution_error'
+  | 'card_double_charge'
+  | 'unauthorized_activity'
+  | 'general_inquiry';
+
+export type GrievanceStatus =
+  | 'submitted'
+  | 'under_investigation'
+  | 'reconciliation_in_progress'
+  | 'resolved'
+  | 'refund_credited'
+  | 'closed';
+
+export type GrievancePriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface GrievanceMessage {
+  id: string;
+  sender: 'user' | 'support_officer' | 'system';
+  senderName: string;
+  timestamp: number;
+  text: string;
+  attachments?: string[];
+}
+
+export interface GrievanceTicket {
+  ticketId: string;           // e.g. "GRV-2026-98124"
+  userUid: string;
+  category: GrievanceCategory;
+  title: string;
+  description: string;
+  status: GrievanceStatus;
+  priority: GrievancePriority;
+  createdAt: number;
+  updatedAt: number;
+  slaDeadline: number;        // Epoch ms by which resolution is guaranteed
+  relatedTxId?: string;       // Associated transaction ID
+  relatedUtr?: string;        // 12-digit Indian UTR
+  relatedTxHash?: string;     // EVM tx hash
+  amountUSD?: number;
+  amountINR?: number;
+  cryptographicDossierHash: string; // SHA-256 tamper-evident evidence checksum
+  officerAssigned?: string;
+  escalationLevel: 1 | 2 | 3; // 1: Automated Reconciliation, 2: Nodal Officer, 3: Banking Ombudsman
+  resolutionNotes?: string;
+  messages: GrievanceMessage[];
+}
+
+// ---------------------------------------------------------------------------
+// UNIFIED LEDGER TRANSACTION TYPE
+// ---------------------------------------------------------------------------
+
+export interface UnifiedLedgerEntry {
+  id: string;
+  timestamp: number;
+  userUid: string;
+  desk: 'fiat_wallet' | 'web3_dex' | 'binance_exchange';
+  channel: 'upi' | 'card' | 'polygon' | 'arbitrum' | 'binance_spot' | 'internal';
+  direction: 'inflow' | 'outflow' | 'swap' | 'transfer';
+  asset: string;
+  amount: number;
+  amountUSD: number;
+  amountINR: number;
+  feeUSD: number;
+  status: 'completed' | 'pending' | 'failed' | 'disputed' | 'refunded';
+  reference: string;          // Bank UTR, UPI RRN, or TxHash
+  description: string;
+  blockExplorerUrl?: string;
+  sha256Proof: string;        // Hash chain verification
+  grievanceTicketId?: string; // If disputed
+}
 

@@ -25,6 +25,8 @@ import {
   AlertCircle,
   ExternalLink,
   Smartphone,
+  LifeBuoy,
+  FileText,
 } from 'lucide-react';
 import { WalletCurrency, Asset, ASSETS } from '../types';
 import {
@@ -52,6 +54,9 @@ export function WalletPage() {
     web3Account,
     openWeb3Drawer,
     setAccountMode,
+    openGrievanceModal,
+    accountMode,
+    authSession,
   } = useLumen();
 
   // Modals state
@@ -121,6 +126,35 @@ export function WalletPage() {
     link.click();
     document.body.removeChild(link);
     triggerToast('Ledger Exported', 'Downloaded RFC 4180 audit CSV record.', 'info');
+  };
+
+  const handleDownloadAuditJson = () => {
+    const data = {
+      title: 'Lumen Official Financial Audit Statement',
+      generatedAt: new Date().toISOString(),
+      user: authSession?.user?.displayName || 'Client-Side Self-Custodial',
+      email: authSession?.user?.email || 'N/A',
+      kycTier: authSession?.user?.kycTier || 'tier_1',
+      accountMode,
+      treasurySummary: {
+        liquidWalletCashUSD: nativeWallet.balanceUSD,
+        allocatedToTradingDeskUSD: nativeWallet.allocatedToTradingUSD,
+        totalDepositedUSD: nativeWallet.totalDepositedUSD,
+        totalWithdrawnUSD: nativeWallet.totalWithdrawnUSD,
+        deskCashUSD: state.cash,
+      },
+      transactions: nativeWallet.transactions,
+      grievanceTickets: state.grievanceTickets || [],
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `lumen_official_audit_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    triggerToast('Audit Record Exported', 'Saved official tamper-evident JSON financial statement.', 'info');
   };
 
   const handleQuickDemoFund = async () => {
@@ -547,16 +581,29 @@ export function WalletPage() {
             </div>
           </div>
 
-          {/* 1-Click Demo Sandbox Funding */}
+          {/* Conditional Demo Sandbox Funding or Grievance Redressal */}
           <div className="pt-3 border-t border-zinc-100">
-            <button
-              type="button"
-              onClick={handleQuickDemoFund}
-              className="w-full py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition-all flex items-center justify-center gap-2"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-              <span>+ $1,000 Sandbox Test Deposit</span>
-            </button>
+            {accountMode === 'paper' ? (
+              <button
+                type="button"
+                onClick={handleQuickDemoFund}
+                className="w-full py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition-all flex items-center justify-center gap-2"
+                title="Credit $1,000 virtual simulated test balance to paper wallet"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>+ $1,000 Sandbox Test Deposit (Virtual)</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openGrievanceModal()}
+                className="w-full py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/80 text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-2xs"
+                title="Open official statutory grievance and transaction dispute desk"
+              >
+                <LifeBuoy className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Grievance Desk &amp; Dispute Resolution</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -599,9 +646,22 @@ export function WalletPage() {
               onClick={handleDownloadCsv}
               disabled={nativeWallet.transactions.length === 0}
               className="px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-xs font-bold text-zinc-700 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+              title="Export RFC 4180 CSV spreadsheet"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export CSV</span>
+              <span>CSV</span>
+            </button>
+
+            {/* Export JSON Audit Statement */}
+            <button
+              type="button"
+              onClick={handleDownloadAuditJson}
+              disabled={nativeWallet.transactions.length === 0}
+              className="px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-xs font-bold text-zinc-700 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+              title="Export tamper-evident JSON audit ledger"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Audit JSON</span>
             </button>
           </div>
         </div>
@@ -655,6 +715,7 @@ export function WalletPage() {
                   <th className="py-3 px-3">Method / Details</th>
                   <th className="py-3 px-3">Status</th>
                   <th className="py-3 px-3 text-right">Receipt Hash (SHA-256)</th>
+                  <th className="py-3 px-3 text-right">Redressal</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -727,6 +788,35 @@ export function WalletPage() {
                           ) : (
                             <Copy className="w-3 h-3 text-zinc-300" />
                           )}
+                        </button>
+                      </td>
+
+                      <td className="py-3 px-3 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openGrievanceModal({
+                              category: isDeposit
+                                ? 'upi_deposit_pending'
+                                : isSwap
+                                ? 'dex_swap_revert'
+                                : isWithdrawal
+                                ? 'general_inquiry'
+                                : 'unauthorized_activity',
+                              title: `Dispute for ${tx.type.replace(/_/g, ' ')} (${formatCurrencyAmount(tx.amount, tx.currency)})`,
+                              description: `Transaction reference: ${tx.paymentDetails?.referenceNumber || tx.txHash}\nAmount: ${tx.amount} ${tx.currency} ($${tx.amountUSD.toFixed(2)} USD)\nTimestamp: ${new Date(tx.timestamp).toISOString()}`,
+                              relatedTxId: tx.id,
+                              relatedUtr: tx.paymentDetails?.referenceNumber || '',
+                              relatedTxHash: tx.txHash,
+                              amountUSD: tx.amountUSD,
+                              amountINR: tx.currency === 'INR' ? tx.amount : tx.amountUSD * 87.2,
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-[11px] border border-indigo-200/60 inline-flex items-center gap-1 transition-colors shadow-2xs active:scale-95"
+                          title="Raise formal dispute or grievance ticket for this transaction"
+                        >
+                          <LifeBuoy className="w-3 h-3 text-indigo-500" />
+                          <span>Dispute</span>
                         </button>
                       </td>
                     </tr>

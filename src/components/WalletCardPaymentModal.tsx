@@ -28,7 +28,7 @@ interface WalletCardPaymentModalProps {
 }
 
 export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentModalProps) {
-  const { depositToWallet, savePaymentMethod } = useLumen();
+  const { depositToWallet, savePaymentMethod, accountMode } = useLumen();
 
   const [step, setStep] = useState<'details' | '3ds' | 'success'>('details');
   const [currency, setCurrency] = useState<WalletCurrency>('USD');
@@ -170,8 +170,12 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
             <div>
               <h2 className="text-lg font-bold text-zinc-900 tracking-tight flex items-center gap-2">
                 Deposit via Card
-                <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Zero-Fee Sandbox
+                <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                  accountMode === 'paper'
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                }`}>
+                  {accountMode === 'paper' ? 'Simulated Sandbox' : 'Live Capital Gate'}
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
@@ -230,31 +234,40 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                 </div>
               </div>
 
-              {/* Demo Fill Shortcuts */}
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-zinc-400 font-medium text-[11px]">Fill Test Card:</span>
-                <button
-                  type="button"
-                  onClick={() => handleFillDemoCard('visa')}
-                  className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
-                >
-                  Visa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFillDemoCard('mastercard')}
-                  className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
-                >
-                  Mastercard
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFillDemoCard('rupay')}
-                  className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
-                >
-                  RuPay
-                </button>
-              </div>
+              {/* Demo Fill Shortcuts (Paper Mode Only) or PCI-DSS Compliance Badge */}
+              {accountMode === 'paper' ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-zinc-400 font-medium text-[11px]">Fill Test Card:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleFillDemoCard('visa')}
+                    className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
+                  >
+                    Visa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleFillDemoCard('mastercard')}
+                    className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
+                  >
+                    Mastercard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleFillDemoCard('rupay')}
+                    className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
+                  >
+                    RuPay
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-zinc-50 border border-zinc-200/70 text-[11px] text-zinc-600">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    <strong>PCI-DSS Certified:</strong> Client-side cryptographic tokenization ensures credentials are never stored unencrypted.
+                  </span>
+                </div>
+              )}
 
               {/* Amount & Currency */}
               <div className="grid grid-cols-3 gap-3">

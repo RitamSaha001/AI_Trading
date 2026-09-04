@@ -390,27 +390,39 @@ export function migrateState(rawState: any): AppState {
     })(),
     timeframe: rawState.timeframe ?? '1D',
     selectedAsset: ASSETS.includes(rawState.selectedAsset) ? rawState.selectedAsset : 'BTC',
+    authSession: rawState.authSession || undefined,
+    grievanceTickets: Array.isArray(rawState.grievanceTickets) ? rawState.grievanceTickets : [],
+    ledgerHistory: Array.isArray(rawState.ledgerHistory) ? rawState.ledgerHistory : [],
   };
 
   return migrated;
 }
 
-export function loadState(): AppState {
+export function getUserStorageKey(userUid?: string): string {
+  if (userUid && userUid.trim()) {
+    return `${STORAGE_KEY}_${userUid.trim()}`;
+  }
+  return STORAGE_KEY;
+}
+
+export function loadState(userUid?: string): AppState {
+  const key = getUserStorageKey(userUid);
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+    const raw = localStorage.getItem(key) || (key === STORAGE_KEY ? localStorage.getItem(LEGACY_STORAGE_KEY) : null);
     if (raw) {
       const parsed = JSON.parse(raw);
       return migrateState(parsed);
     }
   } catch (e) {
-    console.warn('Failed to parse stored simulation state. Resetting to clean slate:', e);
+    console.warn(`Failed to parse stored state for ${key}. Resetting to clean slate:`, e);
   }
   return freshState();
 }
 
-export function saveState(state: AppState): void {
+export function saveState(state: AppState, userUid?: string): void {
+  const key = getUserStorageKey(userUid || state.authSession?.user?.uid);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(key, JSON.stringify(state));
   } catch (e: any) {
     if (e?.name === 'QuotaExceededError' || e?.code === 22) {
       try {
@@ -419,7 +431,7 @@ export function saveState(state: AppState): void {
           orders: state.orders.slice(0, 100),
           notifications: state.notifications.slice(0, 100),
         };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
+        localStorage.setItem(key, JSON.stringify(pruned));
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
             new CustomEvent('lumen_storage_warning', {
@@ -443,13 +455,14 @@ export function saveState(state: AppState): void {
   }
 }
 
-/**
- * Listens for cross-tab localStorage updates and invokes callback to keep tabs synchronized.
- */
-export function initCrossTabSync(onExternalUpdate: (newState: AppState) => void): () => void {
+export function initCrossTabSync(
+  onExternalUpdate: (newState: AppState) => void,
+  activeUserUid?: string
+): () => void {
   if (typeof window === 'undefined') return () => {};
+  const targetKey = getUserStorageKey(activeUserUid);
   const handler = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY && e.newValue) {
+    if (e.key === targetKey && e.newValue) {
       try {
         const parsed = JSON.parse(e.newValue);
         const migrated = migrateState(parsed);

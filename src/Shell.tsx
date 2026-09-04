@@ -8,6 +8,9 @@ import { AISafetyModal } from './components/AISafetyModal';
 import { ExchangeOnboardingDrawer } from './components/ExchangeOnboardingDrawer';
 import { Web3WalletDrawer } from './components/Web3WalletDrawer';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
+import { AuthModal } from './components/AuthModal';
+import { UserProfileDrawer } from './components/UserProfileDrawer';
+import { GrievanceModal } from './components/GrievanceModal';
 import {
   LayoutDashboard,
   BarChart3,
@@ -27,6 +30,10 @@ import {
   Coins,
   Wallet,
   Zap,
+  User,
+  ShieldAlert,
+  LifeBuoy,
+  Lock,
 } from 'lucide-react';
 import { money, portfolioValue, totalPortfolioPnl } from './trading';
 import { senseMarketDanger } from './domain/agentic';
@@ -103,6 +110,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
     openWeb3Drawer,
     closeWeb3Drawer,
     nativeWallet,
+    authSession,
+    user,
+    isAuthenticated,
+    openAuthModal,
+    openUserProfileDrawer,
+    openGrievanceModal,
   } = useLumen();
   const route = useRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -517,6 +530,61 @@ export function Shell({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
+            {/* Grievance & Dispute Redressal Desk Trigger */}
+            <button
+              type="button"
+              onClick={() => openGrievanceModal()}
+              className="relative p-2 rounded-xl text-zinc-500 hover:text-indigo-600 hover:bg-indigo-50/60 transition-all"
+              title="Grievance Redressal Desk & Dispute Resolution"
+            >
+              <LifeBuoy className="w-4 h-4" />
+              {state.grievanceTickets && state.grievanceTickets.some((t) => t.status !== 'resolved' && t.status !== 'closed') && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white" />
+              )}
+            </button>
+
+            {/* Google / Apple User Account Sign-In / Profile Pill */}
+            {isAuthenticated && user ? (
+              <button
+                type="button"
+                onClick={openUserProfileDrawer}
+                className="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full border border-black/[0.08] hover:border-black/[0.15] bg-white/80 hover:bg-white shadow-2xs transition-all active:scale-95"
+                title={`${user.displayName} (${user.email}) — Click for Profile & Security`}
+              >
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName}
+                    className="w-5 h-5 rounded-full object-cover border border-black/10"
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
+                    {user.displayName?.charAt(0) || user.email.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="text-xs font-semibold text-zinc-800 max-w-[90px] truncate hidden sm:inline">
+                  {user.displayName || user.email.split('@')[0]}
+                </span>
+                {user.isEmergencyLocked ? (
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                ) : (
+                  <span className="text-[9px] font-bold px-1 rounded uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {user.kycTier.toUpperCase()}
+                  </span>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={openAuthModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold shadow-2xs transition-all active:scale-95"
+                title="Sign in with Google or Apple for Secure Isolated Account"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            )}
+
             {/* AI Nexus Header Trigger - Apple Minimalist Pill */}
             <button
               type="button"
@@ -531,6 +599,79 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
+
+        {/* Persistent Account Mode & Safety Sentinel Banner */}
+        {user?.isEmergencyLocked ? (
+          <div className="bg-rose-600 text-white px-4 py-2.5 text-xs font-medium flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-md">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 text-white animate-pulse" />
+              <span>
+                <strong>EMERGENCY FREEZE ENGAGED:</strong> All trade executions and automated strategies are locked. Capital is safeguarded.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={openUserProfileDrawer}
+              className="self-start sm:self-auto px-2.5 py-1 bg-white text-rose-700 hover:bg-rose-50 text-xs font-bold rounded-lg shadow-2xs transition-colors"
+            >
+              Open Security Drawer
+            </button>
+          </div>
+        ) : accountMode === 'paper' ? (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 backdrop-blur-xs">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+                🎓
+              </span>
+              <span>
+                <strong>SIMULATED PAPER TRADING MODE</strong> — $50,000 virtual practice capital active. Zero real money at risk.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  if (exchangeAccount?.connected) {
+                    setAccountMode('exchange');
+                  } else if (web3Account?.address) {
+                    setAccountMode('web3');
+                  } else {
+                    openWeb3Drawer();
+                  }
+                }}
+                className="text-[11px] font-semibold text-amber-900 hover:text-amber-950 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg border border-amber-300/60 transition-colors"
+              >
+                Switch to Real Money Desk →
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-emerald-950 text-emerald-100 border-b border-emerald-800/80 px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span>
+                <strong>LIVE REAL CAPITAL DESK ACTIVE</strong> ({accountMode === 'exchange' ? 'Binance Live Exchange' : 'Self-Custodial Web3 / UPI'}) — Real capital deployed. Circuit breakers &amp; statutory grievance redressal active.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => openGrievanceModal()}
+                className="text-[11px] font-medium bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 hover:text-white px-2.5 py-1 rounded-lg border border-emerald-700/60 transition-colors flex items-center gap-1.5"
+              >
+                <LifeBuoy className="w-3 h-3 text-emerald-300" />
+                <span>Grievance Desk</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountMode('paper')}
+                className="text-[11px] font-medium bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-lg transition-colors"
+              >
+                Return to Paper Mode
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Content Area */}
         <main className="flex-1 p-3 sm:p-5 md:p-8 max-w-7xl w-full mx-auto overflow-x-hidden">
@@ -648,6 +789,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       )}
+
+      {/* Google / Apple Enterprise Authentication Modal */}
+      <AuthModal />
+
+      {/* Authenticated User Profile & Security Drawer */}
+      <UserProfileDrawer />
+
+      {/* Formal Grievance Redressal & Dispute Ticket Desk Modal */}
+      <GrievanceModal />
     </div>
   );
 }
