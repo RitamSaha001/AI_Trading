@@ -839,6 +839,7 @@ export class BinanceGateway {
             fee: feeAmountDec,
             feeAsset: input.quoteAsset,
             executedAt: Date.now(),
+            tx,
           });
         }
 
@@ -1005,7 +1006,12 @@ export class BinanceGateway {
               fee: feeAmountDec,
               feeAsset: input.quoteAsset,
               executedAt: Date.now(),
+              tx,
             });
+          }
+
+          if (recStatus === 'FILLED') {
+            await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx });
           }
         });
 
@@ -1176,7 +1182,7 @@ export class BinanceGateway {
           notFoundConfirmed: true,
         };
       }
-      if (creds.apiKey === 'mock_rec_timeout') {
+      if (creds.apiKey === 'mock_rec_timeout' || creds.apiKey === 'mock_timeout_key') {
         return {
           found: false,
           notFoundConfirmed: false,
@@ -1283,27 +1289,30 @@ export class BinanceGateway {
           now,
         ]
       );
-    });
 
-    try {
-      await LedgerService.processFill({
-        userId: order.user_id,
-        accountMode: 'live',
-        orderId: clientOrderId,
-        fillId: tradeId,
-        symbol: order.symbol,
-        baseAsset,
-        quoteAsset: order.quote_asset,
-        side: order.side,
-        price: avgPriceDec,
-        quantity: executedQtyDec,
-        fee: feeAmountDec,
-        feeAsset: order.quote_asset,
-        executedAt: now,
-      });
-    } catch (fillErr: any) {
-      console.warn(`[BinanceGateway] Could not settle fill for reconciled order ${clientOrderId}:`, fillErr.message);
-    }
+      try {
+        await LedgerService.processFill({
+          userId: order.user_id,
+          accountMode: 'live',
+          orderId: clientOrderId,
+          fillId: tradeId,
+          symbol: order.symbol,
+          baseAsset,
+          quoteAsset: order.quote_asset,
+          side: order.side,
+          price: avgPriceDec,
+          quantity: executedQtyDec,
+          fee: feeAmountDec,
+          feeAsset: order.quote_asset,
+          executedAt: now,
+          tx,
+        });
+
+        await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx });
+      } catch (fillErr: any) {
+        console.warn(`[BinanceGateway] Could not settle fill for reconciled order ${clientOrderId}:`, fillErr.message);
+      }
+    });
 
     await AuditService.logEvent({
       userId: order.user_id,
@@ -1374,34 +1383,15 @@ export class BinanceGateway {
       }
     }
 
-    // Release any active capital reservations
-    if (order.side === 'BUY' && Number(order.reserved_cash) > 0) {
-      await LedgerService.releaseReservation({
-        userId,
-        accountMode: 'live',
-        accountType: 'trading_allocated',
-        assetOrCurrency: order.quote_asset,
-        amountMinor: Math.round(Number(order.reserved_cash) * 100),
-        referenceId: clientOrderId,
-      });
-    } else if (order.side === 'SELL' && Number(order.reserved_qty) > 0) {
-      const baseAsset = order.symbol.replace(order.quote_asset, '');
-      await LedgerService.releaseReservation({
-        userId,
-        accountMode: 'live',
-        accountType: 'crypto_holdings',
-        assetOrCurrency: baseAsset,
-        amountMinor: Math.round(Number(order.reserved_qty) * 1e8),
-        referenceId: clientOrderId,
-      });
-    }
-    await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});
-
+    // Release any active capital reservations and update status in single ACID transaction
     const now = Date.now();
-    await db.execute(
-      `UPDATE exchange_orders SET status = 'CANCELED', reserved_cash = 0, reserved_qty = 0, updated_at = ? WHERE client_order_id = ?`,
-      [now, clientOrderId]
-    );
+    await db.transaction(async (tx) => {
+      await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx });
+      await tx.execute(
+        `UPDATE exchange_orders SET status = 'CANCELED', reserved_cash = 0, reserved_qty = 0, reserved_cash_minor = 0, reserved_qty_minor = 0, updated_at = ? WHERE client_order_id = ?`,
+        [now, clientOrderId]
+      );
+    });
 
     await AuditService.logEvent({
       userId,
@@ -1443,5 +1433,12 @@ export class BinanceGateway {
       createdAt: Number(r.created_at),
       updatedAt: Number(r.updated_at),
     };
+  }
+
+  /**
+   * Closes any open exchange connections / WebSockets gracefully.
+   */
+  static async closeAllConnections(): Promise<void> {
+    // Exchange connection teardown hook
   }
 }

@@ -3,6 +3,7 @@ import { AuditService, logger } from './auditService';
 import { BinanceGateway } from './binanceGateway';
 import { LedgerService } from './ledgerService';
 import { ExactDecimal } from './precision';
+import { DistributedLockService } from './distributedLockService';
 import crypto from 'node:crypto';
 
 export interface ReconciliationResult {
@@ -19,6 +20,10 @@ export type DiscrepancyClassification = 'EXACT_MATCH' | 'WITHIN_PRECISION' | 'MA
 export class ReconciliationWorker {
   private static isRunning = false;
 
+  static stop(): void {
+    this.isRunning = false;
+  }
+
   /**
    * Classifies difference between local ledger and exchange state.
    */
@@ -33,8 +38,29 @@ export class ReconciliationWorker {
 
   /**
    * Executes an authoritative reconciliation run against exchange venues and local ledger projections.
+   * Uses DistributedLockService to prevent concurrent execution across multi-instance deployments.
    */
   static async runReconciliation(userId?: string): Promise<ReconciliationResult> {
+    const lockResult = await DistributedLockService.withLock('worker:reconciliation', 60_000, async () => {
+      return this.executeReconciliationInternal(userId);
+    });
+
+    if (!lockResult) {
+      logger.warn('Reconciliation run skipped: already in progress on this or another server instance.');
+      return {
+        runId: 'skipped_locked',
+        status: 'SUCCESS',
+        ordersChecked: 0,
+        balancesChecked: 0,
+        mismatchesFound: 0,
+        durationMs: 0,
+      };
+    }
+
+    return lockResult;
+  }
+
+  private static async executeReconciliationInternal(userId?: string): Promise<ReconciliationResult> {
     if (this.isRunning) {
       logger.warn('Reconciliation run skipped: already in progress.');
       return {

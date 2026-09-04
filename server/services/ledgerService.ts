@@ -94,6 +94,7 @@ export interface ProcessFillParams {
   feeAsset?: string;
   executedAt?: number;
   idempotencyKey?: string;
+  tx?: DBClient;
 }
 
 export interface ProcessFillResult {
@@ -870,7 +871,7 @@ export class LedgerService {
     const db = getDb();
 
     // Perform ACID Fill Accounting with strict transactional idempotency check
-    return db.transaction(async (tx) => {
+    const executeInTx = async (tx: DBClient) => {
       // 1. Strict Server-Side Idempotency Check inside transaction
       const existingEntry = await tx.queryOne<LedgerEntryRecord>(
         `SELECT * FROM ledger_entries WHERE idempotency_key = ? OR (reference_type = 'trade_fill' AND fill_id = ? AND account_mode = ?)`,
@@ -1739,7 +1740,12 @@ export class LedgerService {
         feeExact,
         realizedPnlExact,
       };
-    });
+    };
+
+    if (params.tx) {
+      return executeInTx(params.tx);
+    }
+    return db.transaction(executeInTx);
   }
 
   /**

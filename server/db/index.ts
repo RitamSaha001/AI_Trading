@@ -1,8 +1,6 @@
-import { config } from '../config';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { config, isProd } from '../config';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { runMigrations, runMigrationsSync, getMigrationStatus, MigrationStatus } from './migrator';
 
 // Unified Database Interface
 export interface DBClient {
@@ -10,18 +8,26 @@ export interface DBClient {
   queryOne<T = any>(sql: string, params?: any[]): Promise<T | null>;
   execute(sql: string, params?: any[]): Promise<{ changes: number; lastInsertRowid?: number | bigint }>;
   transaction<T>(fn: (tx: DBClient) => Promise<T>): Promise<T>;
+  isPostgres(): boolean;
+  getEngine(): 'postgresql' | 'sqlite';
+  close(): Promise<void> | void;
+  acquireAdvisoryLock?(key: bigint | number): Promise<void>;
+  releaseAdvisoryLock?(key: bigint | number): Promise<void>;
+  tryAdvisoryLock?(key: bigint | number): Promise<boolean>;
+  getPoolStats?(): { totalCount: number; idleCount: number; waitingCount: number };
 }
 
 let activeDbClient: DBClient | null = null;
+let isMigrationsInitialized = false;
 
 /**
- * SQLite Implementation using Node 26 built-in `node:sqlite`
+ * SQLite Implementation using Node 22+ built-in `node:sqlite`
+ * Used strictly for local development and unit tests.
  */
-class SQLiteClient implements DBClient {
-  private db: any;
+export class SQLiteClient implements DBClient {
+  public db: any;
 
   constructor(dbPath: string) {
-    // Dynamic import to support node:sqlite
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { DatabaseSync } = require('node:sqlite');
     this.db = new DatabaseSync(dbPath);
@@ -31,8 +37,25 @@ class SQLiteClient implements DBClient {
   private txStorage = new AsyncLocalStorage<{ depth: number }>();
   private txMutex: Promise<void> = Promise.resolve();
 
+  isPostgres(): boolean {
+    return false;
+  }
+
+  getEngine(): 'postgresql' | 'sqlite' {
+    return 'sqlite';
+  }
+
+  /**
+   * Automatically strips PostgreSQL-specific row-locking keywords (e.g. FOR UPDATE)
+   * which cause syntax errors in SQLite. SQLite transactions naturally serialize writes.
+   */
+  private cleanSql(sql: string): string {
+    return sql.replace(/\s+FOR\s+UPDATE\b/gi, '');
+  }
+
   async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
-    const stmt = this.db.prepare(sql);
+    const cleaned = this.cleanSql(sql);
+    const stmt = this.db.prepare(cleaned);
     return stmt.all(...params) as T[];
   }
 
@@ -42,7 +65,8 @@ class SQLiteClient implements DBClient {
   }
 
   async execute(sql: string, params: any[] = []): Promise<{ changes: number; lastInsertRowid?: number | bigint }> {
-    const stmt = this.db.prepare(sql);
+    const cleaned = this.cleanSql(sql);
+    const stmt = this.db.prepare(cleaned);
     const result = stmt.run(...params);
     return {
       changes: Number(result.changes),
@@ -63,7 +87,9 @@ class SQLiteClient implements DBClient {
           this.db.exec(`RELEASE SAVEPOINT ${savepointName};`);
           return result;
         } catch (err) {
-          try { this.db.exec(`ROLLBACK TO SAVEPOINT ${savepointName};`); } catch {}
+          try {
+            this.db.exec(`ROLLBACK TO SAVEPOINT ${savepointName};`);
+          } catch {}
           throw err;
         }
       });
@@ -87,7 +113,9 @@ class SQLiteClient implements DBClient {
           this.db.exec('COMMIT;');
           return result;
         } catch (err) {
-          try { this.db.exec('ROLLBACK;'); } catch {}
+          try {
+            this.db.exec('ROLLBACK;');
+          } catch {}
           throw err;
         }
       });
@@ -97,7 +125,7 @@ class SQLiteClient implements DBClient {
   }
 
   execRaw(sql: string): void {
-    this.db.exec(sql);
+    this.db.exec(this.cleanSql(sql));
   }
 
   close(): void {
@@ -106,15 +134,50 @@ class SQLiteClient implements DBClient {
 }
 
 /**
- * PostgreSQL Implementation using `pg` pool
+ * PostgreSQL Implementation using hardened `pg` connection pool
+ * Mandatory for Production environments.
  */
-class PostgresClient implements DBClient {
+export class PostgresClient implements DBClient {
   private pool: any;
+  private dedicatedAdvisoryClient: any = null;
 
   constructor(connectionString: string) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { Pool } = require('pg');
-    this.pool = new Pool({ connectionString });
+
+    const maxPoolSize = Number(process.env.DB_POOL_MAX || process.env.PGPOOL_MAX || 20);
+
+    this.pool = new Pool({
+      connectionString,
+      max: maxPoolSize,
+      min: 2,
+      connectionTimeoutMillis: 5000, // 5s connection acquisition timeout (fail fast)
+      idleTimeoutMillis: 30000,      // 30s idle connection timeout
+      statement_timeout: 10000,      // 10s individual query timeout
+      query_timeout: 10000,          // 10s client query timeout
+      keepAlive: true,
+    });
+
+    // Guard against unhandled error events on idle clients in the pool
+    this.pool.on('error', (err: any) => {
+      console.error('[PostgresClient] Unexpected error on idle PostgreSQL client:', err.message);
+    });
+  }
+
+  isPostgres(): boolean {
+    return true;
+  }
+
+  getEngine(): 'postgresql' | 'sqlite' {
+    return 'postgresql';
+  }
+
+  getPoolStats(): { totalCount: number; idleCount: number; waitingCount: number } {
+    return {
+      totalCount: this.pool.totalCount || 0,
+      idleCount: this.pool.idleCount || 0,
+      waitingCount: this.pool.waitingCount || 0,
+    };
   }
 
   private normalizeSql(sql: string): string {
@@ -139,12 +202,49 @@ class PostgresClient implements DBClient {
     return { changes: res.rowCount || 0 };
   }
 
+  /**
+   * Acquires a session-level PostgreSQL advisory lock.
+   */
+  async acquireAdvisoryLock(key: bigint | number): Promise<void> {
+    if (!this.dedicatedAdvisoryClient) {
+      this.dedicatedAdvisoryClient = await this.pool.connect();
+    }
+    await this.dedicatedAdvisoryClient.query('SELECT pg_advisory_lock($1)', [key.toString()]);
+  }
+
+  /**
+   * Releases a session-level PostgreSQL advisory lock.
+   */
+  async releaseAdvisoryLock(key: bigint | number): Promise<void> {
+    if (this.dedicatedAdvisoryClient) {
+      try {
+        await this.dedicatedAdvisoryClient.query('SELECT pg_advisory_unlock($1)', [key.toString()]);
+      } finally {
+        this.dedicatedAdvisoryClient.release();
+        this.dedicatedAdvisoryClient = null;
+      }
+    }
+  }
+
+  /**
+   * Tries to acquire a session-level PostgreSQL advisory lock without blocking.
+   */
+  async tryAdvisoryLock(key: bigint | number): Promise<boolean> {
+    const res = await this.pool.query('SELECT pg_try_advisory_lock($1) AS acquired', [key.toString()]);
+    return Boolean(res.rows[0]?.acquired);
+  }
+
   async transaction<T>(fn: (tx: DBClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     let depth = 0;
+    let inError = false;
+
     try {
       await client.query('BEGIN');
+
       const createTxClient = (currentDepth: number): DBClient => ({
+        isPostgres: () => true,
+        getEngine: () => 'postgresql',
         query: async <R = any>(sql: string, params: any[] = []): Promise<R[]> => {
           let index = 1;
           const normalized = sql.replace(/\?/g, () => `$${index++}`);
@@ -174,112 +274,94 @@ class PostgresClient implements DBClient {
             throw err;
           }
         },
+        close: () => {},
       });
 
       const result = await fn(createTxClient(0));
       await client.query('COMMIT');
       return result;
     } catch (err) {
-      await client.query('ROLLBACK');
+      inError = true;
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
       throw err;
     } finally {
-      client.release();
+      // Discard client from pool if network/socket error occurred
+      client.release(inError);
     }
   }
 
   async close(): Promise<void> {
+    if (this.dedicatedAdvisoryClient) {
+      try {
+        this.dedicatedAdvisoryClient.release(true);
+      } catch {}
+      this.dedicatedAdvisoryClient = null;
+    }
     await this.pool.end();
   }
 }
 
 /**
+ * Ensures production PostgreSQL requirement is strictly enforced.
+ */
+function assertProductionDbConfig(): void {
+  if (config.NODE_ENV === 'production') {
+    if (
+      !config.DATABASE_URL ||
+      (!config.DATABASE_URL.startsWith('postgres://') && !config.DATABASE_URL.startsWith('postgresql://'))
+    ) {
+      throw new Error(
+        'FATAL: Production mode strictly requires a valid PostgreSQL DATABASE_URL. SQLite is strictly forbidden in production.'
+      );
+    }
+  }
+}
+
+/**
  * Initializes and returns the active database connection.
- * Runs `schema.sql` automatically on initialization.
+ * Guarantees fail-closed PostgreSQL requirement in production.
  */
 export function getDb(): DBClient {
   if (activeDbClient) return activeDbClient;
 
-  if (config.DATABASE_URL && config.DATABASE_URL.startsWith('postgres')) {
+  assertProductionDbConfig();
+
+  if (config.DATABASE_URL && (config.DATABASE_URL.startsWith('postgres://') || config.DATABASE_URL.startsWith('postgresql://'))) {
     activeDbClient = new PostgresClient(config.DATABASE_URL);
   } else {
     activeDbClient = new SQLiteClient(config.SQLITE_PATH);
   }
 
-  // Load and apply schema
-  const schemaPath = path.resolve(process.cwd(), 'server/db/schema.sql');
-  if (fs.existsSync(schemaPath)) {
-    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-    try {
-      if ('execRaw' in (activeDbClient as any)) {
-        (activeDbClient as any).execRaw(schemaSql);
-      } else {
-        activeDbClient.execute(schemaSql);
-      }
-    } catch (err: any) {
-      console.warn('Database schema init warning:', err.message);
-    }
+  // If SQLite, run migrations synchronously on initialization to guarantee ready state
+  if (!isMigrationsInitialized && !activeDbClient.isPostgres()) {
+    isMigrationsInitialized = true;
+    runMigrationsSync(activeDbClient as SQLiteClient);
   }
-
-  // Run non-destructive migrations for newly added exact precision columns
-  runSchemaMigrations(activeDbClient);
 
   return activeDbClient;
 }
 
 /**
- * Non-destructive, idempotent migrations for financial execution schema updates.
+ * Explicit asynchronous database initializer called during server startup.
+ * Runs versioned forward-only migrations with advisory lock protection.
  */
-function runSchemaMigrations(db: DBClient): void {
-  const migrations = [
-    // exchange_orders exact precision columns
-    `ALTER TABLE exchange_orders ADD COLUMN orig_qty_exact TEXT;`,
-    `ALTER TABLE exchange_orders ADD COLUMN executed_qty_exact TEXT DEFAULT '0';`,
-    `ALTER TABLE exchange_orders ADD COLUMN price_exact TEXT;`,
-    `ALTER TABLE exchange_orders ADD COLUMN avg_price_exact TEXT DEFAULT '0';`,
-    `ALTER TABLE exchange_orders ADD COLUMN cumulative_quote_exact TEXT DEFAULT '0';`,
-    `ALTER TABLE exchange_orders ADD COLUMN notional_exact TEXT;`,
-    `ALTER TABLE exchange_orders ADD COLUMN fee_exact TEXT DEFAULT '0';`,
-    `ALTER TABLE exchange_orders ADD COLUMN fee_asset TEXT;`,
-    `ALTER TABLE exchange_orders ADD COLUMN reserved_cash_minor BIGINT DEFAULT 0;`,
-    `ALTER TABLE exchange_orders ADD COLUMN reserved_qty_minor BIGINT DEFAULT 0;`,
-    // exchange_fills exact precision columns
-    `ALTER TABLE exchange_fills ADD COLUMN price_exact TEXT;`,
-    `ALTER TABLE exchange_fills ADD COLUMN qty_exact TEXT;`,
-    `ALTER TABLE exchange_fills ADD COLUMN commission_exact TEXT;`,
-    `ALTER TABLE exchange_fills ADD COLUMN quote_qty_exact TEXT;`,
-    // order_reservations table
-    `CREATE TABLE IF NOT EXISTS order_reservations (
-      id TEXT PRIMARY KEY,
-      order_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      account_id TEXT NOT NULL,
-      account_mode TEXT NOT NULL DEFAULT 'live',
-      asset_or_currency TEXT NOT NULL,
-      amount_minor BIGINT NOT NULL CHECK (amount_minor >= 0),
-      status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'PARTIALLY_CONSUMED', 'CONSUMED', 'RELEASED')),
-      consumed_minor BIGINT NOT NULL DEFAULT 0 CHECK (consumed_minor >= 0),
-      released_minor BIGINT NOT NULL DEFAULT 0 CHECK (released_minor >= 0),
-      created_at BIGINT NOT NULL,
-      updated_at BIGINT NOT NULL,
-      UNIQUE(order_id, account_id),
-      CHECK (consumed_minor + released_minor <= amount_minor)
-    );`,
-    `ALTER TABLE order_reservations ADD COLUMN account_mode TEXT DEFAULT 'live';`,
-    `CREATE INDEX IF NOT EXISTS idx_order_reservations_order ON order_reservations(order_id);`,
-    `CREATE INDEX IF NOT EXISTS idx_order_reservations_user ON order_reservations(user_id);`,
-    `CREATE INDEX IF NOT EXISTS idx_order_reservations_status ON order_reservations(status);`,
-  ];
+export async function initDb(): Promise<DBClient> {
+  const db = getDb();
+  await runMigrations(db);
+  isMigrationsInitialized = true;
+  return db;
+}
 
-  for (const sql of migrations) {
-    try {
-      if ('execRaw' in (db as any)) {
-        (db as any).execRaw(sql);
-      } else {
-        db.execute(sql);
-      }
-    } catch {
-      // Column or table already exists; silently ignore
-    }
+/**
+ * Closes the active database connection cleanly.
+ */
+export async function closeDb(): Promise<void> {
+  if (activeDbClient) {
+    await activeDbClient.close();
+    activeDbClient = null;
+    isMigrationsInitialized = false;
   }
 }
 
@@ -287,5 +369,12 @@ function runSchemaMigrations(db: DBClient): void {
  * Sets a custom DB client (useful for in-memory testing).
  */
 export function setDb(client: DBClient | null): void {
+  if (config.NODE_ENV === 'production' && client && !client.isPostgres()) {
+    throw new Error('FATAL: Refusing to assign non-PostgreSQL DB client in production mode.');
+  }
   activeDbClient = client;
+  isMigrationsInitialized = false;
 }
+
+export { runMigrations, getMigrationStatus };
+export type { MigrationStatus };

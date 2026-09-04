@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import sensible from '@fastify/sensible';
 import { config, auditServerSecurityConfig } from './config';
-import { getDb } from './db';
+import { getDb, initDb, closeDb, getMigrationStatus } from './db';
 import { ServerAuthService } from './services/authService';
 import { requireAuth, requireActive, requireKYC, extractSessionToken, verifyOriginOrCsrf } from './middleware/authMiddleware';
 import { isValidAllowedOrigin } from './utils/originValidator';
@@ -13,7 +13,59 @@ import { PaymentService } from './services/paymentService';
 import { BinanceGateway } from './services/binanceGateway';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
+import { OrderRecoveryService } from './services/orderRecoveryService';
 import { AuditService, logger } from './services/auditService';
+
+let isShuttingDown = false;
+
+export function getIsShuttingDown(): boolean {
+  return isShuttingDown;
+}
+
+export function resetShuttingDownForTesting(): void {
+  isShuttingDown = false;
+}
+
+export async function shutdownServer(server?: FastifyInstance): Promise<void> {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  logger.info('Graceful shutdown initiated: stopping background workers and active connections...');
+
+  // 1. Stop background workers
+  try {
+    ReconciliationWorker.stop();
+    OrderRecoveryService.stop();
+  } catch (err: any) {
+    logger.warn('Error stopping background workers:', err.message);
+  }
+
+  // 2. Stop accepting new HTTP connections
+  if (server) {
+    try {
+      await server.close();
+      logger.info('HTTP server closed cleanly.');
+    } catch (err: any) {
+      logger.warn('Error closing HTTP server:', err.message);
+    }
+  }
+
+  // 3. Disconnect exchange WebSockets
+  try {
+    await BinanceGateway.closeAllConnections();
+  } catch (err: any) {
+    logger.warn('Error closing exchange connections:', err.message);
+  }
+
+  // 4. Close database connection pool
+  try {
+    await closeDb();
+    logger.info('Database connections closed cleanly.');
+  } catch (err: any) {
+    logger.warn('Error closing database connection pool:', err.message);
+  }
+
+  logger.info('Graceful shutdown complete.');
+}
 
 export function buildServer(): FastifyInstance {
   const server = Fastify({
@@ -57,15 +109,92 @@ export function buildServer(): FastifyInstance {
     });
   };
 
-  // Global CSRF / Origin Verification for State-Changing Requests
+  // Global In-Flight Request Guard & CSRF / Origin Verification
   server.addHook('preHandler', async (req: FastifyRequest, reply: FastifyReply) => {
+    // Health probes are always permitted
+    if (req.url.startsWith('/health') || req.url === '/healthz' || req.url === '/ready') {
+      return;
+    }
+    if (isShuttingDown) {
+      return reply.status(503).send({
+        success: false,
+        error: 'Server is currently undergoing graceful shutdown. Please retry on another active instance.',
+      });
+    }
     // Webhook routes use dedicated cryptographic HMAC signature verification
     if (req.url.startsWith('/api/webhooks/')) return;
     await verifyOriginOrCsrf(req, reply);
   });
 
-  // Health check
-  server.get('/health', async () => ({ status: 'UP', env: config.NODE_ENV, timestamp: Date.now() }));
+  // Liveness Probes (Container process is alive and responsive)
+  const livenessHandler = async () => ({
+    status: 'UP',
+    env: config.NODE_ENV,
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+  });
+  server.get('/health/liveness', livenessHandler);
+  server.get('/healthz', livenessHandler);
+
+  // Readiness Probes (Database reachable, Postgres strictly verified in prod, schema migrations at latest version)
+  const readinessHandler = async (_req: FastifyRequest, reply: FastifyReply) => {
+    if (isShuttingDown) {
+      return reply.status(503).send({
+        status: 'DOWN',
+        ready: false,
+        issues: ['Server is currently shutting down'],
+        timestamp: Date.now(),
+      });
+    }
+
+    try {
+      const db = getDb();
+      // 1. Verify database ping
+      await db.queryOne('SELECT 1 as ping');
+
+      // 2. Verify PostgreSQL mandatory requirement in production
+      if (config.NODE_ENV === 'production' && !db.isPostgres()) {
+        return reply.status(503).send({
+          status: 'DOWN',
+          ready: false,
+          issues: ['Production mode strictly requires a PostgreSQL database instance'],
+          timestamp: Date.now(),
+        });
+      }
+
+      // 3. Verify schema migration version alignment
+      const migStatus = await getMigrationStatus(db);
+      if (!migStatus.isUpToDate) {
+        return reply.status(503).send({
+          status: 'DOWN',
+          ready: false,
+          issues: [`Database schema is not at expected migration version (pending: ${migStatus.pending.join(', ')})`],
+          latestVersion: migStatus.latestVersion,
+          timestamp: Date.now(),
+        });
+      }
+
+      return {
+        status: 'READY',
+        ready: true,
+        env: config.NODE_ENV,
+        engine: db.getEngine(),
+        schemaVersion: migStatus.latestVersion,
+        timestamp: Date.now(),
+      };
+    } catch (err: any) {
+      return reply.status(503).send({
+        status: 'DOWN',
+        ready: false,
+        issues: [err.message],
+        timestamp: Date.now(),
+      });
+    }
+  };
+
+  server.get('/health/readiness', readinessHandler);
+  server.get('/ready', readinessHandler);
+  server.get('/health', readinessHandler);
 
   // ==========================================================================
   // AUTHENTICATION ROUTES (Phase 2 & Phase 3)
@@ -660,13 +789,36 @@ if (isMain || process.env.START_SERVER === 'true') {
     process.exit(1);
   }
 
-  const server = buildServer();
-  server.listen({ port: config.PORT, host: config.HOST }, (err, address) => {
-    if (err) {
-      console.error('Server failed to start:', err);
+  (async () => {
+    try {
+      console.log(`[Database] Initializing database and verifying forward-only migrations for environment '${config.NODE_ENV}'...`);
+      await initDb();
+      console.log(`[Database] Database connected and schema migrations up to date.`);
+
+      console.log(`[Recovery] Running startup recovery sweep for ambiguous order states...`);
+      const recovery = await OrderRecoveryService.runRecoverySweep();
+      console.log(
+        `[Recovery] Sweep completed: ${recovery.ordersInspected} inspected, ${recovery.recoveredCount} recovered, ${recovery.unresolvedCount} unresolved.`
+      );
+
+      const server = buildServer();
+
+      // Graceful termination listeners
+      const handleSignal = async (signal: string) => {
+        console.log(`\n[Process] Received ${signal}. Initiating graceful shutdown...`);
+        await shutdownServer(server);
+        process.exit(0);
+      };
+
+      process.on('SIGTERM', () => handleSignal('SIGTERM'));
+      process.on('SIGINT', () => handleSignal('SIGINT'));
+
+      const address = await server.listen({ port: config.PORT, host: config.HOST });
+      console.log(`Lumen Enterprise Server running at ${address} [ENV: ${config.NODE_ENV}]`);
+    } catch (err: any) {
+      console.error('FATAL: Server startup failed:', err);
       process.exit(1);
     }
-    console.log(`Lumen Enterprise Server running at ${address} [ENV: ${config.NODE_ENV}]`);
-  });
+  })();
 }
 
