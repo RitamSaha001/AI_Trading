@@ -21,7 +21,7 @@ interface WalletGuideModalProps {
 
 export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'cards' | 'upi' | 'allocation' | 'security'
+    'overview' | 'cards' | 'upi' | 'allocation' | 'security' | 'web3'
   >('overview');
 
   if (!isOpen) return null;
@@ -64,6 +64,7 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
             { id: 'upi', label: '3. UPI & QR', icon: QrCode },
             { id: 'allocation', label: '4. Trading & Swap', icon: ArrowLeftRight },
             { id: 'security', label: '5. Privacy Vault', icon: ShieldCheck },
+            { id: 'web3', label: '6. Web3 & DEX', icon: Zap },
           ].map((t) => {
             const Icon = t.icon;
             return (
@@ -229,6 +230,52 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
                   <strong>Withdrawal Defense Sentinel:</strong> Configurable daily withdrawal caps ($10,000 / day default) and optional Security PIN authorization to prevent accidental or malicious drains.
                 </li>
               </ul>
+            </div>
+          )}
+
+          {activeTab === 'web3' && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white space-y-1.5 shadow-md">
+                <div className="flex items-center gap-2 font-bold text-indigo-300 text-sm">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <span>Web3 Self-Custody Desk (Polygon & Arbitrum EVM)</span>
+                </div>
+                <p className="text-zinc-300 text-xs">
+                  Trade on-chain decentralized liquidity pools without depositing capital to Binance or any centralized intermediary.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
+                  <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    Pure Client-Side Key Derivation
+                  </div>
+                  <p className="text-[11px] text-zinc-600 mt-1">
+                    Your 12-word BIP-39 mnemonic seed phrase and secp256k1 private keys are computed directly in your browser using the Web Crypto API. They are encrypted using AES-256-GCM and PBKDF2 (100,000 rounds) and never transmitted to any server.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
+                  <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
+                    <QrCode className="w-4 h-4 text-indigo-600" />
+                    Indian UPI Direct Bridging
+                  </div>
+                  <p className="text-[11px] text-zinc-600 mt-1">
+                    Deposit INR with 0% fee using any UPI app (GPay, PhonePe, Paytm, BHIM, CRED) or 12-digit UTR validation. The funds are instantly verified and can be deployed directly to your self-custodial wallet on Polygon or Arbitrum.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
+                  <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
+                    <ArrowLeftRight className="w-4 h-4 text-purple-600" />
+                    DEX Spot Swaps with Gas & Slippage Safety Gate
+                  </div>
+                  <p className="text-[11px] text-zinc-600 mt-1">
+                    Spot trades execute against Uniswap V3 / DEX liquidity pools with a minimal 0.10% pool fee, bounded slippage protection (default 50 bps), preflight gas reserve verification, and auditable transaction receipts with block explorer links.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>

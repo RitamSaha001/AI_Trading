@@ -145,7 +145,7 @@ export const formatQty = (qty: number, asset: Asset): string => {
 export const STABLECOINS = ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const;
 
 export function portfolioValue(
-  state: Pick<AppState, 'cash' | 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount'>>,
+  state: Pick<AppState, 'cash' | 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account' | 'web3Positions'>>,
   markets: Record<Asset, Market | undefined>
 ): number {
   if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
@@ -163,6 +163,22 @@ export function portfolioValue(
     return stableCash + cryptoVal;
   }
 
+  if (state.accountMode === 'web3' && state.web3Account) {
+    const w3 = state.web3Account;
+    const stableCash = (w3.balances?.['USDT'] || 0) + (w3.balances?.['USDC'] || 0);
+    const nativePrice = markets[w3.nativeSymbol as Asset]?.price || (w3.network === 'polygon' ? 0.45 : 3200);
+    const nativeVal = (w3.nativeBalance || 0) * nativePrice;
+    const positions = (state.web3Positions || {}) as Partial<Record<Asset, number>>;
+    const balances = (w3.balances || {}) as Record<string, number>;
+    const cryptoVal = ASSETS.reduce((sum, a) => {
+      const isCashLike = (a as string) === 'USDT' || (a as string) === 'USDC' || (a as string) === w3.nativeSymbol;
+      const units = (positions[a] || 0) + (!isCashLike ? (balances[a] || 0) : 0);
+      const price = markets[a]?.price || 0;
+      return sum + (units > 0 && price > 0 ? units * price : 0);
+    }, 0);
+    return stableCash + nativeVal + cryptoVal;
+  }
+
   const cash = Number.isFinite(state.cash) ? state.cash : 0;
   const positionsVal = ASSETS.reduce((sum, a) => {
     const units = state.positions?.[a] || 0;
@@ -173,16 +189,19 @@ export function portfolioValue(
 }
 
 /**
- * Returns active liquid cash based on account mode (stablecoins for exchange, cash for paper).
+ * Returns active liquid cash based on account mode (stablecoins for exchange/web3, cash for paper).
  */
 export function getActiveLiquidCash(
-  state: Pick<AppState, 'cash'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount'>>
+  state: Pick<AppState, 'cash'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account'>>
 ): number {
   if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
     return STABLECOINS.reduce(
       (sum, coin) => sum + (state.exchangeAccount?.balances[coin]?.free || 0),
       0
     );
+  }
+  if (state.accountMode === 'web3' && state.web3Account?.balances) {
+    return (state.web3Account.balances['USDT'] || 0) + (state.web3Account.balances['USDC'] || 0);
   }
   return Number.isFinite(state.cash) ? state.cash : 0;
 }
@@ -191,11 +210,14 @@ export function getActiveLiquidCash(
  * Returns active position units for an asset based on account mode.
  */
 export function getActiveAssetUnits(
-  state: Pick<AppState, 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount'>>,
+  state: Pick<AppState, 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account' | 'web3Positions'>>,
   asset: Asset
 ): number {
   if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
     return state.exchangeAccount.balances[asset]?.free || 0;
+  }
+  if (state.accountMode === 'web3') {
+    return state.web3Positions?.[asset] || state.web3Account?.balances?.[asset] || 0;
   }
   return state.positions?.[asset] || 0;
 }
@@ -298,12 +320,15 @@ export function getReservedCash(state: Pick<AppState, 'orders'> & { accountMode?
 /**
  * Returns currently available liquid cash after subtracting funds reserved for pending limit buys.
  */
-export function getAvailableCash(state: Pick<AppState, 'cash' | 'orders'> & { accountMode?: AppState['accountMode']; exchangeAccount?: AppState['exchangeAccount'] }): number {
+export function getAvailableCash(state: Pick<AppState, 'cash' | 'orders'> & { accountMode?: AppState['accountMode']; exchangeAccount?: AppState['exchangeAccount']; web3Account?: AppState['web3Account'] }): number {
   if (state.accountMode === 'exchange' && state.exchangeAccount) {
     return ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'].reduce(
       (sum, coin) => sum + (state.exchangeAccount?.balances[coin]?.free || 0),
       0
     );
+  }
+  if (state.accountMode === 'web3' && state.web3Account?.balances) {
+    return (state.web3Account.balances['USDT'] || 0) + (state.web3Account.balances['USDC'] || 0);
   }
   const reserved = getReservedCash(state);
   return Math.max(0, (state.cash || 0) - reserved);
@@ -327,11 +352,19 @@ export function getReservedPosition(state: Pick<AppState, 'orders'> & { accountM
  * Returns available asset units after subtracting units reserved by pending limit sells.
  */
 export function getAvailablePosition(
-  state: Pick<AppState, 'positions' | 'orders'> & { accountMode?: AppState['accountMode']; exchangeAccount?: AppState['exchangeAccount'] },
+  state: Pick<AppState, 'positions' | 'orders'> & {
+    accountMode?: AppState['accountMode'];
+    exchangeAccount?: AppState['exchangeAccount'];
+    web3Account?: AppState['web3Account'];
+    web3Positions?: AppState['web3Positions'];
+  },
   asset: Asset
 ): number {
   if (state.accountMode === 'exchange' && state.exchangeAccount) {
     return state.exchangeAccount.balances[asset]?.free || 0;
+  }
+  if (state.accountMode === 'web3') {
+    return state.web3Positions?.[asset] || state.web3Account?.balances?.[asset] || 0;
   }
   const holding = state.positions[asset] || 0;
   const reserved = getReservedPosition(state, asset);

@@ -81,7 +81,7 @@ export type Order = {
   reservedAmount?: number;
   partialHarvested?: boolean;
   zeroLossLocked?: boolean;
-  accountMode?: 'paper' | 'exchange';
+  accountMode?: 'paper' | 'exchange' | 'web3';
 };
 
 export type AlertRule = {
@@ -317,7 +317,7 @@ export type AISafetyValidation = {
   };
 };
 
-export type AccountMode = 'paper' | 'exchange';
+export type AccountMode = 'paper' | 'exchange' | 'web3';
 
 export type ExchangeBalance = {
   asset: string;
@@ -339,6 +339,20 @@ export type ExchangeAccountInfo = {
   lastSyncAt: number;
   latencyMs?: number;
   listenKey?: string;
+};
+
+export type Web3Network = 'polygon' | 'arbitrum' | 'amoy';
+
+export type Web3AccountInfo = {
+  connected: boolean;
+  address: string;
+  network: Web3Network;
+  nativeBalance: number;
+  nativeSymbol: string;
+  balances: Record<string, number>; // Token balances (e.g. USDT, USDC, POL, ETH)
+  totalValueUsd: number;
+  lastSyncAt: number;
+  isUnlocked: boolean;
 };
 
 export type WalletCurrency = 'USD' | 'INR' | 'EUR' | 'GBP';
@@ -413,6 +427,9 @@ export type AppState = {
   accountMode?: AccountMode;
   exchangeAccount?: ExchangeAccountInfo;
   exchangeOrders?: Order[];
+  web3Account?: Web3AccountInfo;
+  web3Orders?: Order[];
+  web3Positions?: Record<Asset, number>;
   wallet?: NativeWalletState;
   cash: number;
   reservedCash?: number;

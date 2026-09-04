@@ -105,17 +105,22 @@ export function validateAIProposal(
       }
     } else {
       const isExch = state.accountMode === 'exchange';
+      const isW3 = state.accountMode === 'web3';
       let runningCash = isExch
         ? (['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const).reduce(
             (sum, c) => sum + (state.exchangeAccount?.balances[c]?.free || 0),
             0
           )
+        : isW3
+        ? (state.web3Account?.balances?.['USDT'] || 0) + (state.web3Account?.balances?.['USDC'] || 0)
         : getAvailableCash(state);
 
       const runningHoldings: Record<string, number> = {};
       for (const a of ASSETS) {
         runningHoldings[a] = isExch
           ? (state.exchangeAccount?.balances[a]?.free || 0)
+          : isW3
+          ? (state.web3Positions?.[a] || state.web3Account?.balances?.[a] || 0)
           : getAvailablePosition(state, a);
       }
 
@@ -321,8 +326,10 @@ export function validateAIProposal(
   // Financial & Execution Modeling
   const quote = calculateExecutionQuote(market.price, side, amount);
 
-  // Exchange-Specific Checks (Requirement R4)
+  // Exchange & Web3 Mode-Specific Checks
   const isExchangeMode = state.accountMode === 'exchange';
+  const isWeb3Mode = state.accountMode === 'web3';
+
   if (isExchangeMode) {
     if (proposal.requiresConfirmation === false) {
       errors.push('Safety Gate: Live exchange orders require mandatory 2-step human confirmation.');
@@ -338,22 +345,45 @@ export function validateAIProposal(
     }
   }
 
+  if (isWeb3Mode) {
+    if (proposal.requiresConfirmation === false) {
+      errors.push('Safety Gate: Web3 on-chain transactions require mandatory 2-step human confirmation.');
+    }
+    const networkName = state.web3Account?.network?.toUpperCase() || 'POLYGON';
+    warnings.push(`⚡ ON-CHAIN DEX SWAP [${networkName}]`);
+
+    // Gas reserve check (must have native token for gas)
+    const nativeBal = state.web3Account?.nativeBalance || 0;
+    const minGas = state.web3Account?.network === 'arbitrum' ? 0.001 : 0.5;
+    if (nativeBal < minGas) {
+      errors.push(
+        `Insufficient native gas reserve: Have ${nativeBal.toFixed(4)} ${state.web3Account?.nativeSymbol || 'POL'}, need at least ${minGas} for on-chain gas fees.`
+      );
+    }
+  }
+
   // Financial & Execution Modeling
   const totalPortVal = portfolioValue(state, markets);
   const stablecoinsSum = (['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const).reduce(
     (sum, c) => sum + (state.exchangeAccount?.balances[c]?.free || 0),
     0
   );
-  const currentCash = isExchangeMode ? stablecoinsSum : state.cash;
-  const availableCash = isExchangeMode ? stablecoinsSum : getAvailableCash(state);
-  const reservedCash = isExchangeMode ? 0 : getReservedCash(state);
+  const web3StableSum = (state.web3Account?.balances?.['USDT'] || 0) + (state.web3Account?.balances?.['USDC'] || 0);
+
+  const currentCash = isExchangeMode ? stablecoinsSum : isWeb3Mode ? web3StableSum : state.cash;
+  const availableCash = isExchangeMode ? stablecoinsSum : isWeb3Mode ? web3StableSum : getAvailableCash(state);
+  const reservedCash = isExchangeMode || isWeb3Mode ? 0 : getReservedCash(state);
   const currentHolding = isExchangeMode
     ? (state.exchangeAccount?.balances[asset]?.free || 0)
+    : isWeb3Mode
+    ? (state.web3Positions?.[asset] || state.web3Account?.balances?.[asset] || 0)
     : (state.positions[asset] || 0);
   const availableHolding = isExchangeMode
     ? (state.exchangeAccount?.balances[asset]?.free || 0)
+    : isWeb3Mode
+    ? (state.web3Positions?.[asset] || state.web3Account?.balances?.[asset] || 0)
     : getAvailablePosition(state, asset);
-  const reservedHolding = isExchangeMode ? 0 : getReservedPosition(state, asset);
+  const reservedHolding = isExchangeMode || isWeb3Mode ? 0 : getReservedPosition(state, asset);
   const currentAssetVal = currentHolding * market.price;
 
   // Maximum Slippage Hard Limit (Requirement 19)

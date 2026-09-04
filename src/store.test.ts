@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { freshState, migrateState, SCHEMA_VERSION } from './storage';
 import { executeOrder, cancelOrder } from './domain/trading';
-import { getReservedCash, getReservedPosition } from './domain/portfolio';
+import { getReservedCash, getReservedPosition, portfolioValue } from './domain/portfolio';
 import { mergeTickResults, TickMutations } from './store';
 import { AppState, Market, Order } from './types';
 
@@ -344,6 +344,78 @@ describe('Store: State Management & Engine Hardening', () => {
       const migrated = migrateState(raw);
       expect(migrated.orders.length).toBe(150);
       expect(migrated.notifications.some((n) => n.title === 'Order History Archived')).toBe(false);
+    });
+  });
+
+  describe('Triple-Account Mode: Paper, Binance & Web3 Self-Custody Desk', () => {
+    it('segregates Web3 orders and positions from Paper and Exchange desks', () => {
+      const state = freshState(50000, 'clean');
+      state.accountMode = 'web3';
+      state.web3Account = {
+        connected: true,
+        address: '0x71C8363837918a72993321374A32832204B1498B',
+        network: 'polygon',
+        nativeBalance: 15.5,
+        nativeSymbol: 'POL',
+        balances: { POL: 15.5, USDC: 2500, USDT: 1000 },
+        totalValueUsd: 3506.97,
+        lastSyncAt: Date.now(),
+        isUnlocked: true,
+      };
+
+      const web3Order: Order = {
+        id: 'dex_0xabcd1234',
+        ts: Date.now(),
+        side: 'buy',
+        type: 'market',
+        asset: 'ETH',
+        amount: 0.5,
+        price: 3000,
+        fee: 3.5,
+        notional: 1500,
+        auto: false,
+        status: 'filled',
+        accountMode: 'web3',
+      };
+
+      state.orders.push(web3Order);
+      state.web3Orders = [web3Order];
+      state.web3Positions = {
+        ...state.positions,
+        ETH: 0.5,
+      };
+
+      // Paper mode orders/positions remain untouched
+      expect(state.positions.ETH).toBe(0);
+      expect(state.web3Positions.ETH).toBe(0.5);
+      expect(state.web3Orders[0].accountMode).toBe('web3');
+    });
+
+    it('accurately computes portfolio value in web3 mode using on-chain stablecoins and native gas', () => {
+      const state = freshState(50000, 'clean');
+      state.accountMode = 'web3';
+      state.web3Account = {
+        connected: true,
+        address: '0x71C8363837918a72993321374A32832204B1498B',
+        network: 'polygon',
+        nativeBalance: 100, // 100 POL * $0.45 = $45
+        nativeSymbol: 'POL',
+        balances: { POL: 100, USDC: 500, USDT: 500 }, // $1000 stablecoins
+        totalValueUsd: 1045,
+        lastSyncAt: Date.now(),
+        isUnlocked: true,
+      };
+
+      const markets = createMockMarkets();
+      // ETH = $3000, 0.5 ETH in web3Positions = $1500
+      state.web3Positions = {
+        ...state.positions,
+        ETH: 0.5,
+      };
+
+      const val = portfolioValue(state, markets as any);
+      // $1000 stable + $45 POL + $1500 ETH = $2545
+      expect(val).toBeCloseTo(2545, 1);
     });
   });
 });

@@ -6,6 +6,7 @@ import { ChatDrawer } from './ChatDrawer';
 import { DataSourceBadge } from './components/DataSourceBadge';
 import { AISafetyModal } from './components/AISafetyModal';
 import { ExchangeOnboardingDrawer } from './components/ExchangeOnboardingDrawer';
+import { Web3WalletDrawer } from './components/Web3WalletDrawer';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import {
   LayoutDashboard,
@@ -25,6 +26,7 @@ import {
   Menu,
   Coins,
   Wallet,
+  Zap,
 } from 'lucide-react';
 import { money, portfolioValue, totalPortfolioPnl } from './trading';
 import { senseMarketDanger } from './domain/agentic';
@@ -90,6 +92,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     exchangeDrawerOpen,
     openExchangeDrawer,
     closeExchangeDrawer,
+    web3Account,
+    web3DrawerOpen,
+    openWeb3Drawer,
+    closeWeb3Drawer,
     nativeWallet,
   } = useLumen();
   const route = useRoute();
@@ -306,7 +312,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-1.5 sm:gap-3">
-            {/* Dual-Account Desk Switcher & Exchange Trigger */}
+            {/* Triple-Account Desk Switcher (Simulated | Binance | Web3) */}
             <div className="flex items-center bg-black/[0.04] p-0.5 rounded-full border border-black/[0.06]">
               <button
                 type="button"
@@ -319,8 +325,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 title="Switch to Simulated Paper Desk ($50,000 Sandbox)"
               >
                 <span>📊</span>
-                <span className="hidden sm:inline">Simulated</span> Desk
+                <span className="hidden sm:inline">Simulated</span>
               </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -350,10 +357,63 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 ) : (
                   <>
                     <Coins className="w-3 h-3 text-amber-500" />
-                    <span>Connect Exchange</span>
+                    <span className="hidden sm:inline">Binance</span>
                   </>
                 )}
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!web3Account?.address) {
+                    openWeb3Drawer();
+                  } else {
+                    setAccountMode('web3');
+                  }
+                }}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+                  accountMode === 'web3'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : web3Account?.address
+                    ? 'text-indigo-700 hover:text-indigo-900'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+                title={
+                  web3Account?.address
+                    ? `Switch to Self-Custodial Web3 / UPI Desk (${web3Account.address.slice(0, 6)}...${web3Account.address.slice(-4)})`
+                    : 'Setup Self-Custodial Web3 / UPI Desk'
+                }
+              >
+                {web3Account?.address ? (
+                  <>
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        web3Account.isUnlocked ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                      }`}
+                    />
+                    <span className="hidden sm:inline">Web3</span>
+                    <span className="text-[10px] opacity-80 uppercase font-mono">
+                      {web3Account.network === 'polygon' ? 'POL' : web3Account.network === 'arbitrum' ? 'ARB' : 'DEV'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3 h-3 text-indigo-500" />
+                    <span>Web3 / UPI</span>
+                  </>
+                )}
+              </button>
+
+              {web3Account?.address && (
+                <button
+                  type="button"
+                  onClick={openWeb3Drawer}
+                  className="px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-700 transition-colors"
+                  title="Web3 Self-Custody Vault & Network Settings"
+                >
+                  ⚡
+                </button>
+              )}
               {exchangeAccount?.connected && (
                 <button
                   type="button"
@@ -545,6 +605,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Binance Exchange Onboarding Drawer */}
       <ExchangeOnboardingDrawer open={exchangeDrawerOpen} onClose={closeExchangeDrawer} />
+
+      {/* Web3 Self-Custodial Desk Drawer */}
+      <Web3WalletDrawer open={web3DrawerOpen} onClose={closeWeb3Drawer} onOpenUPI={() => go('/wallet')} />
 
       {/* AI Safety Authorization Gate Modal */}
       {pendingAIProposal && pendingAIValidation && (

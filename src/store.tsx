@@ -21,6 +21,7 @@ import {
   WalletTransaction,
   SavedPaymentMethod,
   NativeWalletSecurity,
+  Web3AccountInfo,
 } from './types';
 import {
   createDefaultWallet,
@@ -41,6 +42,27 @@ import {
   calculatePortfolioRisk,
   getReservedCash,
 } from './trading';
+import { createPositionsRecord } from './domain/portfolio';
+import {
+  Web3NetworkKey,
+  WEB3_NETWORKS,
+  GeneratedWallet,
+  generateNewWallet,
+  encryptKeystore,
+  decryptKeystore,
+  saveEncryptedKeystore,
+  loadEncryptedKeystore,
+  privateKeyToAddress,
+  mnemonicToPrivateKey,
+  fetchWalletBalances,
+} from './services/web3Wallet';
+import {
+  calculateDexQuote,
+  validateSwapPrerequisites,
+  executeDexSwap,
+  DexQuote,
+  DexSwapReceipt,
+} from './services/dexRouter';
 import { evaluateStrategy } from './domain/strategies';
 import { evaluateAlert } from './domain/alerts';
 import { validateAIProposal } from './services/safetyGate';
@@ -122,8 +144,8 @@ type Ctx = {
   executeActionProposal: (proposal: any) => { ok: boolean; error?: string };
   reset: (startingCash?: number, mode?: SimulationMode) => void;
   refreshMarkets: () => Promise<void>;
-  accountMode: 'paper' | 'exchange';
-  setAccountMode: (mode: 'paper' | 'exchange') => void;
+  accountMode: 'paper' | 'exchange' | 'web3';
+  setAccountMode: (mode: 'paper' | 'exchange' | 'web3') => void;
   exchangeAccount: ExchangeAccountInfo | null;
   exchangeDrawerOpen: boolean;
   openExchangeDrawer: () => void;
@@ -131,6 +153,16 @@ type Ctx = {
   connectExchange: (creds: ExchangeCredentials, passphrase: string) => Promise<{ ok: boolean; error?: string; audit?: any }>;
   disconnectExchange: () => void;
   syncExchangeBalances: () => Promise<void>;
+  web3Account: Web3AccountInfo | null;
+  web3DrawerOpen: boolean;
+  openWeb3Drawer: () => void;
+  closeWeb3Drawer: () => void;
+  createWeb3Wallet: (passphrase: string) => Promise<GeneratedWallet>;
+  importWeb3Wallet: (passphrase: string, mnemonicOrKey: string) => Promise<{ address: string }>;
+  unlockWeb3Wallet: (passphrase: string) => Promise<boolean>;
+  lockWeb3Wallet: () => void;
+  switchWeb3Network: (network: Web3NetworkKey) => Promise<void>;
+  syncWeb3Balances: () => Promise<void>;
   nativeWallet: NativeWalletState;
   depositToWallet: (
     amount: number,
@@ -329,11 +361,42 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const openExchangeDrawer = useCallback(() => setExchangeDrawerOpen(true), []);
   const closeExchangeDrawer = useCallback(() => setExchangeDrawerOpen(false), []);
 
-  const setAccountMode = useCallback((mode: 'paper' | 'exchange') => {
+  // Web3 Self-Custody Desk State
+  const [web3Account, setWeb3Account] = useState<Web3AccountInfo | null>(() => {
+    if (state.web3Account) return state.web3Account;
+    const ks = loadEncryptedKeystore();
+    if (ks) {
+      return {
+        connected: true,
+        address: ks.address,
+        network: 'polygon',
+        nativeBalance: 0,
+        nativeSymbol: 'POL',
+        balances: { POL: 0, USDT: 0, USDC: 0 },
+        totalValueUsd: 0,
+        lastSyncAt: 0,
+        isUnlocked: false,
+      };
+    }
+    return null;
+  });
+  const [web3DrawerOpen, setWeb3DrawerOpen] = useState(false);
+  const unlockedPrivateKeyRef = useRef<string | null>(null);
+
+  const openWeb3Drawer = useCallback(() => setWeb3DrawerOpen(true), []);
+  const closeWeb3Drawer = useCallback(() => setWeb3DrawerOpen(false), []);
+
+  const setAccountMode = useCallback((mode: 'paper' | 'exchange' | 'web3') => {
     setState((s) => ({ ...s, accountMode: mode }));
     triggerToast(
       'Account Mode Switched',
-      `Active Desk: ${mode === 'exchange' ? '🟢 Live Binance Exchange' : '📊 Simulated Paper Desk'}.`,
+      `Active Desk: ${
+        mode === 'web3'
+          ? '⚡ Web3 / UPI Self-Custody Desk'
+          : mode === 'exchange'
+          ? '🟢 Live Binance Exchange'
+          : '📊 Simulated Paper Desk'
+      }.`,
       'info'
     );
   }, [triggerToast]);
@@ -457,6 +520,225 @@ export function Provider({ children }: { children: React.ReactNode }) {
       triggerToast('Sync Failed', e?.message || 'Could not fetch exchange balances', 'warn');
     }
   }, [triggerToast]);
+
+  const syncWeb3Balances = useCallback(async () => {
+    const activeAddress = web3Account?.address || loadEncryptedKeystore()?.address;
+    if (!activeAddress) return;
+    const currentNetwork = (web3Account?.network || 'polygon') as Web3NetworkKey;
+
+    try {
+      const prices: Record<string, number> = {};
+      for (const [sym, m] of Object.entries(marketsRef.current)) {
+        if (m?.price) prices[sym] = m.price;
+      }
+      const res = await fetchWalletBalances(currentNetwork, activeAddress, prices);
+
+      const balances: Record<string, number> = {
+        [res.native.symbol]: res.native.balance,
+      };
+      for (const [sym, tb] of Object.entries(res.tokens)) {
+        balances[sym] = tb.balance;
+      }
+
+      setWeb3Account((prev) =>
+        prev
+          ? {
+              ...prev,
+              nativeBalance: res.native.balance,
+              nativeSymbol: res.native.symbol,
+              balances,
+              totalValueUsd: res.totalValueUsd,
+              lastSyncAt: Date.now(),
+            }
+          : null
+      );
+
+      setState((s) => {
+        if (!s.web3Account) return s;
+        return {
+          ...s,
+          web3Account: {
+            ...s.web3Account,
+            nativeBalance: res.native.balance,
+            nativeSymbol: res.native.symbol,
+            balances,
+            totalValueUsd: res.totalValueUsd,
+            lastSyncAt: Date.now(),
+          },
+        };
+      });
+      triggerToast('Web3 Balances Synced', `Updated on-chain balances for ${res.network.toUpperCase()}.`, 'info');
+    } catch (e: any) {
+      console.warn('Failed to sync web3 balances:', e);
+    }
+  }, [web3Account?.address, web3Account?.network, triggerToast]);
+
+  const createWeb3Wallet = useCallback(
+    async (passphrase: string): Promise<GeneratedWallet> => {
+      try {
+        const gen = await generateNewWallet();
+        const ks = await encryptKeystore(gen.privateKey, passphrase, gen.mnemonic);
+        saveEncryptedKeystore(ks);
+        unlockedPrivateKeyRef.current = gen.privateKey;
+
+        const info: Web3AccountInfo = {
+          connected: true,
+          address: gen.address,
+          network: 'polygon',
+          nativeBalance: 0,
+          nativeSymbol: 'POL',
+          balances: { POL: 0, USDT: 0, USDC: 0 },
+          totalValueUsd: 0,
+          lastSyncAt: Date.now(),
+          isUnlocked: true,
+        };
+
+        setWeb3Account(info);
+        setState((s) => ({
+          ...s,
+          web3Account: info,
+          accountMode: 'web3',
+        }));
+
+        playChime('success');
+        triggerToast('Self-Custody Wallet Ready', `Derived address: ${gen.address.slice(0, 6)}...${gen.address.slice(-4)}`, 'success');
+        setTimeout(() => syncWeb3Balances(), 100);
+        return gen;
+      } catch (err: any) {
+        triggerToast('Wallet Creation Failed', err?.message || 'Failed to generate keypair', 'warn');
+        throw err;
+      }
+    },
+    [triggerToast, syncWeb3Balances]
+  );
+
+  const importWeb3Wallet = useCallback(
+    async (passphrase: string, mnemonicOrKey: string): Promise<{ address: string }> => {
+      try {
+        const trimmed = mnemonicOrKey.trim();
+        let privateKey = '';
+        let mnemonic: string | undefined;
+
+        if (trimmed.includes(' ')) {
+          mnemonic = trimmed;
+          privateKey = await mnemonicToPrivateKey(mnemonic);
+        } else {
+          privateKey = trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
+        }
+
+        const address = privateKeyToAddress(privateKey);
+        const ks = await encryptKeystore(privateKey, passphrase, mnemonic);
+        saveEncryptedKeystore(ks);
+        unlockedPrivateKeyRef.current = privateKey;
+
+        const info: Web3AccountInfo = {
+          connected: true,
+          address,
+          network: 'polygon',
+          nativeBalance: 0,
+          nativeSymbol: 'POL',
+          balances: { POL: 0, USDT: 0, USDC: 0 },
+          totalValueUsd: 0,
+          lastSyncAt: Date.now(),
+          isUnlocked: true,
+        };
+
+        setWeb3Account(info);
+        setState((s) => ({
+          ...s,
+          web3Account: info,
+          accountMode: 'web3',
+        }));
+
+        playChime('success');
+        triggerToast('Wallet Imported', `Vault encrypted and unlocked for ${address.slice(0, 6)}...${address.slice(-4)}`, 'success');
+        setTimeout(() => syncWeb3Balances(), 100);
+        return { address };
+      } catch (err: any) {
+        triggerToast('Import Failed', err?.message || 'Invalid mnemonic phrase or private key', 'warn');
+        throw err;
+      }
+    },
+    [triggerToast, syncWeb3Balances]
+  );
+
+  const unlockWeb3Wallet = useCallback(
+    async (passphrase: string): Promise<boolean> => {
+      try {
+        const ks = loadEncryptedKeystore();
+        if (!ks) {
+          throw new Error('No local encrypted keystore found. Please create or import a wallet.');
+        }
+        const decrypted = await decryptKeystore(ks, passphrase);
+        unlockedPrivateKeyRef.current = decrypted.privateKey;
+
+        setWeb3Account((prev) =>
+          prev
+            ? { ...prev, isUnlocked: true, address: decrypted.address }
+            : {
+                connected: true,
+                address: decrypted.address,
+                network: 'polygon',
+                nativeBalance: 0,
+                nativeSymbol: 'POL',
+                balances: { POL: 0, USDT: 0, USDC: 0 },
+                totalValueUsd: 0,
+                lastSyncAt: Date.now(),
+                isUnlocked: true,
+              }
+        );
+
+        setState((s) => ({
+          ...s,
+          web3Account: s.web3Account
+            ? { ...s.web3Account, isUnlocked: true, address: decrypted.address }
+            : {
+                connected: true,
+                address: decrypted.address,
+                network: 'polygon',
+                nativeBalance: 0,
+                nativeSymbol: 'POL',
+                balances: { POL: 0, USDT: 0, USDC: 0 },
+                totalValueUsd: 0,
+                lastSyncAt: Date.now(),
+                isUnlocked: true,
+              },
+        }));
+
+        playChime('success');
+        triggerToast('Wallet Unlocked', 'Web3 self-custody vault decrypted for on-chain trading.', 'success');
+        setTimeout(() => syncWeb3Balances(), 100);
+        return true;
+      } catch (err: any) {
+        triggerToast('Unlock Failed', err?.message || 'Incorrect PIN or password', 'warn');
+        return false;
+      }
+    },
+    [triggerToast, syncWeb3Balances]
+  );
+
+  const lockWeb3Wallet = useCallback(() => {
+    unlockedPrivateKeyRef.current = null;
+    setWeb3Account((prev) => (prev ? { ...prev, isUnlocked: false } : null));
+    setState((s) =>
+      s.web3Account
+        ? { ...s, web3Account: { ...s.web3Account, isUnlocked: false } }
+        : s
+    );
+    triggerToast('Wallet Locked', 'Private keys purged from memory. Session locked.', 'info');
+  }, [triggerToast]);
+
+  const switchWeb3Network = useCallback(
+    async (network: Web3NetworkKey) => {
+      setWeb3Account((prev) => (prev ? { ...prev, network } : null));
+      setState((s) =>
+        s.web3Account ? { ...s, web3Account: { ...s.web3Account, network } } : s
+      );
+      triggerToast('Network Switched', `Active EVM chain: ${WEB3_NETWORKS[network].name}`, 'info');
+      setTimeout(() => syncWeb3Balances(), 100);
+    },
+    [triggerToast, syncWeb3Balances]
+  );
 
   const nativeWallet: NativeWalletState = useMemo(() => {
     return state.wallet || createDefaultWallet();
@@ -1095,6 +1377,154 @@ export function Provider({ children }: { children: React.ReactNode }) {
         return { ok: true, order: newOrder };
       }
 
+      if (stateRef.current.accountMode === 'web3') {
+        const w3 = stateRef.current.web3Account;
+        if (!w3 || !w3.address) {
+          triggerToast('Web3 Wallet Required', 'Please create or import a self-custodial Web3 wallet first.', 'warn');
+          return { ok: false, error: 'Web3 wallet not initialized' };
+        }
+        if (!w3.isUnlocked || !unlockedPrivateKeyRef.current) {
+          triggerToast('Web3 Wallet Locked', 'Please unlock your self-custodial wallet with your PIN to trade on-chain.', 'warn');
+          return { ok: false, error: 'Web3 wallet is locked' };
+        }
+
+        const network = (w3.network || 'polygon') as Web3NetworkKey;
+        const fromAsset = side === 'buy' ? 'USDC' : a;
+        const toAsset = side === 'buy' ? a : 'USDC';
+        const currentMkt = marketsRef.current[a];
+        const currentPrice = currentMkt?.price || 0;
+        if (currentPrice <= 0) {
+          triggerToast('Market Stale', `Cannot execute DEX swap: invalid price for ${a}.`, 'warn');
+          return { ok: false, error: 'Invalid market price' };
+        }
+
+        const fromAmount = side === 'buy' ? qty * currentPrice : qty;
+        const slippageTolerancePct = (stateRef.current.settings?.maxSlippageBps || 50) / 10000;
+
+        try {
+          const marketPrices: Record<string, number> = {};
+          for (const [sym, m] of Object.entries(marketsRef.current)) {
+            if (m?.price) marketPrices[sym] = m.price;
+          }
+          marketPrices['USDT'] = 1.0;
+          marketPrices['USDC'] = 1.0;
+
+          const quote = calculateDexQuote({
+            fromAsset,
+            toAsset,
+            amountIn: fromAmount,
+            network,
+            slippageTolerancePct,
+            marketPrices,
+          });
+
+          const fromBal = fromAsset === w3.nativeSymbol ? (w3.nativeBalance || 0) : (w3.balances?.[fromAsset] || 0);
+          const validation = validateSwapPrerequisites({
+            quote,
+            availableFromBalance: fromBal,
+            availableNativeGasBalance: w3.nativeBalance || 0,
+          });
+
+          if (!validation.valid) {
+            triggerToast('DEX Swap Blocked', validation.errors.join('; '), 'warn');
+            return { ok: false, error: validation.errors[0] };
+          }
+
+          const notional = fromAmount * (marketPrices[fromAsset] || 1);
+          const clientOrderId = 'dex_' + Date.now().toString(36);
+          const newOrder: Order = {
+            id: clientOrderId,
+            ts: Date.now(),
+            side,
+            type: 'market',
+            asset: a,
+            amount: qty,
+            price: currentPrice,
+            fee: quote.poolFeeUsd + quote.estimatedGasFeeUsd,
+            notional,
+            auto: Boolean(options?.auto),
+            strategyName: options?.strategyName,
+            status: 'pending',
+            accountMode: 'web3',
+          };
+
+          setState((s) => ({
+            ...s,
+            orders: [newOrder, ...s.orders],
+            web3Orders: [newOrder, ...(s.web3Orders || [])],
+          }));
+
+          executeDexSwap({
+            quote,
+            walletAddress: w3.address,
+            privateKey: unlockedPrivateKeyRef.current || undefined,
+          })
+            .then((receipt) => {
+              setState((s) => {
+                const curPositions: Record<Asset, number> = { ...(s.web3Positions || createPositionsRecord()) };
+                const curBal = { ...(s.web3Account?.balances || {}) };
+                const curUnits = curPositions[a] || 0;
+                const newUnits = side === 'buy' ? curUnits + qty : Math.max(0, curUnits - qty);
+                curPositions[a] = newUnits;
+
+                curBal[fromAsset] = Math.max(0, (curBal[fromAsset] || 0) - quote.amountIn);
+                curBal[toAsset] = (curBal[toAsset] || 0) + quote.expectedAmountOut;
+
+                const updatedAccount: Web3AccountInfo = {
+                  ...(s.web3Account || w3),
+                  balances: curBal,
+                  nativeBalance: Math.max(0, (s.web3Account?.nativeBalance || w3.nativeBalance) - quote.estimatedGasFeeNative),
+                  lastSyncAt: Date.now(),
+                };
+
+                const filledOrder: Order = {
+                  ...newOrder,
+                  id: receipt.txHash,
+                  status: 'filled',
+                };
+
+                const notif = {
+                  id: 'notif_' + Math.random().toString(36).substring(2, 8),
+                  ts: Date.now(),
+                  title: `DEX Swap Settled (${network.toUpperCase()})`,
+                  body: `Swapped ${quote.amountIn.toFixed(4)} ${fromAsset} → ${quote.expectedAmountOut.toFixed(4)} ${toAsset}. TX: ${receipt.txHash.slice(0, 10)}...`,
+                  type: 'order' as const,
+                };
+
+                return {
+                  ...s,
+                  orders: s.orders.map((o) => (o.id === clientOrderId ? filledOrder : o)),
+                  web3Orders: (s.web3Orders || []).map((o) => (o.id === clientOrderId ? filledOrder : o)),
+                  web3Positions: curPositions,
+                  web3Account: updatedAccount,
+                  notifications: [notif, ...s.notifications],
+                };
+              });
+
+              if (stateRef.current.settings.soundEnabled) playChime('trade');
+              triggerToast(
+                'DEX Swap Confirmed',
+                `On-chain settlement confirmed on ${receipt.network.toUpperCase()}: ${quote.amountIn.toFixed(4)} ${fromAsset} → ${quote.expectedAmountOut.toFixed(4)} ${toAsset}`,
+                'success'
+              );
+              syncWeb3Balances();
+            })
+            .catch((err) => {
+              setState((s) => ({
+                ...s,
+                orders: s.orders.map((o) => (o.id === clientOrderId ? { ...o, status: 'rejected' } : o)),
+                web3Orders: (s.web3Orders || []).map((o) => (o.id === clientOrderId ? { ...o, status: 'rejected' } : o)),
+              }));
+              triggerToast('DEX Swap Failed', err?.message || 'Transaction rejected on-chain', 'warn');
+            });
+
+          return { ok: true, order: newOrder };
+        } catch (err: any) {
+          triggerToast('DEX Swap Failed', err?.message || 'Transaction initialization error', 'warn');
+          return { ok: false, error: err?.message };
+        }
+      }
+
       // Paper Simulation Execution
       const s: AppState = {
         ...stateRef.current,
@@ -1128,7 +1558,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
       return r;
     },
-    [triggerToast, syncExchangeBalances]
+    [triggerToast, syncExchangeBalances, syncWeb3Balances]
   );
 
   const cancelPendingOrder = useCallback(
@@ -1887,6 +2317,16 @@ export function Provider({ children }: { children: React.ReactNode }) {
       connectExchange,
       disconnectExchange,
       syncExchangeBalances,
+      web3Account,
+      web3DrawerOpen,
+      openWeb3Drawer,
+      closeWeb3Drawer,
+      createWeb3Wallet,
+      importWeb3Wallet,
+      unlockWeb3Wallet,
+      lockWeb3Wallet,
+      switchWeb3Network,
+      syncWeb3Balances,
       nativeWallet,
       depositToWallet,
       withdrawFromWallet,
@@ -1952,6 +2392,16 @@ export function Provider({ children }: { children: React.ReactNode }) {
       connectExchange,
       disconnectExchange,
       syncExchangeBalances,
+      web3Account,
+      web3DrawerOpen,
+      openWeb3Drawer,
+      closeWeb3Drawer,
+      createWeb3Wallet,
+      importWeb3Wallet,
+      unlockWeb3Wallet,
+      lockWeb3Wallet,
+      switchWeb3Network,
+      syncWeb3Balances,
       nativeWallet,
       depositToWallet,
       withdrawFromWallet,
