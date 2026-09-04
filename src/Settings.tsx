@@ -4,10 +4,11 @@ import { useLumen } from './store';
 import { SimulationMode } from './storage';
 import { X, Sparkles, Key, Cpu, Volume2, RotateCcw, Check, Radio, Info, Shield, Sliders } from 'lucide-react';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
+import { decryptApiKey, isEncryptedApiKey } from './services/keyVault';
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { state, setSettings, reset, setLossPreventionMode } = useLumen();
-  const [key, setKey] = useState(state.settings.geminiApiKey || '');
+  const [key, setKey] = useState('');
   const [models, setModels] = useState<any[]>(SUPPORTED_MODELS);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -35,7 +36,20 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   };
 
   useEffect(() => {
+    let active = true;
+    if (state.settings.geminiApiKey) {
+      if (isEncryptedApiKey(state.settings.geminiApiKey)) {
+        decryptApiKey(state.settings.geminiApiKey).then((dec) => {
+          if (active && dec) setKey(dec);
+        });
+      } else {
+        setKey(state.settings.geminiApiKey);
+      }
+    }
     fetchModels();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleSave = () => {

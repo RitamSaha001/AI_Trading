@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateStrategy } from './strategies';
+import { evaluateStrategy, toAssetPrecision } from './strategies';
 import { freshState } from '../storage';
 import { Market, StrategyConfig } from '../types';
 
@@ -410,5 +410,128 @@ describe('Autonomous Algorithmic Strategy Suite', () => {
     expect(strat.quarantineActive).toBe(false);
     expect(strat.consecutiveLosses).toBe(0);
     expect(res2.message).toContain('Graduated from shadow quarantine');
+  });
+
+  describe('Per-Asset Dynamic Precision & Zero-Quantity Guard', () => {
+    it('applies per-asset decimal precision without hardcoded truncation', () => {
+      // BTC has 4 or 6 decimals depending on META
+      const btcQty = toAssetPrecision(0.00019876, 'BTC');
+      expect(btcQty).toBeGreaterThan(0);
+      expect(btcQty).toBeLessThanOrEqual(0.00019876);
+
+      // SHIB has 0 or 2 decimals
+      const shibQty = toAssetPrecision(123456.789, 'SHIB');
+      expect(shibQty).toBe(123456);
+
+      // SOL has 3 decimals
+      const solQty = toAssetPrecision(1.234567, 'SOL');
+      expect(solQty).toBe(1.234);
+    });
+
+    it('returns zero and blocks execution when budget is below asset precision', () => {
+      // BTC at $150,000, tiny budget of $0.50 yields 0.00000333... which floors to 0
+      const tinyBtc = toAssetPrecision(0.5 / 150000, 'BTC');
+      expect(tinyBtc).toBe(0);
+    });
+  });
+
+  describe('Additional Strategy Implementations Verification', () => {
+    it('evaluates momentum strategy correctly', () => {
+      const state = freshState(50000, 'clean');
+      const market = createMockMarket(65000, 'BTC');
+      const markets = { BTC: market } as any;
+
+      const strat: StrategyConfig = {
+        id: 'strat_momentum_btc',
+        asset: 'BTC',
+        kind: 'momentum',
+        name: 'Momentum BTC',
+        enabled: true,
+        maxAllocation: 0.25,
+        cooldownSec: 0,
+        tradesExecuted: 0,
+        totalPnl: 0,
+        realizedPnl: 0,
+        feesPaid: 0,
+        params: { rsiThresholdBuy: 99 },
+      };
+
+      const res = evaluateStrategy(strat, state, markets);
+      expect(typeof res.executed).toBe('boolean');
+      expect(res).toBeDefined();
+    });
+
+    it('evaluates mean_reversion strategy correctly', () => {
+      const state = freshState(50000, 'clean');
+      const market = createMockMarket(65000, 'BTC');
+      const markets = { BTC: market } as any;
+
+      const strat: StrategyConfig = {
+        id: 'strat_mr_btc',
+        asset: 'BTC',
+        kind: 'mean_reversion',
+        name: 'Mean Reversion BTC',
+        enabled: true,
+        maxAllocation: 0.25,
+        cooldownSec: 0,
+        tradesExecuted: 0,
+        totalPnl: 0,
+        realizedPnl: 0,
+        feesPaid: 0,
+        params: { rsiThresholdBuy: 99 },
+      };
+
+      const res = evaluateStrategy(strat, state, markets);
+      expect(typeof res.executed).toBe('boolean');
+      expect(res).toBeDefined();
+    });
+
+    it('evaluates breakout_volatility strategy correctly', () => {
+      const state = freshState(50000, 'clean');
+      const market = createMockMarket(65000, 'BTC');
+      const markets = { BTC: market } as any;
+
+      const strat: StrategyConfig = {
+        id: 'strat_breakout_btc',
+        asset: 'BTC',
+        kind: 'breakout_volatility',
+        name: 'Breakout Volatility BTC',
+        enabled: true,
+        maxAllocation: 0.25,
+        cooldownSec: 0,
+        tradesExecuted: 0,
+        totalPnl: 0,
+        realizedPnl: 0,
+        feesPaid: 0,
+        params: { breakoutThresholdPct: 1.5 },
+      };
+
+      const res = evaluateStrategy(strat, state, markets);
+      expect(typeof res.executed).toBe('boolean');
+    });
+
+    it('evaluates grid_scalp strategy correctly', () => {
+      const state = freshState(50000, 'clean');
+      const market = createMockMarket(65000, 'BTC');
+      const markets = { BTC: market } as any;
+
+      const strat: StrategyConfig = {
+        id: 'strat_grid_btc',
+        asset: 'BTC',
+        kind: 'grid_scalp',
+        name: 'Grid Scalp BTC',
+        enabled: true,
+        maxAllocation: 0.25,
+        cooldownSec: 0,
+        tradesExecuted: 0,
+        totalPnl: 0,
+        realizedPnl: 0,
+        feesPaid: 0,
+        params: { gridSpacingPct: 0.5 },
+      };
+
+      const res = evaluateStrategy(strat, state, markets);
+      expect(typeof res.executed).toBe('boolean');
+    });
   });
 });

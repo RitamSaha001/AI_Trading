@@ -7,7 +7,7 @@ import { executeOrder, ExecuteOrderResult } from './trading';
  * Rounds a quantity to the correct per-asset decimal precision using Math.floor
  * to avoid rounding up beyond available budget. Uses META[asset].decimals.
  */
-function toAssetPrecision(qty: number, asset: Asset): number {
+export function toAssetPrecision(qty: number, asset: Asset): number {
   const decimals = META[asset]?.decimals ?? 4;
   const factor = Math.pow(10, decimals);
   return Math.floor(qty * factor) / factor;

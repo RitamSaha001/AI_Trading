@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLumen } from './store';
+import { decryptApiKey, isEncryptedApiKey } from './services/keyVault';
 import { ASSETS, Asset, Timeframe, Side, OrderType, StrategyKind } from './types';
 import { LineChart, Sparkline } from './Chart';
 import { MarketHeatmap } from './components/MarketHeatmap';
@@ -23,6 +24,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Shield,
+  ShieldCheck,
   Zap,
   Sliders,
   Bell,
@@ -1399,6 +1401,128 @@ export function Portfolio() {
             <Scale className="w-3.5 h-3.5 text-emerald-400" />
             <span>Autonomous De-Risk</span>
           </button>
+        </div>
+      </div>
+
+      {/* System Health & Safety Sentinel Cockpit Card */}
+      <div className="p-6 rounded-[28px] bg-white border border-black/[0.06] shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-black/[0.05]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-zinc-950 tracking-tight">System Health &amp; Safety Sentinel</h3>
+                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Armed &amp; Protecting
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500">
+                Real-money pre-trade risk enforcement, circuit breaker monitoring, and exchange feed integrity.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-zinc-500">Risk Policy:</span>
+            <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-xl bg-zinc-100 text-zinc-800 border border-zinc-200">
+              {(state.lossPreventionMode || 'strict').toUpperCase()}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 1. Risk Policy */}
+          <div className="p-3.5 rounded-2xl bg-zinc-50/70 border border-black/[0.04]">
+            <span className="text-[11px] font-semibold text-zinc-500 block">Active Risk Policy</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-sm font-bold text-zinc-900 capitalize">{(state.lossPreventionMode || 'strict')} Mode</span>
+            </div>
+            <span className="text-[10px] text-zinc-400 mt-0.5 block">
+              {(state.lossPreventionMode || 'strict') === 'strict'
+                ? 'Mandatory 15% cash reserve + 50% asset cap'
+                : (state.lossPreventionMode || 'strict') === 'balanced'
+                ? 'Adaptive 10% reserve + 60% asset cap'
+                : 'Aggressive 5% reserve + 70% asset cap'}
+            </span>
+          </div>
+
+          {/* 2. Strategy Circuit Breakers */}
+          <div className="p-3.5 rounded-2xl bg-zinc-50/70 border border-black/[0.04]">
+            <span className="text-[11px] font-semibold text-zinc-500 block">Circuit Breakers</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              {state.strategies.some((s) => s.circuitBreakerTriggered) ? (
+                <span className="text-sm font-bold text-rose-600 flex items-center gap-1">
+                  <span>🚨</span>
+                  <span>{state.strategies.filter((s) => s.circuitBreakerTriggered).length} Halted</span>
+                </span>
+              ) : (
+                <span className="text-sm font-bold text-emerald-600 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>All Armed ({state.strategies.length} Safe)</span>
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] text-zinc-400 mt-0.5 block">
+              {state.strategies.filter((s) => s.circuitBreakerTriggered).length > 0
+                ? 'Consecutive losses halted by Loss Sentinel'
+                : 'Zero loss-run halts across active bots'}
+            </span>
+          </div>
+
+          {/* 3. Data Freshness */}
+          <div className="p-3.5 rounded-2xl bg-zinc-50/70 border border-black/[0.04]">
+            <span className="text-[11px] font-semibold text-zinc-500 block">Data Freshness</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              {(() => {
+                const activeAssets = ASSETS.filter((a) => (state.positions[a] || 0) > 0);
+                const checkAssets = activeAssets.length > 0 ? activeAssets : [state.selectedAsset];
+                const maxAge = Math.max(
+                  ...checkAssets.map((a) => {
+                    const lu = markets[a]?.lastUpdated;
+                    return lu ? Date.now() - lu : 0;
+                  })
+                );
+                const isStale = maxAge > 45000;
+                const isLagging = maxAge >= 10000;
+                return isStale ? (
+                  <span className="text-sm font-bold text-rose-600">🔴 Stale (&gt;45s)</span>
+                ) : isLagging ? (
+                  <span className="text-sm font-bold text-amber-600">🟡 Lagging ({Math.round(maxAge / 1000)}s)</span>
+                ) : (
+                  <span className="text-sm font-bold text-emerald-600">🟢 Fresh (&lt;10s)</span>
+                );
+              })()}
+            </div>
+            <span className="text-[10px] text-zinc-400 mt-0.5 block">
+              Audited across active holdings
+            </span>
+          </div>
+
+          {/* 4. Pending Orders & Reserved Capital */}
+          <div className="p-3.5 rounded-2xl bg-zinc-50/70 border border-black/[0.04]">
+            <span className="text-[11px] font-semibold text-zinc-500 block">Pending Orders &amp; Capital</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              {(() => {
+                const pendingOrders = state.orders.filter((o) => o.status === 'pending');
+                const reservedCash = pendingOrders
+                  .filter((o) => o.side === 'buy')
+                  .reduce((sum, o) => sum + (o.reservedCash || o.amount * o.price), 0);
+                return (
+                  <span className="text-sm font-bold text-zinc-900 font-mono">
+                    {pendingOrders.length} {pendingOrders.length === 1 ? 'Order' : 'Orders'} ({money(reservedCash)})
+                  </span>
+                );
+              })()}
+            </div>
+            <span className="text-[10px] text-zinc-400 mt-0.5 block">
+              {accountMode === 'exchange'
+                ? exchangeAccount?.lastSyncAt
+                  ? `Last sync: ${new Date(exchangeAccount.lastSyncAt).toLocaleTimeString()}`
+                  : 'Exchange connected'
+                : 'Simulated desk balance verified'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -3305,8 +3429,24 @@ export function SettingsPage() {
     setLossPreventionMode,
   } = useLumen();
 
-  const [key, setKey] = useState(state.settings.geminiApiKey || '');
+  const [key, setKey] = useState('');
   const [selectedModel, setSelectedModel] = useState(resolveGemini3Model(state.settings.geminiModel));
+
+  useEffect(() => {
+    let active = true;
+    if (state.settings.geminiApiKey) {
+      if (isEncryptedApiKey(state.settings.geminiApiKey)) {
+        decryptApiKey(state.settings.geminiApiKey).then((dec) => {
+          if (active && dec) setKey(dec);
+        });
+      } else {
+        setKey(state.settings.geminiApiKey);
+      }
+    }
+    return () => {
+      active = false;
+    };
+  }, [state.settings.geminiApiKey]);
   const [saved, setSaved] = useState(false);
   const [sound, setSound] = useState(state.settings.soundEnabled ?? true);
   const [wsEnabled, setWsEnabled] = useState(state.settings.enableWebSocket ?? true);

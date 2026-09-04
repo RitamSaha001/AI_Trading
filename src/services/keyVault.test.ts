@@ -14,6 +14,9 @@ import {
   VAULT_STORAGE_KEY,
   ExchangeCredentials,
   getStorage,
+  encryptApiKey,
+  decryptApiKey,
+  isEncryptedApiKey,
 } from './keyVault';
 
 describe('Client-Side Encrypted Key Vault', () => {
@@ -133,5 +136,31 @@ describe('Client-Side Encrypted Key Vault', () => {
     await expect(saveCredentials(mockCreds, '12345')).rejects.toThrow('Master passphrase must be at least 6 characters');
     await expect(saveCredentials({ ...mockCreds, apiKey: '' }, masterPass)).rejects.toThrow('API Key and API Secret are required');
     await expect(saveCredentials({ ...mockCreds, apiSecret: '' }, masterPass)).rejects.toThrow('API Key and API Secret are required');
+  });
+
+  describe('API Key AES-GCM Encryption', () => {
+    it('encrypts plaintext API key into ciphertext format and decrypts back to original', async () => {
+      const rawKey = 'AIzaSySecretGeminiApiKey1234567890';
+      const cipher = await encryptApiKey(rawKey);
+
+      expect(cipher).not.toBe(rawKey);
+      expect(isEncryptedApiKey(cipher)).toBe(true);
+      expect(cipher.startsWith('enc:v1:aes-gcm:')).toBe(true);
+
+      const decrypted = await decryptApiKey(cipher);
+      expect(decrypted).toBe(rawKey);
+    });
+
+    it('returns plaintext unchanged if already plaintext or empty', async () => {
+      expect(await decryptApiKey('')).toBe('');
+      expect(await decryptApiKey('plain-test-key')).toBe('plain-test-key');
+    });
+
+    it('does not re-encrypt already encrypted string', async () => {
+      const rawKey = 'AIzaSySecretGeminiApiKey1234567890';
+      const cipher = await encryptApiKey(rawKey);
+      const cipher2 = await encryptApiKey(cipher);
+      expect(cipher2).toBe(cipher);
+    });
   });
 });

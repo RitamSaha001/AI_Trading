@@ -161,4 +161,54 @@ describe('Domain: Risk-Based Position Sizing Engine', () => {
     });
     expect(res.quantity).toBe(0);
   });
+
+  it('uses dynamic ATR-based stop loss calculation when stopPrice is not provided', () => {
+    const candles = Array.from({ length: 20 }, (_, i) => ({
+      time: Date.now() - (20 - i) * 60000,
+      open: 100 + i,
+      high: 105 + i,
+      low: 95 + i,
+      close: 100 + i,
+      volume: 1000,
+    }));
+    const mockMarket = {
+      asset: 'SOL' as const,
+      price: 100,
+      history: Array.from({ length: 20 }, (_, i) => 100 + i),
+      candles,
+    };
+
+    const res = calculateRiskBasedPositionSize({
+      asset: 'SOL',
+      side: 'buy',
+      entryPrice: 100,
+      portfolioEquity: 50000,
+      availableCash: 20000,
+      currentHolding: 0,
+      currentHoldingNotional: 0,
+      market: mockMarket as any,
+    });
+
+    expect(res.stopPrice).toBeLessThan(100);
+    expect(res.stopPrice).toBeGreaterThan(0);
+    expect(res.targetPrice).toBeGreaterThan(100);
+    expect(res.quantity).toBeGreaterThan(0);
+  });
+
+  it('allows complete liquidation of dust holdings (< $10) on sell orders', () => {
+    // Current holding is 0.05 SOL at $100 = $5.00 notional (< $10 min order)
+    const res = calculateRiskBasedPositionSize({
+      asset: 'SOL',
+      side: 'sell',
+      entryPrice: 100,
+      portfolioEquity: 50000,
+      availableCash: 10000,
+      currentHolding: 0.05,
+      currentHoldingNotional: 5,
+    });
+
+    // Should liquidate all available dust (0.05 units)
+    expect(res.quantity).toBe(0.05);
+    expect(res.notional).toBe(5);
+  });
 });

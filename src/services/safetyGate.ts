@@ -335,7 +335,7 @@ export function validateAIProposal(
   // Single order notional cap (applies to both buy and sell)
   if (quote.notional > totalPortVal * policy.maxSingleOrderPortfolioPct) {
     errors.push(
-      `Order exceeds maximum safe single-trade cap (${(policy.maxSingleOrderPortfolioPct * 100).toFixed(0)}% of portfolio). Trade notional: ${money(quote.notional)}, max allowed: ${money(totalPortVal * policy.maxSingleOrderPortfolioPct)}.`
+      `Order size too large: Order exceeds maximum safe single-trade cap (${(policy.maxSingleOrderPortfolioPct * 100).toFixed(0)}% of portfolio). Trade requires ${money(quote.notional)}, but the maximum permitted per order is ${money(totalPortVal * policy.maxSingleOrderPortfolioPct)}.`
     );
   }
 
@@ -343,8 +343,8 @@ export function validateAIProposal(
   if (side === 'buy') {
     if (quote.totalCashRequired > availableCash + 0.01) {
       const msg = isExchangeMode
-        ? `Insufficient available exchange USDT. Order requires ${money(quote.totalCashRequired)} (incl. fee), but available balance is ${money(availableCash)}.`
-        : `Insufficient available liquid cash. Order requires ${money(quote.totalCashRequired)} (incl. fee), but available cash is ${money(availableCash)} (${money(reservedCash)} reserved for pending orders).`;
+        ? `Not enough USDT (insufficient available exchange USDT) — you need ${money(quote.totalCashRequired)} (incl. fee) but only have ${money(availableCash)} available.`
+        : `Not enough cash (insufficient liquid cash) — you need ${money(quote.totalCashRequired)} (incl. fee) but only have ${money(availableCash)} available (after reserving ${money(reservedCash)} for pending orders).`;
       errors.push(msg);
     }
 
@@ -354,7 +354,7 @@ export function validateAIProposal(
     const minCashPct = policy.minCashReservePct * 100;
     if (resultingCashPct < minCashPct) {
       errors.push(
-        `Capital Defense Hard Block: Order depletes liquid cash reserve to ${resultingCashPct.toFixed(1)}%, violating the mandatory ${minCashPct.toFixed(1)}% capital defense threshold.`
+        `Capital Defense Hard Block: Order would leave liquid cash reserves at ${resultingCashPct.toFixed(1)}%, violating the mandatory ${minCashPct.toFixed(1)}% capital defense threshold. Please retain cash to protect against drawdowns.`
       );
     }
 
@@ -365,7 +365,7 @@ export function validateAIProposal(
     const warnAssetPct = policy.warnSingleAssetPct * 100;
     if (resultingAllocPct > maxAssetPct + 0.01) {
       errors.push(
-        `Safety Policy Hard Block: Order would raise ${asset} allocation to ${resultingAllocPct.toFixed(1)}%, violating the hard ${maxAssetPct.toFixed(1)}% diversification cap.`
+        `Safety Policy Hard Block: Order would raise ${asset} allocation to ${resultingAllocPct.toFixed(1)}%, violating the hard ${maxAssetPct.toFixed(1)}% diversification cap. Please reduce the order size to diversify risk.`
       );
     } else if (resultingAllocPct > warnAssetPct) {
       warnings.push(
@@ -376,7 +376,7 @@ export function validateAIProposal(
     // Sell
     if (amount > availableHolding + 1e-6) {
       errors.push(
-        `Insufficient available holdings. Attempted to sell ${formatQty(amount, asset)}, but available holding is ${formatQty(availableHolding, asset)} (${formatQty(reservedHolding, asset)} reserved for pending orders).`
+        `Not enough ${asset} (insufficient available holdings) — you attempted to sell ${formatQty(amount, asset)}, but only have ${formatQty(availableHolding, asset)} available (with ${formatQty(reservedHolding, asset)} reserved for pending orders).`
       );
     }
   }

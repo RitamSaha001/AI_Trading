@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLumen } from '../store';
+import { decryptApiKey, isEncryptedApiKey } from '../services/keyVault';
 import { SUPPORTED_MODELS, resolveGemini3Model } from '../gemini';
 import {
   Sparkles,
@@ -38,9 +39,25 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
   } = useLumen();
 
   const [step, setStep] = useState(1);
-  const [apiKey, setApiKey] = useState(state.settings.geminiApiKey || '');
+  const [apiKey, setApiKey] = useState('');
   const [selectedModel, setSelectedModel] = useState(resolveGemini3Model(state.settings.geminiModel));
   const [starterBotDeployed, setStarterBotDeployed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (state.settings.geminiApiKey) {
+      if (isEncryptedApiKey(state.settings.geminiApiKey)) {
+        decryptApiKey(state.settings.geminiApiKey).then((dec) => {
+          if (active && dec) setApiKey(dec);
+        });
+      } else {
+        setApiKey(state.settings.geminiApiKey);
+      }
+    }
+    return () => {
+      active = false;
+    };
+  }, [state.settings.geminiApiKey]);
 
   if (!isOpen) return null;
 

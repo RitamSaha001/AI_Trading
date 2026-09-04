@@ -547,7 +547,7 @@ export function checkPendingOrders(
  * Cancels an open/pending order cleanly and releases reserved funds/units.
  */
 export function cancelOrder(state: AppState, orderId: string): boolean {
-  const target = state.orders.find((o) => o.id === orderId);
+  const target = state.orders.find((o) => o.id === orderId) || state.exchangeOrders?.find((o) => o.id === orderId);
   if (target && target.status === 'pending') {
     target.status = 'cancelled';
     target.reservedCash = undefined;

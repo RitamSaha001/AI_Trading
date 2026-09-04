@@ -136,4 +136,120 @@ describe('Domain: Challenger Self-Check Pass', () => {
     expect(res.hasCriticalConcerns).toBe(false);
     expect(res.counterArgument).toContain('disciplined patience');
   });
+
+  it('detects high correlation hazard between proposed asset and core holding', () => {
+    // Propose buying SOL, which perfectly correlates with BTC (mocking same proportional history)
+    const btcHist = mockMarkets.BTC.history;
+    const solHist = btcHist.map((p) => p * 0.0025); // exactly 1.0 correlation
+    const correlatedMarkets: any = {
+      ...mockMarkets,
+      SOL: {
+        asset: 'SOL',
+        price: 150,
+        history: solHist,
+        candles: [],
+        lastUpdated: Date.now(),
+      },
+    };
+
+    const res = challengeTradingDecision(
+      {
+        asset: 'SOL',
+        action: 'BUY',
+        notional: 1000,
+        quantity: 6.6,
+      },
+      mockState,
+      correlatedMarkets
+    );
+
+    expect(res.concerns.some((c) => /High correlation/i.test(c))).toBe(true);
+  });
+
+  it('properly annualizes volatility according to timeframeMinutes parameter', () => {
+    // 1-minute candle timeframe (1440 periods per day) vs 1-day
+    const volatileHist = Array.from({ length: 30 }, (_, i) => 100 * (1 + (i % 2 === 0 ? 0.03 : -0.03)));
+    const volatileMarkets: any = {
+      ...mockMarkets,
+      AVAX: {
+        asset: 'AVAX',
+        price: 100,
+        history: volatileHist,
+        candles: [],
+        lastUpdated: Date.now(),
+      },
+    };
+
+    // 1-minute timeframe (1440 min/day) dramatically amplifies annualized volatility
+    const res1m = challengeTradingDecision(
+      {
+        asset: 'AVAX',
+        action: 'BUY',
+        notional: 1000,
+        quantity: 10,
+      },
+      mockState,
+      volatileMarkets,
+      undefined,
+      1 // 1-minute candles
+    );
+
+    expect(res1m.concerns.some((c) => /Excessive volatility regime/i.test(c))).toBe(true);
+  });
+
+  it('guards against NaN indicator values and flags insufficient price data', () => {
+    // Market with very few ticks where RSI cannot be computed
+    const flatMarkets: any = {
+      ...mockMarkets,
+      LINK: {
+        asset: 'LINK',
+        price: 15,
+        history: [15, 15, 15], // Only 3 ticks (< 14 needed for RSI)
+        candles: [],
+        lastUpdated: Date.now(),
+      },
+    };
+
+    const res = challengeTradingDecision(
+      {
+        asset: 'LINK',
+        action: 'BUY',
+        notional: 300,
+        quantity: 20,
+      },
+      mockState,
+      flatMarkets
+    );
+
+    expect(res.concerns.some((c) => /RSI indicator unavailable|Weak sample size/i.test(c))).toBe(true);
+  });
+
+  it('flags trend conflict when spot price is below 30-period trend SMA', () => {
+    // Downward trending history where current price is well below SMA30
+    const downtrendHistory = Array.from({ length: 35 }, (_, i) => 100 - i * 1.5);
+    const currentPrice = downtrendHistory[downtrendHistory.length - 1]; // ~$49
+    const downtrendMarkets: any = {
+      ...mockMarkets,
+      DOT: {
+        asset: 'DOT',
+        price: currentPrice,
+        history: downtrendHistory,
+        candles: [],
+        lastUpdated: Date.now(),
+      },
+    };
+
+    const res = challengeTradingDecision(
+      {
+        asset: 'DOT',
+        action: 'BUY',
+        notional: 500,
+        quantity: 10,
+      },
+      mockState,
+      downtrendMarkets
+    );
+
+    expect(res.concerns.some((c) => /Trend conflict.*falling knife/i.test(c))).toBe(true);
+  });
 });

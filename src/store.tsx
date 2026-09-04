@@ -55,6 +55,8 @@ import {
   getUnlockedCredentials,
   ExchangeCredentials,
   onVaultLock,
+  encryptApiKey,
+  isEncryptedApiKey,
 } from './services/keyVault';
 import { BinanceConnector } from './services/binanceConnector';
 
@@ -610,6 +612,18 @@ export function Provider({ children }: { children: React.ReactNode }) {
     marketsRef.current = markets;
   }, [markets]);
 
+  // Ensure any legacy plaintext Gemini API key is encrypted with AES-GCM
+  useEffect(() => {
+    if (state.settings.geminiApiKey && !isEncryptedApiKey(state.settings.geminiApiKey)) {
+      encryptApiKey(state.settings.geminiApiKey).then((enc) => {
+        setState((s) => ({
+          ...s,
+          settings: { ...s.settings, geminiApiKey: enc },
+        }));
+      });
+    }
+  }, []);
+
   // Initial Full REST bootstrap
   const refreshMarkets = useCallback(async () => {
     try {
@@ -928,6 +942,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
           status: 'pending',
           stopLoss: options?.stopLoss,
           takeProfit: options?.takeProfit,
+          accountMode: 'exchange',
         };
 
         setState((s) => ({
@@ -1179,6 +1194,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSettings = useCallback((x: Partial<AppState['settings']>) => {
+    if (x.geminiApiKey !== undefined && x.geminiApiKey && !isEncryptedApiKey(x.geminiApiKey)) {
+      encryptApiKey(x.geminiApiKey).then((encrypted) => {
+        setState((s) => ({
+          ...s,
+          settings: { ...s.settings, ...x, geminiApiKey: encrypted },
+        }));
+      });
+      return;
+    }
     setState((s) => ({
       ...s,
       settings: { ...s.settings, ...x },

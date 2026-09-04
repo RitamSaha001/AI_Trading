@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { executeOrder, checkPendingOrders } from './trading';
+import { executeOrder, checkPendingOrders, cancelOrder } from './trading';
 import { AppState, Market } from '../types';
 import { createPositionsRecord } from './portfolio';
 
@@ -212,5 +212,124 @@ describe('Domain: Paper Trading Engine Execution', () => {
     expect(state.realizedPnl).toBeGreaterThan(0);
     // 7. Alert notification generated
     expect(checkResult.triggeredAlerts.some((a) => a.includes('Scale-Out TP1'))).toBe(true);
+  });
+
+  describe('Order Cancellation & Fund Release', () => {
+    it('cancels pending limit order and releases reserved cash', () => {
+      const state = createFreshState(50000);
+      const res = executeOrder(state, mockMarkets as any, 'buy', 'BTC', 0.2, {
+        type: 'limit',
+        limitPrice: 45000,
+      });
+      expect(res.ok).toBe(true);
+      expect(state.orders[0].status).toBe('pending');
+      expect(state.reservedCash).toBeGreaterThan(0);
+
+      const cancelSuccess = cancelOrder(state, state.orders[0].id);
+      expect(cancelSuccess).toBe(true);
+      expect(state.orders[0].status).toBe('cancelled');
+      expect(state.reservedCash).toBe(0);
+
+      // Attempting to cancel already cancelled order returns false
+      expect(cancelOrder(state, state.orders[0].id)).toBe(false);
+    });
+
+    it('returns false when trying to cancel non-existent order', () => {
+      const state = createFreshState(50000);
+      expect(cancelOrder(state, 'non_existent_id')).toBe(false);
+    });
+  });
+
+  describe('Loss Minimization Circuit Breaker & Quarantine Shadow Mode', () => {
+    it('triggers circuit breaker when consecutive losses reach limit and auto-pauses strategy', () => {
+      const state = createFreshState(50000);
+      state.strategies = [
+        {
+          id: 'test_strat',
+          name: 'Test Strategy',
+          asset: 'BTC',
+          kind: 'vwap_trend',
+          enabled: true,
+          maxAllocation: 0.3,
+          cooldownSec: 0,
+          tradesExecuted: 1,
+          totalPnl: -200,
+          realizedPnl: -200,
+          feesPaid: 10,
+          consecutiveLosses: 1,
+          maxConsecutiveLossesAllowed: 2,
+          params: {},
+        },
+      ];
+
+      // Create a position with stopLoss
+      const buyRes = executeOrder(state, mockMarkets as any, 'buy', 'BTC', 0.1, {
+        type: 'market',
+        stopLoss: 48000,
+        strategyName: 'Test Strategy',
+      });
+      expect(buyRes.ok).toBe(true);
+
+      // Market price drops to 47000 -> triggers stopLoss!
+      const dropMarkets: any = {
+        ...mockMarkets,
+        BTC: { ...mockMarkets.BTC, price: 47000 },
+      };
+
+      const check = checkPendingOrders(state, dropMarkets);
+      expect(check.triggeredBrackets.length).toBe(1);
+
+      const strat = state.strategies[0];
+      expect(strat.consecutiveLosses).toBe(2);
+      expect(strat.circuitBreakerTriggered).toBe(true);
+      expect(strat.enabled).toBe(false);
+      expect(strat.circuitBreakerReason).toMatch(/Auto-paused by Loss Sentinel/i);
+      expect(strat.quarantineActive).toBe(true);
+      expect(state.notifications.some((n) => n.title.includes('Circuit Breaker'))).toBe(true);
+    });
+
+    it('resets consecutive losses and deactivates quarantine mode upon profitable trade', () => {
+      const state = createFreshState(50000);
+      state.strategies = [
+        {
+          id: 'test_strat_win',
+          name: 'Winning Strategy',
+          asset: 'BTC',
+          kind: 'vwap_trend',
+          enabled: true,
+          maxAllocation: 0.3,
+          cooldownSec: 0,
+          tradesExecuted: 2,
+          totalPnl: -100,
+          realizedPnl: -100,
+          feesPaid: 10,
+          consecutiveLosses: 1,
+          quarantineActive: true,
+          params: {},
+        },
+      ];
+
+      // Create a position with takeProfit
+      const buyRes = executeOrder(state, mockMarkets as any, 'buy', 'BTC', 0.1, {
+        type: 'market',
+        takeProfit: 52000,
+        strategyName: 'Winning Strategy',
+      });
+      // Mark partialHarvested so the order executes full take-profit close
+      buyRes.order!.partialHarvested = true;
+
+      // Market rises to 53000 -> triggers takeProfit!
+      const riseMarkets: any = {
+        ...mockMarkets,
+        BTC: { ...mockMarkets.BTC, price: 53000 },
+      };
+
+      checkPendingOrders(state, riseMarkets);
+
+      const strat = state.strategies[0];
+      expect(strat.winCount).toBe(1);
+      expect(strat.consecutiveLosses).toBe(0);
+      expect(strat.quarantineActive).toBe(false);
+    });
   });
 });

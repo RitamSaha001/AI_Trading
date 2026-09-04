@@ -372,7 +372,22 @@ export function migrateState(rawState: any): AppState {
           ? rawState.settings.geminiModel
           : 'gemini-3.8-flash',
     },
-    notifications: Array.isArray(rawState.notifications) ? rawState.notifications.slice(0, 100) : base.notifications,
+    notifications: (() => {
+      const notifs = Array.isArray(rawState.notifications) ? [...rawState.notifications.slice(0, 100)] : [...base.notifications];
+      const rawOrders = Array.isArray(rawState.orders) ? rawState.orders : [];
+      if (rawOrders.length > 300) {
+        const archivedCount = rawOrders.length - 300;
+        const archiveNotif = {
+          id: `notif_archive_${Date.now()}`,
+          ts: Date.now(),
+          title: 'Order History Archived',
+          body: `Archived ${archivedCount} older orders for performance.`,
+          type: 'system' as const,
+        };
+        return [archiveNotif, ...notifs].slice(0, 100);
+      }
+      return notifs;
+    })(),
     timeframe: rawState.timeframe ?? '1D',
     selectedAsset: ASSETS.includes(rawState.selectedAsset) ? rawState.selectedAsset : 'BTC',
   };

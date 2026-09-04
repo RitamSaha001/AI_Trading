@@ -23,6 +23,7 @@ import { queryLocalQuantLLM, queryNexusDeterministicQuant, NexusQuantEngine } fr
 import { GeminiLLMProvider } from './domain/llmProvider';
 import { runAgentLoop, AgentTelemetry } from './domain/agentLoop';
 import { TradingDecision } from './domain/decision';
+import { decryptApiKey, isEncryptedApiKey } from './services/keyVault';
 import { buildStructuredMarketContext } from './domain/marketContext';
 import { MarketDataValidityGuard } from './domain/marketValidity';
 import { DEFAULT_RISK_POLICY, getRiskPolicy } from './domain/riskPolicy';
@@ -65,9 +66,18 @@ export function resolveGemini3Model(requestedModel?: string): string {
   return 'gemini-3.1-pro-preview';
 }
 
-export function resolveApiKey(customKey?: string): string {
+export async function resolveApiKey(customKey?: string): Promise<string> {
   const custom = customKey?.trim();
-  if (custom) return custom;
+  if (custom) {
+    if (isEncryptedApiKey(custom)) {
+      try {
+        return await decryptApiKey(custom);
+      } catch {
+        return '';
+      }
+    }
+    return custom;
+  }
   if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
     return (import.meta.env.VITE_GEMINI_API_KEY as string).trim();
   }
@@ -75,7 +85,7 @@ export function resolveApiKey(customKey?: string): string {
 }
 
 export async function listGeminiModels(customKey?: string): Promise<GeminiModel[]> {
-  const key = resolveApiKey(customKey);
+  const key = await resolveApiKey(customKey);
   if (!key) {
     return SUPPORTED_MODELS;
   }
@@ -159,7 +169,7 @@ export async function fetchAIInsight(
     : { s10: null, s30: null, rsi: 50, vol: 0.02, chg: 0, score: 0, signalLabel: 'Neutral' as const, bb: null, macd: null, ema20: null };
 
   const portfolioContext = buildContext(s, markets);
-  const key = resolveApiKey(s.settings.geminiApiKey);
+  const key = await resolveApiKey(s.settings.geminiApiKey);
 
   if (key) {
     try {
@@ -394,7 +404,7 @@ export async function sendAIChat(
   markets: Record<Asset, Market | undefined>,
   history: { role: 'user' | 'assistant'; text: string }[]
 ): Promise<ChatResponse> {
-  const key = resolveApiKey(s.settings.geminiApiKey);
+  const key = await resolveApiKey(s.settings.geminiApiKey);
 
   if (key) {
     try {

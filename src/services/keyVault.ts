@@ -354,3 +354,105 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
     lockVault();
   });
 }
+
+const DEVICE_KEY_STORAGE_KEY = 'lumen_device_entropy_v1';
+
+function getOrCreateDeviceSecret(): string {
+  const storage = getStorage();
+  let secret = storage.getItem(DEVICE_KEY_STORAGE_KEY);
+  if (!secret) {
+    const bytes = new Uint8Array(32);
+    if (globalThis.crypto?.getRandomValues) {
+      globalThis.crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < 32; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    secret = bytesToHex(bytes);
+    try {
+      storage.setItem(DEVICE_KEY_STORAGE_KEY, secret);
+    } catch {
+      // ignore
+    }
+  }
+  return secret;
+}
+
+export function isEncryptedApiKey(key?: string): boolean {
+  return typeof key === 'string' && key.startsWith('enc:v1:aes-gcm:');
+}
+
+/**
+ * Encrypts a sensitive string (like Gemini API key) using AES-GCM 256-bit encryption before persisting.
+ */
+export async function encryptApiKey(plaintext: string): Promise<string> {
+  if (!plaintext || typeof plaintext !== 'string') return '';
+  const trimmed = plaintext.trim();
+  if (!trimmed) return '';
+  if (isEncryptedApiKey(trimmed)) return trimmed;
+
+  try {
+    const secret = getOrCreateDeviceSecret();
+    const salt = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(salt);
+    const iv = new Uint8Array(12);
+    globalThis.crypto.getRandomValues(iv);
+
+    const key = await deriveKeyFromPassphrase(secret, salt);
+    const encoder = new TextEncoder();
+    const cipherBuffer = await globalThis.crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv as BufferSource },
+      key,
+      encoder.encode(trimmed)
+    );
+
+    const cipherHex = bytesToHex(new Uint8Array(cipherBuffer));
+    const saltHex = bytesToHex(salt);
+    const ivHex = bytesToHex(iv);
+
+    return `enc:v1:aes-gcm:${saltHex}:${ivHex}:${cipherHex}`;
+  } catch (err) {
+    console.warn('Failed to encrypt API key with AES-GCM:', err);
+    return trimmed;
+  }
+}
+
+/**
+ * Decrypts an encrypted API key ciphertext or returns the plain string as fallback.
+ */
+export async function decryptApiKey(ciphertextOrPlain?: string): Promise<string> {
+  if (!ciphertextOrPlain || typeof ciphertextOrPlain !== 'string') return '';
+  const val = ciphertextOrPlain.trim();
+  if (!val) return '';
+  if (!isEncryptedApiKey(val)) {
+    return val;
+  }
+
+  try {
+    const parts = val.split(':');
+    // Expected: enc:v1:aes-gcm:<saltHex>:<ivHex>:<cipherHex>
+    if (parts.length !== 6 || parts[0] !== 'enc' || parts[1] !== 'v1' || parts[2] !== 'aes-gcm') {
+      return val;
+    }
+    const saltHex = parts[3];
+    const ivHex = parts[4];
+    const cipherHex = parts[5];
+
+    const secret = getOrCreateDeviceSecret();
+    const salt = hexToBytes(saltHex);
+    const iv = hexToBytes(ivHex);
+    const cipherBytes = hexToBytes(cipherHex);
+
+    const key = await deriveKeyFromPassphrase(secret, salt);
+    const decryptedBuffer = await globalThis.crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv as BufferSource },
+      key,
+      cipherBytes as BufferSource
+    );
+
+    const decoder = new TextDecoder();
+    return decoder.decode(decryptedBuffer);
+  } catch (err) {
+    console.warn('Failed to decrypt API key with AES-GCM:', err);
+    return '';
+  }
+}

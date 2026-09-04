@@ -319,5 +319,99 @@ describe('Service: AI Safety Gate Verification', () => {
       expect(validation.valid).toBe(false);
       expect(validation.errors.some((e) => /Stale market data/i.test(e))).toBe(true);
     });
+
+    it('blocks smart_dca when asset feed is stale', () => {
+      const staleMarkets = {
+        ...mockMarkets,
+        BTC: { ...mockMarkets.BTC, lastUpdated: Date.now() - 60000 },
+      };
+      const proposal = {
+        type: 'smart_dca',
+        asset: 'BTC',
+        dcaPlan: { baseAmountUsd: 100 },
+      };
+      const validation = validateAIProposal(proposal, mockState, staleMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /Stale market data/i.test(e))).toBe(true);
+    });
+
+    it('blocks deploy_strategy when asset feed is stale', () => {
+      const staleMarkets = {
+        ...mockMarkets,
+        BTC: { ...mockMarkets.BTC, lastUpdated: Date.now() - 60000 },
+      };
+      const proposal = {
+        type: 'deploy_strategy',
+        asset: 'BTC',
+        strategyParams: { maxAllocation: 0.2 },
+      };
+      const validation = validateAIProposal(proposal, mockState, staleMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /Stale market data/i.test(e))).toBe(true);
+    });
+
+    it('blocks duplicate order even when varying size by 6% (within 10% threshold)', () => {
+      const stateWithPending: AppState = {
+        ...mockState,
+        orders: [
+          {
+            id: 'ord_open_1',
+            asset: 'ETH',
+            side: 'buy',
+            amount: 1.0,
+            price: 3000,
+            fee: 0,
+            notional: 3000,
+            auto: false,
+            status: 'pending',
+            type: 'market',
+            ts: Date.now(),
+          },
+        ],
+      };
+
+      // 1.06 ETH is a 6% variation of 1.0 ETH — should be blocked by 10% threshold
+      const proposal: AIActionProposal = {
+        type: 'order',
+        asset: 'ETH',
+        side: 'buy',
+        amount: 1.06,
+        orderType: 'market',
+        rationale: 'Duplicate bypass attempt',
+        confidence: 'high',
+        riskSummary: 'Duplicate',
+        requiresConfirmation: true,
+      };
+
+      const validation = validateAIProposal(proposal, stateWithPending, mockMarkets as any);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors.some((e) => /Duplicate order protection/i.test(e))).toBe(true);
+    });
+
+    it('rejects order proposals with NaN, Infinity, or negative amounts', () => {
+      const nanProposal = {
+        type: 'order',
+        asset: 'BTC',
+        side: 'buy',
+        amount: NaN,
+      };
+      expect(validateAIProposal(nanProposal, mockState, mockMarkets as any).valid).toBe(false);
+
+      const infProposal = {
+        type: 'order',
+        asset: 'BTC',
+        side: 'buy',
+        amount: Infinity,
+      };
+      expect(validateAIProposal(infProposal, mockState, mockMarkets as any).valid).toBe(false);
+
+      const negProposal = {
+        type: 'order',
+        asset: 'BTC',
+        side: 'buy',
+        amount: -0.5,
+      };
+      expect(validateAIProposal(negProposal, mockState, mockMarkets as any).valid).toBe(false);
+    });
   });
 });
