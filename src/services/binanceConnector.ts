@@ -324,7 +324,19 @@ export class BinanceConnector {
           continue;
         }
 
-        const responseJson = await res.json();
+        let responseJson: any = {};
+        if (typeof res.text === 'function') {
+          const responseText = await res.text();
+          try {
+            responseJson = responseText ? JSON.parse(responseText) : {};
+          } catch {
+            if (!res.ok) {
+              throw new BinanceNetworkError(`HTTP ${res.status}: ${res.statusText || 'Non-JSON response'}`);
+            }
+          }
+        } else if (typeof res.json === 'function') {
+          responseJson = await res.json();
+        }
 
         if (!res.ok) {
           const code = typeof responseJson.code === 'number' ? responseJson.code : -9999;

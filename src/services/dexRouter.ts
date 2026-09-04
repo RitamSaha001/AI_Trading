@@ -111,10 +111,10 @@ export function calculateDexQuote(req: DexQuoteRequest): DexQuote {
   // Gas estimation
   const config = WEB3_NETWORKS[network];
   const estimatedGasUnits = fromAsset === 'POL' || fromAsset === 'ETH' ? 95_000 : 135_000;
-  const gasGwei = network === 'polygon' ? 35 : 0.1; // Gwei per unit
+  const gasGwei = network === 'arbitrum' ? 0.1 : 35; // Gwei per unit
   const nativeDecimals = config.nativeCurrency.decimals;
   const estimatedGasFeeNative = (estimatedGasUnits * gasGwei * 1e9) / 10 ** nativeDecimals;
-  const nativePrice = marketPrices[config.nativeCurrency.symbol] || (network === 'polygon' ? 0.45 : 3200);
+  const nativePrice = marketPrices[config.nativeCurrency.symbol] || (network === 'arbitrum' ? 3200 : 0.45);
   const estimatedGasFeeUsd = estimatedGasFeeNative * nativePrice;
 
   // Route determination

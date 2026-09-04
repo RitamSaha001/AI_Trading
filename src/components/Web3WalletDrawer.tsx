@@ -555,15 +555,40 @@ export function Web3WalletDrawer({ open, onClose, onOpenUPI }: Props) {
 
                   <div className="flex items-center justify-between gap-2 bg-white/10 p-2.5 rounded-xl backdrop-blur-xs font-mono text-xs">
                     <span className="truncate">{web3Account?.address}</span>
-                    <button
-                      type="button"
-                      onClick={handleCopyAddress}
-                      className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-300 hover:text-white transition-colors shrink-0"
-                      title="Copy Address"
-                    >
-                      {copiedAddress ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowQr(!showQr)}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          showQr ? 'bg-white text-zinc-900' : 'hover:bg-white/10 text-zinc-300 hover:text-white'
+                        }`}
+                        title="Show Address QR Code"
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCopyAddress}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-300 hover:text-white transition-colors"
+                        title="Copy Address"
+                      >
+                        {copiedAddress ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
+
+                  {showQr && web3Account?.address && (
+                    <div className="p-3 bg-white rounded-xl text-center space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                      <img
+                        src={`https://quickchart.io/qr?text=${encodeURIComponent(web3Account.address)}&size=160&margin=1`}
+                        alt="EVM Address QR Code"
+                        className="w-36 h-36 mx-auto rounded-lg shadow-xs"
+                      />
+                      <p className="text-[10px] text-zinc-600 font-mono break-all px-2">
+                        {web3Account.address}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between pt-1 border-t border-white/10">
                     <div>

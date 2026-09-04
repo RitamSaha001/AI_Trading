@@ -37,13 +37,13 @@ const VALID_ROUTES: Route[] = ['/', '/markets', '/portfolio', '/orders', '/strat
 
 function parseRoute(): Route {
   if (typeof window === 'undefined') return '/';
-  if (window.location.hash && window.location.hash.startsWith('#/')) {
-    const h = window.location.hash.slice(1);
-    if (VALID_ROUTES.includes(h as Route)) return h as Route;
+  if (window.location.hash) {
+    const raw = window.location.hash.replace(/^#\/?/, '/');
+    const cleanHash = raw.split('?')[0].replace(/\/+$/, '') || '/';
+    if (VALID_ROUTES.includes(cleanHash as Route)) return cleanHash as Route;
   }
-  let p = window.location.pathname || '/';
-  if (p.includes('/AI_Trading')) p = p.replace('/AI_Trading', '');
-  p = p.replace(/\/+$/, '') || '/';
+  let p = (window.location.pathname || '/').replace(/\/AI_Trading/i, '');
+  p = p.split('?')[0].replace(/\/+$/, '') || '/';
   return (VALID_ROUTES.includes(p as Route) ? p : '/') as Route;
 }
 
@@ -63,10 +63,16 @@ export function useRoute() {
 
 export function go(path: Route) {
   try {
-    history.pushState({}, '', path);
+    const isGhPages = typeof window !== 'undefined' && /github\.io/i.test(window.location.hostname);
+    if (isGhPages) {
+      window.location.hash = '#' + path;
+      return;
+    }
+    const prefix = window.location.pathname.toLowerCase().includes('/ai_trading') ? '/AI_Trading' : '';
+    history.pushState({}, '', prefix + path);
     window.dispatchEvent(new PopStateEvent('popstate'));
   } catch {
-    window.location.hash = path;
+    window.location.hash = '#' + path;
   }
 }
 
