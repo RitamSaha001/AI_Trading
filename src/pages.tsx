@@ -3692,3 +3692,6 @@ export function SettingsPage() {
     </div>
   );
 }
+
+export { WalletPage } from './pages/WalletPage';
+

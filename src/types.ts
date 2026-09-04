@@ -339,11 +339,79 @@ export type ExchangeAccountInfo = {
   listenKey?: string;
 };
 
+export type WalletCurrency = 'USD' | 'INR' | 'EUR' | 'GBP';
+export type PaymentMethodType = 'card' | 'upi' | 'bank_transfer';
+
+export type SavedPaymentMethod = {
+  id: string;
+  type: PaymentMethodType;
+  label: string;
+  last4?: string;
+  brand?: 'visa' | 'mastercard' | 'rupay' | 'amex' | 'discover' | 'unknown';
+  vpa?: string;
+  bankName?: string;
+  createdAt: number;
+  isDefault: boolean;
+};
+
+export type WalletTransactionType =
+  | 'deposit'
+  | 'withdrawal'
+  | 'allocate_to_trading'
+  | 'recall_from_trading'
+  | 'swap_crypto';
+
+export type WalletTransactionStatus = 'completed' | 'processing' | 'failed' | 'cancelled';
+
+export type WalletTransaction = {
+  id: string;
+  timestamp: number;
+  type: WalletTransactionType;
+  amount: number;
+  currency: WalletCurrency;
+  amountUSD: number;
+  status: WalletTransactionStatus;
+  method: PaymentMethodType | 'internal_transfer';
+  description: string;
+  txHash: string;
+  paymentDetails?: {
+    cardBrand?: string;
+    cardLast4?: string;
+    upiVpa?: string;
+    referenceNumber?: string;
+  };
+  failureReason?: string;
+};
+
+export type NativeWalletSecurity = {
+  pinConfigured: boolean;
+  pinHash?: string;
+  requirePinForWithdrawal: boolean;
+  requirePinForAllocation: boolean;
+  dailyDepositLimitUSD: number;
+  dailyWithdrawLimitUSD: number;
+};
+
+export type NativeWalletState = {
+  walletId: string;
+  currency: WalletCurrency;
+  balanceUSD: number;
+  allocatedToTradingUSD: number;
+  totalDepositedUSD: number;
+  totalWithdrawnUSD: number;
+  savedPaymentMethods: SavedPaymentMethod[];
+  transactions: WalletTransaction[];
+  security: NativeWalletSecurity;
+  createdAt: number;
+  lastActiveAt: number;
+};
+
 export type AppState = {
   schemaVersion: number;
   accountMode?: AccountMode;
   exchangeAccount?: ExchangeAccountInfo;
   exchangeOrders?: Order[];
+  wallet?: NativeWalletState;
   cash: number;
   reservedCash?: number;
   reservedPositions?: Partial<Record<Asset, number>>;
@@ -364,3 +432,4 @@ export type AppState = {
   timeframe: Timeframe;
   selectedAsset: Asset;
 };
+

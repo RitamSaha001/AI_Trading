@@ -24,13 +24,14 @@ import {
   VolumeX,
   Menu,
   Coins,
+  Wallet,
 } from 'lucide-react';
 import { money, portfolioValue, totalPortfolioPnl } from './trading';
 import { senseMarketDanger } from './domain/agentic';
 
-export type Route = '/' | '/markets' | '/portfolio' | '/orders' | '/strategies' | '/alerts' | '/settings';
+export type Route = '/' | '/markets' | '/portfolio' | '/orders' | '/strategies' | '/alerts' | '/wallet' | '/settings';
 
-const VALID_ROUTES: Route[] = ['/', '/markets', '/portfolio', '/orders', '/strategies', '/alerts', '/settings'];
+const VALID_ROUTES: Route[] = ['/', '/markets', '/portfolio', '/orders', '/strategies', '/alerts', '/wallet', '/settings'];
 
 function parseRoute(): Route {
   if (typeof window === 'undefined') return '/';
@@ -89,6 +90,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     exchangeDrawerOpen,
     openExchangeDrawer,
     closeExchangeDrawer,
+    nativeWallet,
   } = useLumen();
   const route = useRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -118,6 +120,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { path: '/orders', label: 'Orders', icon: ArrowLeftRight },
     { path: '/strategies', label: 'Strategies', icon: Cpu },
     { path: '/alerts', label: 'Alerts', icon: Bell },
+    { path: '/wallet', label: 'Wallet', icon: Wallet },
   ] as const;
 
   const mobileBottomNav = [
@@ -125,7 +128,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { path: '/markets', label: 'Markets', icon: BarChart3 },
     { path: '/orders', label: 'Trade', icon: ArrowLeftRight },
     { path: '/portfolio', label: 'Portfolio', icon: Briefcase },
-    { path: '/strategies', label: 'Strategies', icon: Cpu },
+    { path: '/wallet', label: 'Wallet', icon: Wallet },
   ] as const;
 
   const unreadAlerts = state.alerts.filter((a) => a.enabled && !a.triggered).length;
@@ -362,6 +365,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </button>
               )}
             </div>
+
+            {/* Sovereign Wallet Quick Pill */}
+            <button
+              type="button"
+              onClick={() => go('/wallet')}
+              className={`px-2.5 py-1 text-[11px] font-semibold rounded-full border transition-all flex items-center gap-1.5 ${
+                route === '/wallet'
+                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                  : 'bg-indigo-50/80 hover:bg-indigo-100 border-indigo-200/80 text-indigo-900'
+              }`}
+              title="Open Sovereign Fiat & Web3 Wallet"
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Wallet:</span>
+              <span className="font-mono font-bold">${nativeWallet.balanceUSD.toFixed(2)}</span>
+            </button>
 
             {/* Quick Start Visual Guide Trigger */}
             <button

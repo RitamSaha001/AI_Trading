@@ -1,9 +1,10 @@
 import { AppState, ASSETS, Asset, StrategyConfig } from './types';
 import { META } from './domain/portfolio';
+import { createDefaultWallet } from './domain/wallet';
 
-export const SCHEMA_VERSION = 6;
-const STORAGE_KEY = 'lumen_cockpit_state_v6';
-const LEGACY_STORAGE_KEY = 'lumen_cockpit_state_v5';
+export const SCHEMA_VERSION = 7;
+const STORAGE_KEY = 'lumen_cockpit_state_v7';
+const LEGACY_STORAGE_KEY = 'lumen_cockpit_state_v6';
 
 export type SimulationMode = 'clean' | 'seeded';
 
@@ -232,6 +233,7 @@ export function freshState(customCash = 50000, mode: SimulationMode = 'clean'): 
   return {
     schemaVersion: SCHEMA_VERSION,
     accountMode: 'paper',
+    wallet: createDefaultWallet(),
     cash: customCash,
     initialCash: customCash,
     startingEquity,
@@ -309,6 +311,7 @@ export function migrateState(rawState: any): AppState {
     accountMode: rawState.accountMode === 'exchange' ? 'exchange' : 'paper',
     exchangeAccount: rawState.exchangeAccount || undefined,
     exchangeOrders: Array.isArray(rawState.exchangeOrders) ? rawState.exchangeOrders : [],
+    wallet: rawState.wallet && typeof rawState.wallet === 'object' ? rawState.wallet : base.wallet,
     cash: typeof rawState.cash === 'number' && Number.isFinite(rawState.cash) ? rawState.cash : base.cash,
     initialCash: typeof rawState.initialCash === 'number' ? rawState.initialCash : base.initialCash,
     startingEquity: typeof rawState.startingEquity === 'number' && rawState.startingEquity > 0

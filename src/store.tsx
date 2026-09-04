@@ -15,7 +15,21 @@ import {
   ExecutionReceipt,
   AccountMode,
   ExchangeAccountInfo,
+  NativeWalletState,
+  WalletCurrency,
+  PaymentMethodType,
+  WalletTransaction,
+  SavedPaymentMethod,
+  NativeWalletSecurity,
 } from './types';
+import {
+  createDefaultWallet,
+  depositFunds,
+  withdrawFunds,
+  allocateToTrading,
+  recallFromTrading,
+  swapWalletToCrypto,
+} from './domain/wallet';
 import { fetchAll, fetchMarket, MarketStreamService } from './services/market';
 import {
   executeOrder,
@@ -113,6 +127,27 @@ type Ctx = {
   connectExchange: (creds: ExchangeCredentials, passphrase: string) => Promise<{ ok: boolean; error?: string; audit?: any }>;
   disconnectExchange: () => void;
   syncExchangeBalances: () => Promise<void>;
+  nativeWallet: NativeWalletState;
+  depositToWallet: (
+    amount: number,
+    currency: WalletCurrency,
+    method: PaymentMethodType,
+    paymentDetails?: WalletTransaction['paymentDetails'],
+    description?: string
+  ) => Promise<void>;
+  withdrawFromWallet: (
+    amount: number,
+    currency: WalletCurrency,
+    method: PaymentMethodType,
+    destinationDetails?: WalletTransaction['paymentDetails'],
+    pin?: string
+  ) => Promise<void>;
+  allocateWalletToTrading: (amountUSD: number) => Promise<void>;
+  recallTradingToWallet: (amountUSD: number) => Promise<void>;
+  swapWalletCrypto: (asset: Asset, amountUSD: number) => Promise<{ units: number; feeUSD: number }>;
+  savePaymentMethod: (method: SavedPaymentMethod) => void;
+  deletePaymentMethod: (id: string) => void;
+  updateWalletSecurity: (security: Partial<NativeWalletSecurity>) => void;
 };
 
 const Context = createContext<Ctx | null>(null);
@@ -341,6 +376,218 @@ export function Provider({ children }: { children: React.ReactNode }) {
       triggerToast('Sync Failed', e?.message || 'Could not fetch exchange balances', 'warn');
     }
   }, [triggerToast]);
+
+  const nativeWallet: NativeWalletState = useMemo(() => {
+    return state.wallet || createDefaultWallet();
+  }, [state.wallet]);
+
+  const depositToWallet = useCallback(
+    async (
+      amount: number,
+      currency: WalletCurrency,
+      method: PaymentMethodType,
+      paymentDetails?: WalletTransaction['paymentDetails'],
+      description?: string
+    ) => {
+      try {
+        const currentWallet = stateRef.current.wallet || createDefaultWallet();
+        const updated = await depositFunds(
+          currentWallet,
+          amount,
+          currency,
+          method,
+          paymentDetails,
+          description
+        );
+        setState((s) => ({ ...s, wallet: updated }));
+        playChime('success');
+        triggerToast(
+          'Deposit Confirmed',
+          `Credited ${amount} ${currency} to Sovereign Wallet.`,
+          'success'
+        );
+      } catch (e: any) {
+        triggerToast('Deposit Failed', e?.message || 'Transaction rejected', 'warn');
+        throw e;
+      }
+    },
+    [triggerToast]
+  );
+
+  const withdrawFromWallet = useCallback(
+    async (
+      amount: number,
+      currency: WalletCurrency,
+      method: PaymentMethodType,
+      destinationDetails?: WalletTransaction['paymentDetails'],
+      pin?: string
+    ) => {
+      try {
+        const currentWallet = stateRef.current.wallet || createDefaultWallet();
+        const updated = await withdrawFunds(
+          currentWallet,
+          amount,
+          currency,
+          method,
+          destinationDetails,
+          pin
+        );
+        setState((s) => ({ ...s, wallet: updated }));
+        playChime('success');
+        triggerToast(
+          'Withdrawal Dispatched',
+          `Transferred ${amount} ${currency} to your destination.`,
+          'success'
+        );
+      } catch (e: any) {
+        triggerToast('Withdrawal Failed', e?.message || 'Withdrawal rejected', 'warn');
+        throw e;
+      }
+    },
+    [triggerToast]
+  );
+
+  const allocateWalletToTrading = useCallback(
+    async (amountUSD: number) => {
+      try {
+        const currentWallet = stateRef.current.wallet || createDefaultWallet();
+        const { updatedWallet, updatedTradingCash } = await allocateToTrading(
+          currentWallet,
+          stateRef.current.cash,
+          amountUSD
+        );
+        setState((s) => ({ ...s, wallet: updatedWallet, cash: updatedTradingCash }));
+        playChime('trade');
+        triggerToast(
+          'Capital Allocated',
+          `Allocated $${amountUSD.toFixed(2)} to Trading Desk cash.`,
+          'success'
+        );
+      } catch (e: any) {
+        triggerToast('Allocation Failed', e?.message || 'Could not allocate capital', 'warn');
+        throw e;
+      }
+    },
+    [triggerToast]
+  );
+
+  const recallTradingToWallet = useCallback(
+    async (amountUSD: number) => {
+      try {
+        const currentWallet = stateRef.current.wallet || createDefaultWallet();
+        const { updatedWallet, updatedTradingCash } = await recallFromTrading(
+          currentWallet,
+          stateRef.current.cash,
+          amountUSD
+        );
+        setState((s) => ({ ...s, wallet: updatedWallet, cash: updatedTradingCash }));
+        playChime('trade');
+        triggerToast(
+          'Capital Recalled',
+          `Recalled $${amountUSD.toFixed(2)} from Trading Desk to Sovereign Wallet.`,
+          'info'
+        );
+      } catch (e: any) {
+        triggerToast('Recall Failed', e?.message || 'Could not recall capital', 'warn');
+        throw e;
+      }
+    },
+    [triggerToast]
+  );
+
+  const swapWalletCrypto = useCallback(
+    async (asset: Asset, amountUSD: number) => {
+      try {
+        const currentWallet = stateRef.current.wallet || createDefaultWallet();
+        const price = marketsRef.current[asset]?.price || 0;
+        if (price <= 0) throw new Error(`Market price for ${asset} is currently unavailable.`);
+
+        const { updatedWallet, units, feeUSD } = await swapWalletToCrypto(
+          currentWallet,
+          asset,
+          amountUSD,
+          price
+        );
+
+        setState((s) => {
+          const curUnits = s.positions[asset] || 0;
+          const newUnits = curUnits + units;
+          const curAvg = s.avgBuyPrice[asset] || price;
+          const newAvg = (curUnits * curAvg + units * price) / (newUnits || 1);
+
+          return {
+            ...s,
+            wallet: updatedWallet,
+            positions: { ...s.positions, [asset]: newUnits },
+            avgBuyPrice: { ...s.avgBuyPrice, [asset]: newAvg },
+            totalFees: s.totalFees + feeUSD,
+          };
+        });
+
+        playChime('trade');
+        triggerToast(
+          'Swap Executed',
+          `Swapped $${amountUSD.toFixed(2)} for ${units.toFixed(4)} ${asset}.`,
+          'success'
+        );
+        return { units, feeUSD };
+      } catch (e: any) {
+        triggerToast('Swap Failed', e?.message || 'Could not execute crypto swap', 'warn');
+        throw e;
+      }
+    },
+    [triggerToast]
+  );
+
+  const savePaymentMethod = useCallback(
+    (method: SavedPaymentMethod) => {
+      setState((s) => {
+        const currentWallet = s.wallet || createDefaultWallet();
+        const methods = [
+          ...currentWallet.savedPaymentMethods.filter((m) => m.id !== method.id),
+          method,
+        ];
+        return {
+          ...s,
+          wallet: { ...currentWallet, savedPaymentMethods: methods },
+        };
+      });
+      triggerToast('Payment Method Saved', `Stored ${method.label} in local encrypted vault.`, 'success');
+    },
+    [triggerToast]
+  );
+
+  const deletePaymentMethod = useCallback(
+    (id: string) => {
+      setState((s) => {
+        const currentWallet = s.wallet || createDefaultWallet();
+        const methods = currentWallet.savedPaymentMethods.filter((m) => m.id !== id);
+        return {
+          ...s,
+          wallet: { ...currentWallet, savedPaymentMethods: methods },
+        };
+      });
+      triggerToast('Payment Method Removed', 'Card/VPA deleted from device storage.', 'info');
+    },
+    [triggerToast]
+  );
+
+  const updateWalletSecurity = useCallback(
+    (sec: Partial<NativeWalletSecurity>) => {
+      setState((s) => {
+        const currentWallet = s.wallet || createDefaultWallet();
+        return {
+          ...s,
+          wallet: {
+            ...currentWallet,
+            security: { ...currentWallet.security, ...sec },
+          },
+        };
+      });
+      triggerToast('Security Settings Updated', 'Wallet protection policies calibrated.', 'info');
+    },
+    [triggerToast]
+  );
 
   useEffect(() => {
     const unsub = onVaultLock(() => {
@@ -1447,6 +1694,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
       connectExchange,
       disconnectExchange,
       syncExchangeBalances,
+      nativeWallet,
+      depositToWallet,
+      withdrawFromWallet,
+      allocateWalletToTrading,
+      recallTradingToWallet,
+      swapWalletCrypto,
+      savePaymentMethod,
+      deletePaymentMethod,
+      updateWalletSecurity,
     }),
     [
       state,
@@ -1503,6 +1759,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
       connectExchange,
       disconnectExchange,
       syncExchangeBalances,
+      nativeWallet,
+      depositToWallet,
+      withdrawFromWallet,
+      allocateWalletToTrading,
+      recallTradingToWallet,
+      swapWalletCrypto,
+      savePaymentMethod,
+      deletePaymentMethod,
+      updateWalletSecurity,
     ]
   );
 
