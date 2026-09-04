@@ -313,17 +313,10 @@ describe('Server-Side Live Binance Execution Architecture', () => {
   describe('Unknown Outcome & Network Timeout Handling', () => {
     it('transitions to UNKNOWN on ambiguous timeout and settles when confirmed filled on Binance', async () => {
       await BinanceGateway.saveExchangeCredentials(userId, {
-        apiKey: 'mock_timeout_key',
+        apiKey: 'mock_timeout_found',
         apiSecret: 'mock_secret',
         environment: 'testnet',
       });
-
-      const db = getDb();
-      const encKey = BinanceGateway.encryptSecret('mock_rec_found');
-      await db.execute(
-        `UPDATE exchange_accounts SET api_key_encrypted = ?, iv = ?, tag = ? WHERE user_id = ?`,
-        [encKey.ciphertext, encKey.iv, encKey.tag, userId]
-      );
 
       const order = await BinanceGateway.submitOrder({
         userId,
@@ -343,21 +336,14 @@ describe('Server-Side Live Binance Execution Architecture', () => {
     });
 
     it('releases reservations when network timeout occurs and exchange confirms order does NOT exist', async () => {
-      const db = getDb();
       const initialSummary = await LedgerService.getAuthoritativeProjection(userId, 'live');
       const startAvailable = initialSummary.cash.available;
 
       await BinanceGateway.saveExchangeCredentials(userId, {
-        apiKey: 'mock_timeout_key',
+        apiKey: 'mock_timeout_not_found',
         apiSecret: 'mock_secret',
         environment: 'testnet',
       });
-
-      const encKey = BinanceGateway.encryptSecret('mock_rec_not_found');
-      await db.execute(
-        `UPDATE exchange_accounts SET api_key_encrypted = ?, iv = ?, tag = ? WHERE user_id = ?`,
-        [encKey.ciphertext, encKey.iv, encKey.tag, userId]
-      );
 
       const order = await BinanceGateway.submitOrder({
         userId,

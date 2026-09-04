@@ -973,7 +973,11 @@ export class BinanceGateway {
     const creds = await this.getCredentials(input.userId);
 
     // Mock testing hooks
-    if (creds?.apiKey === 'mock_timeout_key') {
+    if (
+      creds?.apiKey === 'mock_timeout_key' ||
+      creds?.apiKey === 'mock_timeout_found' ||
+      creds?.apiKey === 'mock_timeout_not_found'
+    ) {
       throw new Error('ETIMEDOUT: Connection timed out');
     }
     if (creds?.apiKey === 'mock_reject_key') {
@@ -1062,7 +1066,7 @@ export class BinanceGateway {
       if (!creds) return { found: false, notFoundConfirmed: false };
 
       // Test hooks
-      if (creds.apiKey === 'mock_rec_found') {
+      if (creds.apiKey === 'mock_rec_found' || creds.apiKey === 'mock_timeout_found') {
         return {
           found: true,
           status: 'FILLED',
@@ -1071,7 +1075,7 @@ export class BinanceGateway {
           avgPrice: 50000,
         };
       }
-      if (creds.apiKey === 'mock_rec_not_found') {
+      if (creds.apiKey === 'mock_rec_not_found' || creds.apiKey === 'mock_timeout_not_found') {
         return {
           found: false,
           notFoundConfirmed: true,
