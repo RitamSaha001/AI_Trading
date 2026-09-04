@@ -37,7 +37,7 @@ type Ctx = {
   currentDataSource: DataSource;
   ai: any;
   aiLoading: boolean;
-  chatHistory: { role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string }[];
+  chatHistory: { role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string; telemetry?: any; decision?: any }[];
   chatLoading: boolean;
   chatOpen: boolean;
   prefilledChatPrompt: string;
@@ -151,11 +151,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
     setPrefilledChatPrompt('');
   }, []);
 
-  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string }[]>([
+  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string; telemetry?: any; decision?: any }[]>([
     {
       role: 'assistant',
-      text: "Welcome to **Lumen Nexus**—your autonomous agentic trading intelligence. I analyze quantitative indicators (SMA/EMA ribbons, RSI, Bollinger Bands, ATR, VWAP), stress-test portfolios, synthesize algorithmic strategy bots, and execute mathematical capital allocation. Click the **`+`** icon below to launch any capability, or ask me directly.",
-      engine: 'Deterministic Algorithmic Engine (Local Mode)',
+      text: "Welcome to **Lumen Nexus**—your institutional quantitative trading intelligence. I analyze quantitative indicators (SMA/EMA ribbons, RSI, Bollinger Bands, ATR, VWAP), stress-test portfolios, synthesize algorithmic strategy bots, and execute mathematical capital allocation. Click the **`+`** icon below to launch any capability, or ask me directly.",
+      engine: 'Nexus Deterministic Quant Engine (Local Offline Mode)',
     },
   ]);
   const [activeToast, setActiveToast] = useState<{ id: string; title: string; message: string; type: 'success' | 'info' | 'warn' } | null>(null);
@@ -681,13 +681,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
       setChatLoading(true);
 
       try {
-        const { reply, actionProposal, engine } = await sendAIChat(
+        const { reply, actionProposal, engine, telemetry, decision } = await sendAIChat(
           text,
           stateRef.current,
           marketsRef.current,
           updated
         );
-        setChatHistory((h) => [...h, { role: 'assistant', text: reply, actionProposal, engine }]);
+        setChatHistory((h) => [...h, { role: 'assistant', text: reply, actionProposal, engine, telemetry, decision }]);
       } catch (err: any) {
         setChatHistory((h) => [
           ...h,
@@ -725,7 +725,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
     const preRisk = calculatePortfolioRisk(stateRef.current, marketsRef.current);
 
     if (proposal.type === 'order') {
-      const res = order(proposal.side || 'buy', proposal.asset, proposal.amount || 0.05, {
+      const amt = proposal.amount;
+      if (typeof amt !== 'number' || !Number.isFinite(amt) || amt <= 0) {
+        return { ok: false, error: 'Order execution rejected: proposal has invalid or zero quantity.' };
+      }
+      const res = order(proposal.side || 'buy', proposal.asset, amt, {
         auto: false,
         strategyName: 'Lumen Nexus Recommendation',
       });

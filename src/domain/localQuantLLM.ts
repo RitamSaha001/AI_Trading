@@ -17,6 +17,10 @@ import {
   simulatePortfolioStressTest,
   calculateAgenticAllocation,
 } from './agentic';
+import { MarketDataValidityGuard } from './marketValidity';
+import { calculateRiskBasedPositionSize } from './positionSizing';
+import { getRiskPolicy } from './riskPolicy';
+import { validateAIProposal } from '../services/safetyGate';
 
 export interface LocalLLMResult {
   reply: string;
@@ -24,17 +28,14 @@ export interface LocalLLMResult {
   engine: string;
 }
 
-const ENGINE_LABEL = 'Nexus Local Quantitative LLM (Autonomous Neural Fallback)';
+export const ENGINE_LABEL = 'Nexus Deterministic Quant Engine (Local Quantitative LLM Offline Fallback)';
 
 /**
- * Ultra-Large Local Quantitative Financial, Crypto & Conversational LLM Engine.
- * Operates completely in-browser without external API dependencies.
- * Capable of:
- * 1. Autonomous multi-step Agentic Workflows (decomposing goals into audit, sizing, execution & sentinel tracking).
- * 2. Natural human conversational dialogue (greetings, trader psychology, ELI5 explanations, philosophy, humor).
- * 3. Institutional quantitative market microstructure & derivatives mathematics with KaTeX LaTeX.
+ * Nexus Deterministic Quantitative Financial & Crypto Analysis Engine.
+ * Operates offline without external neural network API dependencies as a high-fidelity fallback.
+ * Uses deterministic mathematical models, KaTeX LaTeX formulas, and quantitative risk sentinels.
  */
-export function queryLocalQuantLLM(
+export function queryNexusDeterministicQuant(
   prompt: string,
   state: AppState,
   markets: Record<Asset, Market | undefined>
@@ -43,6 +44,7 @@ export function queryLocalQuantLLM(
   const rawPrompt = prompt.trim();
   const pv = portfolioValue(state, markets);
   const rk = calculatePortfolioRisk(state, markets);
+  const policy = getRiskPolicy(state);
   const selectedAsset = state.selectedAsset;
 
   // Detect mentioned assets from query with strict word boundaries
@@ -59,9 +61,10 @@ export function queryLocalQuantLLM(
     ? indicators(primaryMarket.history, primaryMarket.candles)
     : { s10: null, s30: null, rsi: 50, vol: 0.02, chg: 0, score: 0, signalLabel: 'Neutral' as const, bb: null, macd: null, ema20: null, atr: 10 };
 
-  const spot = primaryMarket?.price || 100;
+  const spot = primaryMarket?.price;
+  const spotVal = spot || 0;
   const chg = primaryMarket?.change24h || 0;
-  const atr = primaryInd.atr || spot * 0.02;
+  const atr = primaryInd.atr || (spot ? spot * 0.02 : 10);
   const cashBufferPct = ((state.cash / Math.max(1, pv)) * 100).toFixed(1);
 
   // =========================================================================
@@ -85,7 +88,7 @@ export function queryLocalQuantLLM(
     const alphaComp = compareTokensAlpha(['BTC', 'ETH', 'SOL', 'AVAX'] as Asset[], markets);
     const rebalancePlan = calculateAgenticAllocation(state, markets, 'risk_parity');
     const topAlpha = alphaComp.topAlphaAsset;
-    const topAlphaPrice = markets[topAlpha]?.price || 100;
+    const topAlphaPrice = markets[topAlpha]?.price;
 
     // Determine highest-priority immediate actionable proposal
     let immediateProposal: AIActionProposal;
@@ -107,7 +110,7 @@ export function queryLocalQuantLLM(
             asset: rk.topAsset || primaryAsset,
             action: 'sell',
             amount: 0.1,
-            estimatedPrice: spot,
+            estimatedPrice: spotVal,
             estimatedNotional: +(pv * 0.1).toFixed(2),
           },
         ],
@@ -582,7 +585,7 @@ Review and authorize the emergency capital defense reallocation below to secure 
           asset: rk.topAsset || primaryAsset,
           action: 'sell' as const,
           amount: 0.1,
-          estimatedPrice: spot,
+          estimatedPrice: spotVal,
           estimatedNotional: +(pv * 0.1).toFixed(2),
         },
       ],
@@ -604,12 +607,12 @@ Review and authorize the emergency capital defense reallocation below to secure 
     q.includes('basis trade') ||
     q.includes('open interest')
   ) {
-    const btcSpot = markets.BTC?.price || 62500;
+    const btcSpotStr = markets.BTC?.price ? `$${markets.BTC.price.toLocaleString()}` : '[Feed Unavailable]';
     const reply = `### 📊 Perpetual Swaps & Funding Rate Microstructure
 
 In crypto derivatives markets, perpetual futures contracts have no fixed expiry. Exchanges anchor contract mark price ($P_{\\text{perp}}$) to spot index price ($P_{\\text{spot}}$) via periodic 8-hour **Funding Rate** payments:
 
-- **Spot BTC Benchmark**: $\\$${btcSpot.toLocaleString()}$
+- **Spot BTC Benchmark**: ${btcSpotStr}
 - **Current Funding Rate**: $+0.0100\\%$ per 8h ($+10.95\\%$ annualized basis)
 - **Market Sentiment Bias**: \`Mild Bullish Premium\`
 
@@ -648,11 +651,12 @@ When funding rates exceed $+0.08\\%$ ($>87\\%$ APR), funding fatigue typically i
     q.includes('searcher') ||
     (q.includes('market maker') && q.includes('extract'))
   ) {
+    const btcSpotStr = markets.BTC?.price ? `$${markets.BTC.price.toLocaleString()}` : '[Feed Unavailable]';
     const reply = `### ⚡ Market Microstructure: MEV, Sandwich Attacks & Order Flow
 
 Maximal Extractable Value (MEV) represents the excess value extracted by searchers, block builders, and validators through transaction reordering, insertion, and censorship in the public mempool:
 
-- **BTC Benchmark Spot**: $\\$${(markets.BTC?.price || 62500).toLocaleString()}$
+- **BTC Benchmark Spot**: ${btcSpotStr}
 - **Average Mempool Latency**: $\\approx 12\\text{s}$ block time
 - **Toxic Flow Arbitrage Metric**: Loss-Versus-Rebalancing (LVR)
 
@@ -695,12 +699,12 @@ Where $\\sigma$ is the asset price volatility and $V_t$ is pool TVL. High volati
     q.includes('greeks') ||
     q.includes('put-call')
   ) {
-    const btcSpot = markets.BTC?.price || 62500;
+    const btcSpotStr = markets.BTC?.price ? `$${markets.BTC.price.toLocaleString()}` : '[Feed Unavailable]';
     const reply = `### 📈 Options Volatility Surface & Institutional Skew Analysis
 
 In derivatives markets, options pricing surfaces reveal forward-looking risk premia and institutional downside hedging demand that cannot be seen on spot charts:
 
-- **Underlying Index Spot**: $\\$${btcSpot.toLocaleString()}$
+- **Underlying Index Spot**: ${btcSpotStr}
 - **30-Day Realized Volatility**: $\\sigma_{\\text{real}} \\approx ${(primaryInd.vol * Math.sqrt(365) * 100).toFixed(1)}\\%$
 - **Market Skew Regime**: \`Elevated Tail-Risk Hedging\`
 
@@ -732,12 +736,12 @@ Institutions execute delta-neutral short volatility strategies (e.g. straddles/i
     (q.includes('staking') && (q.includes('lending') || q.includes('aave') || q.includes('compound') || q.includes('lst') || q.includes('risk'))) ||
     q.includes('staking vs lending')
   ) {
-    const ethSpot = markets.ETH?.price || 3150;
+    const ethSpotStr = markets.ETH?.price ? `$${markets.ETH.price.toLocaleString()}` : '[Feed Unavailable]';
     const reply = `### ⚖️ Risk-Return Decomposition: Liquid Staking (LST) vs DeFi Lending
 
 Comparing yield architecture and tail-risk failure modes between Liquid Staking (e.g., Lido, Jito) and Collateralized Lending (e.g., Aave, Compound):
 
-- **ETH Spot Benchmark**: $\\$${ethSpot.toLocaleString()}$
+- **ETH Spot Benchmark**: ${ethSpotStr}
 - **Current Consensus Base Yield**: $\\approx 3.4\\% \\text{ APR}$
 - **Aave Prime Lending APY**: $\\approx 2.1\\% \\text{ APY}$
 
@@ -830,12 +834,12 @@ ${
     q.includes('blob') ||
     q.includes('eip-4844')
   ) {
-    const ethSpot = markets.ETH?.price || 3150;
+    const ethSpotStr = markets.ETH?.price ? `$${markets.ETH.price.toLocaleString()}` : '[Feed Unavailable]';
     const reply = `### ⛓️ Layer-2 Rollup Microeconomics & Proof Mechanics
 
 Layer-2 rollups scale throughput by executing transactions off-chain and posting compressed transaction batches and state roots to Ethereum Layer-1:
 
-- **ETH Settlement Layer Spot**: $\\$${ethSpot.toLocaleString()}$
+- **ETH Settlement Layer Spot**: ${ethSpotStr}
 - **Blob Base Fee**: $\\approx 1.0\\text{ Gwei}$ (EIP-4844 Data Availability)
 - **Batch Finality Multiplier**: $\\approx 1500\\times$ gas compression
 
@@ -867,12 +871,12 @@ Because ZK rollups achieve mathematical finality via validity proofs, capital br
     (q.includes('uniswap') && (q.includes('v2') || q.includes('v3') || q.includes('amm') || q.includes('invariant'))) ||
     q.includes('amm')
   ) {
-    const ethSpot = markets.ETH?.price || 3150;
+    const ethSpotStr = markets.ETH?.price ? `$${markets.ETH.price.toLocaleString()}` : '[Feed Unavailable]';
     const reply = `### ⚡ Automated Market Makers: Uniswap v2 vs v3 & Impermanent Loss
 
 Decentralized AMMs eliminate order books using deterministic mathematical bonding curves:
 
-- **ETH Benchmark Pool Spot**: $\\$${ethSpot.toLocaleString()}$
+- **ETH Benchmark Pool Spot**: ${ethSpotStr}
 - **Impermanent Loss Parameter**: $k_p = P_t / P_0$
 - **Concentrated Bounds**: $[p_a, p_b]$
 
@@ -908,12 +912,16 @@ In high-volatility sideways markets, concentrated v3 ranges maximize fee velocit
     (q.includes('m2') && q.includes('liquidity')) ||
     (q.includes('macro') && (q.includes('cycle') || q.includes('bitcoin') || q.includes('btc') || q.includes('rate')))
   ) {
-    const btcSpot = markets.BTC?.price || 62500;
+    const btcP = markets.BTC?.price;
+    const btcSpotStr = btcP ? `$${btcP.toLocaleString()}` : '[Feed Unavailable]';
+    const minerSellPressure = btcP
+      ? `At $\\$${btcP.toLocaleString()}$, this represents only $\\approx \\$${((450 * btcP) / 1000000).toFixed(2)}\\text{M}/\\text{day}$ in new structural sell pressure from miners, amplifying spot ETF inflows.`
+      : `At current market levels, structural miner issuance represents minimal daily sell pressure relative to spot ETF inflows.`;
     const reply = `### 🌐 Macroeconomic Regime & Bitcoin Halving Supply Inelasticity
 
 Cryptocurrency asset valuations sit at the nexus of global fiat monetary liquidity and algorithmic supply schedules:
 
-- **Spot BTC Quote**: $\\$${btcSpot.toLocaleString()}$
+- **Spot BTC Quote**: ${btcSpotStr}
 - **Global M2 Liquidity Metric**: $\\approx \\$104.5\\text{ Trillion}$
 - **Correlation Factor**: $\\rho \\approx 0.78$
 
@@ -924,7 +932,7 @@ When major central banks expand their balance sheets, capital spills out across 
 #### 2. Halving Supply Inelasticity & Issuance
 Every 210,000 blocks (~4 years), the Bitcoin **Block Reward** reduces by $50\\%$:
 $$\\text{Daily BTC Issuance} = 144 \\cdot \\text{Block Reward} = 144 \\cdot 3.125 = 450 \\text{ BTC/day}$$
-At $\$${btcSpot.toLocaleString()}$, this represents only $\\approx \\$${((450 * btcSpot) / 1000000).toFixed(2)}\\text{M}/\\text{day}$ in new structural sell pressure from miners, amplifying spot ETF inflows.
+${minerSellPressure}
 
 #### 3. Net Liquidity Absorption
 $$\\Delta \\text{Net Float} = \\text{Spot ETF Inflows} - 450 \\cdot P_{\\text{BTC}}$$
@@ -952,9 +960,9 @@ Quantitative risk models mandate holding at least **15% liquid USD cash buffer**
   ) {
     const reply = `### 📐 Quantitative Indicator Architecture for \`${primaryAsset}\`
 
-Evaluating mathematical oscillators and trend filters for **${primaryAsset}** (Spot: $${money(spot)}$):
+Evaluating mathematical oscillators and trend filters for **${primaryAsset}** (Spot: $${money(spotVal)}):
 
-- **Spot Quote**: $${money(spot)}$ ($${chg >= 0 ? '+' : ''}${chg.toFixed(2)}\\%$ 24h)
+- **Spot Quote**: $${money(spotVal)}$ ($${chg >= 0 ? '+' : ''}${chg.toFixed(2)}\\%$ 24h)
 - **Market Regime**: \`${primaryInd.signalLabel}\` (Score: $${primaryInd.score >= 0 ? '+' : ''}${primaryInd.score}/100$)
 - **RSI (14-period)**: $${primaryInd.rsi.toFixed(1)}$
 
@@ -968,7 +976,7 @@ $$\\%B = \\frac{\\text{Spot} - \\text{Lower}}{\\text{Upper} - \\text{Lower}} \\a
 
 #### 3. Average True Range (ATR Risk Brackets)
 $$\\text{TR} = \\max\\left(H_t - L_t, |H_t - C_{t-1}|, |L_t - C_{t-1}|\\right), \\quad \\text{ATR}_{14} = \\$${atr.toFixed(2)}$$
-- Volatility Bandwidth: **${((atr / spot) * 100).toFixed(2)}%** daily price swing expectation. Always keep a **15% cash liquidity buffer** for mean-reversion rebalancing.`;
+- Volatility Bandwidth: **${spot ? ((atr / spot) * 100).toFixed(2) : '0.00'}%** daily price swing expectation. Always keep a **15% cash liquidity buffer** for mean-reversion rebalancing.`;
 
     return {
       reply,
@@ -989,7 +997,7 @@ $$\\text{TR} = \\max\\left(H_t - L_t, |H_t - C_{t-1}|, |L_t - C_{t-1}|\\right), 
     const reply = `### 📈 Smart Value-Weighted DCA for \`${primaryAsset}\`
 
 Constructed an asymmetric dollar-cost averaging schedule calibrated to valuation bands:
-- **Target Asset**: \`${primaryAsset}\` (Spot Quote: $${money(spot)}$, RSI: $${primaryInd.rsi.toFixed(1)}$)
+- **Target Asset**: \`${primaryAsset}\` (Spot Quote: $${money(spotVal)}$, RSI: $${primaryInd.rsi.toFixed(1)}$)
 - **Base Allocation**: $${money(dcaPlan.baseAmountUsd)}$ per execution
 - **Oversold Dip Multiplier**: $${dcaPlan.oversoldMultiplier}\\times$ ($${money(dcaPlan.baseAmountUsd * dcaPlan.oversoldMultiplier)}$) whenever $\\text{RSI}_{14} < 35$
 - **Euphoria Top**: Pauses purchases when $\\text{RSI}_{14} > ${dcaPlan.pauseThresholdRsi}$ to prevent buying euphoric peaks
@@ -1129,8 +1137,8 @@ $$\\text{Sharpe Ratio} = \\frac{\\mathbb{E}[R_i] - R_f}{\\sigma_i \\cdot \\sqrt{
 Calibrated flagship quantitative execution parameters for **${primaryAsset}** with Zero-Loss Capital Armor & Scale-Out Harvester:
 - **Engine Architecture**: \`TITAN QUANTUM APEX SENTINEL (ZERO-LOSS ARMORED)\`
 - **Max Portfolio Allocation**: $${((bot.maxAllocation || 0.25) * 100).toFixed(0)}\\%$ (~$${money((bot.maxAllocation || 0.25) * pv)}$)
-- **Target Take-Profit (TP1/Runner)**: $+${bot.targetProfitPct}\\%$ (~$${money(spot * (1 + (bot.targetProfitPct || 6) / 100))}$)
-- **Initial Stop-Loss**: $-${bot.trailingStopPct}\\%$ (~$${money(spot * (1 - (bot.trailingStopPct || 2) / 100))}$)
+- **Target Take-Profit (TP1/Runner)**: $+${bot.targetProfitPct}\\%$ (~$${money(spotVal * (1 + (bot.targetProfitPct || 6) / 100))}$)
+- **Initial Stop-Loss**: $-${bot.trailingStopPct}\\%$ (~$${money(spotVal * (1 - (bot.trailingStopPct || 2) / 100))}$)
 - **Choppiness Noise Filter**: $\\text{CHOP} \\le 60$ and $\\text{ADX} \\ge 18$ (Strict veto on consolidation noise)
 - **Quarantine Safeguard**: Virtual paper shadow verification (requires 2 consecutive paper wins upon any stop-out)
 
@@ -1150,13 +1158,13 @@ Deploy this algorithmic bot via the Safety Gate to activate autonomous tick eval
 Calibrated quantitative execution parameters for **${primaryAsset}** based on current ATR & implied volatility:
 - **Engine Architecture**: \`${bot.kind.replace('_', ' ').toUpperCase()}\`
 - **Max Portfolio Allocation**: $${((bot.maxAllocation || 0.25) * 100).toFixed(0)}\\%$ (~$${money((bot.maxAllocation || 0.25) * pv)}$)
-- **Target Take-Profit**: $+${bot.targetProfitPct}\\%$ (~$${money(spot * (1 + (bot.targetProfitPct || 5) / 100))}$)
-- **Dynamic Trailing Stop-Loss**: $-${bot.trailingStopPct}\\%$ (~$${money(spot * (1 - (bot.trailingStopPct || 2) / 100))}$)
+- **Target Take-Profit**: $+${bot.targetProfitPct}\\%$ (~$${money(spotVal * (1 + (bot.targetProfitPct || 5) / 100))}$)
+- **Dynamic Trailing Stop-Loss**: $-${bot.trailingStopPct}\\%$ (~$${money(spotVal * (1 - (bot.trailingStopPct || 2) / 100))}$)
 - **Tick Interval**: Evaluated continuously on $2.5\\text{s}$ interval loops
 
 #### Dynamic Volatility Brackets
-$$\\text{Take-Profit} = P_0 + 3.0 \\cdot \\text{ATR}_{14} = \\$${(spot * (1 + (bot.targetProfitPct || 5) / 100)).toFixed(2)}$$
-$$\\text{Trailing Stop} = P_0 - 1.3 \\cdot \\text{ATR}_{14} = \\$${(spot * (1 - (bot.trailingStopPct || 2) / 100)).toFixed(2)}$$
+$$\\text{Take-Profit} = P_0 + 3.0 \\cdot \\text{ATR}_{14} = \\$${(spotVal * (1 + (bot.targetProfitPct || 5) / 100)).toFixed(2)}$$
+$$\\text{Trailing Stop} = P_0 - 1.3 \\cdot \\text{ATR}_{14} = \\$${(spotVal * (1 - (bot.trailingStopPct || 2) / 100)).toFixed(2)}$$
 
 Deploy this algorithmic bot via the Safety Gate to activate autonomous tick evaluation while preserving the 15% cash floor.`;
 
@@ -1195,12 +1203,104 @@ Deploy this algorithmic bot via the Safety Gate to activate autonomous tick eval
     q.includes('prediction') ||
     q.includes('outlook')
   ) {
-    const isBullish = primaryInd.rsi < 65 && (primaryInd.s10 || 0) >= (primaryInd.s30 || 0);
+    if (!spot || spot <= 0 || !primaryMarket) {
+      return {
+        reply: `### ⚠️ Market Feed Unavailable: \`${primaryAsset}\`\n\nLive quotes for ${primaryAsset} are currently unavailable or disconnected. Under strict institutional execution protocols, executable order proposals are suspended until valid market data is restored.`,
+        actionProposal: null,
+        engine: ENGINE_LABEL,
+      };
+    }
+
+    const validity = MarketDataValidityGuard.validate(primaryMarket, primaryAsset, policy, { requireExecutionGrade: true });
+
+    const isReduceIntent =
+      q.includes('reduce') ||
+      q.includes('sell') ||
+      q.includes('trim') ||
+      q.includes('cut') ||
+      q.includes('exit') ||
+      q.includes('take profit') ||
+      q.includes('liquidate') ||
+      q.includes('lighten') ||
+      q.includes('short');
+
+    const isBuyIntent =
+      q.includes('buy') ||
+      q.includes('accumulate') ||
+      q.includes('long') ||
+      q.includes('add') ||
+      q.includes('enter') ||
+      q.includes('scale in');
+
+    const currentHolding = state.positions[primaryAsset] || 0;
+
+    let orderSide: 'buy' | 'sell';
+    if (isReduceIntent && !isBuyIntent) {
+      orderSide = 'sell';
+    } else if (isBuyIntent && !isReduceIntent) {
+      orderSide = 'buy';
+    } else if (currentHolding <= 0) {
+      // In spot paper trading, an asset not currently held can only be bought on entry/outlook
+      orderSide = 'buy';
+    } else {
+      orderSide = primaryInd.rsi < 65 && (primaryInd.s10 || 0) >= (primaryInd.s30 || 0) ? 'buy' : 'sell';
+    }
+
     const tpPrice = +(spot + atr * 2.8).toFixed(2);
     const slPrice = +(Math.max(0.01, spot - atr * 1.3)).toFixed(2);
-    const orderSide: 'buy' | 'sell' = isBullish ? 'buy' : 'sell';
-    const amount = primaryAsset === 'BTC' ? 0.05 : primaryAsset === 'ETH' ? 0.5 : 10;
-    const notional = amount * spot;
+
+    let amount = 0;
+    let actionProposal: AIActionProposal | null = null;
+    let gatingNotice = '';
+
+    if (orderSide === 'sell') {
+      if (currentHolding <= 0) {
+        gatingNotice = `\n\n> ℹ️ **Holding Status**: You currently hold 0 \`${primaryAsset}\`. No liquidation or trim order can be executed.`;
+      } else {
+        // Trim 50% of available holding or full holding if small
+        amount = +(Math.min(currentHolding, Math.max(currentHolding * 0.5, 0.0001))).toFixed(4);
+      }
+    } else {
+      const sized = calculateRiskBasedPositionSize({
+        asset: primaryAsset,
+        side: 'buy',
+        entryPrice: spot,
+        stopPrice: slPrice,
+        targetPrice: tpPrice,
+        portfolioEquity: pv,
+        availableCash: state.cash,
+        currentHolding,
+        currentHoldingNotional: currentHolding * spot,
+        market: primaryMarket,
+        policy,
+      });
+      amount = sized.quantity;
+      if (amount <= 0) {
+        gatingNotice = `\n\n> ⚠️ **Execution Gate Block**: Order quantity is 0 under risk budget and mandatory 15% cash liquidity reserve.`;
+      }
+    }
+
+    if (amount > 0 && validity.canExecute) {
+      const proposalCandidate: AIActionProposal = {
+        type: 'order',
+        asset: primaryAsset,
+        side: orderSide,
+        amount,
+        rationale: `${primaryAsset} ${primaryInd.signalLabel} structure with RSI ${primaryInd.rsi.toFixed(1)} and dynamic ATR brackets.`,
+        confidence: isBuyIntent || primaryInd.score > 0 ? 'high' : 'medium',
+        riskSummary: `Requires ${money(amount * spot)} notional. Adheres to capital preservation rules.`,
+        requiresConfirmation: true,
+      };
+
+      const safety = validateAIProposal(proposalCandidate, state, markets);
+      if (safety.valid) {
+        actionProposal = proposalCandidate;
+      } else {
+        gatingNotice = `\n\n> ⚠️ **Execution Gate Block**: Order proposal disabled due to safety bounds: ${safety.errors.join('; ')}`;
+      }
+    } else if (!validity.canExecute && amount > 0) {
+      gatingNotice = `\n\n> ⚠️ **Execution Gate Block**: Order proposal disabled due to market data feed validation: ${validity.errors.join('; ')}`;
+    }
 
     const reply = `### 📊 Quantitative Market Analysis: \`${primaryAsset}\`
 
@@ -1217,20 +1317,11 @@ $$\\text{Support } (S_1) = P_0 - 1.2 \\cdot \\text{ATR} = \\$${Math.max(0.01, sp
 #### Asymmetric Risk/Reward Ratio
 $$\\text{RR} = \\frac{\\text{Target TP} - P_0}{P_0 - \\text{Trailing SL}} = \\frac{${(tpPrice - spot).toFixed(2)}}{${(spot - slPrice).toFixed(2)}} \\approx 2.15$$
 
-Nexus recommends an asymmetric **${orderSide.toUpperCase()}** order bracket with dynamic profit targets while maintaining a **15% cash liquidity reserve**. Review the proposal below:`;
+Nexus recommends an asymmetric **${orderSide.toUpperCase()}** order bracket with dynamic profit targets while maintaining a **15% cash liquidity reserve**. Review the analysis below:${gatingNotice}`;
 
     return {
       reply,
-      actionProposal: {
-        type: 'order',
-        asset: primaryAsset,
-        side: orderSide,
-        amount,
-        rationale: `${primaryAsset} ${primaryInd.signalLabel} structure with RSI ${primaryInd.rsi.toFixed(1)} and dynamic ATR brackets.`,
-        confidence: isBullish ? 'high' : 'medium',
-        riskSummary: `Requires ${money(notional)} notional. Adheres to capital preservation rules.`,
-        requiresConfirmation: true,
-      },
+      actionProposal,
       engine: ENGINE_LABEL,
     };
   }
@@ -1270,3 +1361,8 @@ Let me know if you would like me to compile a specific order, run a stress scena
     engine: ENGINE_LABEL,
   };
 }
+
+export const queryLocalQuantLLM = queryNexusDeterministicQuant;
+export const NexusQuantEngine = {
+  query: queryNexusDeterministicQuant,
+};

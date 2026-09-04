@@ -252,6 +252,66 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     )}
                   </div>
 
+                  {/* Quantitative Intelligence Telemetry Pill */}
+                  {!isUser && m.telemetry && (
+                    <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-[11px] font-mono space-y-2 shadow-2xs">
+                      <div className="flex items-center justify-between gap-2 flex-wrap text-zinc-800">
+                        <div className="flex items-center gap-1.5 font-semibold text-zinc-900">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="font-sans text-[11.5px]">{m.telemetry.aiMode}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-zinc-500 text-[10px]">
+                          <span>⚡ {m.telemetry.dataFreshnessSec}s freshness</span>
+                          <span>•</span>
+                          <span>🎯 {m.telemetry.dataQualityScore}% data quality</span>
+                        </div>
+                      </div>
+
+                      {m.telemetry.toolsUsed && m.telemetry.toolsUsed.length > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                          <span className="text-[10px] text-zinc-400 font-sans">Tools Used:</span>
+                          {m.telemetry.toolsUsed.map((tool: string, tIdx: number) => (
+                            <span
+                              key={tIdx}
+                              className="px-1.5 py-0.5 rounded-md bg-white border border-zinc-200/80 text-zinc-700 text-[9.5px] font-mono shadow-2xs"
+                            >
+                              {tool.replace(/_/g, ' ')}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-zinc-200/60">
+                        <span className="text-zinc-500 font-sans">Portfolio Risk State:</span>
+                        <span
+                          className={`font-semibold ${
+                            m.telemetry.portfolioRiskLabel === 'Conservative'
+                              ? 'text-emerald-700'
+                              : m.telemetry.portfolioRiskLabel === 'Moderate'
+                              ? 'text-blue-700'
+                              : m.telemetry.portfolioRiskLabel === 'Elevated'
+                              ? 'text-amber-700'
+                              : 'text-rose-700'
+                          }`}
+                        >
+                          {m.telemetry.portfolioRiskLabel} ({m.telemetry.portfolioRiskScore}/100)
+                        </span>
+                      </div>
+
+                      {m.telemetry.counterArgument && (
+                        <div className="mt-1 p-2 rounded-xl bg-amber-50/80 border border-amber-200/70 text-[10.5px] text-amber-900 space-y-0.5">
+                          <div className="flex items-center gap-1 font-semibold text-amber-800 text-[10px]">
+                            <ShieldAlert className="w-3 h-3 text-amber-600 flex-shrink-0" />
+                            <span>Challenger Desk Counterargument:</span>
+                          </div>
+                          <p className="text-zinc-700 font-sans leading-snug">
+                            {m.telemetry.counterArgument}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Visual Execution Receipt ("What Nexus Did") - Apple Pay Style */}
                   {receipt && (
                     <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/70 space-y-2.5 shadow-2xs animate-in fade-in zoom-in-95 duration-200">

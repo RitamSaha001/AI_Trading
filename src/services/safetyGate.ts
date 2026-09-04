@@ -10,11 +10,13 @@ import {
   formatQty,
 } from '../domain/portfolio';
 import { calculateExecutionQuote } from '../domain/trading';
+import { DEFAULT_RISK_POLICY, getRiskPolicy, RiskPolicy } from '../domain/riskPolicy';
+import { MarketDataValidityGuard } from '../domain/marketValidity';
 
-export const MAX_SINGLE_ORDER_PORTFOLIO_PCT = 0.4; // Max 40% of portfolio in a single AI order
-export const MAX_ASSET_ALLOCATION_PCT = 0.5; // Hard cap: Max 50% concentration allowed from AI orders
-export const MIN_CASH_RESERVE_PCT = 0.15; // Hard policy: Minimum 15% liquid cash reserve for capital preservation
-export const STALE_DATA_THRESHOLD_MS = 45000; // 45 seconds
+export const MAX_SINGLE_ORDER_PORTFOLIO_PCT = DEFAULT_RISK_POLICY.maxSingleOrderPortfolioPct; // Max 40% of portfolio in a single AI order
+export const MAX_ASSET_ALLOCATION_PCT = DEFAULT_RISK_POLICY.maxSingleAssetPct; // Hard cap: Max 50% concentration allowed from AI orders
+export const MIN_CASH_RESERVE_PCT = DEFAULT_RISK_POLICY.minCashReservePct; // Hard policy: Minimum 15% liquid cash reserve for capital preservation
+export const STALE_DATA_THRESHOLD_MS = DEFAULT_RISK_POLICY.staleDataThresholdMs; // 45 seconds
 
 /**
  * Validates any AI-generated proposal against financial sanity, portfolio risk caps,
@@ -25,6 +27,7 @@ export function validateAIProposal(
   state: AppState,
   markets: Record<Asset, Market | undefined>
 ): AISafetyValidation {
+  const policy: RiskPolicy = getRiskPolicy(state);
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -129,15 +132,24 @@ export function validateAIProposal(
   const asset: Asset = proposal.asset;
   const market = markets[asset];
 
-  // Check market availability
+  // Check market availability & validity
   if (!market || market.price <= 0) {
     return { valid: false, errors: [`Market data for ${asset} is currently unavailable.`], warnings: [] };
   }
 
-  // Check data freshness
+  const validity = MarketDataValidityGuard.validate(market, asset, policy, { requireExecutionGrade: proposal.type === 'order' });
+  if (!validity.isValid) {
+    return { valid: false, errors: validity.errors, warnings: validity.warnings };
+  }
+
+  // Stale data rejection
   const now = Date.now();
-  if (market.lastUpdated && now - market.lastUpdated > STALE_DATA_THRESHOLD_MS) {
-    warnings.push(`Market feed is lagging (${Math.round((now - market.lastUpdated) / 1000)}s old). Quote may not reflect immediate spot.`);
+  if (validity.isStale || (market.lastUpdated && now - market.lastUpdated > policy.staleDataThresholdMs)) {
+    const ageSec = validity.ageSec || Math.round((now - (market.lastUpdated || 0)) / 1000);
+    warnings.push(`Market feed is lagging (${ageSec}s old). Quote may not reflect immediate spot.`);
+    if (proposal.type === 'order') {
+      errors.push(`Stale market data rejection: Feed for ${asset} is ${ageSec}s old (threshold: ${Math.round(policy.staleDataThresholdMs / 1000)}s). Executable proposals are disabled.`);
+    }
   }
 
   if (market.isSynthetic) {
@@ -168,6 +180,16 @@ export function validateAIProposal(
     errors.push('Order quantity must be a positive finite number.');
   }
 
+  // Duplicate-order protection (Requirement 19)
+  if (Array.isArray(state.orders) && state.orders.length > 0 && Number.isFinite(amount) && amount > 0) {
+    const isDuplicate = state.orders.some(
+      (o) => o.status === 'pending' && o.asset === asset && o.side === side && Math.abs(o.amount - amount) / Math.max(amount, 0.0001) < 0.05
+    );
+    if (isDuplicate) {
+      errors.push(`Duplicate order protection: An open ${side.toUpperCase()} order for ${asset} of matching size is already pending execution.`);
+    }
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors, warnings };
   }
@@ -183,6 +205,14 @@ export function validateAIProposal(
   const reservedHolding = getReservedPosition(state, asset);
   const currentAssetVal = positionValue(state, markets, asset);
 
+  // Maximum Slippage Hard Limit (Requirement 19)
+  // quote.slippagePct is in percent (e.g. 0.02 for 2 bps). policy.maxSlippagePct is decimal (e.g. 0.01 for 1%).
+  if (quote.slippagePct / 100 > policy.maxSlippagePct) {
+    errors.push(
+      `Execution rejected: Estimated slippage (${quote.slippagePct.toFixed(2)}%) exceeds maximum risk policy threshold (${(policy.maxSlippagePct * 100).toFixed(2)}%).`
+    );
+  }
+
   // Capital & Holdings Checks
   if (side === 'buy') {
     if (quote.totalCashRequired > availableCash + 0.01) {
@@ -191,34 +221,33 @@ export function validateAIProposal(
       );
     }
 
-    // Single order size cap (Hard Block at 40%)
-    if (quote.notional > totalPortVal * MAX_SINGLE_ORDER_PORTFOLIO_PCT) {
+    // Single order size cap
+    if (quote.notional > totalPortVal * policy.maxSingleOrderPortfolioPct) {
       errors.push(
-        `Order exceeds maximum safe single-trade cap (40% of portfolio). Trade notional: ${money(quote.notional)}, max allowed: ${money(totalPortVal * MAX_SINGLE_ORDER_PORTFOLIO_PCT)}.`
+        `Order exceeds maximum safe single-trade cap (${(policy.maxSingleOrderPortfolioPct * 100).toFixed(0)}% of portfolio). Trade notional: ${money(quote.notional)}, max allowed: ${money(totalPortVal * policy.maxSingleOrderPortfolioPct)}.`
       );
     }
 
-    // Cash Liquidity Reserve Enforcement (Minimum 15% liquid buffer)
+    // Cash Liquidity Reserve Enforcement (Policy minimum liquid buffer)
     const resultingCashEstimated = Math.max(0, currentCash - quote.totalCashRequired);
     const resultingCashPct = totalPortVal > 0 ? (resultingCashEstimated / totalPortVal) * 100 : 0;
-    if (resultingCashPct < 5.0) {
+    const minCashPct = policy.minCashReservePct * 100;
+    if (resultingCashPct < minCashPct) {
       errors.push(
-        `Capital Defense Hard Block: Order depletes liquid cash reserve to ${resultingCashPct.toFixed(1)}%, violating the mandatory 15.0% capital defense threshold.`
-      );
-    } else if (resultingCashPct < MIN_CASH_RESERVE_PCT * 100) {
-      warnings.push(
-        `Liquidity Alert: Order reduces cash cushion to ${resultingCashPct.toFixed(1)}% (below recommended 15.0% buffer). Capital defense will be constrained during market shocks.`
+        `Capital Defense Hard Block: Order depletes liquid cash reserve to ${resultingCashPct.toFixed(1)}%, violating the mandatory ${minCashPct.toFixed(1)}% capital defense threshold.`
       );
     }
 
-    // Asset allocation cap (Hard Block at 50%, Warning at 35%)
+    // Asset allocation cap
     const resultingAssetVal = currentAssetVal + quote.notional;
     const resultingAllocPct = totalPortVal > 0 ? (resultingAssetVal / totalPortVal) * 100 : 0;
-    if (resultingAllocPct > MAX_ASSET_ALLOCATION_PCT * 100 + 0.01) {
+    const maxAssetPct = policy.maxSingleAssetPct * 100;
+    const warnAssetPct = policy.warnSingleAssetPct * 100;
+    if (resultingAllocPct > maxAssetPct + 0.01) {
       errors.push(
-        `Safety Policy Hard Block: Order would raise ${asset} allocation to ${resultingAllocPct.toFixed(1)}%, violating the hard 50.0% diversification cap.`
+        `Safety Policy Hard Block: Order would raise ${asset} allocation to ${resultingAllocPct.toFixed(1)}%, violating the hard ${maxAssetPct.toFixed(1)}% diversification cap.`
       );
-    } else if (resultingAllocPct > 35.0) {
+    } else if (resultingAllocPct > warnAssetPct) {
       warnings.push(
         `Concentration Warning: Order elevates ${asset} allocation to ${resultingAllocPct.toFixed(1)}% of total portfolio.`
       );
