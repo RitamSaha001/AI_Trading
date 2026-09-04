@@ -39,6 +39,7 @@ import {
   portfolioValue,
   money,
   calculatePortfolioRisk,
+  getReservedCash,
 } from './trading';
 import { evaluateStrategy } from './domain/strategies';
 import { evaluateAlert } from './domain/alerts';
@@ -187,6 +188,83 @@ function playChime(type: 'success' | 'alert' | 'trade') {
   } catch {
     // blocked until user interaction
   }
+}
+
+export interface TickMutations {
+  cashDelta?: number;
+  positionDeltas?: Partial<Record<Asset, number>>;
+  avgBuyPriceUpdates?: Partial<Record<Asset, number | undefined>>;
+  updatedOrders?: Order[];
+  newOrders?: Order[];
+  updatedAlerts?: AppState['alerts'];
+  updatedStrategies?: AppState['strategies'];
+  totalFeesDelta?: number;
+  realizedPnlDelta?: number;
+  notifications?: AppState['notifications'];
+}
+
+/**
+ * Pure state merger that applies tick mutations atomically onto the latest state
+ * without overwriting concurrent user actions (orders, cancellations, cash transactions).
+ */
+export function mergeTickResults(prev: AppState, mutations: TickMutations): AppState {
+  const newCash = Math.round((prev.cash + (mutations.cashDelta || 0)) * 1e8) / 1e8;
+
+  const newPositions = { ...prev.positions };
+  for (const [assetStr, delta] of Object.entries(mutations.positionDeltas || {})) {
+    if (!delta) continue;
+    const a = assetStr as Asset;
+    const cur = newPositions[a] || 0;
+    const updated = Math.max(0, Math.round((cur + delta) * 1e8) / 1e8);
+    if (updated < 1e-8) {
+      delete newPositions[a];
+    } else {
+      newPositions[a] = updated;
+    }
+  }
+
+  const newAvgBuyPrice = { ...(prev.avgBuyPrice || {}) };
+  for (const [assetStr, price] of Object.entries(mutations.avgBuyPriceUpdates || {})) {
+    const a = assetStr as Asset;
+    if (price === undefined || (newPositions[a] || 0) <= 0) {
+      delete newAvgBuyPrice[a];
+    } else {
+      newAvgBuyPrice[a] = price;
+    }
+  }
+
+  const updatedOrderMap = new Map((mutations.updatedOrders || []).map((o) => [o.id, o]));
+  const mergedOrders = prev.orders.map((existing) => {
+    const updated = updatedOrderMap.get(existing.id);
+    if (!updated) return existing;
+    if (existing.status === 'cancelled' && updated.status !== 'filled') {
+      return existing;
+    }
+    return updated;
+  });
+  const finalOrders = [...(mutations.newOrders || []), ...mergedOrders].slice(0, 300);
+
+  const updatedAlertMap = new Map((mutations.updatedAlerts || []).map((a) => [a.id, a]));
+  const finalAlerts = prev.alerts.map((a) => updatedAlertMap.get(a.id) || a);
+
+  const updatedStratMap = new Map((mutations.updatedStrategies || []).map((s) => [s.id, s]));
+  const finalStrategies = prev.strategies.map((s) => updatedStratMap.get(s.id) || s);
+
+  const finalNotifications = [...(mutations.notifications || []), ...prev.notifications].slice(0, 100);
+
+  return {
+    ...prev,
+    cash: newCash,
+    positions: newPositions,
+    avgBuyPrice: newAvgBuyPrice,
+    orders: finalOrders,
+    alerts: finalAlerts,
+    strategies: finalStrategies,
+    notifications: finalNotifications,
+    totalFees: Math.round(((prev.totalFees || 0) + (mutations.totalFeesDelta || 0)) * 1e8) / 1e8,
+    realizedPnl: Math.round(((prev.realizedPnl || 0) + (mutations.realizedPnlDelta || 0)) * 1e8) / 1e8,
+    reservedCash: getReservedCash({ ...prev, orders: finalOrders }),
+  };
 }
 
 export function Provider({ children }: { children: React.ReactNode }) {
@@ -700,27 +778,45 @@ export function Provider({ children }: { children: React.ReactNode }) {
   // Cross-tab synchronization
   useEffect(() => {
     return initCrossTabSync((newState) => {
-      setState(newState);
+      setState((prev) => {
+        const prevNotifIds = new Set(prev.notifications.map((n) => n.id));
+        const incomingNotifs = (newState.notifications || []).filter((n) => !prevNotifIds.has(n.id));
+        return {
+          ...newState,
+          notifications: [...incomingNotifs, ...prev.notifications].slice(0, 100),
+        };
+      });
+      triggerToast('State Synchronized', 'Trading desk synchronized with another active tab.', 'info');
     });
-  }, []);
+  }, [triggerToast]);
+
+  // Storage Quota Warning listener
+  useEffect(() => {
+    const onStorageWarn = (e: any) => {
+      triggerToast('Storage Warning', e?.detail || 'Storage full — older history purged.', 'warn');
+    };
+    window.addEventListener('lumen_storage_warning', onStorageWarn);
+    return () => window.removeEventListener('lumen_storage_warning', onStorageWarn);
+  }, [triggerToast]);
 
   // Price Tick Engine: Pending Orders, Limit Executions, Stop Loss & Take Profit, Strategies, Alerts
-  // SAFETY: Uses functional setState(prev => ...) to prevent race conditions with user actions.
+  // SAFETY: Computes mutations on a snapshot, then uses atomic functional mergeTickResults(prev, mutations)
+  // to guarantee zero race conditions with user actions (placing orders, cancelling, depositing cash).
   useEffect(() => {
     const loopId = setInterval(() => {
       const m = marketsRef.current;
       const hasAnyMarket = Object.values(m).some((market) => market && market.price > 0);
       if (!hasAnyMarket) return;
 
-      // Compute mutations on a snapshot, then apply atomically
+      const initialState = stateRef.current;
       const snapshot: AppState = {
-        ...stateRef.current,
-        positions: { ...stateRef.current.positions },
-        avgBuyPrice: { ...(stateRef.current.avgBuyPrice || {}) },
-        orders: stateRef.current.orders.map((o) => ({ ...o })),
-        alerts: stateRef.current.alerts.map((x) => ({ ...x })),
-        strategies: stateRef.current.strategies.map((x) => ({ ...x })),
-        notifications: [...stateRef.current.notifications],
+        ...initialState,
+        positions: { ...initialState.positions },
+        avgBuyPrice: { ...(initialState.avgBuyPrice || {}) },
+        orders: initialState.orders.map((o) => ({ ...o })),
+        alerts: initialState.alerts.map((x) => ({ ...x })),
+        strategies: initialState.strategies.map((x) => ({ ...x })),
+        notifications: [...initialState.notifications],
       };
 
       let changed = false;
@@ -808,18 +904,63 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
 
       if (changed) {
-        // ATOMIC UPDATE: Merge tick mutations onto the LATEST state, not the stale snapshot.
-        // This prevents overwriting user actions (orders, cancellations) that occurred during the tick.
-        setState((prev) => ({
-          ...prev,
-          positions: { ...prev.positions, ...snapshot.positions },
-          avgBuyPrice: { ...prev.avgBuyPrice, ...snapshot.avgBuyPrice },
-          cash: snapshot.cash,
-          orders: snapshot.orders,
-          alerts: snapshot.alerts,
-          strategies: snapshot.strategies,
-          notifications: [...newNotifications, ...prev.notifications],
-        }));
+        const initialOrderIds = new Set(initialState.orders.map((o) => o.id));
+        const newOrders: Order[] = snapshot.orders.filter((o) => !initialOrderIds.has(o.id));
+        const updatedOrders: Order[] = snapshot.orders.filter((o) => {
+          if (!initialOrderIds.has(o.id)) return false;
+          const orig = initialState.orders.find((x) => x.id === o.id);
+          return (
+            orig &&
+            (orig.status !== o.status ||
+              orig.price !== o.price ||
+              orig.filledAt !== o.filledAt ||
+              orig.rejectReason !== o.rejectReason ||
+              orig.reservedCash !== o.reservedCash ||
+              orig.reservedAmount !== o.reservedAmount)
+          );
+        });
+
+        const positionDeltas: Partial<Record<Asset, number>> = {};
+        for (const asset of ASSETS) {
+          const delta = (snapshot.positions[asset] || 0) - (initialState.positions[asset] || 0);
+          if (Math.abs(delta) > 1e-8) {
+            positionDeltas[asset] = delta;
+          }
+        }
+
+        const avgBuyPriceUpdates: Partial<Record<Asset, number | undefined>> = {};
+        for (const asset of ASSETS) {
+          if (snapshot.avgBuyPrice?.[asset] !== initialState.avgBuyPrice?.[asset]) {
+            avgBuyPriceUpdates[asset] = snapshot.avgBuyPrice?.[asset];
+          }
+        }
+
+        const mutations: TickMutations = {
+          cashDelta: snapshot.cash - initialState.cash,
+          positionDeltas,
+          avgBuyPriceUpdates,
+          updatedOrders,
+          newOrders,
+          updatedAlerts: snapshot.alerts.filter((a) => {
+            const orig = initialState.alerts.find((x) => x.id === a.id);
+            return orig && (orig.lastTriggeredAt !== a.lastTriggeredAt || orig.triggered !== a.triggered);
+          }),
+          updatedStrategies: snapshot.strategies.filter((s) => {
+            const orig = initialState.strategies.find((x) => x.id === s.id);
+            return (
+              orig &&
+              (orig.tradesExecuted !== s.tradesExecuted ||
+                orig.lastExecutedAt !== s.lastExecutedAt ||
+                orig.circuitBreakerTriggered !== s.circuitBreakerTriggered)
+            );
+          }),
+          totalFeesDelta: (snapshot.totalFees || 0) - (initialState.totalFees || 0),
+          realizedPnlDelta: (snapshot.realizedPnl || 0) - (initialState.realizedPnl || 0),
+          notifications: newNotifications,
+        };
+
+        // ATOMIC MERGE onto latest state
+        setState((prev) => mergeTickResults(prev, mutations));
       }
     }, 2500);
 
@@ -948,6 +1089,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         setState((s) => ({
           ...s,
           orders: [newOrder, ...s.orders],
+          exchangeOrders: [newOrder, ...(s.exchangeOrders || [])],
         }));
 
         return { ok: true, order: newOrder };

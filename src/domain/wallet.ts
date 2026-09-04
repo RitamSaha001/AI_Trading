@@ -22,6 +22,18 @@ export async function hashPin(pin: string): Promise<string> {
 }
 
 /**
+ * Constant-time string comparison to prevent timing attacks.
+ */
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/**
  * Transparent, real-time FX Rates pegged to USD.
  * 1 USD = 87.20 INR
  * 1 EUR = 1.085 USD
@@ -196,9 +208,10 @@ export async function withdrawFunds(
       throw new Error('Security PIN required for withdrawal.');
     }
     const enteredHash = await hashPin(enteredPin);
-    const isPlainMatch = wallet.security.pinHash === enteredPin;
-    const isHashMatch = wallet.security.pinHash === enteredHash;
-    if (!isPlainMatch && !isHashMatch) {
+    const storedHash = wallet.security.pinHash || '';
+    const isHashMatch = timingSafeEqual(storedHash, enteredHash);
+    const isPlainMatch = timingSafeEqual(storedHash, enteredPin);
+    if (!isHashMatch && !isPlainMatch) {
       throw new Error('Invalid Security PIN. Withdrawal rejected for capital protection.');
     }
   }

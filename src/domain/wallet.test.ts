@@ -7,6 +7,8 @@ import {
   allocateToTrading,
   recallFromTrading,
   swapWalletToCrypto,
+  hashPin,
+  timingSafeEqual,
   FX_RATES_TO_USD,
 } from './wallet';
 import {
@@ -116,6 +118,26 @@ describe('Sovereign Native Wallet Domain', () => {
 
     // Correct PIN
     const success = await withdrawFunds(wallet, 100, 'USD', 'card', {}, '1234');
+    expect(success.balanceUSD).toBe(900);
+  });
+
+  it('enforces SHA-256 hashed security PIN with timing-safe comparison on withdrawal', async () => {
+    let wallet = createDefaultWallet(1000);
+    wallet.security.pinConfigured = true;
+    wallet.security.pinHash = await hashPin('5678');
+
+    // Wrong PIN rejected
+    await expect(
+      withdrawFunds(wallet, 100, 'USD', 'card', {}, '1234')
+    ).rejects.toThrow(/Invalid Security PIN/);
+
+    // Timing safe comparison verification
+    expect(timingSafeEqual('abc', 'abc')).toBe(true);
+    expect(timingSafeEqual('abc', 'abd')).toBe(false);
+    expect(timingSafeEqual('abc', 'abcd')).toBe(false);
+
+    // Correct PIN accepted
+    const success = await withdrawFunds(wallet, 100, 'USD', 'card', {}, '5678');
     expect(success.balanceUSD).toBe(900);
   });
 

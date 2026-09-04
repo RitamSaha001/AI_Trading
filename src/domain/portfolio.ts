@@ -281,9 +281,11 @@ export function totalPortfolioPnl(
 /**
  * Computes total cash currently reserved by open/pending limit buy orders (including estimated taker fee).
  */
-export function getReservedCash(state: Pick<AppState, 'orders'>): number {
+export function getReservedCash(state: Pick<AppState, 'orders'> & { accountMode?: AppState['accountMode'] }): number {
+  const currentMode = state.accountMode || 'paper';
   return (state.orders || []).reduce((sum, o) => {
-    if (o.status === 'pending' && o.side === 'buy' && o.type === 'limit') {
+    const oMode = o.accountMode || 'paper';
+    if (oMode === currentMode && o.status === 'pending' && o.side === 'buy' && o.type === 'limit') {
       const price = o.limitPrice ?? o.price;
       const notional = price * o.amount;
       const fee = notional * FEE_RATE;
@@ -296,7 +298,13 @@ export function getReservedCash(state: Pick<AppState, 'orders'>): number {
 /**
  * Returns currently available liquid cash after subtracting funds reserved for pending limit buys.
  */
-export function getAvailableCash(state: Pick<AppState, 'cash' | 'orders'>): number {
+export function getAvailableCash(state: Pick<AppState, 'cash' | 'orders'> & { accountMode?: AppState['accountMode']; exchangeAccount?: AppState['exchangeAccount'] }): number {
+  if (state.accountMode === 'exchange' && state.exchangeAccount) {
+    return ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'].reduce(
+      (sum, coin) => sum + (state.exchangeAccount?.balances[coin]?.free || 0),
+      0
+    );
+  }
   const reserved = getReservedCash(state);
   return Math.max(0, (state.cash || 0) - reserved);
 }
@@ -304,9 +312,11 @@ export function getAvailableCash(state: Pick<AppState, 'cash' | 'orders'>): numb
 /**
  * Computes asset units currently reserved by open/pending limit sell orders.
  */
-export function getReservedPosition(state: Pick<AppState, 'orders'>, asset: Asset): number {
+export function getReservedPosition(state: Pick<AppState, 'orders'> & { accountMode?: AppState['accountMode'] }, asset: Asset): number {
+  const currentMode = state.accountMode || 'paper';
   return (state.orders || []).reduce((sum, o) => {
-    if (o.status === 'pending' && o.side === 'sell' && o.asset === asset) {
+    const oMode = o.accountMode || 'paper';
+    if (oMode === currentMode && o.status === 'pending' && o.side === 'sell' && o.asset === asset) {
       return sum + (o.reservedAmount ?? o.amount);
     }
     return sum;
@@ -316,7 +326,13 @@ export function getReservedPosition(state: Pick<AppState, 'orders'>, asset: Asse
 /**
  * Returns available asset units after subtracting units reserved by pending limit sells.
  */
-export function getAvailablePosition(state: Pick<AppState, 'positions' | 'orders'>, asset: Asset): number {
+export function getAvailablePosition(
+  state: Pick<AppState, 'positions' | 'orders'> & { accountMode?: AppState['accountMode']; exchangeAccount?: AppState['exchangeAccount'] },
+  asset: Asset
+): number {
+  if (state.accountMode === 'exchange' && state.exchangeAccount) {
+    return state.exchangeAccount.balances[asset]?.free || 0;
+  }
   const holding = state.positions[asset] || 0;
   const reserved = getReservedPosition(state, asset);
   return Math.max(0, holding - reserved);

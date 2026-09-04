@@ -413,5 +413,75 @@ describe('Service: AI Safety Gate Verification', () => {
       };
       expect(validateAIProposal(negProposal, mockState, mockMarkets as any).valid).toBe(false);
     });
+
+    it('rejects cross-mode proposals where target mode does not match active mode', () => {
+      // 1. Exchange proposal against paper desk
+      const exchangeProposal: AIActionProposal = {
+        type: 'order',
+        asset: 'ETH',
+        side: 'buy',
+        amount: 0.5,
+        orderType: 'market',
+        rationale: 'Live target test',
+        confidence: 'high',
+        riskSummary: 'Risk test',
+        requiresConfirmation: true,
+        accountMode: 'exchange',
+      };
+      const paperValidation = validateAIProposal(exchangeProposal, mockState, mockMarkets as any);
+      expect(paperValidation.valid).toBe(false);
+      expect(paperValidation.errors.some((e) => /Cross-mode proposal rejected/i.test(e))).toBe(true);
+
+      // 2. Paper proposal against exchange desk
+      const paperProposal: AIActionProposal = {
+        type: 'order',
+        asset: 'ETH',
+        side: 'buy',
+        amount: 0.5,
+        orderType: 'market',
+        rationale: 'Paper target test',
+        confidence: 'high',
+        riskSummary: 'Risk test',
+        requiresConfirmation: true,
+        accountMode: 'paper',
+      };
+      const exchangeState: AppState = {
+        ...mockState,
+        accountMode: 'exchange',
+      };
+      const exchValidation = validateAIProposal(paperProposal, exchangeState, mockMarkets as any);
+      expect(exchValidation.valid).toBe(false);
+      expect(exchValidation.errors.some((e) => /Cross-mode proposal rejected/i.test(e))).toBe(true);
+    });
+
+    it('enforces cumulative running balance across multi-step rebalance batches', () => {
+      // Total available cash is $10,000.
+      // Step 1: Buy 0.1 BTC = $6,000. (Fits $10k * 0.95 = $9,500)
+      // Step 2: Buy 0.1 BTC = $6,000. (Cumulative notional $12,000 > $10,000 cash!)
+      const cumulativeBuyProposal = {
+        type: 'rebalance',
+        rebalanceSteps: [
+          { asset: 'BTC', action: 'buy', amount: 0.1 },
+          { asset: 'BTC', action: 'buy', amount: 0.1 },
+        ],
+      };
+      const buyVal = validateAIProposal(cumulativeBuyProposal, mockState, mockMarkets as any);
+      expect(buyVal.valid).toBe(false);
+      expect(buyVal.errors.some((e) => /exceeds available cash/i.test(e))).toBe(true);
+
+      // Current holding: 0.5 BTC
+      // Step 1: Sell 0.3 BTC (Fits 0.5 BTC)
+      // Step 2: Sell 0.3 BTC (Cumulative 0.6 BTC > 0.5 BTC!)
+      const cumulativeSellProposal = {
+        type: 'rebalance',
+        rebalanceSteps: [
+          { asset: 'BTC', action: 'sell', amount: 0.3 },
+          { asset: 'BTC', action: 'sell', amount: 0.3 },
+        ],
+      };
+      const sellVal = validateAIProposal(cumulativeSellProposal, mockState, mockMarkets as any);
+      expect(sellVal.valid).toBe(false);
+      expect(sellVal.errors.some((e) => /exceeds available holding/i.test(e))).toBe(true);
+    });
   });
 });

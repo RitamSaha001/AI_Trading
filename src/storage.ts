@@ -416,14 +416,27 @@ export function saveState(state: AppState): void {
       try {
         const pruned: AppState = {
           ...state,
-          orders: state.orders.slice(0, 50),
-          notifications: state.notifications.slice(0, 50),
+          orders: state.orders.slice(0, 100),
+          notifications: state.notifications.slice(0, 100),
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
-        console.warn('Storage quota exceeded. Auto-pruned older orders and notifications to preserve state.');
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('lumen_storage_warning', {
+              detail: 'Storage full — older history purged.',
+            })
+          );
+        }
         return;
       } catch (retryErr) {
         console.error('Failed to persist pruned state after quota exceeded:', retryErr);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('lumen_storage_warning', {
+              detail: 'Storage quota critically exceeded — unable to persist state.',
+            })
+          );
+        }
       }
     }
     console.warn('Failed to persist simulation state to localStorage:', e);

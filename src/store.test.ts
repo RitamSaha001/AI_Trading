@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { freshState, migrateState, SCHEMA_VERSION } from './storage';
 import { executeOrder, cancelOrder } from './domain/trading';
+import { getReservedCash, getReservedPosition } from './domain/portfolio';
+import { mergeTickResults, TickMutations } from './store';
 import { AppState, Market, Order } from './types';
 
 function createMockMarkets(): Record<string, Market> {
@@ -40,53 +42,82 @@ function createMockMarkets(): Record<string, Market> {
 
 describe('Store: State Management & Engine Hardening', () => {
   describe('Price Tick Engine Functional Updater & Concurrent Safety', () => {
-    it('preserves concurrent user orders when tick engine merges mutations atomically', () => {
-      // Simulating the tick engine race condition fix:
-      // T0: Tick engine takes a snapshot
+    it('preserves concurrent user orders when tick engine merges mutations atomically via mergeTickResults', () => {
       let state = freshState(50000, 'clean');
       const markets = createMockMarkets();
-      const tickSnapshot = {
-        ...state,
-        positions: { ...state.positions },
-        orders: [...state.orders],
-        notifications: [...state.notifications],
+
+      // Pre-existing pending limit order in state
+      executeOrder(state, markets as any, 'buy', 'ETH', 1.0, {
+        type: 'limit',
+        limitPrice: 2800,
+      });
+      const pendingEthOrderId = state.orders[0].id;
+      expect(state.orders.length).toBe(1);
+
+      // T0: Tick engine starts computing on snapshot.
+      // During tick, ETH price drops to $2700, filling the pending ETH order!
+      const tickMutations: TickMutations = {
+        cashDelta: -2802.24, // $2800 + fee
+        positionDeltas: { ETH: 1.0 },
+        avgBuyPriceUpdates: { ETH: 2802.24 },
+        updatedOrders: [
+          {
+            ...state.orders[0],
+            status: 'filled',
+            price: 2800,
+            fee: 2.24,
+            notional: 2800,
+            filledAt: Date.now(),
+          },
+        ],
+        newOrders: [],
+        totalFeesDelta: 2.24,
+        realizedPnlDelta: 0,
+        notifications: [
+          {
+            id: 'tick_notif_eth',
+            ts: Date.now(),
+            title: 'Order Filled (LIMIT)',
+            body: 'ETH limit buy filled',
+            type: 'order',
+          },
+        ],
       };
 
-      // T1: User places a limit order while tick engine is computing
-      const userOrderRes = executeOrder(state, markets as any, 'buy', 'BTC', 0.1, {
+      // T1: WHILE tick was calculating, user concurrently placed a new order for BTC!
+      const userBtcRes = executeOrder(state, markets as any, 'buy', 'BTC', 0.1, {
         type: 'limit',
         limitPrice: 58000,
       });
-      expect(userOrderRes.ok).toBe(true);
-      expect(state.orders.length).toBe(1);
-      const userOrderId = state.orders[0].id;
+      expect(userBtcRes.ok).toBe(true);
+      expect(state.orders.length).toBe(2);
+      const userBtcOrderId = state.orders[0].id;
+      const userCashAfterBtcOrder = state.cash;
 
-      // T2: Tick engine finishes background computations and applies atomic updater:
-      // Instead of setState(tickSnapshot) which would wipe out userOrderRes,
-      // functional updater merges onto the latest `prev` state!
-      const tickGeneratedNotifications = [
-        {
-          id: 'tick_notif_1',
-          ts: Date.now(),
-          title: 'Price Alert: BTC',
-          body: 'BTC crossed $60,000',
-          type: 'alert' as const,
-        },
-      ];
+      // T2: Tick engine completes and applies atomic mergeTickResults to latest state:
+      const mergedState = mergeTickResults(state, tickMutations);
 
-      // Functional updater simulation:
-      state = ((prev: AppState) => ({
-        ...prev,
-        notifications: [...tickGeneratedNotifications, ...prev.notifications],
-      }))(state);
+      // Verify:
+      // 1. Both orders are preserved!
+      expect(mergedState.orders.length).toBe(2);
+      const btcOrder = mergedState.orders.find((o) => o.id === userBtcOrderId);
+      const ethOrder = mergedState.orders.find((o) => o.id === pendingEthOrderId);
+      expect(btcOrder).toBeDefined();
+      expect(btcOrder?.status).toBe('pending');
+      expect(ethOrder).toBeDefined();
+      expect(ethOrder?.status).toBe('filled');
 
-      // Verify user order is NOT lost!
-      expect(state.orders.length).toBe(1);
-      expect(state.orders[0].id).toBe(userOrderId);
-      expect(state.notifications.some((n) => n.id === 'tick_notif_1')).toBe(true);
+      // 2. Both cash deductions are preserved (user BTC reservation + tick ETH fill)
+      expect(mergedState.cash).toBe(Math.round((userCashAfterBtcOrder - 2802.24) * 1e8) / 1e8);
+
+      // 3. Position contains ETH from tick
+      expect(mergedState.positions.ETH).toBe(1.0);
+
+      // 4. Notifications merged
+      expect(mergedState.notifications.some((n) => n.id === 'tick_notif_eth')).toBe(true);
     });
 
-    it('preserves order cancellations made concurrently during tick cycle', () => {
+    it('preserves order cancellations made concurrently during tick cycle via mergeTickResults', () => {
       let state = freshState(50000, 'clean');
       const markets = createMockMarkets();
 
@@ -98,17 +129,24 @@ describe('Store: State Management & Engine Hardening', () => {
       const orderId = state.orders[0].id;
       expect(state.orders[0].status).toBe('pending');
 
-      // User cancels order
+      // User concurrently cancels order in state
       cancelOrder(state, orderId);
       expect(state.orders[0].status).toBe('cancelled');
 
-      // Tick merges without regressing the status to 'pending'
-      state = ((prev: AppState) => ({
-        ...prev,
-        positions: { ...prev.positions },
-      }))(state);
+      // Tick attempted a tick mutation that did not fill it (or had stale pending state)
+      const tickMutations: TickMutations = {
+        updatedOrders: [
+          {
+            ...state.orders[0],
+            status: 'pending',
+          },
+        ],
+      };
 
-      expect(state.orders[0].status).toBe('cancelled');
+      const merged = mergeTickResults(state, tickMutations);
+      // Cancellation must NOT regress back to 'pending'!
+      const order = merged.orders.find((o) => o.id === orderId);
+      expect(order?.status).toBe('cancelled');
     });
   });
 
@@ -168,6 +206,81 @@ describe('Store: State Management & Engine Hardening', () => {
       expect(paperOrders[0].id).toBe('ord_paper_1');
       expect(exchangeOrders.length).toBe(1);
       expect(exchangeOrders[0].id).toBe('ord_exchange_1');
+    });
+
+    it('isolates reserved cash and positions between paper and exchange modes', () => {
+      const orders: Order[] = [
+        {
+          id: 'ord_paper_limit_buy',
+          ts: Date.now(),
+          side: 'buy',
+          type: 'limit',
+          asset: 'BTC',
+          amount: 1.0,
+          price: 50000,
+          limitPrice: 50000,
+          fee: 0,
+          notional: 50000,
+          reservedCash: 50050,
+          auto: false,
+          status: 'pending',
+          accountMode: 'paper',
+        },
+        {
+          id: 'ord_exchange_limit_buy',
+          ts: Date.now(),
+          side: 'buy',
+          type: 'limit',
+          asset: 'ETH',
+          amount: 2.0,
+          price: 3000,
+          limitPrice: 3000,
+          fee: 0,
+          notional: 6000,
+          reservedCash: 6006,
+          auto: false,
+          status: 'pending',
+          accountMode: 'exchange',
+        },
+        {
+          id: 'ord_paper_limit_sell',
+          ts: Date.now(),
+          side: 'sell',
+          type: 'limit',
+          asset: 'SOL',
+          amount: 10,
+          price: 150,
+          fee: 0,
+          notional: 1500,
+          reservedAmount: 10,
+          auto: false,
+          status: 'pending',
+          accountMode: 'paper',
+        },
+        {
+          id: 'ord_exchange_limit_sell',
+          ts: Date.now(),
+          side: 'sell',
+          type: 'limit',
+          asset: 'SOL',
+          amount: 5,
+          price: 150,
+          fee: 0,
+          notional: 750,
+          reservedAmount: 5,
+          auto: false,
+          status: 'pending',
+          accountMode: 'exchange',
+        },
+      ];
+
+      // In paper mode: only paper pending buy/sell orders count toward reserved cash & positions
+      expect(getReservedCash({ orders, accountMode: 'paper' })).toBe(50050);
+      expect(getReservedPosition({ orders, accountMode: 'paper' }, 'SOL')).toBe(10);
+
+      // In exchange mode: only exchange pending buy/sell orders count toward reserved cash & positions
+      expect(getReservedCash({ orders, accountMode: 'exchange' })).toBe(6006);
+      expect(getReservedPosition({ orders, accountMode: 'exchange' }, 'SOL')).toBe(5);
     });
   });
 

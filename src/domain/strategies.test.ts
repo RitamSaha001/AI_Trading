@@ -457,11 +457,16 @@ describe('Autonomous Algorithmic Strategy Suite', () => {
       };
 
       const res = evaluateStrategy(strat, state, markets);
-      expect(typeof res.executed).toBe('boolean');
       expect(res).toBeDefined();
+      expect(typeof res.executed).toBe('boolean');
+      if (res.executed) {
+        expect(res.type).toBe('buy');
+        expect(res.orderResult?.ok).toBe(true);
+        expect(res.orderResult?.order?.asset).toBe('BTC');
+      }
     });
 
-    it('evaluates mean_reversion strategy correctly', () => {
+    it('evaluates mean_reversion strategy correctly with real signal checks', () => {
       const state = freshState(50000, 'clean');
       const market = createMockMarket(65000, 'BTC');
       const markets = { BTC: market } as any;
@@ -478,15 +483,19 @@ describe('Autonomous Algorithmic Strategy Suite', () => {
         totalPnl: 0,
         realizedPnl: 0,
         feesPaid: 0,
-        params: { rsiThresholdBuy: 99 },
+        params: { rsiThresholdBuy: 75 },
       };
 
       const res = evaluateStrategy(strat, state, markets);
-      expect(typeof res.executed).toBe('boolean');
       expect(res).toBeDefined();
+      expect(typeof res.executed).toBe('boolean');
+      if (res.executed) {
+        expect(res.type).toBe('buy');
+        expect(res.orderResult?.ok).toBe(true);
+      }
     });
 
-    it('evaluates breakout_volatility strategy correctly', () => {
+    it('evaluates breakout_volatility strategy correctly with real signal checks', () => {
       const state = freshState(50000, 'clean');
       const market = createMockMarket(65000, 'BTC');
       const markets = { BTC: market } as any;
@@ -507,10 +516,15 @@ describe('Autonomous Algorithmic Strategy Suite', () => {
       };
 
       const res = evaluateStrategy(strat, state, markets);
+      expect(res).toBeDefined();
       expect(typeof res.executed).toBe('boolean');
+      if (res.executed) {
+        expect(res.type).toBe('buy');
+        expect(res.orderResult?.ok).toBe(true);
+      }
     });
 
-    it('evaluates grid_scalp strategy correctly', () => {
+    it('evaluates grid_scalp strategy correctly with real signal checks', () => {
       const state = freshState(50000, 'clean');
       const market = createMockMarket(65000, 'BTC');
       const markets = { BTC: market } as any;
@@ -531,7 +545,12 @@ describe('Autonomous Algorithmic Strategy Suite', () => {
       };
 
       const res = evaluateStrategy(strat, state, markets);
+      expect(res).toBeDefined();
       expect(typeof res.executed).toBe('boolean');
+      if (res.executed) {
+        expect(res.type).toBe('buy');
+        expect(res.orderResult?.ok).toBe(true);
+      }
     });
   });
 });

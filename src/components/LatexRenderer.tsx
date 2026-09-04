@@ -51,7 +51,7 @@ export const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className
           (trimmed.startsWith('\\[') && trimmed.endsWith('\\]'))) {
         const formula = trimmed.replace(/^(\$\$|\\\[)/, '').replace(/(\$\$|\\\])$/, '').trim();
         try {
-          const html = katex.renderToString(formula, { displayMode: true, throwOnError: false, trust: false });
+          const html = katex.renderToString(formula, { displayMode: true, throwOnError: false, trust: false, strict: 'error' });
           elements.push(
             <div
               key={`block-math-${lineIdx}`}
@@ -192,7 +192,7 @@ function renderInlineLatexAndFormatting(text: string): React.ReactNode[] {
     if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
       const formula = part.slice(1, -1);
       try {
-        const html = katex.renderToString(formula, { displayMode: false, throwOnError: false, trust: false });
+        const html = katex.renderToString(formula, { displayMode: false, throwOnError: false, trust: false, strict: 'error' });
         return (
           <span
             key={`math-${idx}`}
@@ -208,7 +208,7 @@ function renderInlineLatexAndFormatting(text: string): React.ReactNode[] {
     if (part.startsWith('\\(') && part.endsWith('\\)')) {
       const formula = part.slice(2, -2);
       try {
-        const html = katex.renderToString(formula, { displayMode: false, throwOnError: false, trust: false });
+        const html = katex.renderToString(formula, { displayMode: false, throwOnError: false, trust: false, strict: 'error' });
         return (
           <span
             key={`math-${idx}`}

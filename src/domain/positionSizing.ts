@@ -149,8 +149,11 @@ export function calculateRiskBasedPositionSize(
         // Re-validate: min-size must not violate risk caps
         const minNotional = minQty * entry;
         const minResultingAssetVal = req.currentHoldingNotional + minNotional;
+        const minTradeRisk = minQty * unitRisk;
         if (minResultingAssetVal > equity * policy.maxSingleAssetPct) {
           boundedQty = 0; // Would exceed concentration limit
+        } else if (minTradeRisk > riskBudget) {
+          boundedQty = 0; // Would exceed max trade risk budget
         } else if (minNotional > equity * policy.maxSingleOrderPortfolioPct) {
           boundedQty = 0; // Would exceed single order cap
         }

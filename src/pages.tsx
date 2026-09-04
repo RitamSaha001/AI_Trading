@@ -1307,21 +1307,25 @@ export function Portfolio() {
           {/* Balance Metrics Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
             <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-              <span className="text-[11px] text-zinc-400 font-medium block">Total Liquid USDT</span>
+              <span className="text-[11px] text-zinc-400 font-medium block">Total Liquid Stablecoins</span>
               <span className="text-lg font-bold font-mono text-emerald-400 mt-1 block">
-                ${(exchangeAccount?.balances?.['USDT']?.free || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${(['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const)
+                  .reduce((sum, c) => sum + (exchangeAccount?.balances?.[c]?.free || 0), 0)
+                  .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-              <span className="text-[11px] text-zinc-400 font-medium block">USDT In Orders</span>
+              <span className="text-[11px] text-zinc-400 font-medium block">Stablecoins In Orders</span>
               <span className="text-lg font-bold font-mono text-amber-400 mt-1 block">
-                ${(exchangeAccount?.balances?.['USDT']?.locked || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${(['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const)
+                  .reduce((sum, c) => sum + (exchangeAccount?.balances?.[c]?.locked || 0), 0)
+                  .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
               <span className="text-[11px] text-zinc-400 font-medium block">Active Tokens</span>
               <span className="text-lg font-bold font-mono text-white mt-1 block">
-                {Object.keys(exchangeAccount?.balances || {}).filter((k) => k !== 'USDT').length} Assets
+                {Object.keys(exchangeAccount?.balances || {}).filter((k) => !['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'].includes(k)).length} Assets
               </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
@@ -1504,7 +1508,10 @@ export function Portfolio() {
             <span className="text-[11px] font-semibold text-zinc-500 block">Pending Orders &amp; Capital</span>
             <div className="flex items-center gap-1.5 mt-1">
               {(() => {
-                const pendingOrders = state.orders.filter((o) => o.status === 'pending');
+                const currentDeskMode = accountMode || 'paper';
+                const pendingOrders = state.orders.filter(
+                  (o) => (o.accountMode || 'paper') === currentDeskMode && o.status === 'pending'
+                );
                 const reservedCash = pendingOrders
                   .filter((o) => o.side === 'buy')
                   .reduce((sum, o) => sum + (o.reservedCash || o.amount * o.price), 0);
@@ -1809,10 +1816,16 @@ export function Orders() {
   const estTotal = numAmount * estPrice;
   const estFee = estTotal * 0.0008;
 
+  const exchangeAvailableCash = (['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const).reduce(
+    (sum, c) => sum + (exchangeAccount?.balances?.[c]?.free || 0),
+    0
+  );
+  const currentDeskMode = accountMode || 'paper';
+
   const handleQuickPercent = (pct: number) => {
     if (!estPrice) return;
-    const availableCash = accountMode === 'exchange' ? (exchangeAccount?.balances?.['USDT']?.free || 0) : state.cash;
-    const availableHolding = accountMode === 'exchange' ? (exchangeAccount?.balances?.[selectedAsset]?.free || 0) : currentHolding;
+    const availableCash = currentDeskMode === 'exchange' ? exchangeAvailableCash : state.cash;
+    const availableHolding = currentDeskMode === 'exchange' ? (exchangeAccount?.balances?.[selectedAsset]?.free || 0) : currentHolding;
     if (side === 'buy') {
       const budget = (availableCash * pct) / 100;
       const qty = budget / (estPrice * 1.001);
@@ -1834,6 +1847,7 @@ export function Orders() {
   };
 
   const filteredOrders = state.orders.filter((o) => {
+    if ((o.accountMode || 'paper') !== currentDeskMode) return false;
     if (orderFilter === 'pending') return o.status === 'pending';
     if (orderFilter === 'filled') return o.status === 'filled' || !o.status;
     if (orderFilter === 'buy') return o.side === 'buy';
@@ -1841,7 +1855,9 @@ export function Orders() {
     return true;
   });
 
-  const pendingCount = state.orders.filter((o) => o.status === 'pending').length;
+  const pendingCount = state.orders.filter(
+    (o) => (o.accountMode || 'paper') === currentDeskMode && o.status === 'pending'
+  ).length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -1985,8 +2001,8 @@ export function Orders() {
                 <label className="font-semibold text-zinc-700">Quantity ({selectedAsset})</label>
                 <span className="text-zinc-500 font-mono text-[11px]">
                   {side === 'buy'
-                    ? `Avail: ${accountMode === 'exchange' ? `$${(exchangeAccount?.balances?.['USDT']?.free || 0).toFixed(2)} USDT` : money(state.cash)}`
-                    : `Holding: ${accountMode === 'exchange' ? `${(exchangeAccount?.balances?.[selectedAsset]?.free || 0).toFixed(4)} ${selectedAsset}` : formatQty(currentHolding, selectedAsset)}`}
+                    ? `Avail: ${currentDeskMode === 'exchange' ? `$${exchangeAvailableCash.toFixed(2)} (Stablecoins)` : money(state.cash)}`
+                    : `Holding: ${currentDeskMode === 'exchange' ? `${(exchangeAccount?.balances?.[selectedAsset]?.free || 0).toFixed(4)} ${selectedAsset}` : formatQty(currentHolding, selectedAsset)}`}
                 </span>
               </div>
               <input

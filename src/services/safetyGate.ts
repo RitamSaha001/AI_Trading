@@ -8,6 +8,7 @@ import {
   getAvailablePosition,
   getReservedPosition,
   formatQty,
+  FEE_RATE,
 } from '../domain/portfolio';
 import { calculateExecutionQuote } from '../domain/trading';
 import { DEFAULT_RISK_POLICY, getRiskPolicy, RiskPolicy } from '../domain/riskPolicy';
@@ -87,6 +88,14 @@ export function validateAIProposal(
     return { valid: false, errors: [`Unsupported proposal type: ${proposal.type}`], warnings: [] };
   }
 
+  // 1a. Cross-mode proposal protection (Requirement 1.2)
+  const currentMode = state.accountMode || 'paper';
+  if (proposal.accountMode && proposal.accountMode !== currentMode) {
+    errors.push(
+      `Cross-mode proposal rejected: proposal target mode '${proposal.accountMode}' does not match current active trading mode '${currentMode}'.`
+    );
+  }
+
   // 1b. Rebalance & Emergency Defense Validation
   if (proposal.type === 'rebalance' || proposal.type === 'emergency_defend') {
     const steps: any[] = proposal.rebalanceSteps || [];
@@ -95,6 +104,21 @@ export function validateAIProposal(
         errors.push('Rebalance proposal must specify either rebalanceSteps or rebalanceTargets.');
       }
     } else {
+      const isExch = state.accountMode === 'exchange';
+      let runningCash = isExch
+        ? (['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const).reduce(
+            (sum, c) => sum + (state.exchangeAccount?.balances[c]?.free || 0),
+            0
+          )
+        : getAvailableCash(state);
+
+      const runningHoldings: Record<string, number> = {};
+      for (const a of ASSETS) {
+        runningHoldings[a] = isExch
+          ? (state.exchangeAccount?.balances[a]?.free || 0)
+          : getAvailablePosition(state, a);
+      }
+
       for (const s of steps) {
         if (!ASSETS.includes(s.asset)) {
           errors.push(`Unknown asset in rebalance step: ${s.asset}`);
@@ -105,26 +129,29 @@ export function validateAIProposal(
         if (!Number.isFinite(s.amount) || s.amount <= 0) {
           errors.push(`Invalid amount in rebalance step for ${s.asset}: ${s.amount}`);
         }
-        
-        // Validate sufficient balance for rebalance step
+
+        // Validate sufficient balance for rebalance step with cumulative tracking
         const stepMarket = markets[s.asset as Asset];
-        if (stepMarket && stepMarket.price > 0) {
+        if (stepMarket && stepMarket.price > 0 && Number.isFinite(s.amount) && s.amount > 0) {
           if (s.action === 'buy') {
             const stepNotional = s.amount * stepMarket.price;
-            const isExch = state.accountMode === 'exchange';
-            const cashAvail = isExch
-              ? (['USDT','USDC','BUSD','FDUSD','USD'] as const).reduce((sum, c) => sum + (state.exchangeAccount?.balances[c]?.free || 0), 0)
-              : getAvailableCash(state);
-            if (stepNotional > cashAvail * 0.95) {
-              errors.push(`Rebalance buy step for ${s.asset}: notional $${stepNotional.toFixed(2)} exceeds available cash $${cashAvail.toFixed(2)}.`);
+            if (stepNotional > runningCash * 0.95) {
+              errors.push(
+                `Rebalance buy step for ${s.asset}: notional $${stepNotional.toFixed(2)} exceeds available cash $${runningCash.toFixed(2)}.`
+              );
+            } else {
+              runningCash = Math.max(0, runningCash - stepNotional);
+              runningHoldings[s.asset] = (runningHoldings[s.asset] || 0) + s.amount;
             }
           } else if (s.action === 'sell') {
-            const isExch = state.accountMode === 'exchange';
-            const holdingAvail = isExch
-              ? (state.exchangeAccount?.balances[s.asset]?.free || 0)
-              : getAvailablePosition(state, s.asset as Asset);
-            if (s.amount > holdingAvail + 1e-6) {
-              errors.push(`Rebalance sell step for ${s.asset}: amount ${s.amount} exceeds available holding ${holdingAvail.toFixed(6)}.`);
+            const curHolding = runningHoldings[s.asset] || 0;
+            if (s.amount > curHolding + 1e-6) {
+              errors.push(
+                `Rebalance sell step for ${s.asset}: amount ${s.amount} exceeds available holding ${curHolding.toFixed(6)}.`
+              );
+            } else {
+              runningHoldings[s.asset] = Math.max(0, curHolding - s.amount);
+              runningCash += s.amount * stepMarket.price * (1 - FEE_RATE);
             }
           }
         }
@@ -265,7 +292,12 @@ export function validateAIProposal(
   // Duplicate-order protection (Requirement 19)
   if (Array.isArray(state.orders) && state.orders.length > 0 && Number.isFinite(amount) && amount > 0) {
     const isDuplicate = state.orders.some(
-      (o) => o.status === 'pending' && o.asset === asset && o.side === side && Math.abs(o.amount - amount) / Math.max(amount, 0.0001) < 0.10
+      (o) =>
+        (o.accountMode || 'paper') === currentMode &&
+        o.status === 'pending' &&
+        o.asset === asset &&
+        o.side === side &&
+        Math.abs(o.amount - amount) / Math.max(amount, 0.0001) < 0.10
     );
     if (isDuplicate) {
       errors.push(`Duplicate order protection: An open ${side.toUpperCase()} order for ${asset} of matching size is already pending execution.`);
@@ -308,12 +340,12 @@ export function validateAIProposal(
 
   // Financial & Execution Modeling
   const totalPortVal = portfolioValue(state, markets);
-  const currentCash = isExchangeMode
-    ? (state.exchangeAccount?.balances['USDT']?.free || 0)
-    : state.cash;
-  const availableCash = isExchangeMode
-    ? (state.exchangeAccount?.balances['USDT']?.free || 0)
-    : getAvailableCash(state);
+  const stablecoinsSum = (['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const).reduce(
+    (sum, c) => sum + (state.exchangeAccount?.balances[c]?.free || 0),
+    0
+  );
+  const currentCash = isExchangeMode ? stablecoinsSum : state.cash;
+  const availableCash = isExchangeMode ? stablecoinsSum : getAvailableCash(state);
   const reservedCash = isExchangeMode ? 0 : getReservedCash(state);
   const currentHolding = isExchangeMode
     ? (state.exchangeAccount?.balances[asset]?.free || 0)

@@ -211,4 +211,22 @@ describe('Domain: Risk-Based Position Sizing Engine', () => {
     expect(res.quantity).toBe(0.05);
     expect(res.notional).toBe(5);
   });
+
+  it('zeros out order if min size bump would violate max trade risk budget', () => {
+    // Equity is $100. Max trade risk is 2% = $2.00.
+    // Entry: $100, Stop: $50 (Unit risk: $50).
+    // Min order notional: $10.00 -> minQty = 0.1 units.
+    // Min trade risk = 0.1 * $50 = $5.00 > $2.00 risk budget!
+    const res = calculateRiskBasedPositionSize({
+      asset: 'SOL',
+      side: 'buy',
+      entryPrice: 100,
+      stopPrice: 50,
+      portfolioEquity: 100,
+      availableCash: 50,
+      currentHolding: 0,
+      currentHoldingNotional: 0,
+    });
+    expect(res.quantity).toBe(0);
+  });
 });

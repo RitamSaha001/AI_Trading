@@ -265,6 +265,7 @@ export type AIActionProposal = {
   confidence: 'low' | 'medium' | 'high';
   riskSummary: string;
   requiresConfirmation: boolean;
+  accountMode?: AccountMode;
   // Agentic & Danger Sensing extensions
   dangerLevel?: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
   hazardSource?: string;
