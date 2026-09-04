@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { listGeminiModels, SUPPORTED_MODELS, resolveGemini3Model } from './gemini';
 import { useLumen } from './store';
 import { SimulationMode } from './storage';
-import { X, Sparkles, Key, Cpu, Volume2, RotateCcw, Check, Radio, Info } from 'lucide-react';
+import { X, Sparkles, Key, Cpu, Volume2, RotateCcw, Check, Radio, Info, Shield, Sliders } from 'lucide-react';
+import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
-  const { state, setSettings, reset } = useLumen();
+  const { state, setSettings, reset, setLossPreventionMode } = useLumen();
   const [key, setKey] = useState(state.settings.geminiApiKey || '');
   const [models, setModels] = useState<any[]>(SUPPORTED_MODELS);
   const [loading, setLoading] = useState(false);
@@ -16,6 +17,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [wsEnabled, setWsEnabled] = useState(state.settings.enableWebSocket ?? true);
   const [resetBalance, setResetBalance] = useState(50000);
   const [resetMode, setResetMode] = useState<SimulationMode>('clean');
+  const [lossMode, setLossMode] = useState<'strict' | 'balanced' | 'aggressive'>(state.lossPreventionMode || 'balanced');
+  const [slippageBps, setSlippageBps] = useState(state.settings.maxSlippageBps || 50);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const fetchModels = async () => {
     setLoading(true);
@@ -35,11 +39,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   }, []);
 
   const handleSave = () => {
+    setLossPreventionMode(lossMode);
     setSettings({
       geminiApiKey: key.trim(),
       geminiModel: selectedModel,
       soundEnabled: sound,
       enableWebSocket: wsEnabled,
+      maxSlippageBps: slippageBps,
     });
     setSaved(true);
     setTimeout(() => {
@@ -57,7 +63,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-black/[0.06] bg-white/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shadow-sm">
+            <div className="w-10 h-10 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-sm">
               <Sparkles className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
@@ -76,6 +82,25 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
         {/* Content */}
         <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          {/* Visual Setup Guide & Tour Launcher */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/80 via-purple-50/50 to-white border border-indigo-200/80 flex items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-indigo-950">Visual Setup Guide &amp; Tour</h4>
+                <p className="text-[11px] text-zinc-500">Step-by-step walkthrough of desks, AI models &amp; defense</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap"
+            >
+              Launch Tour
+            </button>
+          </div>
           {/* Gemini API Key */}
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
@@ -138,6 +163,65 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <p className="text-[11px] text-zinc-500">
               Configured exclusively for Gemini 3 series models for fast technical analysis, risk scoring, and copilot reasoning.
             </p>
+          </div>
+
+          {/* Risk Policy Sentinel Policy Preset */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
+                <Shield className="w-3.5 h-3.5 text-zinc-400" />
+                Capital Defense Policy Preset
+              </label>
+              <span className="text-[10px] font-mono text-zinc-400 uppercase font-semibold">
+                Active: {lossMode}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(['strict', 'balanced', 'aggressive'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setLossMode(m)}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    lossMode === m
+                      ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                      : 'bg-white border-black/[0.08] text-zinc-700 hover:bg-black/[0.02]'
+                  }`}
+                >
+                  <div className="text-xs font-bold capitalize">{m}</div>
+                  <div className={`text-[10px] mt-0.5 ${lossMode === m ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                    {m === 'strict' ? '25% Cash Floor' : m === 'balanced' ? '15% Cash Floor' : '10% Cash Floor'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Max Execution Slippage Tolerance */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
+                <Sliders className="w-3.5 h-3.5 text-zinc-400" />
+                Max Execution Slippage Tolerance
+              </label>
+              <span className="text-xs font-mono font-semibold text-zinc-800">
+                {slippageBps} bps ({(slippageBps / 100).toFixed(2)}%)
+              </span>
+            </div>
+            <input
+              type="range"
+              min="10"
+              max="200"
+              step="5"
+              value={slippageBps}
+              onChange={(e) => setSlippageBps(Number(e.target.value))}
+              className="w-full h-1.5 bg-black/[0.06] rounded-lg appearance-none cursor-pointer accent-indigo-600"
+            />
+            <div className="flex justify-between text-[10px] text-zinc-400 font-mono">
+              <span>Strict (10 bps / 0.1%)</span>
+              <span>Standard (50 bps / 0.5%)</span>
+              <span>Volatile (200 bps / 2%)</span>
+            </div>
           </div>
 
           {/* Real-time WebSocket Feed */}
@@ -285,6 +369,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
+      {wizardOpen && <OnboardingWizardModal isOpen={wizardOpen} onClose={() => setWizardOpen(false)} />}
     </div>
   );
 }

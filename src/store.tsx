@@ -59,6 +59,7 @@ type Ctx = {
   closeChat: () => void;
   activeToast: { id: string; title: string; message: string; type: 'success' | 'info' | 'warn' } | null;
   dismissToast: () => void;
+  triggerToast: (title: string, message: string, type?: 'success' | 'info' | 'warn') => void;
   setSelectedAsset: (a: Asset) => void;
   setTimeframe: (t: Timeframe) => void;
   toggleWatch: (a: Asset) => void;
@@ -1405,6 +1406,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       closeChat,
       activeToast,
       dismissToast,
+      triggerToast,
       setSelectedAsset,
       setTimeframe,
       toggleWatch,

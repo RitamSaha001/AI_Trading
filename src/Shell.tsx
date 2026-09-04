@@ -6,6 +6,7 @@ import { ChatDrawer } from './ChatDrawer';
 import { DataSourceBadge } from './components/DataSourceBadge';
 import { AISafetyModal } from './components/AISafetyModal';
 import { ExchangeOnboardingDrawer } from './components/ExchangeOnboardingDrawer';
+import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import {
   LayoutDashboard,
   BarChart3,
@@ -91,9 +92,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
   } = useLumen();
   const route = useRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const done = localStorage.getItem('lumen_onboarded_v1');
+      if (!done) {
+        setOnboardingOpen(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
@@ -226,6 +239,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             onClick={() => {
+              setOnboardingOpen(true);
+              setMobileMenuOpen(false);
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-200/70 rounded-xl transition-all shadow-2xs"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+            <span>Setup Guide &amp; Tour</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
               setSettingsOpen(true);
               setMobileMenuOpen(false);
             }}
@@ -337,6 +362,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </button>
               )}
             </div>
+
+            {/* Quick Start Visual Guide Trigger */}
+            <button
+              type="button"
+              onClick={() => setOnboardingOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-semibold rounded-full border border-indigo-200/80 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 transition-all flex items-center gap-1.5 shadow-2xs active:scale-95"
+              title="Launch Interactive Cockpit Walkthrough"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+              <span className="hidden md:inline">Quick Start Guide</span>
+            </button>
 
             {/* Live Data Source Indicator (hidden on smallest screens to preserve space) */}
             <div className="hidden sm:block">
@@ -481,6 +517,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Settings Modal */}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+
+      {/* Onboarding Visual Wizard Modal */}
+      <OnboardingWizardModal isOpen={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
 
       {/* Nexus AI Drawer */}
       <ChatDrawer open={chatOpen} onClose={closeChat} />

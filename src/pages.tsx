@@ -50,7 +50,14 @@ import {
   Compass,
   Scale,
   Coins,
+  Radio,
+  Volume2,
+  Key,
+  Cpu,
+  Lock,
+  Check,
 } from 'lucide-react';
+import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { senseMarketDanger } from './domain/agentic';
 
 function GlassCard({
@@ -102,6 +109,8 @@ export function Dashboard() {
     openChat,
   } = useLumen();
 
+  const [wizardOpen, setWizardOpen] = useState(false);
+
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
   const riskProfile = calculatePortfolioRisk(state, markets);
@@ -115,17 +124,54 @@ export function Dashboard() {
         title="Algorithmic Trading Dashboard"
         subtitle="Live cryptocurrency market streams, quantitative risk controls, and automated paper execution."
         action={
-          <button
-            type="button"
-            onClick={refreshAI}
-            disabled={aiLoading}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white/80 hover:bg-white border border-black/[0.08] rounded-xl shadow-xs transition-all"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${aiLoading ? 'animate-spin text-indigo-600' : 'text-zinc-500'}`} />
-            <span>{aiLoading ? 'Analyzing Indicators...' : 'Refresh Technical Intelligence'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWizardOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-xl shadow-2xs transition-all active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+              <span>Setup Guide</span>
+            </button>
+            <button
+              type="button"
+              onClick={refreshAI}
+              disabled={aiLoading}
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white/80 hover:bg-white border border-black/[0.08] rounded-xl shadow-xs transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${aiLoading ? 'animate-spin text-indigo-600' : 'text-zinc-500'}`} />
+              <span>{aiLoading ? 'Analyzing...' : 'Refresh Technicals'}</span>
+            </button>
+          </div>
         }
       />
+
+      {/* Quick Setup & Platform Guidance Strip */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-emerald-500/10 border border-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold text-zinc-950">Quick Setup &amp; Platform Tour</h3>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800">
+                Institutional Ready
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-600 mt-0.5">
+              Learn how to navigate Simulated Paper vs Live Binance Spot, calibrate Gemini 3 reasoning, and arm Zero-Loss bots.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setWizardOpen(true)}
+          className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-xs transition-all whitespace-nowrap active:scale-95 shrink-0"
+        >
+          Launch Interactive Guide →
+        </button>
+      </div>
 
       {marketError && (
         <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 text-xs flex items-center gap-2.5">
@@ -628,6 +674,7 @@ export function Dashboard() {
           </button>
         </div>
       </div>
+      {wizardOpen && <OnboardingWizardModal isOpen={wizardOpen} onClose={() => setWizardOpen(false)} />}
     </div>
   );
 }
@@ -966,6 +1013,25 @@ export function Markets() {
                   </tr>
                 );
               })}
+              {displayed.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-12 text-center text-xs text-zinc-400">
+                    <div className="space-y-2">
+                      <p>No markets found matching "{query}".</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuery('');
+                          setCategory('All');
+                        }}
+                        className="px-3 py-1 text-xs font-semibold text-zinc-800 bg-black/[0.04] hover:bg-black/[0.08] rounded-lg transition-all"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1105,6 +1171,27 @@ export function Markets() {
               </GlassCard>
             );
           })}
+          {displayed.length === 0 && (
+            <div className="col-span-full p-12 text-center bg-white/70 rounded-3xl border border-black/[0.06] space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-black/[0.04] text-zinc-400 flex items-center justify-center mx-auto">
+                <Search className="w-5 h-5" />
+              </div>
+              <h4 className="text-sm font-bold text-zinc-800">No Markets Match Your Search</h4>
+              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                No cryptocurrency found matching "{query}". Try searching for major assets like BTC, ETH, SOL, or clear your filters.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('');
+                  setCategory('All');
+                }}
+                className="px-4 py-2 text-xs font-semibold text-zinc-900 bg-black/[0.05] hover:bg-black/[0.08] rounded-xl transition-all"
+              >
+                Clear Search &amp; Filters
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1130,6 +1217,7 @@ export function Portfolio() {
   const danger = senseMarketDanger(state, markets);
 
   const activeHoldings = ASSETS.filter((a) => (state.positions[a] || 0) > 0);
+  const [onlyActive, setOnlyActive] = useState(true);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -1427,18 +1515,44 @@ export function Portfolio() {
 
       {/* Positions Table */}
       <GlassCard className="overflow-hidden p-0">
-        <div className="p-5 border-b border-black/[0.05] flex items-center justify-between">
+        <div className="p-5 border-b border-black/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-bold text-zinc-900">Positions &amp; Unrealized P&amp;L</h3>
             <p className="text-xs text-zinc-500">Continuous mark-to-market using current live ask quotes.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => go('/orders')}
-            className="px-3.5 py-1.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-all shadow-xs"
-          >
-            + New Order
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center p-0.5 rounded-xl bg-black/[0.04] border border-black/[0.04]">
+              <button
+                type="button"
+                onClick={() => setOnlyActive(true)}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  onlyActive
+                    ? 'bg-white text-zinc-950 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                Active ({activeHoldings.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOnlyActive(false)}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  !onlyActive
+                    ? 'bg-white text-zinc-950 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                All ({ASSETS.length})
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => go('/orders')}
+              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-all shadow-xs"
+            >
+              + New Order
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -1456,7 +1570,7 @@ export function Portfolio() {
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.04]">
-              {ASSETS.map((a) => {
+              {(onlyActive ? activeHoldings : ASSETS).map((a) => {
                 const qty = state.positions[a] || 0;
                 const m = markets[a];
                 const val = qty * (m?.price || 0);
@@ -1526,6 +1640,22 @@ export function Portfolio() {
                   </tr>
                 );
               })}
+              {onlyActive && activeHoldings.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-12 text-center text-xs text-zinc-400">
+                    <div className="space-y-2 max-w-sm mx-auto">
+                      <p>You have no active token positions yet (100% Liquid Cash).</p>
+                      <button
+                        type="button"
+                        onClick={() => go('/orders')}
+                        className="px-4 py-1.5 text-xs font-semibold text-white bg-zinc-950 rounded-xl hover:bg-zinc-800 transition-all shadow-xs"
+                      >
+                        Place First Order →
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1538,7 +1668,7 @@ export function Portfolio() {
 // ORDERS & EXECUTION
 // ----------------------------------------------------
 export function Orders() {
-  const { state, markets, order, cancelPendingOrder } = useLumen();
+  const { state, markets, order, cancelPendingOrder, accountMode, exchangeAccount } = useLumen();
   const [selectedAsset, setSelectedAsset] = useState<Asset>(state.selectedAsset);
   const [side, setSide] = useState<Side>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
@@ -1557,12 +1687,14 @@ export function Orders() {
 
   const handleQuickPercent = (pct: number) => {
     if (!estPrice) return;
+    const availableCash = accountMode === 'exchange' ? (exchangeAccount?.balances?.['USDT']?.free || 0) : state.cash;
+    const availableHolding = accountMode === 'exchange' ? (exchangeAccount?.balances?.[selectedAsset]?.free || 0) : currentHolding;
     if (side === 'buy') {
-      const budget = (state.cash * pct) / 100;
+      const budget = (availableCash * pct) / 100;
       const qty = budget / (estPrice * 1.001);
       setAmountStr(qty > 0 ? qty.toFixed(META[selectedAsset]?.decimals || 4) : '0');
     } else {
-      const qty = (currentHolding * pct) / 100;
+      const qty = (availableHolding * pct) / 100;
       setAmountStr(qty.toFixed(META[selectedAsset]?.decimals || 4));
     }
   };
@@ -1590,8 +1722,12 @@ export function Orders() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
-        title="Paper Trading Terminal"
-        subtitle="Deterministic paper execution engine modeling realistic liquidity slippage and taker fees."
+        title={accountMode === 'exchange' ? "Binance Spot Execution Terminal" : "Paper Trading Terminal"}
+        subtitle={
+          accountMode === 'exchange'
+            ? `Live order dispatch to Binance ${exchangeAccount?.environment?.toUpperCase() || 'TESTNET'} with client-side cryptographic HMAC-SHA256 signing.`
+            : "Deterministic paper execution engine modeling realistic liquidity slippage and taker fees."
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1599,9 +1735,16 @@ export function Orders() {
         <GlassCard className="space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-black/[0.05]">
             <h3 className="text-sm font-bold text-zinc-900">Execution Ticket</h3>
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 font-semibold">
-              Paper Mode
-            </span>
+            {accountMode === 'exchange' ? (
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 font-semibold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Binance {exchangeAccount?.environment === 'mainnet' ? 'Mainnet' : 'Testnet'}
+              </span>
+            ) : (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-500/10 text-zinc-700 font-semibold">
+                Simulated Desk
+              </span>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -1716,10 +1859,10 @@ export function Orders() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <label className="font-semibold text-zinc-700">Quantity ({selectedAsset})</label>
-                <span className="text-zinc-500">
+                <span className="text-zinc-500 font-mono text-[11px]">
                   {side === 'buy'
-                    ? `Avail: ${money(state.cash)}`
-                    : `Holding: ${formatQty(currentHolding, selectedAsset)}`}
+                    ? `Avail: ${accountMode === 'exchange' ? `$${(exchangeAccount?.balances?.['USDT']?.free || 0).toFixed(2)} USDT` : money(state.cash)}`
+                    : `Holding: ${accountMode === 'exchange' ? `${(exchangeAccount?.balances?.[selectedAsset]?.free || 0).toFixed(4)} ${selectedAsset}` : formatQty(currentHolding, selectedAsset)}`}
                 </span>
               </div>
               <input
@@ -1905,8 +2048,17 @@ export function Orders() {
                 ))}
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="p-8 text-center text-xs text-zinc-400">
-                      No paper orders match the selected filter.
+                    <td colSpan={10} className="p-10 text-center text-xs text-zinc-400">
+                      <div className="space-y-2 max-w-xs mx-auto">
+                        <p>No orders match the selected filter ({orderFilter}).</p>
+                        <button
+                          type="button"
+                          onClick={() => setOrderFilter('all')}
+                          className="px-3 py-1 text-xs font-semibold text-zinc-800 bg-black/[0.04] hover:bg-black/[0.08] rounded-lg transition-all"
+                        >
+                          Show All Orders
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -3022,6 +3174,35 @@ export function Alerts() {
         </form>
       </GlassCard>
 
+      {/* Quick 1-Click Alert Presets */}
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <span className="text-xs font-semibold text-zinc-500">Quick Presets:</span>
+        {[
+          { asset: 'BTC' as Asset, type: 'above' as const, value: 100000, label: 'BTC > $100k' },
+          { asset: 'ETH' as Asset, type: 'above' as const, value: 4000, label: 'ETH > $4k' },
+          { asset: 'SOL' as Asset, type: 'above' as const, value: 250, label: 'SOL > $250' },
+          { asset: 'BTC' as Asset, type: 'changeDown' as const, value: 5, label: 'BTC Dip > 5%' },
+        ].map((preset) => (
+          <button
+            key={preset.label}
+            type="button"
+            onClick={() => {
+              addAlert({
+                asset: preset.asset,
+                type: preset.type,
+                value: preset.value,
+                enabled: true,
+                isRecurring: true,
+                cooldownSec: 300,
+              });
+            }}
+            className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200/60 rounded-xl transition-all shadow-2xs active:scale-95"
+          >
+            + {preset.label}
+          </button>
+        ))}
+      </div>
+
       {/* Alerts Grid */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-zinc-900 px-1">Configured Alert Rules</h3>
@@ -3071,7 +3252,7 @@ export function Alerts() {
                   <button
                     type="button"
                     onClick={() => toggleAlert(al.id)}
-                    className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all ${
                       al.enabled
                         ? 'bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20'
                         : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'
@@ -3093,8 +3274,14 @@ export function Alerts() {
           })}
 
           {state.alerts.length === 0 && (
-            <div className="col-span-2 p-8 text-center text-xs text-zinc-400 bg-white/50 rounded-2xl border border-black/[0.05]">
-              No alerts active. Create a threshold above to receive acoustic and visual notifications.
+            <div className="col-span-2 p-10 text-center bg-white/60 rounded-3xl border border-black/[0.05] space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                <Bell className="w-5 h-5" />
+              </div>
+              <h4 className="text-sm font-bold text-zinc-800">No Active Price Alerts</h4>
+              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                Configure threshold alerts above or click any preset to receive real-time audio chimes and visual warning banners.
+              </p>
             </div>
           )}
         </div>
@@ -3107,37 +3294,127 @@ export function Alerts() {
 // SETTINGS PAGE
 // ----------------------------------------------------
 export function SettingsPage() {
-  const { state, setSettings, reset } = useLumen();
+  const {
+    state,
+    setSettings,
+    reset,
+    accountMode,
+    setAccountMode,
+    exchangeAccount,
+    openExchangeDrawer,
+    setLossPreventionMode,
+  } = useLumen();
+
   const [key, setKey] = useState(state.settings.geminiApiKey || '');
   const [selectedModel, setSelectedModel] = useState(resolveGemini3Model(state.settings.geminiModel));
   const [saved, setSaved] = useState(false);
+  const [sound, setSound] = useState(state.settings.soundEnabled ?? true);
+  const [wsEnabled, setWsEnabled] = useState(state.settings.enableWebSocket ?? true);
+  const [lossMode, setLossMode] = useState<'strict' | 'balanced' | 'aggressive'>(state.lossPreventionMode || 'balanced');
+  const [slippageBps, setSlippageBps] = useState(state.settings.maxSlippageBps || 50);
+  const [resetBalance, setResetBalance] = useState(50000);
+  const [resetMode, setResetMode] = useState<'clean' | 'seeded'>('clean');
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  const handleSave = () => {
+    setLossPreventionMode(lossMode);
+    setSettings({
+      geminiApiKey: key.trim(),
+      geminiModel: selectedModel,
+      soundEnabled: sound,
+      enableWebSocket: wsEnabled,
+      maxSlippageBps: slippageBps,
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
 
   return (
-    <div className="max-w-2xl space-y-6 animate-in fade-in duration-300">
+    <div className="max-w-3xl space-y-6 animate-in fade-in duration-300">
       <PageHeader
-        title="Settings &amp; Environment"
-        subtitle="Configure Gemini 3 series model endpoints, audio cues, and local paper balances."
+        title="Settings &amp; Platform Cockpit"
+        subtitle="Manage dual-desk routing, Gemini 3 reasoning models, institutional risk policies, and key vault."
+        action={
+          <button
+            type="button"
+            onClick={() => setWizardOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl shadow-2xs transition-all active:scale-95"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+            <span>Launch Setup Wizard</span>
+          </button>
+        }
       />
 
+      {/* 1. Quick Start & Guided Tour Card */}
+      <div className="p-5 rounded-3xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-emerald-500/10 border border-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
+            <Sparkles className="w-5 h-5 text-indigo-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-zinc-950">Visual Setup Guide &amp; Interactive Tour</h3>
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800">
+                5-Step Walkthrough
+              </span>
+            </div>
+            <p className="text-xs text-zinc-600 mt-0.5">
+              Need a refresher on Simulated Paper vs Live Binance Spot, Gemini 3 series reasoning, or risk calibration?
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setWizardOpen(true)}
+          className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0"
+        >
+          Open Visual Guide →
+        </button>
+      </div>
+
+      {/* 2. AI Intelligence Desk */}
       <GlassCard className="space-y-4">
-        <h3 className="text-sm font-bold text-zinc-900">Gemini 3 Series AI Configuration</h3>
+        <div className="flex items-center justify-between pb-2 border-b border-black/[0.04]">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-sm font-bold text-zinc-900">AI Intelligence Engine</h3>
+          </div>
+          <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full ${
+            key ? 'bg-indigo-500/10 text-indigo-700' : 'bg-emerald-500/10 text-emerald-700'
+          }`}>
+            {key ? '🟢 Gemini 3 Series Active' : '🛡️ 100% Free Offline Quant Engine Active'}
+          </span>
+        </div>
+
         <p className="text-xs text-zinc-500">
-          The app uses Google Gemini 3 series models exclusively for high-throughput technical analysis, quantitative risk modeling, and interactive copilot queries.
+          Lumen operates exclusively with Google Gemini 3 series models for frontier reasoning, or falls back to 26 deterministic client-side quant algorithms (15/15 benchmark win rate) with zero API keys.
         </p>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-zinc-700">Custom Gemini API Key</label>
+          <label className="text-xs font-semibold text-zinc-700 flex items-center justify-between">
+            <span>Google Gemini API Key (Optional)</span>
+            {key && (
+              <button
+                type="button"
+                onClick={() => setKey('')}
+                className="text-[11px] text-rose-600 hover:underline font-normal"
+              >
+                Clear Key (Revert to Free Local Mode)
+              </button>
+            )}
+          </label>
           <input
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder="AIzaSy... (leave blank for zero-cost offline local mode)"
+            placeholder="AIzaSy... (leave blank for 100% Free Offline Mode)"
             className="w-full px-3.5 py-2.5 text-xs font-mono bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-zinc-700">Gemini Model (Model 3 Series Only)</label>
+          <label className="text-xs font-semibold text-zinc-700">Reasoning Model (Model 3 Series)</label>
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
@@ -3149,46 +3426,269 @@ export function SettingsPage() {
               </option>
             ))}
           </select>
-          <p className="text-[11px] text-zinc-500">
-            Powered exclusively by Gemini 3.8 Flash, 3.1 Pro, and 3.1 Flash Lite.
-          </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="pt-1 flex items-center justify-between">
+          <span className="text-[11px] text-zinc-400 font-mono">26 deterministic quant tools active</span>
           <button
             type="button"
-            onClick={() => {
-              setSettings({
-                geminiApiKey: key.trim(),
-                geminiModel: selectedModel,
-              });
-              setSaved(true);
-              setTimeout(() => setSaved(false), 2000);
-            }}
-            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 rounded-xl shadow-xs hover:bg-zinc-800 transition-all flex items-center gap-1.5"
+            onClick={handleSave}
+            className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 rounded-xl shadow-xs hover:bg-zinc-800 transition-all flex items-center gap-1.5"
           >
-            {saved ? 'Saved Successfully!' : 'Save AI Configuration'}
+            {saved ? <><Check className="w-3.5 h-3.5 text-emerald-400" /> Saved!</> : 'Save AI Configuration'}
           </button>
         </div>
       </GlassCard>
 
-      <GlassCard className="space-y-4 border-rose-500/20 bg-rose-500/[0.02]">
-        <h3 className="text-sm font-bold text-rose-900">Reset Simulator</h3>
-        <p className="text-xs text-zinc-600">
-          Resetting will clear paper order history and re-initialize with $50,000 in paper cash.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            if (confirm('Reset the entire simulator to fresh starting balances?')) {
-              reset(50000);
-            }
-          }}
-          className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-all"
-        >
-          Reset Simulator Now
-        </button>
+      {/* 3. Execution Desks & Exchange Security Vault */}
+      <GlassCard className="space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-black/[0.04]">
+          <div className="flex items-center gap-2">
+            <Coins className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-sm font-bold text-zinc-900">Execution Desks &amp; Key Vault</h3>
+          </div>
+          <span className="text-[10px] font-mono text-zinc-400">
+            Active: <strong>{accountMode === 'exchange' ? 'Binance Spot' : 'Paper Sandbox'}</strong>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div
+            onClick={() => setAccountMode('paper')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              accountMode === 'paper'
+                ? 'bg-zinc-900/5 border-zinc-900 ring-1 ring-zinc-900'
+                : 'bg-white border-black/[0.08] hover:border-black/20'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <strong className="text-xs font-bold text-zinc-900">Simulated Paper Desk</strong>
+              {accountMode === 'paper' && <span className="text-[10px] font-bold text-indigo-600">Selected</span>}
+            </div>
+            <p className="text-[11px] text-zinc-500 mt-1">Virtual capital sandbox with live matching simulation.</p>
+          </div>
+
+          <div
+            onClick={() => {
+              setAccountMode('exchange');
+              if (!exchangeAccount?.connected) openExchangeDrawer();
+            }}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              accountMode === 'exchange'
+                ? 'bg-emerald-50/20 border-emerald-600 ring-1 ring-emerald-600'
+                : 'bg-white border-black/[0.08] hover:border-black/20'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <strong className="text-xs font-bold text-zinc-900">Binance Spot Bridge</strong>
+              {accountMode === 'exchange' && <span className="text-[10px] font-bold text-emerald-600">Selected</span>}
+            </div>
+            <p className="text-[11px] text-zinc-500 mt-1">
+              {exchangeAccount?.connected
+                ? `Connected to ${exchangeAccount.environment.toUpperCase()} (${exchangeAccount.latencyMs ?? 0}ms ping)`
+                : 'Connect API Key via Client-Side AES-GCM Vault.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-zinc-500" />
+            <span className="text-zinc-700 font-medium">
+              {exchangeAccount?.connected
+                ? `Vault Active: Safe Spot Only (${exchangeAccount.canWithdraw ? 'Warning: Withdrawals on' : 'Withdrawals blocked'})`
+                : 'Vault Locked: No keys loaded in browser memory.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={openExchangeDrawer}
+            className="text-xs font-bold text-indigo-600 hover:underline"
+          >
+            {exchangeAccount?.connected ? 'Manage Keys ⚙️' : 'Configure Exchange Keys →'}
+          </button>
+        </div>
       </GlassCard>
+
+      {/* 4. Institutional Capital Defense & Risk Policy Sentinel */}
+      <GlassCard className="space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-black/[0.04]">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-rose-600" />
+            <h3 className="text-sm font-bold text-zinc-900">Sentinel Capital Defense Policy</h3>
+          </div>
+          <span className="text-[10px] font-mono uppercase font-bold text-zinc-500">
+            Mode: {lossMode}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(['strict', 'balanced', 'aggressive'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setLossMode(m);
+                setLossPreventionMode(m);
+              }}
+              className={`p-3.5 rounded-2xl border text-left transition-all ${
+                lossMode === m
+                  ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                  : 'bg-white border-black/[0.08] text-zinc-700 hover:bg-black/[0.02]'
+              }`}
+            >
+              <div className="text-xs font-bold capitalize">{m} Defense</div>
+              <div className={`text-[10px] mt-1 space-y-0.5 font-mono ${lossMode === m ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                <div>{m === 'strict' ? '25% Cash Reserve' : m === 'balanced' ? '15% Cash Reserve' : '10% Cash Reserve'}</div>
+                <div>{m === 'strict' ? 'Max 35% Single Asset' : m === 'balanced' ? 'Max 50% Single Asset' : 'Max 60% Single Asset'}</div>
+                <div>{m === 'strict' ? '1.0% Trade Risk' : m === 'balanced' ? '2.0% Trade Risk' : '3.5% Trade Risk'}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Max Execution Slippage Tolerance */}
+        <div className="space-y-1.5 pt-2">
+          <div className="flex items-center justify-between text-xs">
+            <label className="font-semibold text-zinc-700 flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Max Execution Slippage Tolerance</span>
+            </label>
+            <span className="font-mono font-semibold text-zinc-900">
+              {slippageBps} bps ({(slippageBps / 100).toFixed(2)}%)
+            </span>
+          </div>
+          <input
+            type="range"
+            min="10"
+            max="200"
+            step="5"
+            value={slippageBps}
+            onChange={(e) => setSlippageBps(Number(e.target.value))}
+            className="w-full h-1.5 bg-black/[0.06] rounded-lg appearance-none cursor-pointer accent-indigo-600"
+          />
+          <div className="flex justify-between text-[10px] text-zinc-400 font-mono">
+            <span>Tight (10 bps / 0.1%)</span>
+            <span>Standard (50 bps / 0.5%)</span>
+            <span>Volatile (200 bps / 2.0%)</span>
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* 5. Sound & Telemetry Controls */}
+      <GlassCard className="space-y-3">
+        <h3 className="text-sm font-bold text-zinc-900 pb-1 border-b border-black/[0.04]">
+          Telemetry &amp; Acoustic Controls
+        </h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <div className="p-3.5 rounded-2xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-between">
+            <div>
+              <h4 className="text-xs font-bold text-zinc-800">Acoustic Feedback</h4>
+              <p className="text-[11px] text-zinc-500">Order fills &amp; alert chimes</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSound(!sound)}
+              className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
+                sound ? 'bg-indigo-600' : 'bg-zinc-300'
+              }`}
+            >
+              <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                sound ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-between">
+            <div>
+              <h4 className="text-xs font-bold text-zinc-800">Binance WebSocket Feed</h4>
+              <p className="text-[11px] text-zinc-500">Live sub-second quotes</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWsEnabled(!wsEnabled)}
+              className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
+                wsEnabled ? 'bg-indigo-600' : 'bg-zinc-300'
+              }`}
+            >
+              <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                wsEnabled ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* 6. Simulator Capital Reset */}
+      <GlassCard className="space-y-4 border-rose-500/20 bg-rose-500/[0.02]">
+        <div className="flex items-center gap-2 text-xs font-bold text-rose-900">
+          <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+          <span>Paper Simulator Capital Management</span>
+        </div>
+        <p className="text-xs text-zinc-600">
+          Re-initialize your paper simulation balance and clear orders:
+        </p>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setResetMode('clean')}
+            className={`p-2.5 rounded-xl border text-left transition-all ${
+              resetMode === 'clean'
+                ? 'bg-white border-zinc-900 ring-1 ring-zinc-900 shadow-xs'
+                : 'bg-black/[0.02] border-black/[0.06] text-zinc-600'
+            }`}
+          >
+            <div className="text-xs font-bold text-zinc-900">Clean Slate</div>
+            <div className="text-[10px] text-zinc-500 mt-0.5">100% Cash, 0 positions, 0 orders</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setResetMode('seeded')}
+            className={`p-2.5 rounded-xl border text-left transition-all ${
+              resetMode === 'seeded'
+                ? 'bg-white border-zinc-900 ring-1 ring-zinc-900 shadow-xs'
+                : 'bg-black/[0.02] border-black/[0.06] text-zinc-600'
+            }`}
+          >
+            <div className="text-xs font-bold text-zinc-900">Seeded Portfolio</div>
+            <div className="text-[10px] text-zinc-500 mt-0.5">Starter BTC/ETH/SOL allocations</div>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          {[25000, 50000, 100000].map((amt) => (
+            <button
+              key={amt}
+              type="button"
+              onClick={() => setResetBalance(amt)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-xl border transition-all ${
+                resetBalance === amt
+                  ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                  : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
+              }`}
+            >
+              ${amt.toLocaleString()}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm(`Reset paper simulation in ${resetMode} mode with $${resetBalance.toLocaleString()}?`)) {
+                reset(resetBalance, resetMode);
+              }
+            }}
+            className="ml-auto px-4 py-1.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-all"
+          >
+            Reset Simulator Now
+          </button>
+        </div>
+      </GlassCard>
+
+      {/* Onboarding Visual Wizard Modal */}
+      {wizardOpen && <OnboardingWizardModal isOpen={wizardOpen} onClose={() => setWizardOpen(false)} />}
     </div>
   );
 }
