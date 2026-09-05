@@ -68,6 +68,10 @@ export class ReconciliationWorker {
     return this.lastSuccessfulRunAt;
   }
 
+  static hasUserRun(userId: string): boolean {
+    return this.userLastSuccessfulRuns.has(userId);
+  }
+
   static setLastSuccessfulRunAt(timestamp: number, userId?: string): void {
     if (userId) {
       this.userLastSuccessfulRuns.set(userId, timestamp);
@@ -353,7 +357,21 @@ export class ReconciliationWorker {
               );
               this.userLastSuccessfulRuns.set(userId, now);
             } catch (err: any) {
-              logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state for ${userId}: ${err.message}`);
+              logger.warn(`[ReconciliationWorker] Failed to persist HEALTHY exchange_sync_state for ${userId}: ${err.message}`);
+              this.userLastSuccessfulRuns.set(userId, 0);
+              overallRunSucceeded = false;
+              try {
+                await db.execute(
+                  `INSERT INTO exchange_sync_state (
+                    account_id, last_sync_at, rest_health, updated_at
+                  ) VALUES (?, 0, 'UNAVAILABLE', ?)
+                  ON CONFLICT(account_id) DO UPDATE SET
+                    last_sync_at = excluded.last_sync_at,
+                    rest_health = excluded.rest_health,
+                    updated_at = excluded.updated_at`,
+                  [`rec_${userId}`, now]
+                );
+              } catch {}
             }
           } else {
             const failureHealth = !stepTransportSuccess ? 'UNAVAILABLE' : 'DEGRADED';
@@ -462,9 +480,17 @@ export class ReconciliationWorker {
 
         overallRunSucceeded = allUsersTransportSucceeded && !unknownOrdersFailed;
 
-        // Also update rec_global for overall system health
-        const globalHealth = overallRunSucceeded && mismatchesFound === 0 ? 'HEALTHY' : (mismatchesFound > 0 ? 'DEGRADED' : 'UNAVAILABLE');
-        const globalSyncAt = overallRunSucceeded && mismatchesFound === 0 ? now : 0;
+        // Distinct semantic classification between exchange transport failure and balance/order mismatches
+        let globalHealth: ExchangeHealthState = 'HEALTHY';
+        if (!allUsersTransportSucceeded) {
+          globalHealth = 'UNAVAILABLE';
+        } else if (mismatchesFound > 0 || unknownOrdersFailed) {
+          globalHealth = 'DEGRADED';
+        } else {
+          globalHealth = 'HEALTHY';
+        }
+
+        const globalSyncAt = (globalHealth === 'HEALTHY' && overallRunSucceeded) ? now : 0;
         try {
           await db.execute(
             `INSERT INTO exchange_sync_state (
@@ -476,13 +502,15 @@ export class ReconciliationWorker {
               updated_at = excluded.updated_at`,
             [globalSyncAt, globalHealth, now]
           );
+          if (globalHealth === 'HEALTHY' && overallRunSucceeded) {
+            this.lastSuccessfulRunAt = now;
+          } else {
+            this.lastSuccessfulRunAt = 0;
+          }
         } catch (err: any) {
-          logger.warn(`[ReconciliationWorker] Failed to update global exchange_sync_state: ${err.message}`);
-        }
-        if (overallRunSucceeded && mismatchesFound === 0) {
-          this.lastSuccessfulRunAt = now;
-        } else {
+          logger.warn(`[ReconciliationWorker] Failed to persist global exchange_sync_state: ${err.message}`);
           this.lastSuccessfulRunAt = 0;
+          overallRunSucceeded = false;
         }
       }
 

@@ -36,6 +36,11 @@ export interface OperationalHealthReport {
     restHealth: string;
     isFresh: boolean;
   };
+  globalReconciliation?: {
+    lastSyncAt: number;
+    restHealth: string;
+    isFresh: boolean;
+  };
   userStream?: {
     status: string;
     lastKeepAliveAt: number;
@@ -201,23 +206,37 @@ export class OperationalSafetyService {
     );
     const unresolvedMismatches = Number(criticalMismatches[0]?.cnt || 0);
 
-    // Query exchange sync state (per-user or global fallback)
-    let syncRow: any = null;
+    // Query exchange sync state: decouple account health from venue global health
+    const globalRow = await db.queryOne<any>(
+      `SELECT last_sync_at, rest_health FROM exchange_sync_state WHERE account_id = 'rec_global'`
+    );
+    const globalSyncAt = Number(globalRow?.last_sync_at || 0);
+    const globalRestHealth = globalRow?.rest_health || 'INITIALIZING';
+    const isGlobalFresh = globalSyncAt > 0 && Date.now() - globalSyncAt <= 300_000 && globalRestHealth === 'HEALTHY';
+    const globalReconciliation = {
+      lastSyncAt: globalSyncAt,
+      restHealth: globalRestHealth,
+      isFresh: isGlobalFresh,
+    };
+
+    let reconciliation: { lastSyncAt: number; restHealth: string; isFresh: boolean } | undefined = undefined;
+
     if (userId) {
-      syncRow = await db.queryOne<any>(
+      const userRow = await db.queryOne<any>(
         `SELECT last_sync_at, rest_health FROM exchange_sync_state WHERE account_id = ?`,
         [`rec_${userId}`]
       );
+      const userSyncAt = Number(userRow?.last_sync_at || 0);
+      const userRestHealth = userRow?.rest_health || 'INITIALIZING';
+      const isUserFresh = userSyncAt > 0 && Date.now() - userSyncAt <= 300_000 && userRestHealth === 'HEALTHY';
+      reconciliation = {
+        lastSyncAt: userSyncAt,
+        restHealth: userRestHealth,
+        isFresh: isUserFresh,
+      };
+    } else {
+      reconciliation = globalReconciliation;
     }
-    if (!syncRow) {
-      syncRow = await db.queryOne<any>(
-        `SELECT last_sync_at, rest_health FROM exchange_sync_state WHERE account_id = 'rec_global'`
-      );
-    }
-
-    const lastSyncAt = Number(syncRow?.last_sync_at || 0);
-    const restHealth = syncRow?.rest_health || (syncRow ? 'UNAVAILABLE' : 'INITIALIZING');
-    const isFresh = lastSyncAt > 0 && Date.now() - lastSyncAt <= 300_000 && restHealth === 'HEALTHY';
 
     // Query user stream status if userId provided
     let userStream: { status: string; lastKeepAliveAt: number } | undefined = undefined;
@@ -233,11 +252,14 @@ export class OperationalSafetyService {
 
     // Determine overall state
     let overallState: ExchangeHealthState = 'HEALTHY';
-    if (isGlobalFrozen || activeBreakers.some((b) => b.scope === 'GLOBAL')) {
+    const activeRestHealth = reconciliation ? reconciliation.restHealth : globalRestHealth;
+    const isReconciliationFresh = reconciliation ? reconciliation.isFresh : isGlobalFresh;
+
+    if (isGlobalFrozen || activeBreakers.some((b) => b.scope === 'GLOBAL') || (userId && activeBreakers.some((b) => b.scope === 'ACCOUNT' && b.target === userId))) {
       overallState = 'BLOCKED';
-    } else if (unresolvedMismatches > 0 || rateLimitStatus.isBlocked || restHealth === 'UNAVAILABLE') {
+    } else if (unresolvedMismatches > 0 || rateLimitStatus.isBlocked || activeRestHealth === 'UNAVAILABLE') {
       overallState = 'UNAVAILABLE';
-    } else if (!clockStatus.isHealthy || rateLimitStatus.isThrottled || activeBreakers.length > 0 || restHealth === 'DEGRADED' || (syncRow && !isFresh)) {
+    } else if (!clockStatus.isHealthy || rateLimitStatus.isThrottled || activeBreakers.length > 0 || activeRestHealth === 'DEGRADED' || !isReconciliationFresh) {
       overallState = 'DEGRADED';
     }
 
@@ -268,11 +290,8 @@ export class OperationalSafetyService {
           reason: b.reason,
         })),
       },
-      reconciliation: {
-        lastSyncAt,
-        restHealth,
-        isFresh,
-      },
+      reconciliation,
+      globalReconciliation,
       userStream,
       unresolvedMismatches,
       timestamp: Date.now(),
@@ -405,14 +424,27 @@ export class OperationalSafetyGate {
       }
 
       // Reconciliation Freshness SLA & Operational Health (Must be HEALTHY, fresh, and clean)
+      // Strict Invariant: DB row MUST exist and indicate HEALTHY with last_sync_at > 0.
+      // In-memory state is strictly a VETO (DB can authorize, memory can veto). Memory alone CANNOT authorize.
       const RECONCILIATION_SLA_MS = config.RECONCILIATION_SLA_MS ?? 300_000;
       const syncState = await db.queryOne<any>(
         `SELECT last_sync_at, rest_health FROM exchange_sync_state WHERE account_id = ? LIMIT 1`,
         [`rec_${params.userId}`]
       );
 
-      // 1. Explicit rest_health failure checks
-      const restHealth = syncState?.rest_health;
+      // 1. Durable DB record MUST exist
+      if (!syncState) {
+        return {
+          allowed: false,
+          reason: 'Trading blocked: No durable exchange sync state found for this user account. No exchange reconciliation has ever completed for this user account. Run reconciliation first.',
+          checks,
+        };
+      }
+
+      const restHealth = syncState.rest_health;
+      const dbLastSyncAt = Number(syncState.last_sync_at || 0);
+
+      // 2. Explicit rest_health failure checks (UNAVAILABLE / DEGRADED)
       if (restHealth === 'UNAVAILABLE' || restHealth === 'DEGRADED') {
         return {
           allowed: false,
@@ -421,14 +453,8 @@ export class OperationalSafetyGate {
         };
       }
 
-      // 2. Reconciliation timestamp must be non-zero and within SLA
-      const dbLastSyncAt = syncState?.last_sync_at ? Number(syncState.last_sync_at) : 0;
-      const userMemSyncAt = ReconciliationWorker.getLastSuccessfulRunAt(params.userId);
-      const effectiveLastSyncAt = (dbLastSyncAt === 0 && userMemSyncAt === 0)
-        ? 0
-        : (dbLastSyncAt === 0 ? userMemSyncAt : (userMemSyncAt === 0 ? dbLastSyncAt : Math.min(dbLastSyncAt, userMemSyncAt)));
-
-      if (effectiveLastSyncAt === 0 || restHealth === 'INITIALIZING') {
+      // 3. Uninitialized / zero-sync check
+      if (dbLastSyncAt <= 0 || restHealth === 'INITIALIZING') {
         return {
           allowed: false,
           reason: 'Trading blocked: No exchange reconciliation has ever completed for this user account.',
@@ -436,13 +462,30 @@ export class OperationalSafetyGate {
         };
       }
 
-      if (restHealth && restHealth !== 'HEALTHY') {
+      // 4. Any other non-HEALTHY state
+      if (restHealth !== 'HEALTHY') {
         return {
           allowed: false,
-          reason: `Trading blocked: Exchange REST health is '${restHealth}' (must be HEALTHY).`,
+          reason: `Trading blocked: Exchange REST health is '${restHealth || 'UNKNOWN'}' (must be HEALTHY).`,
           checks,
         };
       }
+
+      // 4. In-memory state is strictly a veto (DB can authorize, memory can veto)
+      const isMemTracked = ReconciliationWorker.hasUserRun(params.userId);
+      const userMemSyncAt = ReconciliationWorker.getLastSuccessfulRunAt(params.userId);
+      if (isMemTracked && userMemSyncAt === 0) {
+        return {
+          allowed: false,
+          reason: 'Trading blocked: In-memory reconciliation state is invalidated or pending verification.',
+          checks,
+        };
+      }
+
+      const effectiveLastSyncAt = (isMemTracked && userMemSyncAt > 0)
+        ? Math.min(dbLastSyncAt, userMemSyncAt)
+        : dbLastSyncAt;
+
       if (Date.now() - effectiveLastSyncAt > RECONCILIATION_SLA_MS) {
         const slaSec = Math.round(RECONCILIATION_SLA_MS / 1000);
         return {

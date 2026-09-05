@@ -26,6 +26,11 @@ interface OperationalHealthData {
     restHealth: string;
     isFresh: boolean;
   };
+  globalReconciliation?: {
+    lastSyncAt: number;
+    restHealth: string;
+    isFresh: boolean;
+  };
   userStream?: {
     status: string;
     lastKeepAliveAt: number;
@@ -215,13 +220,26 @@ export const OperationalHealthBanner: React.FC<{ accountMode?: string }> = ({ ac
             {/* Last Authoritative Sync */}
             <div className="flex items-center justify-between">
               <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5" /> Last Reconciliation
+                <ShieldCheck className="w-3.5 h-3.5" /> Account Reconciliation
               </span>
               <span className={`font-mono font-semibold ${data?.reconciliation?.isFresh ? 'text-emerald-600' : 'text-amber-600'}`}>
                 {formatSyncTime(data?.reconciliation?.lastSyncAt)}
                 {data?.reconciliation?.isFresh ? ' (Fresh)' : ' (Stale)'}
               </span>
             </div>
+
+            {/* Global Venue Sync */}
+            {data?.globalReconciliation && (
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5" /> Venue Global Sync
+                </span>
+                <span className={`font-mono font-semibold ${data.globalReconciliation.isFresh ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {formatSyncTime(data.globalReconciliation.lastSyncAt)}
+                  {` (${data.globalReconciliation.restHealth})`}
+                </span>
+              </div>
+            )}
 
             {/* Clock Sync Status */}
             <div className="flex items-center justify-between">

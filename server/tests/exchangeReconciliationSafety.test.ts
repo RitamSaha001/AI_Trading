@@ -637,7 +637,13 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       ClockSyncService.setSimulatedOffset(50); // Clock is healthy
 
       // Simulate reconciliation that ran 400 seconds ago (>300s SLA)
-      ReconciliationWorker.setLastSuccessfulRunAt(Date.now() - 400_000, userId);
+      const overdueTime = Date.now() - 400_000;
+      await db.execute(
+        `INSERT INTO exchange_sync_state (account_id, last_sync_at, rest_health, updated_at)
+         VALUES (?, ?, 'HEALTHY', ?)`,
+        [`rec_${userId}`, overdueTime, overdueTime]
+      );
+      ReconciliationWorker.setLastSuccessfulRunAt(overdueTime, userId);
 
       const gateCheck = await OperationalSafetyGate.verifyOrderSubmission({
         userId,
@@ -655,7 +661,12 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       expect(gateCheck.checks.reconciliationFresh).toBe(false);
 
       // After a fresh reconciliation, orders are allowed
-      ReconciliationWorker.setLastSuccessfulRunAt(Date.now(), userId);
+      const now = Date.now();
+      await db.execute(
+        `UPDATE exchange_sync_state SET last_sync_at = ?, updated_at = ? WHERE account_id = ?`,
+        [now, now, `rec_${userId}`]
+      );
+      ReconciliationWorker.setLastSuccessfulRunAt(now, userId);
       const passCheck = await OperationalSafetyGate.verifyOrderSubmission({
         userId,
         symbol: 'BTCUSDT',
@@ -1379,6 +1390,218 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       } finally {
         (config as any).NODE_ENV = originalEnv;
       }
+    });
+  });
+
+  // =========================================================================
+  // 12. INVARIANT HARDENING: DB AUTHORITY, IN-MEMORY VETO & DECOUPLED TELEMETRY
+  // =========================================================================
+  describe('12. Invariant Hardening: DB Authority, In-Memory VETO & Decoupled Cockpit Telemetry', () => {
+    const userHard = 'usr_hardened_rec_001';
+    const userFailTp = 'usr_rec_fail_tp';
+    const userMismatch = 'usr_rec_mis_venue';
+
+    beforeEach(async () => {
+      ReconciliationWorker.resetForTesting();
+      const db = getDb();
+      const now = Date.now();
+      for (const u of [userHard, userFailTp, userMismatch]) {
+        await db.execute(
+          `INSERT INTO users (id, email, display_name, provider, provider_id, created_at, updated_at)
+           VALUES (?, ?, 'Test User', 'email', ?, ?, ?)
+           ON CONFLICT(id) DO NOTHING`,
+          [u, `${u}@lumen.io`, `prov_${u}`, now, now]
+        );
+        await BinanceGateway.saveExchangeCredentials(u, {
+          apiKey: `mock_key_${u}`,
+          apiSecret: `mock_secret_${u}`,
+          environment: 'testnet',
+        });
+      }
+      ClockSyncService.setSimulatedOffset(50);
+    });
+
+    afterEach(async () => {
+      ReconciliationWorker.resetForTesting();
+      const db = getDb();
+      for (const u of [userHard, userFailTp, userMismatch]) {
+        await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = ?`, [`rec_${u}`]);
+        await db.execute(`DELETE FROM exchange_orders WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM reconciliation_mismatches WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM exchange_accounts WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM users WHERE id = ?`, [u]);
+      }
+      await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = 'rec_global'`);
+    });
+
+    it('Phase 6 - Issue 1: Failed DB write on HEALTHY state invalidates in-memory timestamp and fails reconciliation run', async () => {
+      const db = getDb();
+      const originalExecute = db.execute.bind(db);
+
+      const executeSpy = vi.spyOn(db, 'execute').mockImplementation(async (sql: string, params?: any[]) => {
+        if (
+          typeof sql === 'string' &&
+          sql.includes('INSERT INTO exchange_sync_state') &&
+          sql.includes('HEALTHY') &&
+          params?.includes(`rec_${userHard}`)
+        ) {
+          throw new Error('Simulated disk I/O failure writing HEALTHY sync state to DB');
+        }
+        return originalExecute(sql, params);
+      });
+
+      try {
+        const recResult = await ReconciliationWorker.runReconciliation(userHard);
+        expect(recResult.status).toBe('FAILED');
+        // In-memory timestamp MUST be invalidated to 0
+        expect(ReconciliationWorker.getLastSuccessfulRunAt(userHard)).toBe(0);
+
+        // Pre-trade gate MUST fail closed
+        const check = await OperationalSafetyGate.verifyOrderSubmission({
+          userId: userHard,
+          symbol: 'BTCUSDT',
+          quoteAsset: 'USDT',
+          side: 'BUY',
+          type: 'LIMIT',
+          quantity: '0.01',
+          price: '50000',
+          isLive: true,
+        });
+        expect(check.allowed).toBe(false);
+      } finally {
+        executeSpy.mockRestore();
+      }
+    });
+
+    it('Phase 6 - Issue 2: Strict DB authority & memory veto invariant (DB can authorize, memory can only veto)', async () => {
+      const db = getDb();
+
+      // Case A: Missing DB row with non-zero in-memory timestamp -> BLOCKED
+      await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = ?`, [`rec_${userHard}`]);
+      ReconciliationWorker.setLastSuccessfulRunAt(Date.now(), userHard);
+
+      const checkMissingDb = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: userHard,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(checkMissingDb.allowed).toBe(false);
+      expect(checkMissingDb.reason).toContain('No durable exchange sync state found');
+
+      // Case B: DB indicates HEALTHY, but in-memory state is 0 (memory veto) -> BLOCKED
+      const now = Date.now();
+      await db.execute(
+        `INSERT INTO exchange_sync_state (account_id, last_sync_at, rest_health, updated_at)
+         VALUES (?, ?, 'HEALTHY', ?)
+         ON CONFLICT(account_id) DO UPDATE SET last_sync_at = excluded.last_sync_at, rest_health = 'HEALTHY'`,
+        [`rec_${userHard}`, now, now]
+      );
+      ReconciliationWorker.setLastSuccessfulRunAt(0, userHard); // In-memory veto
+
+      const checkVeto = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: userHard,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(checkVeto.allowed).toBe(false);
+      expect(checkVeto.reason).toContain('In-memory reconciliation state is invalidated or pending verification');
+
+      // Case C: Both DB and memory indicate HEALTHY & fresh -> ALLOWED
+      ReconciliationWorker.setLastSuccessfulRunAt(now, userHard);
+      const checkPass = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: userHard,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(checkPass.allowed).toBe(true);
+    });
+
+    it('Phase 6 - Issue 3: getHealthReport decouples per-user account health from rec_global', async () => {
+      const db = getDb();
+      const now = Date.now();
+
+      // Seed global venue sync state as HEALTHY
+      await db.execute(
+        `INSERT INTO exchange_sync_state (account_id, last_sync_at, rest_health, updated_at)
+         VALUES ('rec_global', ?, 'HEALTHY', ?)
+         ON CONFLICT(account_id) DO UPDATE SET last_sync_at = excluded.last_sync_at, rest_health = 'HEALTHY'`,
+        [now, now]
+      );
+
+      // Seed an uninitialized account with NO row
+      const uninitUser = 'usr_uninit_telemetry_999';
+      await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = ?`, [`rec_${uninitUser}`]);
+
+      const report = await OperationalSafetyService.getHealthReport(uninitUser);
+
+      // Account-specific reconciliation must NOT fall back to rec_global
+      expect(report.reconciliation).toBeDefined();
+      expect(report.reconciliation?.lastSyncAt).toBe(0);
+      expect(report.reconciliation?.restHealth).toBe('INITIALIZING');
+      expect(report.reconciliation?.isFresh).toBe(false);
+
+      // Global reconciliation must be cleanly exposed as a separate entity
+      expect(report.globalReconciliation).toBeDefined();
+      expect(report.globalReconciliation?.lastSyncAt).toBe(now);
+      expect(report.globalReconciliation?.restHealth).toBe('HEALTHY');
+      expect(report.globalReconciliation?.isFresh).toBe(true);
+    });
+
+    it('Phase 6 - Issue 4: Distinct semantic classification between transport failure (UNAVAILABLE) and mismatches (DEGRADED)', async () => {
+      const db = getDb();
+
+      // Case A: Exchange REST transport failure -> globalHealth UNAVAILABLE
+      ReconciliationWorker.setMockExchangeState(userFailTp, {
+        shouldFail: true,
+        failureError: 'Simulated 503 Service Unavailable on Binance REST API',
+      });
+
+      const recResultTransportFail = await ReconciliationWorker.runReconciliation();
+      expect(recResultTransportFail.status).toBe('FAILED');
+
+      const syncStateTransport = await db.queryOne<any>(
+        `SELECT rest_health, last_sync_at FROM exchange_sync_state WHERE account_id = 'rec_global'`
+      );
+      expect(syncStateTransport.rest_health).toBe('UNAVAILABLE');
+      expect(Number(syncStateTransport.last_sync_at)).toBe(0);
+
+      // Case B: Exchange responded fine, but ledger/venue state mismatch detected -> globalHealth DEGRADED
+      ReconciliationWorker.setMockExchangeState(userFailTp, { shouldFail: false });
+      ReconciliationWorker.setMockExchangeState(userMismatch, {
+        openOrders: [
+          {
+            orderId: 888777666,
+            clientOrderId: 'mismatched_global_order_001',
+            symbol: 'BTCUSDT',
+            origQty: '0.25',
+            status: 'NEW',
+          },
+        ],
+      });
+
+      const recResultMismatch = await ReconciliationWorker.runReconciliation();
+      expect(recResultMismatch.status).toBe('MISMATCH_DETECTED');
+
+      const syncStateMismatch = await db.queryOne<any>(
+        `SELECT rest_health, last_sync_at FROM exchange_sync_state WHERE account_id = 'rec_global'`
+      );
+      expect(syncStateMismatch.rest_health).toBe('DEGRADED');
+      expect(Number(syncStateMismatch.last_sync_at)).toBe(0);
     });
   });
 });
