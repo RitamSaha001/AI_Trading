@@ -5,12 +5,13 @@ import sensible from '@fastify/sensible';
 import { config, auditServerSecurityConfig } from './config';
 import { getDb, initDb, closeDb, getMigrationStatus } from './db';
 import { ServerAuthService } from './services/authService';
-import { requireAuth, requireActive, requireKYC, requireAdmin, extractSessionToken, verifyOriginOrCsrf, authenticate } from './middleware/authMiddleware';
+import { requireAuth, requireActive, requireKYC, requireAdmin, requireFinanceAdmin, extractSessionToken, verifyOriginOrCsrf, authenticate } from './middleware/authMiddleware';
 import { isValidAllowedOrigin } from './utils/originValidator';
 import { z } from 'zod';
 import { AuthRateLimiter } from './middleware/rateLimiter';
 import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
+import { ExactDecimal } from './services/precision';
 import { BinanceGateway } from './services/binanceGateway';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
@@ -493,7 +494,12 @@ export function buildServer(): FastifyInstance {
       return reply.status(400).send({ success: false, error: 'Positive allocation amount required' });
     }
 
-    const amountCents = Math.round(body.amountUSD * 100);
+    const amountMinorBig = ExactDecimal.from(body.amountUSD).toMinor(2);
+    const amountCents = Number(amountMinorBig);
+    if (!Number.isSafeInteger(amountCents)) {
+      return reply.status(400).send({ success: false, error: 'Amount exceeds safe integer representation' });
+    }
+
     try {
       const result = await LedgerService.transfer({
         userId: req.user!.id,
@@ -518,7 +524,12 @@ export function buildServer(): FastifyInstance {
       return reply.status(400).send({ success: false, error: 'Positive recall amount required' });
     }
 
-    const amountCents = Math.round(body.amountUSD * 100);
+    const amountMinorBig = ExactDecimal.from(body.amountUSD).toMinor(2);
+    const amountCents = Number(amountMinorBig);
+    if (!Number.isSafeInteger(amountCents)) {
+      return reply.status(400).send({ success: false, error: 'Amount exceeds safe integer representation' });
+    }
+
     try {
       const result = await LedgerService.transfer({
         userId: req.user!.id,
@@ -543,7 +554,12 @@ export function buildServer(): FastifyInstance {
       return reply.status(400).send({ success: false, error: 'Positive withdrawal amount required' });
     }
 
-    const amountMinor = Math.round(body.amount * 100);
+    const amountMinorBig = ExactDecimal.from(body.amount).toMinor(2);
+    const amountMinor = Number(amountMinorBig);
+    if (!Number.isSafeInteger(amountMinor)) {
+      return reply.status(400).send({ success: false, error: 'Amount exceeds safe integer representation' });
+    }
+
     try {
       // Execute debit from sovereign cash to reserve_escrow
       const result = await LedgerService.transfer({
@@ -635,6 +651,9 @@ export function buildServer(): FastifyInstance {
 
   // Authoritative Webhook endpoint
   server.post('/api/webhooks/payments', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (config.NODE_ENV === 'production' && config.PAYMENT_PROVIDER === 'phonepe') {
+      return reply.status(403).send({ success: false, error: 'Generic webhook disabled in PhonePe production mode' });
+    }
     const signature = req.headers['x-webhook-signature'] as string;
     const rawPayload = (req as any).rawBody;
 
@@ -715,7 +734,7 @@ export function buildServer(): FastifyInstance {
     bankReference: z.string().min(1, 'bankReference is required'),
   });
 
-  server.post('/api/admin/payments/reconcile-utr', { preHandler: requireAdmin }, async (req: FastifyRequest, reply: FastifyReply) => {
+  server.post('/api/admin/payments/reconcile-utr', { preHandler: requireFinanceAdmin }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parseResult = ReconcileUtrSchema.safeParse(req.body);
     if (!parseResult.success) {
       return reply.status(400).send({
@@ -739,6 +758,16 @@ export function buildServer(): FastifyInstance {
       });
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  // Authoritative Admin Payment Operational Telemetry Endpoint
+  server.get('/api/admin/payments/metrics', { preHandler: requireFinanceAdmin }, async (_req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const metrics = await PaymentService.getOperationalMetrics();
+      return reply.send({ success: true, metrics });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
     }
   });
 

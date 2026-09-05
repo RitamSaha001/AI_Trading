@@ -636,9 +636,129 @@ export class LedgerService {
   }
 
   /**
+   * Economically reserves sovereign cash before an external refund is initiated.
+   * Prevents double-spending while external provider refund is in-flight or in REFUND_UNKNOWN.
+   */
+  static async reserveRefundCash(
+    params: {
+      userId: string;
+      assetOrCurrency: string;
+      amountMinor: bigint | number;
+      accountMode?: 'live' | 'paper';
+      refundId: string;
+      description?: string;
+    },
+    client?: DBClient
+  ): Promise<void> {
+    const amount = BigInt(params.amountMinor);
+    if (amount <= 0n) {
+      throw new Error('Reservation amount must be strictly positive');
+    }
+    const accountMode = params.accountMode || 'live';
+
+    const runner = async (tx: DBClient) => {
+      const acc = await this.getOrCreateAccount(
+        params.userId,
+        'sovereign_cash',
+        params.assetOrCurrency,
+        accountMode,
+        tx
+      );
+
+      const lockedAcc = await this.lockAccount(acc.id, tx);
+      const bal = BigInt(lockedAcc.balance_minor);
+      const res = BigInt(lockedAcc.reserved_minor);
+      if (bal - res < amount) {
+        throw new Error(
+          `Insufficient unreserved balance for refund reservation: available ${(bal - res).toString()}, requested ${amount.toString()}`
+        );
+      }
+
+      const newReserved = res + amount;
+      await tx.execute(
+        `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
+        [newReserved, Date.now(), acc.id]
+      );
+
+      await AuditService.logEvent({
+        userId: params.userId,
+        eventType: 'REFUND_CASH_RESERVED',
+        source: 'payment_refund',
+        actor: 'system',
+        externalId: params.refundId,
+        metadata: {
+          accountMode,
+          asset: params.assetOrCurrency,
+          amountMinor: amount,
+          newReservedMinor: newReserved,
+        },
+        result: 'SUCCESS',
+      });
+    };
+
+    if (client) return runner(client);
+    return getDb().transaction(runner);
+  }
+
+  /**
+   * Releases an economic refund cash reservation if external provider refund fails.
+   */
+  static async releaseRefundCashReservation(
+    params: {
+      userId: string;
+      assetOrCurrency: string;
+      amountMinor: bigint | number;
+      accountMode?: 'live' | 'paper';
+      refundId: string;
+    },
+    client?: DBClient
+  ): Promise<void> {
+    const amount = BigInt(params.amountMinor);
+    if (amount <= 0n) return;
+    const accountMode = params.accountMode || 'live';
+
+    const runner = async (tx: DBClient) => {
+      const acc = await this.getOrCreateAccount(
+        params.userId,
+        'sovereign_cash',
+        params.assetOrCurrency,
+        accountMode,
+        tx
+      );
+
+      const lockedAcc = await this.lockAccount(acc.id, tx);
+      const res = BigInt(lockedAcc.reserved_minor);
+      const newReserved = res > amount ? res - amount : 0n;
+
+      await tx.execute(
+        `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
+        [newReserved, Date.now(), acc.id]
+      );
+
+      await AuditService.logEvent({
+        userId: params.userId,
+        eventType: 'REFUND_CASH_RESERVATION_RELEASED',
+        source: 'payment_refund',
+        actor: 'system',
+        externalId: params.refundId,
+        metadata: {
+          accountMode,
+          asset: params.assetOrCurrency,
+          amountMinor: amount,
+          newReservedMinor: newReserved,
+        },
+        result: 'SUCCESS',
+      });
+    };
+
+    if (client) return runner(client);
+    return getDb().transaction(runner);
+  }
+
+  /**
    * Debits a refund from the user's sovereign cash ledger account.
    * Reverse of creditDeposit: debits sovereign_cash, credits settlement_clearing.
-   * Verifies available unreserved balance before proceeding.
+   * If isReserved is true, also releases the reservation on reserved_minor.
    */
   static async debitRefund(
     params: {
@@ -649,6 +769,7 @@ export class LedgerService {
       refundId: string;
       description: string;
       idempotencyKey?: string;
+      isReserved?: boolean;
     },
     client?: DBClient
   ): Promise<{ transactionId: string; balanceAfter: bigint }> {
@@ -685,15 +806,23 @@ export class LedgerService {
 
       const currentBal = BigInt(lockedAcc.balance_minor);
       const reserved = BigInt(lockedAcc.reserved_minor);
-      if (currentBal - reserved < amount) {
-        throw new Error('Insufficient unreserved balance for refund debit');
+
+      if (params.isReserved) {
+        if (currentBal < amount) {
+          throw new Error('Insufficient balance for refund debit');
+        }
+      } else {
+        if (currentBal - reserved < amount) {
+          throw new Error('Insufficient unreserved balance for refund debit');
+        }
       }
 
-      // 1. Debit Sovereign Cash
+      // 1. Debit Sovereign Cash (and consume reservation if previously reserved)
       const newBal = currentBal - amount;
+      const newReserved = params.isReserved ? (reserved >= amount ? reserved - amount : 0n) : reserved;
       await tx.execute(
-        `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-        [newBal, now, acc.id]
+        `UPDATE ledger_accounts SET balance_minor = ?, reserved_minor = ?, updated_at = ? WHERE id = ?`,
+        [newBal, newReserved, now, acc.id]
       );
 
       const debitEntryId = `ent_deb_${crypto.randomBytes(8).toString('hex')}`;

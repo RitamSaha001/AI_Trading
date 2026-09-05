@@ -13,6 +13,21 @@ jobs:
   verify:
     name: Lint, Test & Build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lumen
+          POSTGRES_PASSWORD: lumen_test_password
+          POSTGRES_DB: lumen_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,8 +44,11 @@ jobs:
       - name: TypeScript & Syntax Validation
         run: npm run lint
 
-      - name: Run Domain & Financial Unit Tests
+      - name: Run Domain & Financial Unit Tests (with PostgreSQL CI Service)
         run: npm test
+        env:
+          TEST_DATABASE_URL: postgresql://lumen:lumen_test_password@localhost:5432/lumen_test
+          DATABASE_URL: postgresql://lumen:lumen_test_password@localhost:5432/lumen_test
 
       - name: Production Bundle Compilation
         run: npm run build

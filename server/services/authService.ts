@@ -14,6 +14,7 @@ export interface AuthenticatedUser {
   photoUrl?: string;
   provider: 'google' | 'apple' | 'email';
   providerId: string;
+  role: string;
   kycTier: string;
   kycStatus: string;
   accountMode: string;
@@ -31,6 +32,7 @@ export class ServerAuthService {
 
   /**
    * Verifies Google Identity Services ID token cryptographically against Google's public JWKS.
+   * Strictly requires email_verified from Google.
    */
   static async verifyGoogleIdToken(idToken: string): Promise<{
     email: string;
@@ -61,12 +63,16 @@ export class ServerAuthService {
         throw new Error('Google ID token does not contain an email address');
       }
 
+      if (!payload.email_verified) {
+        throw new Error('Google account email is not verified');
+      }
+
       return {
         email: payload.email,
         sub: payload.sub as string,
         name: (payload.name as string) || payload.email.split('@')[0],
         picture: payload.picture as string | undefined,
-        emailVerified: Boolean(payload.email_verified),
+        emailVerified: true,
       };
     } catch (err: any) {
       throw new Error(`Google token validation failed: ${err.message}`);
@@ -74,7 +80,7 @@ export class ServerAuthService {
   }
 
   /**
-   * Verifies Sign in with Apple identity token cryptographically against Apple's public JWKS.
+   * Legacy / Deprecated: Verifies Sign in with Apple identity token cryptographically.
    */
   static async verifyAppleIdToken(idToken: string, nonce?: string): Promise<{
     email?: string;
@@ -82,7 +88,6 @@ export class ServerAuthService {
     emailVerified?: boolean;
     isPrivateEmail?: boolean;
   }> {
-    // In test environment, support deterministic test tokens
     if (config.NODE_ENV === 'test' && idToken.startsWith('test_apple_token:')) {
       if (nonce && nonce !== 'valid_apple_nonce') {
         throw new Error('Apple identity token nonce mismatch');
@@ -120,21 +125,17 @@ export class ServerAuthService {
   }
 
   /**
-   * Finds or provisions an internal user and sets up KYC and risk records in an ACID transaction.
+   * Resets all email challenges (used in test teardowns).
    */
-  private static emailChallenges = new Map<
-    string,
-    { email: string; codeHash: string; expiresAt: number; attemptsLeft: number }
-  >();
-
-  static clearEmailChallenges(): void {
-    this.emailChallenges.clear();
+  static async clearEmailChallenges(): Promise<void> {
+    const db = getDb();
+    await db.execute('DELETE FROM auth_email_challenges');
   }
 
   /**
    * Requests a passwordless email verification challenge.
-   * Generates a cryptographically secure 6-digit OTP and stores its SHA-256 hash.
-   * Fails closed in production if no verified email delivery provider is configured.
+   * Generates a cryptographically secure 6-digit OTP, stores its SHA-256 hash in DB,
+   * and dispatches email. Fails closed on email delivery provider failures.
    */
   static async requestEmailChallenge(
     email: string,
@@ -160,17 +161,35 @@ export class ServerAuthService {
       );
     }
 
+    const db = getDb();
+    const now = Date.now();
+
+    // Invalidate any unverified active challenges for this email
+    await db.execute(
+      `UPDATE auth_email_challenges SET verified_at = ?, attempts_left = 0 WHERE email = ? AND verified_at IS NULL`,
+      [now, cleanEmail]
+    );
+
+    // Enforce rate limiting: max 5 requests per 10 minutes
+    const tenMinutesAgo = now - 10 * 60 * 1000;
+    const recent = await db.queryOne<{ count: string | number }>(
+      `SELECT COUNT(*) as count FROM auth_email_challenges WHERE email = ? AND created_at >= ?`,
+      [cleanEmail, tenMinutesAgo]
+    );
+    if (Number(recent?.count || 0) >= 5) {
+      throw new Error('Too many verification requests. Please wait a few minutes before trying again.');
+    }
+
     const code = crypto.randomInt(100000, 999999).toString();
     const codeHash = crypto.createHash('sha256').update(code).digest('hex');
-    const now = Date.now();
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes
+    const challengeId = `ch_${crypto.randomBytes(8).toString('hex')}`;
 
-    this.emailChallenges.set(cleanEmail, {
-      email: cleanEmail,
-      codeHash,
-      expiresAt,
-      attemptsLeft: 5,
-    });
+    await db.execute(
+      `INSERT INTO auth_email_challenges (id, email, code_hash, attempts_left, expires_at, created_at, verified_at)
+       VALUES (?, ?, ?, 5, ?, ?, NULL)`,
+      [challengeId, cleanEmail, codeHash, expiresAt, now]
+    );
 
     await AuditService.logEvent({
       eventType: 'EMAIL_CHALLENGE_REQUESTED',
@@ -217,10 +236,17 @@ export class ServerAuthService {
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          console.warn('[AuthService] Resend email delivery warning:', errData);
+          throw new Error(`Email delivery provider rejected request: ${JSON.stringify(errData)}`);
         }
       } catch (sendErr: any) {
-        console.warn('[AuthService] Failed to send email via Resend:', sendErr.message);
+        await AuditService.logEvent({
+          eventType: 'EMAIL_DELIVERY_FAILED',
+          source: 'auth_service',
+          actor: 'system',
+          metadata: { email: cleanEmail, error: sendErr.message },
+          result: 'FAILURE',
+        });
+        throw new Error(`Failed to dispatch verification email: ${sendErr.message}`);
       }
     }
 
@@ -232,7 +258,7 @@ export class ServerAuthService {
 
   /**
    * Verifies an email verification challenge and creates or fetches the authenticated user.
-   * Implements single-use replay protection and attempt rate limits.
+   * Implements database-backed single-use replay protection and attempt rate limits.
    */
   static async verifyEmailChallenge(
     email: string,
@@ -244,7 +270,12 @@ export class ServerAuthService {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const challenge = this.emailChallenges.get(cleanEmail);
+    const db = getDb();
+
+    const challenge = await db.queryOne<any>(
+      `SELECT * FROM auth_email_challenges WHERE email = ? AND verified_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail]
+    );
 
     if (!challenge) {
       await AuditService.logEvent({
@@ -258,8 +289,11 @@ export class ServerAuthService {
     }
 
     const now = Date.now();
-    if (now > challenge.expiresAt) {
-      this.emailChallenges.delete(cleanEmail);
+    if (now > Number(challenge.expires_at)) {
+      await db.execute(
+        `UPDATE auth_email_challenges SET attempts_left = 0, verified_at = ? WHERE id = ?`,
+        [now, challenge.id]
+      );
       await AuditService.logEvent({
         eventType: 'EMAIL_CHALLENGE_FAILED',
         source: 'auth_service',
@@ -270,8 +304,7 @@ export class ServerAuthService {
       throw new Error('Verification code has expired. Please request a new code.');
     }
 
-    if (challenge.attemptsLeft <= 0) {
-      this.emailChallenges.delete(cleanEmail);
+    if (Number(challenge.attempts_left) <= 0) {
       await AuditService.logEvent({
         eventType: 'EMAIL_CHALLENGE_FAILED',
         source: 'auth_service',
@@ -283,20 +316,27 @@ export class ServerAuthService {
     }
 
     const codeHash = crypto.createHash('sha256').update(code.trim()).digest('hex');
-    if (codeHash !== challenge.codeHash) {
-      challenge.attemptsLeft -= 1;
+    if (codeHash !== challenge.code_hash) {
+      const remaining = Number(challenge.attempts_left) - 1;
+      await db.execute(
+        `UPDATE auth_email_challenges SET attempts_left = ? WHERE id = ?`,
+        [remaining, challenge.id]
+      );
       await AuditService.logEvent({
         eventType: 'EMAIL_CHALLENGE_FAILED',
         source: 'auth_service',
         actor: 'user',
-        metadata: { email: cleanEmail, reason: 'INVALID_CODE', attemptsRemaining: challenge.attemptsLeft },
+        metadata: { email: cleanEmail, reason: 'INVALID_CODE', attemptsRemaining: remaining },
         result: 'FAILURE',
       });
-      throw new Error(`Invalid verification code. ${challenge.attemptsLeft} attempts remaining.`);
+      throw new Error(`Invalid verification code. ${remaining} attempts remaining.`);
     }
 
-    // Replay protection: delete immediately upon verification
-    this.emailChallenges.delete(cleanEmail);
+    // Replay protection: mark verified immediately
+    await db.execute(
+      `UPDATE auth_email_challenges SET verified_at = ?, attempts_left = 0 WHERE id = ?`,
+      [now, challenge.id]
+    );
 
     await AuditService.logEvent({
       eventType: 'EMAIL_CHALLENGE_VERIFIED',
@@ -363,7 +403,6 @@ export class ServerAuthService {
               `ACCOUNT_PROVIDER_CONFLICT: An account with email '${cleanEmail}' already exists using sign-in provider '${existingWithEmail.provider}'. Automatic takeover is blocked.`
             );
           } else {
-            // Same provider but different provider_id
             throw new Error(
               `ACCOUNT_PROVIDER_CONFLICT: Provider identity mismatch for '${cleanEmail}'.`
             );
@@ -373,8 +412,8 @@ export class ServerAuthService {
         const now = Date.now();
         const userId = `usr_${params.provider.slice(0, 3)}_${crypto.randomBytes(8).toString('hex')}`;
         await tx.execute(
-          `INSERT INTO users (id, email, display_name, photo_url, provider, provider_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO users (id, email, display_name, photo_url, provider, provider_id, role, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'TRADER', ?, ?)`,
           [userId, cleanEmail, params.displayName, params.photoUrl || null, params.provider, params.providerId, now, now]
         );
 
@@ -417,6 +456,7 @@ export class ServerAuthService {
         photoUrl: user.photo_url,
         provider: user.provider,
         providerId: user.provider_id,
+        role: user.role || 'TRADER',
         kycTier: kyc?.tier || 'tier0_unverified',
         kycStatus: kyc?.status || 'unverified',
         accountMode: limits?.account_mode || 'paper',
@@ -491,6 +531,7 @@ export class ServerAuthService {
       photoUrl: user.photo_url,
       provider: user.provider,
       providerId: user.provider_id,
+      role: user.role || 'TRADER',
       kycTier: kyc?.tier || 'tier0_unverified',
       kycStatus: kyc?.status || 'unverified',
       accountMode: limits?.account_mode || 'paper',

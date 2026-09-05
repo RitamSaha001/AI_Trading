@@ -39,12 +39,22 @@ export class SQLiteClient implements DBClient {
   private registerPolyfills(): void {
     try {
       this.db.function('GREATEST', { varargs: true }, (...args: any[]) => {
-        const nums = args.map((a) => (typeof a === 'bigint' ? Number(a) : Number(a) || 0));
-        return Math.max(...nums);
+        if (!args || args.length === 0) return 0n;
+        let max = BigInt(args[0] ?? 0);
+        for (let i = 1; i < args.length; i++) {
+          const val = BigInt(args[i] ?? 0);
+          if (val > max) max = val;
+        }
+        return max;
       });
       this.db.function('LEAST', { varargs: true }, (...args: any[]) => {
-        const nums = args.map((a) => (typeof a === 'bigint' ? Number(a) : Number(a) || 0));
-        return Math.min(...nums);
+        if (!args || args.length === 0) return 0n;
+        let min = BigInt(args[0] ?? 0);
+        for (let i = 1; i < args.length; i++) {
+          const val = BigInt(args[i] ?? 0);
+          if (val < min) min = val;
+        }
+        return min;
       });
     } catch {
       // Ignore if already registered
@@ -176,16 +186,16 @@ export class PostgresClient implements DBClient {
   private advisoryClients = new Map<string, any>();
 
   constructor(connectionString: string) {
-    const maxPoolSize = Number(process.env.DB_POOL_MAX || process.env.PGPOOL_MAX || 20);
+    const maxPoolSize = Number(process.env.DB_POOL_MAX || process.env.PGPOOL_MAX || 25);
 
     this.pool = new Pool({
       connectionString,
       max: maxPoolSize,
       min: 2,
-      connectionTimeoutMillis: 5000, // 5s connection acquisition timeout (fail fast)
+      connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 25000), // 25s connection acquisition timeout
       idleTimeoutMillis: 30000,      // 30s idle connection timeout
-      statement_timeout: 10000,      // 10s individual query timeout
-      query_timeout: 10000,          // 10s client query timeout
+      statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 45000), // 45s query execution / lock wait timeout
+      query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 45000),         // 45s client query timeout
       keepAlive: true,
     });
 

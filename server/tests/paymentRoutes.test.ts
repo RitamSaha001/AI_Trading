@@ -41,6 +41,7 @@ describe('Payment HTTP Routes & Admin Trust Boundary', () => {
       provider: 'email',
       providerId: 'prov_adm_001',
     });
+    await db.execute(`UPDATE users SET role = 'FINANCE_ADMIN' WHERE id = ?`, [admUser.id]);
     const admSession = await ServerAuthService.createSession(admUser.id, '127.0.0.1', 'Vitest');
     adminToken = admSession.rawToken;
 
@@ -193,7 +194,7 @@ describe('Payment HTTP Routes & Admin Trust Boundary', () => {
         },
       });
       expect(resForbidden.statusCode).toBe(403);
-      expect(resForbidden.json().error).toMatch(/Administrative or compliance/i);
+      expect(resForbidden.json().error).toMatch(/Access denied|administrative or compliance/i);
 
       // 4. Authorized admin successfully reconciles and authoritatively settles
       const resAdmin = await server.inject({

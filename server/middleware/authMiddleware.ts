@@ -127,15 +127,87 @@ export function requireKYC(minTier: 'tier1_basic' | 'tier2_verified') {
   };
 }
 
+export type UserRole = 'TRADER' | 'FINANCE_ADMIN' | 'COMPLIANCE_RECONCILIATION' | 'AUDITOR' | 'ADMIN';
+
+/**
+ * Role-Based Access Control Guard.
+ * Enforces explicit database-backed user roles.
+ * Strict invariant: 'x-admin-bypass' is strictly rejected in production and staging environments.
+ */
+export function requireRole(allowedRoles: (UserRole | string)[]) {
+  return async (req: FastifyRequest, reply: FastifyReply) => {
+    // Strictly reject bypass header in production or staging
+    if (config.NODE_ENV === 'production' || config.NODE_ENV === 'staging') {
+      if (req.headers['x-admin-bypass']) {
+        return reply.status(403).send({
+          success: false,
+          error: 'Security violation: Administrative bypass headers are strictly prohibited in production and staging environments.',
+        });
+      }
+    }
+
+    // Non-production test bypass support ONLY in test/development
+    if ((config.NODE_ENV === 'test' || config.NODE_ENV === 'development') && req.headers['x-admin-bypass'] === 'true') {
+      if (!req.user) {
+        req.user = {
+          id: 'usr_admin_mock_001',
+          email: 'admin@lumen.io',
+          displayName: 'System Administrator',
+          provider: 'email',
+          providerId: 'usr_admin_mock_001',
+          role: 'FINANCE_ADMIN',
+          kycTier: 'tier2_verified',
+          kycStatus: 'verified',
+          accountMode: 'live',
+          isEmergencyFrozen: false,
+          createdAt: Date.now(),
+        };
+      }
+      return;
+    }
+
+    await requireActive(req, reply);
+    if (!req.user) return; // Response sent by requireAuth
+
+    const userRole = req.user.role || 'TRADER';
+    const configuredAdmin = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+    const userEmail = (req.user.email || '').toLowerCase().trim();
+    const isConfiguredAdmin = configuredAdmin !== '' && userEmail === configuredAdmin;
+
+    if (isConfiguredAdmin || allowedRoles.includes(userRole)) {
+      return;
+    }
+
+    return reply.status(403).send({
+      success: false,
+      error: `Access denied. Required role: [${allowedRoles.join(', ')}]. Current role: ${userRole}.`,
+    });
+  };
+}
+
+/**
+ * Dedicated Financial & Reconciliation Authorization Guard.
+ * Required for manual bank UTR reconciliations, adjustments, and financial telemetry.
+ */
+export const requireFinanceAdmin = requireRole(['FINANCE_ADMIN', 'COMPLIANCE_RECONCILIATION', 'ADMIN']);
+
 /**
  * Administrator Authorization Guard.
  * Enforces that caller is an authenticated, non-frozen administrator.
- * Validates against process.env.ADMIN_EMAIL, company domain (@lumen.io),
- * or non-production testing override headers.
  */
 export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
-  // Non-production test bypass support
-  if (config.NODE_ENV === 'test' && req.headers['x-admin-bypass'] === 'true') {
+  // Strictly reject bypass header in production or staging
+  if (config.NODE_ENV === 'production' || config.NODE_ENV === 'staging') {
+    if (req.headers['x-admin-bypass']) {
+      return reply.status(403).send({
+        success: false,
+        error: 'Security violation: Administrative bypass headers are strictly prohibited in production and staging environments.',
+      });
+    }
+  }
+
+  // Non-production test bypass support ONLY in test/development
+  if ((config.NODE_ENV === 'test' || config.NODE_ENV === 'development') && req.headers['x-admin-bypass'] === 'true') {
     if (!req.user) {
       req.user = {
         id: 'usr_admin_mock_001',
@@ -143,6 +215,7 @@ export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
         displayName: 'System Administrator',
         provider: 'email',
         providerId: 'usr_admin_mock_001',
+        role: 'ADMIN',
         kycTier: 'tier2_verified',
         kycStatus: 'verified',
         accountMode: 'live',
@@ -154,19 +227,19 @@ export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   }
 
   await requireActive(req, reply);
-  if (!req.user) return; // Response sent by requireAuth
+  if (!req.user) return;
 
-  const userEmail = (req.user.email || '').toLowerCase().trim();
+  const userRole = req.user.role || 'TRADER';
   const configuredAdmin = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-
+  const userEmail = (req.user.email || '').toLowerCase().trim();
   const isConfiguredAdmin = configuredAdmin !== '' && userEmail === configuredAdmin;
-  const isLumenAdminDomain = userEmail.endsWith('@lumen.io') && (userEmail.startsWith('admin') || userEmail.startsWith('compliance') || userEmail.startsWith('audit'));
-  const isNonProdBypass = config.NODE_ENV !== 'production' && (userEmail.includes('admin') || req.headers['x-admin-bypass'] === 'true');
 
-  if (!isConfiguredAdmin && !isLumenAdminDomain && !isNonProdBypass) {
-    return reply.status(403).send({
-      success: false,
-      error: 'Administrative or compliance auditor privileges required for this operation.',
-    });
+  if (isConfiguredAdmin || ['ADMIN', 'FINANCE_ADMIN', 'COMPLIANCE_RECONCILIATION', 'AUDITOR'].includes(userRole)) {
+    return;
   }
+
+  return reply.status(403).send({
+    success: false,
+    error: 'Administrative or compliance auditor privileges required for this operation.',
+  });
 }

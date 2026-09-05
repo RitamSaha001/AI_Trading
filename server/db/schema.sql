@@ -9,8 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   display_name TEXT NOT NULL,
   photo_url TEXT,
-  provider TEXT NOT NULL, -- 'google' | 'apple' | 'email'
+  provider TEXT NOT NULL, -- 'google' | 'email'
   provider_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'TRADER',
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
@@ -161,21 +162,36 @@ CREATE TABLE IF NOT EXISTS payment_webhooks (
   error TEXT,
   raw_headers TEXT,
   raw_body TEXT,
+  received_at BIGINT,
+  verified_at BIGINT,
   processing_started_at BIGINT,
   processing_attempt INTEGER NOT NULL DEFAULT 0,
   worker_id TEXT,
   lease_expires_at BIGINT,
   next_retry_at BIGINT,
+  failed_at BIGINT,
   processed_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_webhooks_event ON payment_webhooks(event_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_webhooks_provider_event_unique ON payment_webhooks(provider, event_id);
 CREATE INDEX IF NOT EXISTS idx_payment_webhooks_lease ON payment_webhooks(status, lease_expires_at);
 
--- Payment Attempts
+-- Durable DB-Backed Passwordless Email Challenges
+CREATE TABLE IF NOT EXISTS auth_email_challenges (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  attempts_left INTEGER NOT NULL DEFAULT 5,
+  expires_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL,
+  verified_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_auth_challenges_email ON auth_email_challenges(email, expires_at);
+
+-- Payment Attempts (Append-Only Financial History)
 CREATE TABLE IF NOT EXISTS payment_attempts (
   id TEXT PRIMARY KEY,
-  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE CASCADE,
+  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
   attempt_number INTEGER NOT NULL,
   provider TEXT NOT NULL,
   provider_order_id TEXT,
@@ -191,11 +207,11 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_payment_attempts_order ON payment_attempts(payment_order_id);
 
--- Payment Settlements
+-- Payment Settlements (Append-Only Financial History)
 CREATE TABLE IF NOT EXISTS payment_settlements (
   id TEXT PRIMARY KEY,
-  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE CASCADE,
-  payment_id TEXT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
+  payment_id TEXT NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,
   settlement_source TEXT NOT NULL, -- 'WEBHOOK' | 'STATUS_POLL' | 'RECONCILIATION_SWEEP' | 'MANUAL_BANK_RECONCILIATION'
   external_settlement_id TEXT,
   amount_minor BIGINT NOT NULL,
@@ -209,14 +225,16 @@ CREATE TABLE IF NOT EXISTS payment_settlements (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_settlements_order_unique ON payment_settlements(payment_order_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_settlements_payment_unique ON payment_settlements(payment_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_settlements_ext_unique ON payment_settlements(external_settlement_id) WHERE external_settlement_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_settlements_ledger_tx_unique ON payment_settlements(ledger_transaction_id) WHERE ledger_transaction_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_payment_settlements_order ON payment_settlements(payment_order_id);
 CREATE INDEX IF NOT EXISTS idx_payment_settlements_payment ON payment_settlements(payment_id);
 
--- Payment Refunds
+-- Payment Refunds (Append-Only Financial History)
 CREATE TABLE IF NOT EXISTS payment_refunds (
   id TEXT PRIMARY KEY,
-  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE CASCADE,
-  payment_id TEXT REFERENCES payments(id) ON DELETE CASCADE,
+  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
+  payment_id TEXT REFERENCES payments(id) ON DELETE RESTRICT,
   provider_refund_id TEXT UNIQUE,
   amount_minor BIGINT NOT NULL,
   currency TEXT NOT NULL,
