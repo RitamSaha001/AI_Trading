@@ -87,6 +87,8 @@ export class LiveOrderConfirmationService {
     triggerPrice?: number;
     product: string;
     validity?: string;
+    disclosedQuantity?: number;
+    slice?: boolean;
   }): string {
     const canonical = [
       params.userId,
@@ -99,6 +101,8 @@ export class LiveOrderConfirmationService {
       params.triggerPrice ? ExactDecimal.from(params.triggerPrice).toString() : '0',
       params.product.toUpperCase(),
       (params.validity || 'DAY').toUpperCase(),
+      params.disclosedQuantity ? ExactDecimal.from(params.disclosedQuantity).toString() : '0',
+      params.slice ? 'TRUE' : 'FALSE',
     ].join('|');
 
     return crypto.createHash('sha256').update(canonical).digest('hex');
@@ -124,7 +128,7 @@ export class LiveOrderConfirmationService {
     }
 
     const rawProduct = req.product.toUpperCase().trim();
-    const validProducts = ['CNC', 'MIS', 'NRML', 'MTF', 'D', 'I'];
+    const validProducts = ['CNC', 'MIS', 'NRML', 'MTF', 'D', 'I', 'DELIVERY', 'INTRADAY'];
     if (!validProducts.includes(rawProduct)) {
       throw new StandardBrokerError(
         'INVALID_PRODUCT',
@@ -209,6 +213,8 @@ export class LiveOrderConfirmationService {
       triggerPrice: req.triggerPrice,
       product: rawProduct,
       validity: req.validity || 'DAY',
+      disclosedQuantity: req.disclosedQuantity,
+      slice: req.slice,
     });
 
     const ttlSeconds = config.LIVE_ORDER_CONFIRMATION_TTL_SECONDS
@@ -220,10 +226,10 @@ export class LiveOrderConfirmationService {
     const idempotencyKey = `idemp_${clientOrderId}`;
 
     const riskSnapshot = {
-      singleOrderPct: riskResult.metadata?.singleOrderPct || 0,
-      projectedConcentrationPct: riskResult.metadata?.projectedConcentrationPct || 0,
-      accountEquity: riskResult.metadata?.portfolioEquity || 0,
-      availableCash: riskResult.metadata?.availableCash || 0,
+      singleOrderPct: riskResult.singleOrderPct || 0,
+      projectedConcentrationPct: riskResult.projectedConcentrationPct || 0,
+      accountEquity: riskResult.portfolioEquity || 0,
+      availableCash: riskResult.availableCash || 0,
       notional,
     };
 

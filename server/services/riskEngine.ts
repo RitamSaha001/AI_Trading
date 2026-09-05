@@ -29,6 +29,7 @@ export interface RiskDecision {
   portfolioEquityUsd: number;
   notional?: number;
   portfolioEquity?: number;
+  availableCash?: number;
   currency?: string;
   currencySymbol?: string;
   singleOrderPct: number;
@@ -352,6 +353,7 @@ export class ServerRiskEngine {
       portfolioEquityUsd,
       notional: notionalAmount,
       portfolioEquity: portfolioEquityAmount,
+      availableCash: tradingCashDec.toDisplayNumber(),
       currency: quoteAsset,
       currencySymbol,
       singleOrderPct,

@@ -1018,7 +1018,16 @@ export function buildServer(): FastifyInstance {
       return reply.status(400).send({ success: false, error: 'confirmationId is required' });
     }
 
+    // Security guard: Explicitly disallow client-supplied isSystemPanic
+    delete (body as any).isSystemPanic;
+
     try {
+      // Authoritative verification: Retrieve pre-allocated clientOrderId and idempotencyKey
+      const confirmation = await LiveOrderConfirmationService.getConfirmation(body.confirmationId, req.user!.id);
+      if (!confirmation) {
+        return reply.status(404).send({ success: false, error: 'Confirmation not found or unauthorized' });
+      }
+
       const broker = BrokerRegistry.get(body.broker || 'upstox');
       const order = await broker.placeOrder({
         userId: req.user!.id,
@@ -1034,7 +1043,8 @@ export function buildServer(): FastifyInstance {
         disclosedQuantity: body.disclosedQuantity,
         slice: body.slice,
         confirmationId: body.confirmationId,
-        idempotencyKey: `confirm_${body.confirmationId}`,
+        clientOrderId: confirmation.clientOrderId,
+        idempotencyKey: confirmation.idempotencyKey,
         accountMode: 'live',
       });
       return { success: true, order };
@@ -1076,6 +1086,9 @@ export function buildServer(): FastifyInstance {
     if (!body?.symbol || !body.quantity || body.quantity <= 0) {
       return reply.status(400).send({ success: false, error: 'Invalid order parameters' });
     }
+
+    // Security guard: Explicitly disallow client-supplied isSystemPanic
+    delete (body as any).isSystemPanic;
 
     const accountMode = body.accountMode || 'live';
     const brokerId = body.broker || 'binance';
@@ -1124,7 +1137,7 @@ export function buildServer(): FastifyInstance {
     return { success: true, status };
   });
 
-  server.post('/api/emergency/panic', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+  server.post('/api/emergency/panic', { preHandler: requireAdmin }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = (req.body as any) || {};
     try {
       const summary = await EmergencyControlService.executePanicSquareOff(
@@ -1139,7 +1152,7 @@ export function buildServer(): FastifyInstance {
     }
   });
 
-  server.post('/api/emergency/halt', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+  server.post('/api/emergency/halt', { preHandler: requireAdmin }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = (req.body as any) || {};
     try {
       const status = await EmergencyControlService.setState(
@@ -1153,7 +1166,7 @@ export function buildServer(): FastifyInstance {
     }
   });
 
-  server.post('/api/emergency/resume', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+  server.post('/api/emergency/resume', { preHandler: requireAdmin }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = (req.body as any) || {};
     try {
       const status = await EmergencyControlService.setState(

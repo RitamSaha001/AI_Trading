@@ -73,13 +73,23 @@ export class LiveOrderGateService {
     // 2. Emergency State Check (Durable PANIC / TRADING_HALTED)
     const emergencyStatus = await EmergencyControlService.getStatus();
     if (emergencyStatus.state === 'PANIC') {
+      if (!order.isSystemPanic) {
+        throw new StandardBrokerError(
+          'EMERGENCY_PANIC_ACTIVE',
+          `Live order blocked: Emergency PANIC mode is currently active. Reason: ${emergencyStatus.reason}`,
+          brokerId
+        );
+      }
+    } else if (order.isSystemPanic) {
+      // Security guard: If order claims isSystemPanic but system is NOT in PANIC state, reject immediately
       throw new StandardBrokerError(
-        'EMERGENCY_PANIC_ACTIVE',
-        `Live order blocked: Emergency PANIC mode is currently active. Reason: ${emergencyStatus.reason}`,
+        'ORDER_REJECTED',
+        'Unauthorized panic order: System is not in PANIC state.',
         brokerId
       );
     }
-    if (emergencyStatus.state === 'TRADING_HALTED') {
+
+    if (emergencyStatus.state === 'TRADING_HALTED' && !order.isSystemPanic) {
       throw new StandardBrokerError(
         'TRADING_HALTED',
         `Live order blocked: System trading is temporarily halted. Reason: ${emergencyStatus.reason}`,
@@ -199,7 +209,7 @@ export class LiveOrderGateService {
       );
     }
     const rawProduct = order.product.toUpperCase().trim();
-    const validProducts = ['CNC', 'MIS', 'NRML', 'MTF', 'D', 'I'];
+    const validProducts = ['CNC', 'MIS', 'NRML', 'MTF', 'D', 'I', 'DELIVERY', 'INTRADAY'];
     if (!validProducts.includes(rawProduct)) {
       throw new StandardBrokerError(
         'INVALID_PRODUCT',
@@ -220,70 +230,108 @@ export class LiveOrderGateService {
       throw new StandardBrokerError('ORDER_REJECTED', `Unsupported Upstox instrument: ${order.symbol}`, brokerId);
     }
 
-    // 11. Two-Step Human Confirmation Token Verification (Sections 3, 4, 5)
-    let confirmationRecord: any = undefined;
-    if (confirmationId) {
-      const claimResult = await LiveOrderConfirmationService.claimConfirmationAtomically(confirmationId, order.userId);
-      if (!claimResult.claimed) {
-        throw new StandardBrokerError(
-          claimResult.reason || 'CONFIRMATION_INVALID',
-          `Live order confirmation check failed: ${claimResult.reason}`,
-          brokerId
-        );
-      }
-      confirmationRecord = claimResult.record;
-
-      // Anti-Tampering Hash Verification (Section 4)
-      const submittedHash = LiveOrderConfirmationService.computeOrderHash({
-        userId: order.userId,
-        broker: brokerId,
-        symbol: order.symbol,
-        side: order.side,
-        type: order.type,
-        quantity: Number(order.quantity),
-        price: order.price ? Number(order.price) : undefined,
-        triggerPrice: order.triggerPrice ? Number(order.triggerPrice) : undefined,
-        product: rawProduct,
-        validity: order.validity,
-      });
-
-      if (submittedHash !== confirmationRecord.order_hash) {
-        // Mark confirmation as rejected due to tampering
-        await db.execute(
-          `UPDATE live_order_confirmations SET status = 'REJECTED', rejection_reason = 'Order parameters tampered' WHERE id = ?`,
-          [confirmationId]
-        );
-
-        await AuditService.logEvent({
-          userId: order.userId,
-          eventType: 'ORDER_REJECTED',
-          source: 'live_order_gate_service',
-          actor: 'anti_tampering_guard',
-          result: 'BLOCKED',
-          metadata: { confirmationId, reason: 'PARAMETER_TAMPERING' },
-        });
-
-        throw new StandardBrokerError(
-          'ORDER_PARAMETER_TAMPERING',
-          'Order parameters do not match confirmed proposal. A new confirmation is required.',
-          brokerId
-        );
-      }
-
+    // 11. System Panic Bypass or Two-Step Human Confirmation Token Verification
+    if (order.isSystemPanic) {
       await AuditService.logEvent({
         userId: order.userId,
-        eventType: 'ORDER_CONFIRMED',
+        eventType: 'PANIC_GATE_BYPASS',
         source: 'live_order_gate_service',
-        actor: 'human_operator',
-        externalId: confirmationId,
+        actor: 'emergency_control_service',
         result: 'SUCCESS',
-        metadata: { confirmationId, symbol: order.symbol, quantity: order.quantity },
+        metadata: {
+          symbol: order.symbol,
+          side: order.side,
+          quantity: order.quantity,
+          clientOrderId: order.clientOrderId,
+          reason: 'Emergency Panic Square-Off bypass of human confirmation token',
+        },
       });
-    } else {
+
+      return {
+        passed: true,
+        instrument,
+        credentials: { accessToken, accountId: credRow.account_id },
+      };
+    }
+
+    if (!confirmationId) {
       // Require server-side confirmation for all live orders
       throw new StandardBrokerError(
         'CONFIRMATION_REQUIRED',
         'Live orders strictly require a valid two-step human confirmation token. Please propose order first via /api/orders/propose.',
+        brokerId
+      );
+    }
+
+    // Inspect pending confirmation record
+    const confirmation = await LiveOrderConfirmationService.getConfirmation(confirmationId, order.userId);
+    if (!confirmation) {
+      throw new StandardBrokerError(
+        'CONFIRMATION_NOT_FOUND',
+        'Live order confirmation not found or unauthorized.',
+        brokerId
+      );
+    }
+
+    if (confirmation.status === 'CONSUMED') {
+      throw new StandardBrokerError(
+        'CONFIRMATION_ALREADY_CONSUMED',
+        'Live order confirmation has already been consumed.',
+        brokerId
+      );
+    }
+
+    if (confirmation.status === 'EXPIRED' || confirmation.expiresAt <= Date.now()) {
+      throw new StandardBrokerError(
+        'CONFIRMATION_EXPIRED',
+        'Live order confirmation has expired. Please propose order again.',
+        brokerId
+      );
+    }
+
+    if (confirmation.status !== 'PENDING') {
+      throw new StandardBrokerError(
+        'CONFIRMATION_INVALID',
+        `Live order confirmation is not in PENDING state (status: ${confirmation.status}).`,
+        brokerId
+      );
+    }
+
+    // Anti-Tampering Hash Verification (includes disclosedQuantity and slice)
+    const submittedHash = LiveOrderConfirmationService.computeOrderHash({
+      userId: order.userId,
+      broker: brokerId,
+      symbol: order.symbol,
+      side: order.side,
+      type: order.type,
+      quantity: Number(order.quantity),
+      price: order.price ? Number(order.price) : undefined,
+      triggerPrice: order.triggerPrice ? Number(order.triggerPrice) : undefined,
+      product: rawProduct,
+      validity: order.validity,
+      disclosedQuantity: order.disclosedQuantity,
+      slice: order.slice,
+    });
+
+    if (submittedHash !== confirmation.orderHash) {
+      // Mark confirmation as rejected due to tampering
+      await db.execute(
+        `UPDATE live_order_confirmations SET status = 'REJECTED', rejection_reason = 'Order parameters tampered' WHERE id = ?`,
+        [confirmationId]
+      );
+
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'ORDER_REJECTED',
+        source: 'live_order_gate_service',
+        actor: 'anti_tampering_guard',
+        result: 'BLOCKED',
+        metadata: { confirmationId, reason: 'PARAMETER_TAMPERING' },
+      });
+
+      throw new StandardBrokerError(
+        'ORDER_PARAMETER_TAMPERING',
+        'Order parameters do not match confirmed proposal. A new confirmation is required.',
         brokerId
       );
     }
@@ -324,22 +372,54 @@ export class LiveOrderGateService {
       );
     }
 
-    // 13. Risk Snapshot Drift Check (Section 13)
-    if (confirmationRecord?.risk_snapshot) {
-      let snapshot: any;
-      try {
-        snapshot = JSON.parse(confirmationRecord.risk_snapshot);
-      } catch {
-        snapshot = confirmationRecord.risk_snapshot;
-      }
-
-      const currentEquity = riskResult.metadata?.portfolioEquity || 0;
+    // 13. Comprehensive Risk Snapshot Drift Check
+    if (confirmation.riskSnapshot) {
+      const snapshot = confirmation.riskSnapshot;
+      const currentEquity = riskResult.portfolioEquity || 0;
       const initialEquity = snapshot.accountEquity || currentEquity;
-      // If equity dropped by > 15% between confirmation and execution, reject
+
+      // 1. Total Equity Degradation (>15%)
       if (initialEquity > 0 && (initialEquity - currentEquity) / initialEquity > 0.15) {
         throw new StandardBrokerError(
           'RISK_CONDITIONS_CHANGED',
-          'Account equity has degraded significantly since confirmation. A new confirmation is required.',
+          'Account equity has degraded significantly (>15%) since confirmation. A new confirmation is required.',
+          brokerId
+        );
+      }
+
+      // 2. Available Cash Degradation for BUY orders (>25%)
+      if (order.side === 'BUY') {
+        const currentCash = riskResult.availableCash || 0;
+        const initialCash = snapshot.availableCash || currentCash;
+        if (initialCash > 0 && (initialCash - currentCash) / initialCash > 0.25) {
+          throw new StandardBrokerError(
+            'RISK_CONDITIONS_CHANGED',
+            'Available cash has degraded significantly (>25%) since confirmation. A new confirmation is required.',
+            brokerId
+          );
+        }
+      }
+
+      // 3. Projected Concentration Drift (>5 percentage points increase)
+      if (order.side === 'BUY') {
+        const currentConcentration = riskResult.projectedConcentrationPct || 0;
+        const initialConcentration = snapshot.projectedConcentrationPct || 0;
+        if (currentConcentration > initialConcentration + 0.05) {
+          throw new StandardBrokerError(
+            'RISK_CONDITIONS_CHANGED',
+            'Projected asset concentration drifted beyond safe tolerance since confirmation. A new confirmation is required.',
+            brokerId
+          );
+        }
+      }
+
+      // 4. Single Order Notional Ratio Drift (>5 percentage points increase)
+      const currentSingleOrderPct = riskResult.singleOrderPct || 0;
+      const initialSingleOrderPct = snapshot.singleOrderPct || 0;
+      if (currentSingleOrderPct > initialSingleOrderPct + 0.05) {
+        throw new StandardBrokerError(
+          'RISK_CONDITIONS_CHANGED',
+          'Order size relative to portfolio equity drifted beyond safe tolerance since confirmation. A new confirmation is required.',
           brokerId
         );
       }
@@ -381,7 +461,28 @@ export class LiveOrderGateService {
       }
     }
 
-    // 15. Atomic Ledger Reservation (Cash for BUY, Equity Shares for SELL)
+    // 15. Atomically Consume Confirmation (Only AFTER all checks pass!)
+    const claimResult = await LiveOrderConfirmationService.claimConfirmationAtomically(confirmationId, order.userId);
+    if (!claimResult.claimed) {
+      throw new StandardBrokerError(
+        claimResult.reason || 'CONFIRMATION_INVALID',
+        `Live order confirmation check failed: ${claimResult.reason}`,
+        brokerId
+      );
+    }
+    const confirmationRecord = claimResult.record;
+
+    await AuditService.logEvent({
+      userId: order.userId,
+      eventType: 'ORDER_CONFIRMED',
+      source: 'live_order_gate_service',
+      actor: 'human_operator',
+      externalId: confirmationId,
+      result: 'SUCCESS',
+      metadata: { confirmationId, symbol: order.symbol, quantity: order.quantity },
+    });
+
+    // 16. Atomic Ledger Reservation (Cash for BUY, Equity Shares for SELL)
     const clientOrderId = order.clientOrderId || order.idempotencyKey;
     if (order.side === 'BUY' && reservedCashMinor > 0n) {
       await LedgerService.reserveOrderFunds({

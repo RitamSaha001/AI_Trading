@@ -541,7 +541,7 @@ export class UpstoxAdapter implements BrokerGateway {
         String(order.quantity),
         String(price),
         notional.toString(),
-        clientOrderId,
+        order.idempotencyKey || clientOrderId,
         now,
         now,
       ]
@@ -1028,7 +1028,7 @@ export class UpstoxAdapter implements BrokerGateway {
         String(order.quantity),
         String(price),
         notional.toString(),
-        clientOrderId,
+        order.idempotencyKey || clientOrderId,
         now,
         now,
       ]

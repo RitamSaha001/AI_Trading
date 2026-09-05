@@ -609,6 +609,7 @@ CREATE TABLE IF NOT EXISTS panic_squareoff_runs (
   positions_evaluated_count INTEGER NOT NULL DEFAULT 0,
   close_orders_submitted_count INTEGER NOT NULL DEFAULT 0,
   errors TEXT,
+  reconciliation_result TEXT,
   started_at BIGINT NOT NULL,
   completed_at BIGINT
 );

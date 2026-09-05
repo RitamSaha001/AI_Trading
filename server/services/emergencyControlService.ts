@@ -39,6 +39,14 @@ export interface PanicSquareOffSummary {
   closeOrdersSubmittedCount: number;
   skippedPositionsCount: number;
   errors: string[];
+  reconciliation?: {
+    reconciledAt: number;
+    residualOpenOrdersCount: number;
+    residualOpenOrders: any[];
+    residualPositionsCount: number;
+    residualPositions: any[];
+    isCompletelyFlat: boolean;
+  };
   startedAt: number;
   completedAt: number;
 }
@@ -278,6 +286,9 @@ export class EmergencyControlService {
           // Invariant: Auto-slicing for positions exceeding exchange freeze limits
           const shouldSlice = absQty > freezeQty;
           const closeClientOrderId = `panic_close_${runId}_${pos.symbol.replace(/[^a-zA-Z0-9]/g, '')}_${Date.now()}`;
+          let closeProduct = (pos.product || 'D').toUpperCase().trim();
+          if (closeProduct === 'DELIVERY' || closeProduct === 'CNC') closeProduct = 'D';
+          if (closeProduct === 'INTRADAY' || closeProduct === 'MIS') closeProduct = 'I';
 
           try {
             await broker.placeOrder({
@@ -288,11 +299,12 @@ export class EmergencyControlService {
               type: 'MARKET',
               quantity: absQty,
               price: price > 0 ? price : undefined,
-              product: pos.product || 'D',
+              product: closeProduct,
               slice: shouldSlice,
               idempotencyKey: `idemp_${closeClientOrderId}`,
               clientOrderId: closeClientOrderId,
               accountMode: 'live',
+              isSystemPanic: true,
             });
             closeOrdersSubmittedCount++;
           } catch (orderErr: any) {
@@ -306,6 +318,52 @@ export class EmergencyControlService {
       }
     }
 
+    // 4. Authoritative Post-Panic Reconciliation Pass
+    let residualOrders: any[] = [];
+    let residualPositions: any[] = [];
+    try {
+      const openOrdersAfter = await broker.getOpenOrders(userId);
+      residualOrders = openOrdersAfter || [];
+    } catch (err: any) {
+      logger.error(`[PanicSquareOff] Post-panic open orders reconciliation failed: ${err.message}`);
+      errors.push(`Reconciliation: open orders check failed: ${err.message}`);
+    }
+
+    if (broker.getPositions) {
+      try {
+        const positionsAfter = await broker.getPositions(userId);
+        residualPositions = (positionsAfter || []).filter((p) => !ExactDecimal.from(p.quantity).isZero());
+      } catch (err: any) {
+        logger.error(`[PanicSquareOff] Post-panic positions reconciliation failed: ${err.message}`);
+        errors.push(`Reconciliation: positions check failed: ${err.message}`);
+      }
+    }
+
+    const isCompletelyFlat = residualOrders.length === 0 && residualPositions.length === 0;
+    const reconciliation = {
+      reconciledAt: Date.now(),
+      residualOpenOrdersCount: residualOrders.length,
+      residualOpenOrders: residualOrders.map((o) => ({ clientOrderId: o.clientOrderId, symbol: o.symbol, status: o.status })),
+      residualPositionsCount: residualPositions.length,
+      residualPositions: residualPositions.map((p) => ({ symbol: p.symbol, quantity: p.quantity, product: p.product })),
+      isCompletelyFlat,
+    };
+
+    if (!isCompletelyFlat) {
+      const msg = `Reconciliation warning: ${residualPositions.length} positions and ${residualOrders.length} orders remain open after panic square-off.`;
+      logger.warn(`[PanicSquareOff] ${msg}`);
+      errors.push(msg);
+    }
+
+    await AuditService.logEvent({
+      userId,
+      eventType: 'PANIC_RECONCILIATION_COMPLETED',
+      source: 'emergency_control_service',
+      actor: initiatedBy,
+      result: isCompletelyFlat ? 'SUCCESS' : 'WARNING',
+      metadata: { runId, brokerId, reconciliation },
+    });
+
     const completedAt = Date.now();
     const finalStatus = errors.length === 0 ? 'COMPLETED' : (closeOrdersSubmittedCount > 0 || cancelledOrdersCount > 0 ? 'PARTIAL' : 'FAILED');
 
@@ -316,6 +374,7 @@ export class EmergencyControlService {
          positions_evaluated_count = ?,
          close_orders_submitted_count = ?,
          errors = ?,
+         reconciliation_result = ?,
          completed_at = ?
        WHERE id = ?`,
       [
@@ -324,6 +383,7 @@ export class EmergencyControlService {
         positionsEvaluatedCount,
         closeOrdersSubmittedCount,
         errors.length > 0 ? JSON.stringify(errors) : null,
+        JSON.stringify(reconciliation),
         completedAt,
         runId,
       ]
@@ -339,6 +399,7 @@ export class EmergencyControlService {
       closeOrdersSubmittedCount,
       skippedPositionsCount,
       errors,
+      reconciliation,
       startedAt,
       completedAt,
     };
