@@ -199,7 +199,11 @@ export class PostgresClient implements DBClient {
 
   private normalizeSql(sql: string): string {
     let index = 1;
-    return sql.replace(/\?/g, () => `$${index++}`);
+    let normalized = sql.replace(/\?/g, () => `$${index++}`);
+    // PostgreSQL requires boolean defaults to be boolean literals (FALSE/TRUE), not integers (0/1)
+    normalized = normalized.replace(/\bBOOLEAN\b(\s+NOT\s+NULL)?\s+DEFAULT\s+0\b/gi, 'BOOLEAN$1 DEFAULT FALSE');
+    normalized = normalized.replace(/\bBOOLEAN\b(\s+NOT\s+NULL)?\s+DEFAULT\s+1\b/gi, 'BOOLEAN$1 DEFAULT TRUE');
+    return normalized;
   }
 
   async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
@@ -286,8 +290,7 @@ export class PostgresClient implements DBClient {
         isPostgres: () => true,
         getEngine: () => 'postgresql',
         query: async <R = any>(sql: string, params: any[] = []): Promise<R[]> => {
-          let index = 1;
-          const normalized = sql.replace(/\?/g, () => `$${index++}`);
+          const normalized = this.normalizeSql(sql);
           const res = await client.query(normalized, params);
           return res.rows as R[];
         },
@@ -296,8 +299,7 @@ export class PostgresClient implements DBClient {
           return rows.length > 0 ? rows[0] : null;
         },
         execute: async (sql: string, params: any[] = []): Promise<{ changes: number }> => {
-          let index = 1;
-          const normalized = sql.replace(/\?/g, () => `$${index++}`);
+          const normalized = this.normalizeSql(sql);
           const res = await client.query(normalized, params);
           return { changes: res.rowCount || 0 };
         },
@@ -369,9 +371,10 @@ function assertProductionDbConfig(): void {
 export function getDb(): DBClient {
   if (activeDbClient) return activeDbClient;
 
-  assertProductionDbConfig();
-
-  if (config.DATABASE_URL && (config.DATABASE_URL.startsWith('postgres://') || config.DATABASE_URL.startsWith('postgresql://'))) {
+  // In test mode, default to isolated SQLite unless explicitly running Postgres integration tests
+  if (config.NODE_ENV === 'test' && !process.env.USE_POSTGRES_IN_TESTS) {
+    activeDbClient = new SQLiteClient(config.SQLITE_PATH);
+  } else if (config.DATABASE_URL && (config.DATABASE_URL.startsWith('postgres://') || config.DATABASE_URL.startsWith('postgresql://'))) {
     activeDbClient = new PostgresClient(config.DATABASE_URL);
   } else {
     activeDbClient = new SQLiteClient(config.SQLITE_PATH);

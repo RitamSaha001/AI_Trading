@@ -91,7 +91,7 @@ export class PaymentService {
         id, user_id, amount_minor, currency, method, provider, provider_order_id,
         status, idempotency_key, expires_at, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'INITIATING', ?, ?, ?, ?)
-      ON CONFLICT(idempotency_key) DO UPDATE SET id=id RETURNING *`,
+      ON CONFLICT(idempotency_key) DO UPDATE SET id = payment_orders.id RETURNING *`,
       [
         orderId,
         params.userId,
