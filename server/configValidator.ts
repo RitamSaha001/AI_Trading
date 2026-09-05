@@ -32,6 +32,14 @@ export interface ServerConfig {
   BINANCE_ENV: 'testnet' | 'mainnet';
   BINANCE_API_KEY?: string;
   BINANCE_API_SECRET?: string;
+  UPSTOX_CLIENT_ID?: string;
+  UPSTOX_CLIENT_SECRET?: string;
+  UPSTOX_REDIRECT_URI?: string;
+  UPSTOX_ENV: 'sandbox' | 'production';
+  UPSTOX_API_BASE_URL: string;
+  UPSTOX_STATIC_IP?: string;
+  UPSTOX_SECONDARY_STATIC_IP?: string;
+  UPSTOX_LIVE_TRADING_ENABLED: boolean;
   ALLOWED_ORIGINS: string;
   RECONCILIATION_SLA_MS: number;
 }
@@ -46,6 +54,10 @@ export interface SecurityConfigAuditResult {
   paymentConfigured: boolean;
   binanceConfigured: boolean;
   binanceEnv: 'testnet' | 'mainnet';
+  upstoxConfigured: boolean;
+  upstoxEnv: 'sandbox' | 'production';
+  upstoxLiveEnabled: boolean;
+  upstoxStaticIpConfigured: boolean;
   unsafeDefaultsDetected: boolean;
   productionSafe: boolean;
   issues: string[]; // Sanitized messages ONLY - no secret values
@@ -81,6 +93,9 @@ const DEV_TEST_FALLBACKS = {
   PHONEPE_CALLBACK_USERNAME: 'lumen_webhook_user',
   PHONEPE_CALLBACK_PASSWORD: 'lumen_webhook_password_test_2026',
   BINANCE_ENV: 'testnet' as const,
+  UPSTOX_ENV: 'sandbox' as const,
+  UPSTOX_API_BASE_URL: 'https://api.upstox.com/v2',
+  UPSTOX_LIVE_TRADING_ENABLED: false,
 };
 
 // Known default/placeholder values that MUST be rejected in production and staging
@@ -325,6 +340,23 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   const phonepeCallbackUsername = candidate.PHONEPE_CALLBACK_USERNAME || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CALLBACK_USERNAME : '');
   const phonepeCallbackPassword = candidate.PHONEPE_CALLBACK_PASSWORD || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CALLBACK_PASSWORD : '');
   const binanceEnv = candidate.BINANCE_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.BINANCE_ENV : 'mainnet');
+  const upstoxEnv = candidate.UPSTOX_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.UPSTOX_ENV : 'sandbox');
+  const upstoxApiBaseUrl = candidate.UPSTOX_API_BASE_URL || (isDev || isTest ? DEV_TEST_FALLBACKS.UPSTOX_API_BASE_URL : 'https://api.upstox.com/v2');
+  const upstoxLiveTradingEnabled = candidate.UPSTOX_LIVE_TRADING_ENABLED === true || candidate.UPSTOX_LIVE_TRADING_ENABLED === 'true';
+  const upstoxClientId = candidate.UPSTOX_CLIENT_ID || '';
+  const upstoxClientSecret = candidate.UPSTOX_CLIENT_SECRET || '';
+  const upstoxRedirectUri = candidate.UPSTOX_REDIRECT_URI || '';
+  const upstoxStaticIp = candidate.UPSTOX_STATIC_IP || '';
+  const upstoxSecondaryStaticIp = candidate.UPSTOX_SECONDARY_STATIC_IP || '';
+
+  // IPv4 format validation for registered static IPs
+  const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  if (upstoxStaticIp && !IPV4_REGEX.test(upstoxStaticIp.trim())) {
+    errors.push('UPSTOX_STATIC_IP must be a valid IPv4 address.');
+  }
+  if (upstoxSecondaryStaticIp && !IPV4_REGEX.test(upstoxSecondaryStaticIp.trim())) {
+    errors.push('UPSTOX_SECONDARY_STATIC_IP must be a valid IPv4 address.');
+  }
 
   // Strict Validation: SESSION_SECRET
   const sessionValidation = validateSessionSecret(sessionSecret, env);
@@ -417,6 +449,25 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     if (appleKeyId && (appleKeyId === 'APPLE_KEY_ID' || /mock/i.test(appleKeyId))) {
       errors.push('APPLE_KEY_ID contains placeholder value in production mode.');
     }
+
+    // 6. Upstox Execution Gateway Safety Gates in Production
+    if (upstoxLiveTradingEnabled) {
+      if (!upstoxClientId || /mock|test|demo/i.test(upstoxClientId)) {
+        errors.push('UPSTOX_CLIENT_ID is required and cannot be a placeholder when Upstox live trading is enabled.');
+      }
+      if (!upstoxClientSecret || /mock|test|demo/i.test(upstoxClientSecret)) {
+        errors.push('UPSTOX_CLIENT_SECRET is required and cannot be a placeholder when Upstox live trading is enabled.');
+      }
+      if (!upstoxRedirectUri || !upstoxRedirectUri.startsWith('https://')) {
+        errors.push('UPSTOX_REDIRECT_URI must be an external HTTPS endpoint when Upstox live trading is enabled.');
+      }
+      if (!upstoxStaticIp) {
+        errors.push('UPSTOX_STATIC_IP is required in production when Upstox live trading is enabled.');
+      }
+      if (upstoxEnv !== 'production') {
+        errors.push("UPSTOX_ENV must be 'production' when Upstox live trading is enabled.");
+      }
+    }
   }
 
   // Staging Fail-Closed Rules
@@ -466,6 +517,14 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     BINANCE_ENV: binanceEnv,
     BINANCE_API_KEY: candidate.BINANCE_API_KEY,
     BINANCE_API_SECRET: candidate.BINANCE_API_SECRET,
+    UPSTOX_CLIENT_ID: candidate.UPSTOX_CLIENT_ID,
+    UPSTOX_CLIENT_SECRET: candidate.UPSTOX_CLIENT_SECRET,
+    UPSTOX_REDIRECT_URI: candidate.UPSTOX_REDIRECT_URI,
+    UPSTOX_ENV: upstoxEnv as 'sandbox' | 'production',
+    UPSTOX_API_BASE_URL: upstoxApiBaseUrl,
+    UPSTOX_STATIC_IP: candidate.UPSTOX_STATIC_IP,
+    UPSTOX_SECONDARY_STATIC_IP: candidate.UPSTOX_SECONDARY_STATIC_IP,
+    UPSTOX_LIVE_TRADING_ENABLED: upstoxLiveTradingEnabled,
     ALLOWED_ORIGINS: candidate.ALLOWED_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000',
     RECONCILIATION_SLA_MS: candidate.RECONCILIATION_SLA_MS ? Number(candidate.RECONCILIATION_SLA_MS) : 300_000,
   };
@@ -497,6 +556,10 @@ export function auditServerSecurityConfig(
     ? Boolean((config.PHONEPE_MERCHANT_ID && config.PHONEPE_SALT_KEY) || (config.PHONEPE_CLIENT_ID && config.PHONEPE_CLIENT_SECRET))
     : config.PAYMENT_PROVIDER === 'sandbox';
 
+  const upstoxConfigured = Boolean(config.UPSTOX_CLIENT_ID && config.UPSTOX_CLIENT_SECRET);
+  const upstoxLiveEnabled = Boolean(config.UPSTOX_LIVE_TRADING_ENABLED);
+  const upstoxStaticIpConfigured = Boolean(config.UPSTOX_STATIC_IP);
+
   const isProd = env === 'production';
   const issues = validation.errors;
 
@@ -521,6 +584,10 @@ export function auditServerSecurityConfig(
     paymentConfigured,
     binanceConfigured,
     binanceEnv: config.BINANCE_ENV || 'testnet',
+    upstoxConfigured,
+    upstoxEnv: config.UPSTOX_ENV || 'sandbox',
+    upstoxLiveEnabled,
+    upstoxStaticIpConfigured,
     unsafeDefaultsDetected,
     productionSafe,
     issues,

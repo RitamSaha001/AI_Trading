@@ -181,19 +181,54 @@ export const ApiClient = {
     return apiRequest('/api/reconciliation/run', { method: 'POST' });
   },
 
-  async connectExchange(creds: { apiKey: string; apiSecret: string; environment: 'testnet' | 'mainnet' }) {
+  async connectExchange(creds: {
+    apiKey?: string;
+    apiSecret?: string;
+    accessToken?: string;
+    code?: string;
+    environment?: string;
+    broker?: string;
+  }) {
     return apiRequest<{ audit: any; message: string }>('/api/exchange/connect', {
       method: 'POST',
       body: JSON.stringify(creds),
     });
   },
 
-  async disconnectExchange() {
-    return apiRequest('/api/exchange/disconnect', { method: 'POST' });
+  async disconnectExchange(broker: string = 'binance') {
+    return apiRequest(`/api/exchange/disconnect?broker=${encodeURIComponent(broker)}`, { method: 'POST' });
   },
 
-  async getExchangeAccount() {
-    return apiRequest<{ account: any }>('/api/exchange/account');
+  async getExchangeAccount(broker: string = 'binance') {
+    return apiRequest<{ account: any }>(`/api/exchange/account?broker=${encodeURIComponent(broker)}`);
+  },
+
+  async getUpstoxAuthUrl(state?: string) {
+    const q = state ? `?state=${encodeURIComponent(state)}` : '';
+    return apiRequest<{ authUrl: string }>(`/api/exchange/upstox/auth-url${q}`);
+  },
+
+  async submitUpstoxCallback(code: string, redirectUri?: string) {
+    return apiRequest<{ audit: any; message: string }>('/api/exchange/upstox/callback', {
+      method: 'POST',
+      body: JSON.stringify({ code, redirectUri }),
+    });
+  },
+
+  async getUpstoxIpDiagnostics() {
+    return apiRequest<{ diagnostics: any }>('/api/exchange/upstox/ip-diagnostics');
+  },
+
+  async getBrokerFunds(broker: string = 'binance') {
+    return apiRequest<{ funds: any }>(`/api/exchange/funds?broker=${encodeURIComponent(broker)}`);
+  },
+
+  async getBrokerPositions(broker: string = 'binance') {
+    return apiRequest<{ positions: any[] }>(`/api/exchange/positions?broker=${encodeURIComponent(broker)}`);
+  },
+
+  async getBrokerHoldings(broker: string = 'binance') {
+    return apiRequest<{ holdings: any[] }>(`/api/exchange/holdings?broker=${encodeURIComponent(broker)}`);
   },
 
   async getExchangeListenKey() {

@@ -9,6 +9,7 @@
 import { BrokerId, BrokerInstrument, BrokerOrderRequest } from './brokers/brokerTypes';
 import { SymbolRulesService, BinanceSymbolRule } from './symbolRules';
 import { ExactDecimal } from './precision';
+import { UpstoxInstrumentProvider } from './brokers/upstox/upstoxInstrumentProvider';
 
 export interface InstrumentRulesProvider {
   readonly broker: BrokerId;
@@ -76,8 +77,9 @@ export class InstrumentRulesService {
   private static providers: Map<string, InstrumentRulesProvider> = new Map();
 
   static {
-    // Register default Binance provider
+    // Register standard production providers
     this.registerProvider(new BinanceInstrumentProvider());
+    this.registerProvider(new UpstoxInstrumentProvider());
   }
 
   static registerProvider(provider: InstrumentRulesProvider): void {
@@ -118,8 +120,20 @@ export class InstrumentRulesService {
     }
   }
 
+  static hasProvider(broker: BrokerId | string): boolean {
+    return this.providers.has(broker);
+  }
+
+  static getRules(symbolOrKey: string, broker: BrokerId = 'binance'): BrokerInstrument | null {
+    const provider = this.getProvider(broker);
+    if (!provider) return null;
+    const res = provider.getInstrument(symbolOrKey);
+    return (res instanceof Promise ? null : res) as BrokerInstrument | null;
+  }
+
   static resetForTesting(): void {
     this.providers.clear();
     this.registerProvider(new BinanceInstrumentProvider());
+    this.registerProvider(new UpstoxInstrumentProvider());
   }
 }

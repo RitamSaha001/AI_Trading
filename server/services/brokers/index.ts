@@ -16,3 +16,6 @@ export * from './brokerTypes';
 export * from './brokerGateway';
 export * from './brokerRegistry';
 export * from './binance/binanceAdapter';
+export * from './upstox/upstoxAdapter';
+export * from './upstox/upstoxClient';
+export * from './upstox/upstoxInstrumentProvider';

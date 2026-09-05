@@ -319,11 +319,13 @@ CREATE TABLE IF NOT EXISTS exchange_orders (
   executed_notional_exact TEXT DEFAULT '0',
   reserved_cash_minor BIGINT NOT NULL DEFAULT 0,
   reserved_qty_minor BIGINT NOT NULL DEFAULT 0,
+  broker TEXT DEFAULT 'binance',
   idempotency_key TEXT UNIQUE NOT NULL,
   reject_reason TEXT,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_exchange_orders_broker ON exchange_orders(broker);
 CREATE INDEX IF NOT EXISTS idx_exchange_orders_client_id ON exchange_orders(client_order_id);
 CREATE INDEX IF NOT EXISTS idx_exchange_orders_user ON exchange_orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_exchange_orders_status ON exchange_orders(status);
@@ -369,12 +371,39 @@ CREATE TABLE IF NOT EXISTS exchange_fills (
   commission_status TEXT NOT NULL DEFAULT 'AUTHORITATIVE',
   ledger_processed BOOLEAN NOT NULL DEFAULT 0,
   ledger_transaction_id TEXT,
+  broker TEXT DEFAULT 'binance',
   executed_at BIGINT NOT NULL,
   UNIQUE(order_id, exchange_trade_id)
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_fills_order ON exchange_fills(order_id);
 CREATE INDEX IF NOT EXISTS idx_exchange_fills_processed ON exchange_fills(ledger_processed);
+CREATE INDEX IF NOT EXISTS idx_exchange_fills_broker ON exchange_fills(broker);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_fills_canonical_key ON exchange_fills(canonical_fill_key);
+
+-- Multi-Broker Credentials Storage (Encrypted at Rest with AES-256-GCM)
+CREATE TABLE IF NOT EXISTS broker_credentials (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  broker TEXT NOT NULL,
+  environment TEXT NOT NULL DEFAULT 'sandbox',
+  auth_type TEXT NOT NULL DEFAULT 'oauth2',
+  api_key_encrypted TEXT,
+  api_secret_encrypted TEXT,
+  access_token_encrypted TEXT,
+  refresh_token_encrypted TEXT,
+  token_expires_at BIGINT,
+  account_id TEXT,
+  account_name TEXT,
+  can_trade BOOLEAN NOT NULL DEFAULT 1,
+  can_withdraw BOOLEAN NOT NULL DEFAULT 0,
+  is_safe BOOLEAN NOT NULL DEFAULT 1,
+  last_sync_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE(user_id, broker, environment)
+);
+CREATE INDEX IF NOT EXISTS idx_broker_credentials_user ON broker_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_broker_credentials_user_broker ON broker_credentials(user_id, broker);
 
 -- Double-Entry Settlement Idempotency & Financial Events
 CREATE TABLE IF NOT EXISTS accounting_events (

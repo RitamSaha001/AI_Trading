@@ -13,7 +13,7 @@ import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
 import { ExactDecimal } from './services/precision';
 import { BinanceGateway } from './services/binanceGateway';
-import { BrokerRegistry, BrokerGateway } from './services/brokers';
+import { BrokerRegistry, BrokerGateway, UpstoxClient } from './services/brokers';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
 import { OrderRecoveryService } from './services/orderRecoveryService';
@@ -813,13 +813,18 @@ export function buildServer(): FastifyInstance {
   // ==========================================================================
 
   server.post('/api/exchange/connect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { apiKey: string; apiSecret: string; environment: 'testnet' | 'mainnet'; broker?: string };
-    if (!body?.apiKey || !body.apiSecret) {
-      return reply.status(400).send({ success: false, error: 'API Key and Secret required' });
+    const body = req.body as { apiKey?: string; apiSecret?: string; accessToken?: string; code?: string; environment?: string; broker?: string };
+    const brokerId = body?.broker || 'binance';
+
+    if (brokerId === 'binance' && (!body?.apiKey || !body.apiSecret)) {
+      return reply.status(400).send({ success: false, error: 'API Key and Secret required for Binance' });
+    }
+    if (brokerId === 'upstox' && !body?.accessToken && !body?.code) {
+      return reply.status(400).send({ success: false, error: 'Upstox Access Token or Authorization Code required' });
     }
 
     try {
-      const broker = BrokerRegistry.get(body.broker || 'binance');
+      const broker = BrokerRegistry.get(brokerId);
       const audit = await broker.saveCredentials!(req.user!.id, body);
       let reconciliationResult: any = null;
       try {
@@ -831,11 +836,36 @@ export function buildServer(): FastifyInstance {
         success: true,
         audit,
         reconciled: reconciliationResult?.success ?? false,
-        message: 'Exchange credentials securely audited and encrypted at rest.',
+        message: `${broker.name} credentials securely audited and encrypted at rest.`,
       };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }
+  });
+
+  server.get('/api/exchange/upstox/auth-url', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const state = (req.query as any)?.state || `state_${Date.now()}`;
+    const authUrl = UpstoxClient.getAuthorizationUrl(state);
+    return { success: true, authUrl };
+  });
+
+  server.post('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as { code: string; redirectUri?: string };
+    if (!body?.code) {
+      return reply.status(400).send({ success: false, error: 'Authorization code is required' });
+    }
+    try {
+      const broker = BrokerRegistry.get('upstox');
+      const audit = await broker.saveCredentials!(req.user!.id, { code: body.code, redirectUri: body.redirectUri });
+      return { success: true, audit, message: 'Upstox connected and credentials encrypted at rest.' };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/exchange/upstox/ip-diagnostics', { preHandler: requireAuth }, async () => {
+    const diagnostics = await UpstoxClient.checkOutboundIp();
+    return { success: true, diagnostics };
   });
 
   server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -853,6 +883,36 @@ export function buildServer(): FastifyInstance {
       const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
       const info = await broker.getAccount(req.user!.id);
       return { success: true, account: info || { connected: false } };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/exchange/funds', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const funds = broker.getFunds ? await broker.getFunds(req.user!.id) : null;
+      return { success: true, funds };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/exchange/positions', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const positions = broker.getPositions ? await broker.getPositions(req.user!.id) : [];
+      return { success: true, positions };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/exchange/holdings', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const holdings = broker.getHoldings ? await broker.getHoldings(req.user!.id) : [];
+      return { success: true, holdings };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }

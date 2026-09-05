@@ -8,6 +8,7 @@
 import { BrokerGateway } from './brokerGateway';
 import { BrokerId } from './brokerTypes';
 import { BinanceAdapter } from './binance/binanceAdapter';
+import { UpstoxAdapter } from './upstox/upstoxAdapter';
 
 export class BrokerRegistry {
   private static gateways: Map<string, BrokerGateway> = new Map();
@@ -15,8 +16,9 @@ export class BrokerRegistry {
   private static isInitialized = false;
 
   static {
-    // Automatically register standard production BinanceAdapter
+    // Automatically register standard production adapters
     this.register(new BinanceAdapter());
+    this.register(new UpstoxAdapter());
   }
 
   /**
@@ -107,5 +109,6 @@ export class BrokerRegistry {
     this.defaultBrokerId = 'binance';
     this.isInitialized = false;
     this.register(new BinanceAdapter());
+    this.register(new UpstoxAdapter());
   }
 }

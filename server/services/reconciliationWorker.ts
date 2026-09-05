@@ -181,7 +181,7 @@ export class ReconciliationWorker {
 
       // 1. Reconcile any UNKNOWN orders
       const unknownOrders = await db.query<any>(
-        `SELECT client_order_id, symbol, user_id FROM exchange_orders WHERE status = 'UNKNOWN' ${userId ? 'AND user_id = ?' : ''}`,
+        `SELECT client_order_id, symbol, user_id, broker FROM exchange_orders WHERE status = 'UNKNOWN' ${userId ? 'AND user_id = ?' : ''}`,
         userId ? [userId] : []
       );
 

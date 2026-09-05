@@ -80,19 +80,32 @@ export class StandardBrokerError extends Error implements BrokerError {
   public raw?: any;
 
   constructor(
-    message: string,
-    options: {
-      code?: string;
-      category?: BrokerError['category'];
-      retryable?: boolean;
-      raw?: any;
-    } = {}
+    messageOrCode: string,
+    optionsOrMessage?:
+      | {
+          code?: string;
+          category?: BrokerError['category'];
+          retryable?: boolean;
+          raw?: any;
+        }
+      | string,
+    broker?: string,
+    rawError?: any
   ) {
-    super(message);
-    this.name = 'StandardBrokerError';
-    this.code = options.code || 'UNKNOWN_ERROR';
-    this.category = options.category || 'UNKNOWN';
-    this.retryable = options.retryable ?? false;
-    this.raw = options.raw;
+    if (typeof optionsOrMessage === 'string') {
+      super(optionsOrMessage);
+      this.name = 'StandardBrokerError';
+      this.code = messageOrCode || 'UNKNOWN_ERROR';
+      this.category = 'UNKNOWN';
+      this.retryable = false;
+      this.raw = rawError || broker;
+    } else {
+      super(messageOrCode);
+      this.name = 'StandardBrokerError';
+      this.code = optionsOrMessage?.code || 'UNKNOWN_ERROR';
+      this.category = optionsOrMessage?.category || 'UNKNOWN';
+      this.retryable = optionsOrMessage?.retryable ?? false;
+      this.raw = optionsOrMessage?.raw;
+    }
   }
 }

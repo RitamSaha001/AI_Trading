@@ -118,6 +118,10 @@ export class ExactDecimal {
     return new ExactDecimal(u1 + u2, s);
   }
 
+  plus(other: ExactDecimal | string | number | bigint): ExactDecimal {
+    return this.add(other);
+  }
+
   sub(other: ExactDecimal | string | number | bigint): ExactDecimal {
     const o = ExactDecimal.from(other);
     const [u1, u2, s] = this.align(o);
@@ -127,6 +131,10 @@ export class ExactDecimal {
   mul(other: ExactDecimal | string | number | bigint): ExactDecimal {
     const o = ExactDecimal.from(other);
     return new ExactDecimal(this.unscaled * o.unscaled, this.scale + o.scale);
+  }
+
+  times(other: ExactDecimal | string | number | bigint): ExactDecimal {
+    return this.mul(other);
   }
 
   div(
