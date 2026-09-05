@@ -14,6 +14,8 @@ import { BinanceGateway } from './services/binanceGateway';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
 import { OrderRecoveryService } from './services/orderRecoveryService';
+import crypto from 'node:crypto';
+import { SymbolRulesService } from './services/symbolRules';
 import { AuditService, logger } from './services/auditService';
 
 let isShuttingDown = false;
@@ -800,6 +802,14 @@ if (isMain || process.env.START_SERVER === 'true') {
       console.log(
         `[Recovery] Sweep completed: ${recovery.ordersInspected} inspected, ${recovery.recoveredCount} recovered, ${recovery.unresolvedCount} unresolved.`
       );
+
+      console.log(`[ExchangeRules] Loading authoritative Binance exchange rules...`);
+      await SymbolRulesService.refreshRules().catch((err: any) => {
+        if (config.NODE_ENV === 'production') {
+          throw new Error(`Failed to load authoritative Binance exchange rules on startup: ${err.message}`);
+        }
+        console.warn(`[ExchangeRules] Non-production startup: exchangeInfo refresh skipped or failed: ${err.message}`);
+      });
 
       const server = buildServer();
 

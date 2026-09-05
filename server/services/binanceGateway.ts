@@ -4,7 +4,7 @@ import { AuditService } from './auditService';
 import { ServerRiskEngine } from './riskEngine';
 import { LedgerService } from './ledgerService';
 import { ExactDecimal, fromCashMinor } from './precision';
-import { SymbolRulesService } from './symbolRules';
+import { SymbolRulesService, ValidatedOrderParams } from './symbolRules';
 import { OrderStateMachine } from './orderStateMachine';
 import crypto from 'node:crypto';
 
@@ -21,11 +21,13 @@ export interface PlaceOrderInput {
   quoteAsset: string;
   side: 'BUY' | 'SELL';
   type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT';
-  quantity: number;
-  price?: number;
-  stopPrice?: number;
+  quantity: number | string | ExactDecimal;
+  price?: number | string | ExactDecimal;
+  stopPrice?: number | string | ExactDecimal;
+  quoteOrderQty?: number | string | ExactDecimal;
   marketQuoteAgeMs: number;
   idempotencyKey: string;
+  accountMode?: 'live' | 'paper';
 }
 
 export interface OrderStateRecord {
@@ -52,15 +54,25 @@ export interface OrderStateRecord {
     | 'RECONCILING'
     | 'RECONCILED';
   origQty: number;
+  origQtyExact?: string;
   executedQty: number;
+  executedQtyExact?: string;
   price: number;
+  priceExact?: string;
   avgPrice: number;
+  avgPriceExact?: string;
   cumulativeQuoteQty: number;
+  cumulativeQuoteExact?: string;
   quoteAsset: string;
   notional: number;
+  notionalExact?: string;
   fee: number;
+  feeExact?: string;
+  feeAsset?: string;
   reservedCash: number;
+  reservedCashMinor?: bigint;
   reservedQty: number;
+  reservedQtyMinor?: bigint;
   rejectReason?: string;
   createdAt: number;
   updatedAt: number;
@@ -78,6 +90,17 @@ export interface BinanceAccountAudit {
   securityWarning?: string;
   balances: Record<string, { asset: string; free: number; locked: number }>;
   latencyMs: number;
+}
+
+export interface ReconcileVenueResult {
+  found: boolean;
+  notFoundConfirmed?: boolean;
+  status?: string;
+  executedQty?: number;
+  executedQtyExact?: string;
+  exchangeOrderId?: string;
+  avgPrice?: number;
+  avgPriceExact?: string;
 }
 
 export class BinanceGateway {
@@ -487,11 +510,29 @@ export class BinanceGateway {
     if (!['MARKET', 'LIMIT', 'STOP_LOSS_LIMIT'].includes(input.type)) {
       return `Invalid order type: ${input.type}`;
     }
-    if (!input.quantity || input.quantity <= 0 || !isFinite(input.quantity)) {
+    if (!input.quantity) {
       return 'Quantity must be a positive finite number';
     }
-    if (input.type === 'LIMIT' && (!input.price || input.price <= 0)) {
-      return 'Price is required and must be positive for LIMIT orders';
+    try {
+      const q = ExactDecimal.from(input.quantity);
+      if (q.lte(ExactDecimal.zero())) {
+        return 'Quantity must be a positive finite number';
+      }
+    } catch {
+      return 'Quantity must be a positive finite number';
+    }
+    if (input.type === 'LIMIT') {
+      if (!input.price) {
+        return 'Price is required and must be positive for LIMIT orders';
+      }
+      try {
+        const p = ExactDecimal.from(input.price);
+        if (p.lte(ExactDecimal.zero())) {
+          return 'Price is required and must be positive for LIMIT orders';
+        }
+      } catch {
+        return 'Price is required and must be positive for LIMIT orders';
+      }
     }
     try {
       SymbolRulesService.validateAndNormalize({
@@ -559,16 +600,22 @@ export class BinanceGateway {
     }
 
     const clientOrderId = this.generateClientOrderId(input.userId, input.idempotencyKey);
+    const accountMode = input.accountMode || 'live';
+    const rule = await SymbolRulesService.getAuthoritativeRule(input.symbol, accountMode);
     const normalized = SymbolRulesService.validateAndNormalize({
       symbol: input.symbol,
       side: input.side,
       type: input.type,
       quantity: input.quantity,
       price: input.price,
+      quoteOrderQty: input.quoteOrderQty,
+      accountMode,
+      rule,
     });
 
-    const orderPrice = Number(normalized.priceStr);
-    const notional = Number(normalized.notionalStr);
+    const orderPrice = normalized.price.toDisplayNumber();
+    const notional = normalized.notional.toDisplayNumber();
+    const origQty = normalized.quantity.toDisplayNumber();
 
     OrderStateMachine.validateTransition('CREATED', 'RESERVING', clientOrderId);
 
@@ -579,8 +626,8 @@ export class BinanceGateway {
       quoteAsset: input.quoteAsset,
       side: input.side,
       type: input.type,
-      quantity: input.quantity,
-      price: orderPrice,
+      quantity: normalized.quantity,
+      price: normalized.price,
       marketQuoteAgeMs: input.marketQuoteAgeMs,
       idempotencyKey: input.idempotencyKey,
     });
@@ -596,16 +643,25 @@ export class BinanceGateway {
         side: input.side,
         type: input.type,
         status: 'REJECTED',
-        origQty: input.quantity,
+        origQty,
+        origQtyExact: normalized.quantityStr,
         executedQty: 0,
+        executedQtyExact: '0',
         price: orderPrice,
+        priceExact: normalized.priceStr,
         avgPrice: 0,
+        avgPriceExact: '0',
         cumulativeQuoteQty: 0,
+        cumulativeQuoteExact: '0',
         quoteAsset: input.quoteAsset,
         notional,
+        notionalExact: normalized.notionalStr,
         fee: 0,
+        feeExact: '0',
         reservedCash: 0,
+        reservedCashMinor: 0n,
         reservedQty: 0,
+        reservedQtyMinor: 0n,
         rejectReason: riskDecision.rejectReason,
         createdAt: now,
         updatedAt: now,
@@ -680,16 +736,25 @@ export class BinanceGateway {
         side: input.side,
         type: input.type,
         status: 'REJECTED',
-        origQty: input.quantity,
+        origQty,
+        origQtyExact: normalized.quantityStr,
         executedQty: 0,
+        executedQtyExact: '0',
         price: orderPrice,
+        priceExact: normalized.priceStr,
         avgPrice: 0,
+        avgPriceExact: '0',
         cumulativeQuoteQty: 0,
+        cumulativeQuoteExact: '0',
         quoteAsset: input.quoteAsset,
         notional,
+        notionalExact: normalized.notionalStr,
         fee: 0,
+        feeExact: '0',
         reservedCash: 0,
+        reservedCashMinor: 0n,
         reservedQty: 0,
+        reservedQtyMinor: 0n,
         rejectReason: `Insufficient available balance: ${reserveErr.message}`,
         createdAt: now,
         updatedAt: now,
@@ -742,7 +807,7 @@ export class BinanceGateway {
         input.symbol,
         input.side,
         input.type,
-        input.quantity,
+        origQty,
         normalized.quantityStr,
         orderPrice,
         normalized.priceStr,
@@ -761,19 +826,25 @@ export class BinanceGateway {
 
     // 5. Dispatch to External Exchange Venue
     try {
-      const exchangeResponse = await this.dispatchToExchange(input, clientOrderId);
+      const exchangeResponse = await this.dispatchToExchange(input, clientOrderId, normalized);
 
       // Successfully acknowledged by exchange
       const finalStatus = exchangeResponse.status === 'FILLED' ? 'FILLED' : 'OPEN';
       OrderStateMachine.validateTransition('SUBMITTING', finalStatus, clientOrderId);
 
-      const executedQty = exchangeResponse.executedQty || (finalStatus === 'FILLED' ? input.quantity : 0);
-      const avgPrice = exchangeResponse.avgPrice || orderPrice;
+      const executedQtyDec = exchangeResponse.executedQty !== undefined
+        ? ExactDecimal.from(exchangeResponse.executedQty)
+        : (finalStatus === 'FILLED' ? normalized.quantity : ExactDecimal.zero());
+      const avgPriceDec = exchangeResponse.avgPrice !== undefined && exchangeResponse.avgPrice > 0
+        ? ExactDecimal.from(exchangeResponse.avgPrice)
+        : normalized.price;
 
-      const executedQtyDec = ExactDecimal.from(executedQty);
-      const avgPriceDec = ExactDecimal.from(avgPrice);
       const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
       const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
+
+      const executedQty = executedQtyDec.toDisplayNumber();
+      const avgPrice = avgPriceDec.toDisplayNumber();
+      const notionalSettled = notionalSettledDec.toDisplayNumber();
 
       // Atomic ACID transaction for status update, fill recording, and ledger settlement
       await db.transaction(async (tx) => {
@@ -790,14 +861,14 @@ export class BinanceGateway {
             executedQtyDec.toString(),
             avgPrice,
             avgPriceDec.toString(),
-            executedQty * avgPrice,
+            notionalSettled,
             notionalSettledDec.toString(),
             Date.now(),
             clientOrderId,
           ]
         );
 
-        if (executedQty > 0) {
+        if (executedQtyDec.gt(ExactDecimal.zero())) {
           const tradeId = `trd_${clientOrderId}_${executedQty}`;
           const fillId = `fill_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
@@ -815,10 +886,10 @@ export class BinanceGateway {
               avgPriceDec.toString(),
               executedQty,
               executedQtyDec.toString(),
-              Number(feeAmountDec.toMinor(2)) / 100,
+              feeAmountDec.toDisplayNumber(),
               feeAmountDec.toString(),
               input.quoteAsset,
-              executedQty * avgPrice,
+              notionalSettled,
               notionalSettledDec.toString(),
               Date.now(),
             ]
@@ -937,12 +1008,18 @@ export class BinanceGateway {
       if (recResult.found) {
         const recStatus = recResult.status === 'FILLED' ? 'FILLED' : 'OPEN';
         OrderStateMachine.validateTransition('UNKNOWN', recStatus, clientOrderId);
-        const executedQty = recResult.executedQty || 0;
-        const avgPrice = recResult.avgPrice || orderPrice;
-        const executedQtyDec = ExactDecimal.from(executedQty);
-        const avgPriceDec = ExactDecimal.from(avgPrice);
+        const executedQtyDec = recResult.executedQtyExact
+          ? ExactDecimal.from(recResult.executedQtyExact)
+          : (recResult.executedQty != null ? ExactDecimal.from(recResult.executedQty) : ExactDecimal.zero());
+        const avgPriceDec = recResult.avgPriceExact
+          ? ExactDecimal.from(recResult.avgPriceExact)
+          : (recResult.avgPrice != null && recResult.avgPrice > 0 ? ExactDecimal.from(recResult.avgPrice) : normalized.price);
         const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
         const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
+
+        const executedQty = executedQtyDec.toDisplayNumber();
+        const avgPrice = avgPriceDec.toDisplayNumber();
+        const notionalSettled = notionalSettledDec.toDisplayNumber();
 
         await db.transaction(async (tx) => {
           await tx.execute(
@@ -958,14 +1035,14 @@ export class BinanceGateway {
               executedQtyDec.toString(),
               avgPrice,
               avgPriceDec.toString(),
-              executedQty * avgPrice,
+              notionalSettled,
               notionalSettledDec.toString(),
               Date.now(),
               clientOrderId,
             ]
           );
 
-          if (executedQty > 0) {
+          if (executedQtyDec.gt(ExactDecimal.zero())) {
             const tradeId = `trd_rec_${clientOrderId}_${executedQty}`;
             const fillId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
             await tx.execute(
@@ -983,10 +1060,10 @@ export class BinanceGateway {
                 avgPriceDec.toString(),
                 executedQty,
                 executedQtyDec.toString(),
-                Number(feeAmountDec.toMinor(2)) / 100,
+                feeAmountDec.toDisplayNumber(),
                 feeAmountDec.toString(),
                 input.quoteAsset,
-                executedQty * avgPrice,
+                notionalSettled,
                 notionalSettledDec.toString(),
                 Date.now(),
               ]
@@ -1069,7 +1146,8 @@ export class BinanceGateway {
    */
   private static async dispatchToExchange(
     input: PlaceOrderInput,
-    clientOrderId: string
+    clientOrderId: string,
+    normalized?: ValidatedOrderParams
   ): Promise<{ exchangeOrderId: string; status: string; executedQty: number; avgPrice: number }> {
     const creds = await this.getCredentials(input.userId);
 
@@ -1087,11 +1165,17 @@ export class BinanceGateway {
 
     if (!creds?.apiKey || (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_sim_'))) {
       await new Promise((r) => setTimeout(r, 10));
+      const simulatedPrice = normalized?.price && !normalized.price.isZero()
+        ? normalized.price.toDisplayNumber()
+        : (input.price ? ExactDecimal.from(input.price).toDisplayNumber() : 0);
+      const simulatedQty = normalized?.quantity && !normalized.quantity.isZero()
+        ? normalized.quantity.toDisplayNumber()
+        : (input.quantity ? ExactDecimal.from(input.quantity).toDisplayNumber() : 0);
       return {
         exchangeOrderId: `bin_ord_${Date.now()}`,
         status: input.type === 'MARKET' ? 'FILLED' : 'OPEN',
-        executedQty: input.type === 'MARKET' ? input.quantity : 0,
-        avgPrice: input.price || 50000,
+        executedQty: input.type === 'MARKET' ? simulatedQty : 0,
+        avgPrice: simulatedPrice,
       };
     }
 
@@ -1102,15 +1186,25 @@ export class BinanceGateway {
       symbol: input.symbol,
       side: input.side,
       type: input.type,
-      quantity: input.quantity.toString(),
       newClientOrderId: clientOrderId,
       timestamp: timestamp.toString(),
       recvWindow: '5000',
     });
 
-    if (input.type === 'LIMIT' && input.price) {
-      query.set('price', input.price.toString());
-      query.set('timeInForce', 'GTC');
+    if (normalized?.quoteOrderQtyStr) {
+      query.set('quoteOrderQty', normalized.quoteOrderQtyStr);
+    } else if (normalized?.quantityStr) {
+      query.set('quantity', normalized.quantityStr);
+    } else if (input.quantity) {
+      query.set('quantity', input.quantity.toString());
+    }
+
+    if (input.type === 'LIMIT') {
+      const priceStr = normalized?.priceStr || (input.price ? input.price.toString() : '');
+      if (priceStr) {
+        query.set('price', priceStr);
+        query.set('timeInForce', 'GTC');
+      }
     }
 
     const signature = crypto
@@ -1137,31 +1231,30 @@ export class BinanceGateway {
     }
 
     const data = await res.json();
+    const executedQtyDec = ExactDecimal.from(data.executedQty || '0');
+    const avgPriceDec = ExactDecimal.from(data.price || data.avgPrice || '0');
     return {
       exchangeOrderId: data.orderId?.toString() || `bin_ord_${Date.now()}`,
       status: data.status || 'OPEN',
-      executedQty: parseFloat(data.executedQty || '0'),
-      avgPrice: parseFloat(data.price || '0'),
+      executedQty: executedQtyDec.toDisplayNumber(),
+      avgPrice: avgPriceDec.toDisplayNumber(),
     };
   }
 
   /**
    * Reconciles an UNKNOWN order by querying Binance REST API by origClientOrderId.
    */
+  static async reconcileUnknownOrder(clientOrderId: string): Promise<OrderStateRecord>;
   static async reconcileUnknownOrder(
     clientOrderId: string,
     symbol: string,
     userId: string
-  ): Promise<{ found: boolean; notFoundConfirmed?: boolean; status?: string; executedQty?: number; exchangeOrderId?: string; avgPrice?: number }>;
-  static async reconcileUnknownOrder(clientOrderId: string): Promise<OrderStateRecord>;
+  ): Promise<ReconcileVenueResult>;
   static async reconcileUnknownOrder(
     clientOrderId: string,
     symbol?: string,
     userId?: string
-  ): Promise<
-    | { found: boolean; notFoundConfirmed?: boolean; status?: string; executedQty?: number; exchangeOrderId?: string; avgPrice?: number }
-    | OrderStateRecord
-  > {
+  ): Promise<OrderStateRecord | ReconcileVenueResult> {
     if (symbol !== undefined && userId !== undefined) {
       const creds = await this.getCredentials(userId);
       if (!creds) return { found: false, notFoundConfirmed: false };
@@ -1203,13 +1296,17 @@ export class BinanceGateway {
         });
 
         if (response.ok) {
-          const data = await response.json() as any;
+          const data = (await response.json()) as any;
+          const executedQtyDec = ExactDecimal.from(data.executedQty || '0');
+          const avgPriceDec = ExactDecimal.from(data.price || data.avgPrice || '0');
           return {
             found: true,
             status: data.status,
-            executedQty: parseFloat(data.executedQty || '0'),
+            executedQty: executedQtyDec.toDisplayNumber(),
+            executedQtyExact: executedQtyDec.toString(),
             exchangeOrderId: data.orderId?.toString(),
-            avgPrice: parseFloat(data.price || '0'),
+            avgPrice: avgPriceDec.toDisplayNumber(),
+            avgPriceExact: avgPriceDec.toString(),
           };
         } else {
           const errData = await response.json().catch(() => ({}));
@@ -1241,8 +1338,9 @@ export class BinanceGateway {
     const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
     const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
 
-    const executedQty = executedQtyDec.toNumber();
-    const avgPrice = avgPriceDec.toNumber();
+    const executedQty = executedQtyDec.toDisplayNumber();
+    const avgPrice = avgPriceDec.toDisplayNumber();
+    const notionalSettled = notionalSettledDec.toDisplayNumber();
     const tradeId = `trd_rec_${clientOrderId}`;
     const baseAsset = order.symbol.replace(order.quote_asset, '');
 
@@ -1258,7 +1356,7 @@ export class BinanceGateway {
           executedQtyDec.toString(),
           avgPrice,
           avgPriceDec.toString(),
-          executedQty * avgPrice,
+          notionalSettled,
           notionalSettledDec.toString(),
           now,
           clientOrderId,
@@ -1281,10 +1379,10 @@ export class BinanceGateway {
           avgPriceDec.toString(),
           executedQty,
           executedQtyDec.toString(),
-          Number(feeAmountDec.toMinor(2)) / 100,
+          feeAmountDec.toDisplayNumber(),
           feeAmountDec.toString(),
           order.quote_asset,
-          executedQty * avgPrice,
+          notionalSettled,
           notionalSettledDec.toString(),
           now,
         ]
@@ -1420,15 +1518,25 @@ export class BinanceGateway {
       type: r.type,
       status: r.status,
       origQty: Number(r.orig_qty),
+      origQtyExact: r.orig_qty_exact ?? String(r.orig_qty),
       executedQty: Number(r.executed_qty || 0),
+      executedQtyExact: r.executed_qty_exact ?? String(r.executed_qty || 0),
       price: Number(r.price),
+      priceExact: r.price_exact ?? String(r.price),
       avgPrice: Number(r.avg_price || 0),
+      avgPriceExact: r.avg_price_exact ?? String(r.avg_price || 0),
       cumulativeQuoteQty: Number(r.cumulative_quote_qty || 0),
+      cumulativeQuoteExact: r.cumulative_quote_exact ?? String(r.cumulative_quote_qty || 0),
       quoteAsset: r.quote_asset,
       notional: Number(r.notional),
+      notionalExact: r.notional_exact ?? String(r.notional),
       fee: Number(r.fee || 0),
+      feeExact: r.fee_exact ?? String(r.fee || 0),
+      feeAsset: r.fee_asset,
       reservedCash: Number(r.reserved_cash || 0),
+      reservedCashMinor: r.reserved_cash_minor != null ? BigInt(r.reserved_cash_minor) : undefined,
       reservedQty: Number(r.reserved_qty || 0),
+      reservedQtyMinor: r.reserved_qty_minor != null ? BigInt(r.reserved_qty_minor) : undefined,
       rejectReason: r.reject_reason,
       createdAt: Number(r.created_at),
       updatedAt: Number(r.updated_at),

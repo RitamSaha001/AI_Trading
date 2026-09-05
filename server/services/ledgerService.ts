@@ -5,6 +5,9 @@ import {
   toAssetMinor,
   fromCashMinor,
   fromAssetMinor,
+  fromCashMinorToDisplayNumber,
+  fromAssetMinorToDisplayNumber,
+  getAssetDecimals,
   computeNotionalMinor,
   computeSoldCostBasis,
   ExactDecimal,
@@ -929,7 +932,7 @@ export class LedgerService {
 
       if (params.fee !== undefined) {
         feeDec = params.fee instanceof ExactDecimal ? params.fee : ExactDecimal.from(params.fee);
-        feeMinor = feeAsset === params.baseAsset ? feeDec.toMinor(8) : feeDec.toMinor(2);
+        feeMinor = feeDec.toMinor(getAssetDecimals(feeAsset));
       } else {
         // Default 0.075% fee
         const computedFeeCashMinor = (notionalCashMinor * 75n) / 100000n;
@@ -1825,9 +1828,9 @@ export class LedgerService {
       cumulativeRealizedPnlMinor += rPnlMinor;
       cumulativeTotalFeesMinor += feesMinor;
 
-      const totalQty = fromAssetMinor(totalQtyMinor);
-      const reservedQty = fromAssetMinor(reservedQtyMinor);
-      const costBasisUSD = fromCashMinor(costBasisMinor);
+      const totalQty = fromAssetMinorToDisplayNumber(totalQtyMinor);
+      const reservedQty = fromAssetMinorToDisplayNumber(reservedQtyMinor);
+      const costBasisUSD = fromCashMinorToDisplayNumber(costBasisMinor);
       const avgCostBasisUSD = totalQty > 0 ? costBasisUSD / totalQty : 0;
 
       positions[p.asset] = {
@@ -1842,9 +1845,9 @@ export class LedgerService {
         costBasisUSD,
         avgCostBasisUSD,
         realizedPnlMinor: rPnlMinor,
-        realizedPnlUSD: fromCashMinor(rPnlMinor),
+        realizedPnlUSD: fromCashMinorToDisplayNumber(rPnlMinor),
         totalFeesMinor: feesMinor,
-        totalFeesUSD: fromCashMinor(feesMinor),
+        totalFeesUSD: fromCashMinorToDisplayNumber(feesMinor),
       };
     }
 
@@ -1858,17 +1861,17 @@ export class LedgerService {
         totalMinor: totalCashMinor,
         reservedMinor: reservedCashMinor,
         availableMinor: availableCashMinor,
-        total: fromCashMinor(totalCashMinor),
-        reserved: fromCashMinor(reservedCashMinor),
-        available: fromCashMinor(availableCashMinor),
+        total: fromCashMinorToDisplayNumber(totalCashMinor),
+        reserved: fromCashMinorToDisplayNumber(reservedCashMinor),
+        available: fromCashMinorToDisplayNumber(availableCashMinor),
         currency: preferredCurrency,
       },
       positions,
       pnl: {
         realizedPnlMinor: cumulativeRealizedPnlMinor,
-        realizedPnlUSD: fromCashMinor(cumulativeRealizedPnlMinor),
+        realizedPnlUSD: fromCashMinorToDisplayNumber(cumulativeRealizedPnlMinor),
         totalFeesMinor: cumulativeTotalFeesMinor,
-        totalFeesUSD: fromCashMinor(cumulativeTotalFeesMinor),
+        totalFeesUSD: fromCashMinorToDisplayNumber(cumulativeTotalFeesMinor),
       },
     };
   }

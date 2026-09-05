@@ -1,6 +1,7 @@
 import { getDb } from '../db';
 import { AuditService } from './auditService';
 import { LedgerService } from './ledgerService';
+import { ExactDecimal } from './precision';
 
 export interface RiskEvaluationRequest {
   userId: string;
@@ -8,8 +9,8 @@ export interface RiskEvaluationRequest {
   quoteAsset: string;
   side: 'BUY' | 'SELL';
   type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT';
-  quantity: number;
-  price: number;
+  quantity: number | string | ExactDecimal;
+  price: number | string | ExactDecimal;
   marketQuoteAgeMs: number;
   idempotencyKey?: string;
 }
@@ -71,7 +72,10 @@ export class ServerRiskEngine {
       };
     }
 
-    if (req.quantity <= 0 || req.price <= 0) {
+    const qtyDec = ExactDecimal.from(req.quantity);
+    const priceDec = ExactDecimal.from(req.price);
+
+    if (qtyDec.lte(ExactDecimal.zero()) || priceDec.lte(ExactDecimal.zero())) {
       return {
         approved: false,
         rejectReason: 'Quantity and price must be positive non-zero numbers.',
@@ -83,7 +87,8 @@ export class ServerRiskEngine {
       };
     }
 
-    const notionalUsd = req.quantity * req.price;
+    const notionalDec = qtyDec.mul(priceDec);
+    const notionalUsd = notionalDec.toDisplayNumber();
 
     // 3. Duplicate Order Rate-Limit / Cooldown Check (5 seconds window)
     const recentDuplicate = await db.queryOne<any>(
@@ -126,22 +131,31 @@ export class ServerRiskEngine {
 
     // 5. Balance & Portfolio Valuation
     const balances = await LedgerService.getUserBalances(req.userId);
-    const tradingCashMinor = balances[`trading_allocated:${req.quoteAsset}`]?.free ?? balances[`sovereign_cash:${req.quoteAsset}`]?.free ?? 0;
-    const tradingCashUsd = tradingCashMinor / 100; // Cents to USD
+    const tradingCashMinor = BigInt(
+      balances[`trading_allocated:${req.quoteAsset}`]?.free ??
+        balances[`sovereign_cash:${req.quoteAsset}`]?.free ??
+        0
+    );
+    const tradingCashDec = ExactDecimal.fromMinor(tradingCashMinor, 2);
 
-    // Calculate approximate portfolio equity
-    let portfolioEquityUsd = tradingCashUsd;
+    // Calculate portfolio equity
+    let portfolioEquityDec = tradingCashDec;
     for (const [key, bal] of Object.entries(balances)) {
       if (key.startsWith('crypto_holdings:') && key.includes(req.asset)) {
-        portfolioEquityUsd += (bal.balance / 1e8) * req.price;
+        const balMinor = BigInt(bal.balance || 0);
+        const balDec = ExactDecimal.fromMinor(balMinor, 8);
+        portfolioEquityDec = portfolioEquityDec.add(balDec.mul(priceDec));
       }
     }
-    if (portfolioEquityUsd <= 0) {
-      portfolioEquityUsd = notionalUsd; // Genesis baseline
+    if (portfolioEquityDec.lte(ExactDecimal.zero())) {
+      portfolioEquityDec = notionalDec; // Genesis baseline
     }
 
+    const portfolioEquityUsd = portfolioEquityDec.toDisplayNumber();
+
     // 6. Max Single Order Percentage (40% hard policy)
-    const singleOrderPct = notionalUsd / Math.max(1, portfolioEquityUsd);
+    const singleOrderPctDec = notionalDec.div(portfolioEquityDec, 4);
+    const singleOrderPct = singleOrderPctDec.toDisplayNumber();
     const maxSingleOrderPct = limits?.max_single_order_pct ?? 0.40;
     if (singleOrderPct > maxSingleOrderPct + 0.001) {
       return {
@@ -157,13 +171,15 @@ export class ServerRiskEngine {
 
     // 7. Minimum Liquid Cash Reserve (15% policy)
     const minReservePct = limits?.min_cash_reserve_pct ?? 0.15;
-    const requiredCashReserve = portfolioEquityUsd * minReservePct;
+    const minReservePctDec = ExactDecimal.from(String(minReservePct));
+    const requiredCashReserveDec = portfolioEquityDec.mul(minReservePctDec);
+    const requiredCashReserve = requiredCashReserveDec.toDisplayNumber();
     if (req.side === 'BUY') {
-      const remainingCash = tradingCashUsd - notionalUsd;
-      if (remainingCash < requiredCashReserve) {
+      const remainingCashDec = tradingCashDec.sub(notionalDec);
+      if (remainingCashDec.lt(requiredCashReserveDec)) {
         return {
           approved: false,
-          rejectReason: `Order would violate minimum liquid cash reserve of ${(minReservePct * 100).toFixed(0)}% ($${requiredCashReserve.toFixed(2)}). Projected remaining cash: $${remainingCash.toFixed(2)}.`,
+          rejectReason: `Order would violate minimum liquid cash reserve of ${(minReservePct * 100).toFixed(0)}% ($${requiredCashReserve.toFixed(2)}). Projected remaining cash: $${remainingCashDec.toFixed(2)}.`,
           requiredCashReserve,
           notionalUsd,
           portfolioEquityUsd,
@@ -174,12 +190,14 @@ export class ServerRiskEngine {
     }
 
     // 8. Max Asset Concentration (50% policy)
-    const currentAssetHolding = (balances[`crypto_holdings:${req.asset}`]?.balance ?? 0) / 1e8;
-    const currentHoldingNotional = currentAssetHolding * req.price;
-    const projectedHoldingNotional = req.side === 'BUY'
-      ? currentHoldingNotional + notionalUsd
-      : Math.max(0, currentHoldingNotional - notionalUsd);
-    const projectedConcentrationPct = projectedHoldingNotional / Math.max(1, portfolioEquityUsd);
+    const currentAssetMinor = BigInt(balances[`crypto_holdings:${req.asset}`]?.balance ?? 0);
+    const currentAssetHoldingDec = ExactDecimal.fromMinor(currentAssetMinor, 8);
+    const currentHoldingNotionalDec = currentAssetHoldingDec.mul(priceDec);
+    const projectedHoldingNotionalDec = req.side === 'BUY'
+      ? currentHoldingNotionalDec.add(notionalDec)
+      : (currentHoldingNotionalDec.gt(notionalDec) ? currentHoldingNotionalDec.sub(notionalDec) : ExactDecimal.zero());
+    const projectedConcentrationPctDec = projectedHoldingNotionalDec.div(portfolioEquityDec, 4);
+    const projectedConcentrationPct = projectedConcentrationPctDec.toDisplayNumber();
     const maxConcentrationPct = limits?.max_asset_concentration_pct ?? 0.50;
 
     if (req.side === 'BUY' && projectedConcentrationPct > maxConcentrationPct + 0.001) {

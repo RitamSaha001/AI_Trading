@@ -139,7 +139,7 @@ export class SQLiteClient implements DBClient {
  */
 export class PostgresClient implements DBClient {
   private pool: any;
-  private dedicatedAdvisoryClient: any = null;
+  private advisoryClients = new Map<string, any>();
 
   constructor(connectionString: string) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -203,35 +203,58 @@ export class PostgresClient implements DBClient {
   }
 
   /**
-   * Acquires a session-level PostgreSQL advisory lock.
+   * Acquires a session-level PostgreSQL advisory lock on a dedicated connection.
    */
   async acquireAdvisoryLock(key: bigint | number): Promise<void> {
-    if (!this.dedicatedAdvisoryClient) {
-      this.dedicatedAdvisoryClient = await this.pool.connect();
+    const k = key.toString();
+    let client = this.advisoryClients.get(k);
+    if (!client) {
+      client = await this.pool.connect();
+      this.advisoryClients.set(k, client);
     }
-    await this.dedicatedAdvisoryClient.query('SELECT pg_advisory_lock($1)', [key.toString()]);
+    await client.query('SELECT pg_advisory_lock($1)', [k]);
   }
 
   /**
-   * Releases a session-level PostgreSQL advisory lock.
+   * Releases a session-level PostgreSQL advisory lock and returns connection to pool.
    */
   async releaseAdvisoryLock(key: bigint | number): Promise<void> {
-    if (this.dedicatedAdvisoryClient) {
+    const k = key.toString();
+    const client = this.advisoryClients.get(k);
+    if (client) {
       try {
-        await this.dedicatedAdvisoryClient.query('SELECT pg_advisory_unlock($1)', [key.toString()]);
+        await client.query('SELECT pg_advisory_unlock($1)', [k]);
       } finally {
-        this.dedicatedAdvisoryClient.release();
-        this.dedicatedAdvisoryClient = null;
+        client.release();
+        this.advisoryClients.delete(k);
       }
     }
   }
 
   /**
    * Tries to acquire a session-level PostgreSQL advisory lock without blocking.
+   * Holds the dedicated connection client if acquired; releases immediately if not.
    */
   async tryAdvisoryLock(key: bigint | number): Promise<boolean> {
-    const res = await this.pool.query('SELECT pg_try_advisory_lock($1) AS acquired', [key.toString()]);
-    return Boolean(res.rows[0]?.acquired);
+    const k = key.toString();
+    if (this.advisoryClients.has(k)) {
+      return true;
+    }
+    const client = await this.pool.connect();
+    try {
+      const res = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [k]);
+      const acquired = Boolean(res.rows[0]?.acquired);
+      if (acquired) {
+        this.advisoryClients.set(k, client);
+        return true;
+      } else {
+        client.release();
+        return false;
+      }
+    } catch (err) {
+      client.release(true);
+      throw err;
+    }
   }
 
   async transaction<T>(fn: (tx: DBClient) => Promise<T>): Promise<T> {
@@ -293,12 +316,15 @@ export class PostgresClient implements DBClient {
   }
 
   async close(): Promise<void> {
-    if (this.dedicatedAdvisoryClient) {
+    for (const [k, client] of this.advisoryClients.entries()) {
       try {
-        this.dedicatedAdvisoryClient.release(true);
+        await client.query('SELECT pg_advisory_unlock($1)', [k]);
       } catch {}
-      this.dedicatedAdvisoryClient = null;
+      try {
+        client.release(true);
+      } catch {}
     }
+    this.advisoryClients.clear();
     await this.pool.end();
   }
 }

@@ -452,7 +452,7 @@ export class PaymentService {
   static async processPhonePeWebhook(
     rawBody: string,
     headers: Record<string, string | string[] | undefined>
-  ): Promise<{ status: 'PROCESSED' | 'DUPLICATE' | 'FAILED'; error?: string }> {
+  ): Promise<{ status: 'PROCESSED' | 'DUPLICATE' | 'IGNORED' | 'FAILED'; error?: string }> {
     const provider = this.getProvider();
     const verification = await provider.verifyWebhook(rawBody, headers);
 

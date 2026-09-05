@@ -244,8 +244,8 @@ export class ReconciliationWorker {
             const data = (await response.json()) as any;
             exchangeBalances = {};
             for (const b of data.balances || []) {
-              const free = parseFloat(b.free || '0');
-              if (free > 0) {
+              const freeDec = ExactDecimal.from(b.free || '0');
+              if (freeDec.gt(ExactDecimal.zero())) {
                 exchangeBalances[b.asset] = b.free;
               }
             }
@@ -261,7 +261,7 @@ export class ReconciliationWorker {
     }
 
     // 1. Reconcile Cash
-    const localCashDec = ExactDecimal.from(localProjection.cash.available);
+    const localCashDec = ExactDecimal.fromMinor(localProjection.cash.availableMinor, 2);
     const quoteAsset = localProjection.cash.currency || 'USDT';
     const rawExchangeCash = exchangeBalances[quoteAsset] ?? '0';
     const exchangeCashDec = ExactDecimal.from(rawExchangeCash);
@@ -289,7 +289,7 @@ export class ReconciliationWorker {
     const positionTolerance = ExactDecimal.from('0.00000001'); // 1 satoshi tolerance
 
     for (const [asset, pos] of Object.entries(localProjection.positions)) {
-      const localUnitsDec = ExactDecimal.from(pos.availableQuantity);
+      const localUnitsDec = ExactDecimal.fromMinor(pos.availableQuantityMinor, 8);
       const rawExchangeUnits = exchangeBalances[asset] ?? '0';
       const exchangeUnitsDec = ExactDecimal.from(rawExchangeUnits);
       const assetDiffDec = localUnitsDec.sub(exchangeUnitsDec).abs();

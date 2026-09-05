@@ -297,6 +297,24 @@ export class ExactDecimal {
     return `${signStr}${whole}.${frac}`;
   }
 
+  /**
+   * Non-authoritative conversion for UI/display, logging, or metric aggregation.
+   * MUST NEVER be used in authoritative trading, risk, balance, or accounting calculations.
+   */
+  toDisplayNumber(): number {
+    return Number(this.toString());
+  }
+
+  /**
+   * Explicit alias for toDisplayNumber indicating lossy floating-point representation.
+   */
+  toApproximateNumber(): number {
+    return Number(this.toString());
+  }
+
+  /**
+   * @deprecated Use toDisplayNumber() or toApproximateNumber() to make non-authoritative boundary explicit.
+   */
   toNumber(): number {
     return Number(this.toString());
   }
@@ -317,7 +335,7 @@ export const ASSET_FACTOR = 100_000_000n; // 1.00000000 = 100,000,000 satoshis
  */
 export function getAssetDecimals(assetOrCurrency: string): number {
   const norm = assetOrCurrency.toUpperCase().trim();
-  if (['USD', 'INR', 'EUR', 'GBP', 'CAD', 'AUD'].includes(norm)) {
+  if (['USD', 'INR', 'EUR', 'GBP', 'CAD', 'AUD', 'USDT', 'USDC', 'BUSD', 'DAI', 'FDUSD', 'TUSD'].includes(norm)) {
     return 2;
   }
   return 8;
@@ -326,29 +344,43 @@ export function getAssetDecimals(assetOrCurrency: string): number {
 /**
  * Converts a number or decimal string to integer minor cash units (e.g. cents).
  */
-export function toCashMinor(val: number | string | bigint): bigint {
+export function toCashMinor(val: number | string | bigint | ExactDecimal): bigint {
   return ExactDecimal.from(val).toMinor(CASH_DECIMALS);
 }
 
 /**
  * Converts a number or decimal string to integer minor asset units (e.g. satoshis).
  */
-export function toAssetMinor(val: number | string | bigint): bigint {
+export function toAssetMinor(val: number | string | bigint | ExactDecimal): bigint {
   return ExactDecimal.from(val).toMinor(ASSET_DECIMALS);
 }
 
 /**
- * Converts cash minor units (cents) to standard number.
+ * Converts cash minor units (cents) to authoritative ExactDecimal representation.
  */
-export function fromCashMinor(minor: bigint | number): number {
-  return ExactDecimal.fromMinor(minor, CASH_DECIMALS).toNumber();
+export function fromCashMinor(minor: bigint | number): ExactDecimal {
+  return ExactDecimal.fromMinor(minor, CASH_DECIMALS);
 }
 
 /**
- * Converts asset minor units (satoshis) to standard number.
+ * Converts asset minor units (satoshis) to authoritative ExactDecimal representation.
  */
-export function fromAssetMinor(minor: bigint | number): number {
-  return ExactDecimal.fromMinor(minor, ASSET_DECIMALS).toNumber();
+export function fromAssetMinor(minor: bigint | number): ExactDecimal {
+  return ExactDecimal.fromMinor(minor, ASSET_DECIMALS);
+}
+
+/**
+ * Non-authoritative helper: converts cash minor units to standard JavaScript number for display/logging only.
+ */
+export function fromCashMinorToDisplayNumber(minor: bigint | number): number {
+  return ExactDecimal.fromMinor(minor, CASH_DECIMALS).toDisplayNumber();
+}
+
+/**
+ * Non-authoritative helper: converts asset minor units to standard JavaScript number for display/logging only.
+ */
+export function fromAssetMinorToDisplayNumber(minor: bigint | number): number {
+  return ExactDecimal.fromMinor(minor, ASSET_DECIMALS).toDisplayNumber();
 }
 
 /**
@@ -363,6 +395,11 @@ export function computeNotionalMinor(qtyAssetMinor: bigint, priceCashMinor: bigi
 /**
  * Computes the proportional cost basis of a sold quantity:
  * costBasisSoldMinor = (totalCostBasisMinor * soldQtyMinor) / totalQtyMinor
+ * 
+ * Rounding & allocation policy:
+ * - Truncates minor fractions towards zero for partial sales.
+ * - When liquidating entire remaining lot (soldQtyMinor >= totalQtyMinor), the entire
+ *   remaining cost basis is assigned to prevent fractional residual drift.
  */
 export function computeSoldCostBasis(
   totalCostBasisMinor: bigint,
@@ -370,5 +407,6 @@ export function computeSoldCostBasis(
   totalQtyMinor: bigint
 ): bigint {
   if (totalQtyMinor <= 0n || soldQtyMinor <= 0n) return 0n;
+  if (soldQtyMinor >= totalQtyMinor) return totalCostBasisMinor;
   return (totalCostBasisMinor * soldQtyMinor) / totalQtyMinor;
 }
