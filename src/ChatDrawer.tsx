@@ -29,6 +29,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { money } from './trading';
+import { isIndianAsset } from './domain/portfolio';
 import { resolveGemini3Model } from './gemini';
 import { LatexRenderer } from './components/LatexRenderer';
 import { go } from './Shell';
@@ -143,14 +144,25 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
     },
   ];
 
-  const quickPrompts = [
-    { label: '🛡️ Sentinel Danger Audit', prompt: 'Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
-    { label: '🌪️ Stress Test (-20% BTC)', prompt: 'Run a portfolio stress test simulating a 20% Bitcoin flash crash.' },
-    { label: '🤖 Synthesize Strategy Bot', prompt: `Synthesize an institutional strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets.` },
-    { label: '📈 Smart DCA Plan', prompt: `Create a Smart Value-Weighted DCA plan for ${state.selectedAsset}.` },
-    { label: '⚖️ Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization.' },
-    { label: '🔬 Compare BTC vs ETH vs SOL', prompt: 'Compare BTC, ETH, and SOL head-to-head on Alpha Radar.' },
-  ];
+  const isIndian = isIndianAsset(state.selectedAsset) || state.accountMode === 'upstox';
+
+  const quickPrompts = isIndian
+    ? [
+        { label: '🛡️ Sentinel Danger Audit', prompt: 'Sense market danger across my Indian equities portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
+        { label: '🎯 High-Probability NSE Setups', prompt: 'Scan top NSE Indian equities for asymmetric setups with at least 2.5:1 reward-to-risk ratio.' },
+        { label: `🤖 Synthesize Bot (${state.selectedAsset})`, prompt: `Synthesize an institutional VWAP momentum strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets and deploy it.` },
+        { label: `📈 Smart DCA (${state.selectedAsset})`, prompt: `Create a Smart Value-Weighted DCA plan for ${state.selectedAsset} with dip buying multipliers.` },
+        { label: '⚖️ Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization across Indian equities.' },
+        { label: '🔬 Compare RELIANCE vs TCS vs INFY', prompt: 'Compare RELIANCE, TCS, and INFY head-to-head on Alpha Radar, analyzing Sharpe ratios and momentum.' },
+      ]
+    : [
+        { label: '🛡️ Sentinel Danger Audit', prompt: 'Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
+        { label: '🌪️ Stress Test (-20% BTC)', prompt: 'Run a portfolio stress test simulating a 20% Bitcoin flash crash.' },
+        { label: '🤖 Synthesize Strategy Bot', prompt: `Synthesize an institutional strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets.` },
+        { label: '📈 Smart DCA Plan', prompt: `Create a Smart Value-Weighted DCA plan for ${state.selectedAsset}.` },
+        { label: '⚖️ Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization.' },
+        { label: '🔬 Compare BTC vs ETH vs SOL', prompt: 'Compare BTC, ETH, and SOL head-to-head on Alpha Radar.' },
+      ];
 
   return (
     <div
@@ -169,11 +181,13 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 <h2 className="text-sm font-semibold tracking-tight text-zinc-900">Nexus Intelligence</h2>
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-800 rounded-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Active
+                  {state.settings.geminiApiKey ? 'Gemini 3 + Local Quant' : 'Local Quant AI (100% Offline)'}
                 </span>
-                <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">
-                  {resolveGemini3Model(state.settings.geminiModel).replace('gemini-', '')}
-                </span>
+                {state.settings.geminiApiKey && (
+                  <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">
+                    {resolveGemini3Model(state.settings.geminiModel).replace('gemini-', '')}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-zinc-400 tracking-tight">Quantitative Desk &amp; Risk Sentinel</p>
             </div>

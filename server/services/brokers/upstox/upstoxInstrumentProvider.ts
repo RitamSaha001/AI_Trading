@@ -122,6 +122,7 @@ export class UpstoxInstrumentProvider implements InstrumentRulesProvider {
   }
 
   private mapToBrokerInstrument(rule: AuthoritativeInstrument): BrokerInstrument {
+    const instType = rule.instrumentType || (rule.segment.includes('FO') ? 'FUT' : 'EQUITY');
     return {
       broker: 'upstox',
       exchange: rule.exchange,
@@ -129,7 +130,7 @@ export class UpstoxInstrumentProvider implements InstrumentRulesProvider {
       instrumentKey: rule.instrumentKey,
       tradingSymbol: rule.tradingSymbol,
       instrumentToken: rule.instrumentKey,
-      instrumentType: 'EQUITY',
+      instrumentType: instType as any,
       currency: rule.currency,
       baseAsset: rule.tradingSymbol,
       quoteAsset: rule.currency,

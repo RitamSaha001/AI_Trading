@@ -26,7 +26,16 @@ import {
   UserProfile,
   AuthSession,
   GrievanceTicket,
+  AutonomousPilotProfile,
+  QuantitativeOpportunity,
+  AutonomousPilotState,
 } from './types';
+import {
+  scanAllMarkets,
+  checkPilotCircuitBreaker,
+  PILOT_PROFILES,
+  createDefaultAutonomousPilotState,
+} from './domain/autonomousPilot';
 import {
   createDefaultWallet,
   depositFunds,
@@ -46,7 +55,7 @@ import {
   calculatePortfolioRisk,
   getReservedCash,
 } from './trading';
-import { createPositionsRecord } from './domain/portfolio';
+import { createPositionsRecord, isIndianAsset } from './domain/portfolio';
 import {
   Web3NetworkKey,
   WEB3_NETWORKS,
@@ -233,6 +242,12 @@ type Ctx = {
   submitGrievance: (req: CreateGrievanceRequest) => Promise<GrievanceTicket>;
   escalateGrievanceTicketAction: (ticketId: string, reason: string) => void;
   triggerEmergencyFreezeAction: () => { cancelledCount: number };
+  autonomousPilot: AutonomousPilotState;
+  toggleAutonomousPilot: () => void;
+  setPilotProfile: (profile: AutonomousPilotProfile) => void;
+  scanPilotOpportunities: () => void;
+  executePilotRecommendation: (opp: QuantitativeOpportunity) => { ok: boolean; error?: string };
+  resetPilotCircuitBreaker: () => void;
 };
 
 const Context = createContext<Ctx | null>(null);
@@ -2096,13 +2111,25 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
   const cancelPendingOrder = useCallback(
     async (orderId: string) => {
-      const isExchange = stateRef.current.accountMode === 'exchange';
-      if (isExchange) {
+      const mode = stateRef.current.accountMode;
+      const isUpstox = mode === 'upstox';
+      const isExchange = mode === 'exchange';
+
+      if (isUpstox || isExchange) {
         try {
-          const res = await ApiClient.cancelOrder(orderId);
+          const broker = isUpstox ? 'upstox' : 'binance';
+          const res = await ApiClient.cancelOrder(orderId, broker);
           if (res.ok && res.data?.order) {
-            triggerToast('Order Cancelled', `Binance order ${orderId.slice(0, 10)} cancelled on exchange.`, 'info');
-            syncExchangeBalances();
+            triggerToast(
+              'Order Cancelled',
+              `${isUpstox ? 'Upstox' : 'Binance'} order ${orderId.slice(0, 10)} cancelled on exchange.`,
+              'info'
+            );
+            if (isUpstox) {
+              syncUpstoxAccount();
+            } else {
+              syncExchangeBalances();
+            }
             setState((s) => ({
               ...s,
               orders: s.orders.map((o) => (o.id === orderId ? { ...o, status: 'cancelled' } : o)),
@@ -2137,7 +2164,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
       return ok;
     },
-    [triggerToast, syncExchangeBalances]
+    [triggerToast, syncExchangeBalances, syncUpstoxAccount]
   );
 
   const toggleStrategy = useCallback((id: string) => {
@@ -2796,6 +2823,135 @@ export function Provider({ children }: { children: React.ReactNode }) {
     [requestExecuteAIProposal]
   );
 
+  const autonomousPilot = state.autonomousPilot || createDefaultAutonomousPilotState(state.startingEquity);
+
+  const toggleAutonomousPilot = useCallback(() => {
+    let nextEnabled = false;
+    setState((prev) => {
+      const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      nextEnabled = !current.enabled;
+      const updated = { ...current, enabled: nextEnabled };
+      if (nextEnabled) {
+        updated.activeOpportunities = scanAllMarkets(prev, markets, updated.profile);
+        updated.lastScanAt = Date.now();
+      }
+      return { ...prev, autonomousPilot: updated };
+    });
+    triggerToast(
+      nextEnabled ? 'Auto-Pilot Engaged' : 'Auto-Pilot Paused',
+      nextEnabled
+        ? `Autonomous Local Quant Pilot active (${PILOT_PROFILES[autonomousPilot.profile].name}). Anti-loss controls armed.`
+        : 'Autonomous quantitative trading scans paused.',
+      'info'
+    );
+  }, [markets, autonomousPilot.profile, triggerToast]);
+
+  const setPilotProfile = useCallback((profile: AutonomousPilotProfile) => {
+    setState((prev) => {
+      const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      const updated = {
+        ...current,
+        profile,
+        riskPerTradePct: PILOT_PROFILES[profile].maxRiskPerTradePct,
+        activeOpportunities: scanAllMarkets(prev, markets, profile),
+        lastScanAt: Date.now(),
+      };
+      return { ...prev, autonomousPilot: updated };
+    });
+    triggerToast('Pilot Profile Updated', `Active profile switched to ${PILOT_PROFILES[profile].name}.`, 'info');
+  }, [markets, triggerToast]);
+
+  const scanPilotOpportunities = useCallback(() => {
+    setState((prev) => {
+      const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      const opps = scanAllMarkets(prev, markets, current.profile);
+      return {
+        ...prev,
+        autonomousPilot: {
+          ...current,
+          activeOpportunities: opps,
+          lastScanAt: Date.now(),
+        },
+      };
+    });
+  }, [markets]);
+
+  const resetPilotCircuitBreaker = useCallback(() => {
+    setState((prev) => {
+      const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      const pv = portfolioValue(prev, markets);
+      return {
+        ...prev,
+        autonomousPilot: {
+          ...current,
+          circuitBreakerTripped: false,
+          tripReason: undefined,
+          dailyStartingValue: pv,
+          dailyDrawdownPct: 0,
+        },
+      };
+    });
+    triggerToast('Circuit Breaker Reset', 'Autonomous Pilot drawdown limits reset with current portfolio valuation.', 'success');
+  }, [markets, triggerToast]);
+
+  const executePilotRecommendation = useCallback(
+    (opp: QuantitativeOpportunity) => {
+      const pv = portfolioValue(state, markets);
+      const cbCheck = checkPilotCircuitBreaker(state, pv, state.autonomousPilot?.profile || 'conservative');
+      if (cbCheck.tripped) {
+        setState((prev) => ({
+          ...prev,
+          autonomousPilot: {
+            ...(prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity)),
+            circuitBreakerTripped: true,
+            tripReason: cbCheck.reason,
+            dailyDrawdownPct: cbCheck.drawdownPct,
+          },
+        }));
+        triggerToast('Auto-Pilot Blocked', cbCheck.reason || 'Daily drawdown limit reached.', 'warn');
+        return { ok: false, error: cbCheck.reason };
+      }
+
+      const res = order(
+        'buy',
+        opp.asset,
+        opp.recommendedUnits,
+        {
+          type: 'limit',
+          limitPrice: opp.entryPrice,
+          stopLoss: opp.stopLossPrice,
+          takeProfit: opp.takeProfitPrice,
+          auto: true,
+          strategyName: `Auto-Pilot (${PILOT_PROFILES[state.autonomousPilot?.profile || 'conservative'].name})`,
+          product: isIndianAsset(opp.asset) ? 'CNC' : undefined,
+        }
+      );
+
+      if (res.ok) {
+        setState((prev) => {
+          const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+          return {
+            ...prev,
+            autonomousPilot: {
+              ...current,
+              totalAutopilotTradesExecuted: current.totalAutopilotTradesExecuted + 1,
+            },
+          };
+        });
+        triggerToast(
+          'Safe Order Placed',
+          `Placed limit order for ${opp.recommendedUnits} units of ${opp.asset} with Stop-Loss at ${opp.stopLossPrice} and Take-Profit at ${opp.takeProfitPrice}.`,
+          'success'
+        );
+      } else {
+        triggerToast('Order Rejected by Safety Gate', res.error || 'Failed risk validation.', 'warn');
+      }
+
+      return res;
+    },
+    [markets, order, state, triggerToast]
+  );
+
   const reset = useCallback(
     (startingCash = 50000, mode: SimulationMode = 'clean') => {
       const s = resetState(startingCash, mode);
@@ -2920,6 +3076,12 @@ export function Provider({ children }: { children: React.ReactNode }) {
       submitGrievance,
       escalateGrievanceTicketAction,
       triggerEmergencyFreezeAction,
+      autonomousPilot,
+      toggleAutonomousPilot,
+      setPilotProfile,
+      scanPilotOpportunities,
+      executePilotRecommendation,
+      resetPilotCircuitBreaker,
     }),
     [
       state,
@@ -3021,6 +3183,12 @@ export function Provider({ children }: { children: React.ReactNode }) {
       submitGrievance,
       escalateGrievanceTicketAction,
       triggerEmergencyFreezeAction,
+      autonomousPilot,
+      toggleAutonomousPilot,
+      setPilotProfile,
+      scanPilotOpportunities,
+      executePilotRecommendation,
+      resetPilotCircuitBreaker,
     ]
   );
 

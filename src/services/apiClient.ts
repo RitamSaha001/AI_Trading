@@ -241,10 +241,10 @@ export const ApiClient = {
     return apiRequest('/api/orders');
   },
 
-  async cancelOrder(clientOrderId: string) {
+  async cancelOrder(clientOrderId: string, broker?: string) {
     return apiRequest('/api/orders/cancel', {
       method: 'POST',
-      body: JSON.stringify({ clientOrderId }),
+      body: JSON.stringify({ clientOrderId, broker }),
     });
   },
 

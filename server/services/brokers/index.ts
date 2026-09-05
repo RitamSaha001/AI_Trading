@@ -7,10 +7,13 @@
 
 import { BrokerRegistry } from './brokerRegistry';
 import { BinanceAdapter } from './binance/binanceAdapter';
+import { UpstoxAdapter } from './upstox/upstoxAdapter';
 
 // Register standard production adapters
 const binanceAdapter = new BinanceAdapter();
 BrokerRegistry.register(binanceAdapter);
+const upstoxAdapter = new UpstoxAdapter();
+BrokerRegistry.register(upstoxAdapter);
 
 export * from './brokerTypes';
 export * from './brokerGateway';

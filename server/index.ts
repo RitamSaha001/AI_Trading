@@ -1037,27 +1037,29 @@ export function buildServer(): FastifyInstance {
     delete (body as any).isSystemPanic;
 
     try {
-      // Authoritative verification: Retrieve pre-allocated clientOrderId and idempotencyKey
+      // Authoritative verification: Retrieve pre-allocated clientOrderId, idempotencyKey, and frozen parameters
       const confirmation = await LiveOrderConfirmationService.getConfirmation(body.confirmationId, req.user!.id);
       if (!confirmation) {
         return reply.status(404).send({ success: false, error: 'Confirmation not found or unauthorized' });
       }
 
-      const broker = BrokerRegistry.get(body.broker || 'upstox');
+      // Defense-in-depth: Execute the server-stored, frozen proposal record
+      // Ignore client parameter mutations and bind strictly to the verified proposal
+      const broker = BrokerRegistry.get(confirmation.broker || 'upstox');
       const order = await broker.placeOrder({
         userId: req.user!.id,
         broker: broker.id,
-        symbol: body.symbol,
-        side: body.side,
-        type: body.type,
-        quantity: body.quantity,
-        price: body.price,
-        triggerPrice: body.triggerPrice,
-        product: body.product,
-        validity: body.validity,
-        disclosedQuantity: body.disclosedQuantity,
-        slice: body.slice,
-        confirmationId: body.confirmationId,
+        symbol: confirmation.symbol,
+        side: confirmation.side,
+        type: confirmation.type,
+        quantity: confirmation.quantity,
+        price: confirmation.price,
+        triggerPrice: confirmation.triggerPrice,
+        product: confirmation.product,
+        validity: confirmation.validity,
+        disclosedQuantity: confirmation.disclosedQuantity,
+        slice: confirmation.slice,
+        confirmationId: confirmation.confirmationId,
         clientOrderId: confirmation.clientOrderId,
         idempotencyKey: confirmation.idempotencyKey,
         accountMode: 'live',
@@ -1230,7 +1232,13 @@ export function buildServer(): FastifyInstance {
       return reply.status(400).send({ success: false, error: 'clientOrderId is required' });
     }
     try {
-      const broker = BrokerRegistry.get(body.broker || 'binance');
+      const db = getDb();
+      const existing = await db.queryOne<{ broker: string }>(
+        `SELECT broker FROM exchange_orders WHERE user_id = ? AND client_order_id = ?`,
+        [req.user!.id, body.clientOrderId]
+      );
+      const brokerId = existing?.broker || body.broker || 'upstox';
+      const broker = BrokerRegistry.get(brokerId);
       const order = await broker.cancelOrder(req.user!.id, body.clientOrderId);
       return { success: true, order };
     } catch (err: any) {
@@ -1266,8 +1274,19 @@ export function buildServer(): FastifyInstance {
     if (!body?.scope || !body?.reason) {
       return reply.status(400).send({ success: false, error: 'Scope and reason are required' });
     }
-    await OperationalSafetyService.freeze(body.scope, body.target || '*', body.reason, req.user!.id);
-    return { success: true, message: `Emergency freeze activated for ${body.scope}:${body.target || '*'}` };
+    const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'FINANCE_ADMIN' || (process.env.ADMIN_EMAIL && req.user?.email === process.env.ADMIN_EMAIL);
+    if (body.scope === 'GLOBAL' || body.scope === 'SYMBOL') {
+      if (!isAdmin) {
+        return reply.status(403).send({ success: false, error: 'Administrative privilege required for GLOBAL or SYMBOL kill-switch operations' });
+      }
+    } else if (body.scope === 'ACCOUNT') {
+      if (!isAdmin && body.target && body.target !== req.user!.id) {
+        return reply.status(403).send({ success: false, error: 'Cannot freeze other user accounts' });
+      }
+    }
+    const target = body.scope === 'ACCOUNT' && !isAdmin ? req.user!.id : (body.target || '*');
+    await OperationalSafetyService.freeze(body.scope, target, body.reason, req.user!.id);
+    return { success: true, message: `Emergency freeze activated for ${body.scope}:${target}` };
   });
 
   server.post('/api/operational/kill-switch/unfreeze', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1275,8 +1294,19 @@ export function buildServer(): FastifyInstance {
     if (!body?.scope || !body?.reason) {
       return reply.status(400).send({ success: false, error: 'Scope and reason are required' });
     }
-    await OperationalSafetyService.unfreeze(body.scope, body.target || '*', body.reason, req.user!.id);
-    return { success: true, message: `Emergency freeze deactivated for ${body.scope}:${body.target || '*'}` };
+    const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'FINANCE_ADMIN' || (process.env.ADMIN_EMAIL && req.user?.email === process.env.ADMIN_EMAIL);
+    if (body.scope === 'GLOBAL' || body.scope === 'SYMBOL') {
+      if (!isAdmin) {
+        return reply.status(403).send({ success: false, error: 'Administrative privilege strictly required to unfreeze GLOBAL or SYMBOL scopes' });
+      }
+    } else if (body.scope === 'ACCOUNT') {
+      if (!isAdmin && body.target && body.target !== req.user!.id) {
+        return reply.status(403).send({ success: false, error: 'Cannot unfreeze other user accounts' });
+      }
+    }
+    const target = body.scope === 'ACCOUNT' && !isAdmin ? req.user!.id : (body.target || '*');
+    await OperationalSafetyService.unfreeze(body.scope, target, body.reason, req.user!.id);
+    return { success: true, message: `Emergency freeze deactivated for ${body.scope}:${target}` };
   });
 
   server.post('/api/operational/reconciliation/run', { preHandler: requireAuth }, async (req: FastifyRequest) => {

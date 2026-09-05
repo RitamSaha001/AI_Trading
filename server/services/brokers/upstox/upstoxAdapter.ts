@@ -590,41 +590,9 @@ export class UpstoxAdapter implements BrokerGateway {
       slice: order.slice,
     };
 
+    let resp: any = null;
     try {
-      const resp = await UpstoxClient.placeOrder(creds.accessToken, payload);
-      const exchangeOrderId = resp.order_id;
-
-      await db.execute(
-        `UPDATE exchange_orders SET status = 'OPEN', exchange_order_id = ?, updated_at = ? WHERE client_order_id = ?`,
-        [exchangeOrderId, Date.now(), clientOrderId]
-      );
-
-      await AuditService.logEvent({
-        userId: order.userId,
-        eventType: 'ORDER_SUBMITTED',
-        source: 'upstox_adapter',
-        actor: 'execution_service',
-        metadata: { clientOrderId, exchangeOrderId, symbol: order.symbol, side: order.side, quantity: order.quantity },
-        result: 'SUCCESS',
-      });
-
-      return {
-        id: clientOrderId,
-        clientOrderId,
-        exchangeOrderId,
-        broker: 'upstox',
-        symbol: order.symbol,
-        side: order.side,
-        type: order.type,
-        status: 'OPEN',
-        origQty: String(order.quantity),
-        executedQty: '0',
-        price: String(price),
-        avgPrice: '0',
-        quoteAsset: instrument.quoteAsset || 'INR',
-        time: now,
-        updateTime: Date.now(),
-      };
+      resp = await UpstoxClient.placeOrder(creds.accessToken, payload);
     } catch (err: any) {
       const isNetworkTimeout = err instanceof StandardBrokerError && err.code === 'NETWORK_ERROR';
 
@@ -633,7 +601,7 @@ export class UpstoxAdapter implements BrokerGateway {
         await db.execute(
           `UPDATE exchange_orders SET status = 'UNKNOWN', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
           [`Network timeout: ${err.message}`, Date.now(), clientOrderId]
-        );
+        ).catch(() => {});
 
         await AuditService.logEvent({
           userId: order.userId,
@@ -642,7 +610,7 @@ export class UpstoxAdapter implements BrokerGateway {
           actor: 'execution_service',
           metadata: { clientOrderId, error: err.message },
           result: 'BLOCKED',
-        });
+        }).catch(() => {});
 
         // Trigger immediate venue reconciliation
         await this.reconcileUnknownOrder(clientOrderId, order.symbol, order.userId).catch(() => {});
@@ -671,7 +639,7 @@ export class UpstoxAdapter implements BrokerGateway {
       await db.execute(
         `UPDATE exchange_orders SET status = 'REJECTED', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
         [err.message, Date.now(), clientOrderId]
-      );
+      ).catch(() => {});
 
       await AuditService.logEvent({
         userId: order.userId,
@@ -680,9 +648,94 @@ export class UpstoxAdapter implements BrokerGateway {
         actor: 'upstox_venue',
         metadata: { clientOrderId, error: err.message },
         result: 'BLOCKED',
-      });
+      }).catch(() => {});
 
       throw err;
+    }
+
+    // BROKER ACCEPTED: resp contains order_id and order_ids
+    const primaryVenueOrderId = resp.order_id;
+    const venueOrderIds = resp.order_ids && resp.order_ids.length > 0 ? resp.order_ids : [primaryVenueOrderId];
+
+    try {
+      await db.execute(
+        `UPDATE exchange_orders 
+         SET status = 'OPEN', exchange_order_id = ?, venue_order_ids = ?, updated_at = ? 
+         WHERE client_order_id = ?`,
+        [primaryVenueOrderId, JSON.stringify(venueOrderIds), Date.now(), clientOrderId]
+      );
+
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'ORDER_SUBMITTED',
+        source: 'upstox_adapter',
+        actor: 'execution_service',
+        metadata: { 
+          clientOrderId, 
+          exchangeOrderId: primaryVenueOrderId, 
+          slicedOrderIds: venueOrderIds.length > 1 ? venueOrderIds : undefined,
+          symbol: order.symbol, 
+          side: order.side, 
+          quantity: order.quantity 
+        },
+        result: 'SUCCESS',
+      });
+
+      return {
+        id: clientOrderId,
+        clientOrderId,
+        exchangeOrderId: primaryVenueOrderId,
+        broker: 'upstox',
+        symbol: order.symbol,
+        side: order.side,
+        type: order.type,
+        status: 'OPEN',
+        origQty: String(order.quantity),
+        executedQty: '0',
+        price: String(price),
+        avgPrice: '0',
+        quoteAsset: instrument.quoteAsset || 'INR',
+        time: now,
+        updateTime: Date.now(),
+      };
+    } catch (localErr: any) {
+      // CRITICAL: Broker accepted, but local DB update failed!
+      // Must set status to UNKNOWN, do NOT release reservation, trigger reconciliation!
+      await db.execute(
+        `UPDATE exchange_orders 
+         SET status = 'UNKNOWN', exchange_order_id = ?, venue_order_ids = ?, reject_reason = ?, updated_at = ? 
+         WHERE client_order_id = ?`,
+        [primaryVenueOrderId, JSON.stringify(venueOrderIds), `Post-broker local DB error: ${localErr.message}`, Date.now(), clientOrderId]
+      ).catch(() => {});
+
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'ORDER_UNKNOWN',
+        source: 'upstox_adapter',
+        actor: 'execution_service',
+        metadata: { clientOrderId, exchangeOrderId: primaryVenueOrderId, localError: localErr.message },
+        result: 'BLOCKED',
+      }).catch(() => {});
+
+      await this.reconcileUnknownOrder(clientOrderId, order.symbol, order.userId).catch(() => {});
+
+      return {
+        id: clientOrderId,
+        clientOrderId,
+        exchangeOrderId: primaryVenueOrderId,
+        broker: 'upstox',
+        symbol: order.symbol,
+        side: order.side,
+        type: order.type,
+        status: 'UNKNOWN',
+        origQty: String(order.quantity),
+        executedQty: '0',
+        price: String(price),
+        avgPrice: '0',
+        quoteAsset: instrument.quoteAsset || 'INR',
+        time: now,
+        updateTime: Date.now(),
+      };
     }
   }
 
@@ -705,14 +758,27 @@ export class UpstoxAdapter implements BrokerGateway {
     }
 
     const creds = await this.getCredentials(userId);
-    if (creds?.accessToken && order.exchange_order_id) {
-      try {
-        await UpstoxClient.cancelOrder(creds.accessToken, order.exchange_order_id);
-      } catch (err: any) {
-        if (err instanceof StandardBrokerError && err.code === 'ORDER_NOT_FOUND') {
-          // Already cancelled or terminal on venue
-        } else {
-          throw err;
+    if (creds?.accessToken) {
+      let venueIds: string[] = [];
+      if (order.venue_order_ids) {
+        try {
+          const parsed = JSON.parse(order.venue_order_ids);
+          if (Array.isArray(parsed) && parsed.length > 0) venueIds = parsed;
+        } catch {}
+      }
+      if (venueIds.length === 0 && order.exchange_order_id) {
+        venueIds = [order.exchange_order_id];
+      }
+
+      for (const vId of venueIds) {
+        try {
+          await UpstoxClient.cancelOrder(creds.accessToken, vId);
+        } catch (err: any) {
+          if (err instanceof StandardBrokerError && err.code === 'ORDER_NOT_FOUND') {
+            // Already cancelled or terminal on venue
+          } else {
+            throw err;
+          }
         }
       }
     }
@@ -937,9 +1003,9 @@ export class UpstoxAdapter implements BrokerGateway {
       price: String(t.average_price || t.price || 0),
       qty: String(t.quantity),
       quoteQty: String(t.quantity * (t.average_price || t.price || 0)),
-      commission: '0',
+      commission: undefined,
       commissionAsset: 'INR',
-      commissionStatus: 'AUTHORITATIVE',
+      commissionStatus: 'UNRESOLVED',
       time: t.exchange_timestamp ? new Date(t.exchange_timestamp).getTime() : Date.now(),
     }));
   }
@@ -949,27 +1015,47 @@ export class UpstoxAdapter implements BrokerGateway {
   // ==========================================================================
 
   /**
-   * Fetches market quote.
+   * Fetches market quote. Supports authenticated token loading or fallback for simulation.
    */
-  async getMarketQuote(symbol: string): Promise<BrokerMarketQuote | null> {
+  async getMarketQuote(symbol: string, userId?: string, token?: string): Promise<BrokerMarketQuote | null> {
     const instrument = this.instrumentProvider.getInstrument(symbol);
     if (!instrument) return null;
 
     try {
-      // In development/test or when no token is present, return safe quote
-      const quotes = await UpstoxClient.getQuote('', instrument.instrumentKey);
-      const data = quotes[instrument.instrumentKey] || Object.values(quotes)[0];
-      if (!data) return null;
+      let accessToken = token || '';
+      if (!accessToken && userId) {
+        const creds = await this.getCredentials(userId);
+        if (creds?.accessToken) accessToken = creds.accessToken;
+      }
 
+      if (accessToken) {
+        const quotes = await UpstoxClient.getQuote(accessToken, instrument.instrumentKey);
+        const data = quotes[instrument.instrumentKey] || Object.values(quotes)[0];
+        if (data) {
+          return {
+            symbol,
+            bidPrice: data.depth?.buy?.[0]?.price || data.last_price,
+            bidQty: data.depth?.buy?.[0]?.quantity || 1,
+            askPrice: data.depth?.sell?.[0]?.price || data.last_price,
+            askQty: data.depth?.sell?.[0]?.quantity || 1,
+            lastPrice: data.last_price,
+            lastQty: 1,
+            quoteTime: data.timestamp ? new Date(data.timestamp).getTime() : Date.now(),
+          };
+        }
+      }
+
+      // Safe fallback when unauthenticated or for testing
+      const estPrice = this.instrumentProvider.getEstimatedPrice(symbol) || 100;
       return {
         symbol,
-        bidPrice: data.depth?.buy?.[0]?.price || data.last_price,
-        bidQty: data.depth?.buy?.[0]?.quantity || 1,
-        askPrice: data.depth?.sell?.[0]?.price || data.last_price,
-        askQty: data.depth?.sell?.[0]?.quantity || 1,
-        lastPrice: data.last_price,
+        bidPrice: estPrice,
+        bidQty: 10,
+        askPrice: estPrice,
+        askQty: 10,
+        lastPrice: estPrice,
         lastQty: 1,
-        quoteTime: data.timestamp ? new Date(data.timestamp).getTime() : Date.now(),
+        quoteTime: Date.now(),
       };
     } catch {
       return null;

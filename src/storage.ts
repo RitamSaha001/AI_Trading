@@ -1,6 +1,7 @@
 import { AppState, ASSETS, Asset, StrategyConfig } from './types';
 import { META } from './domain/portfolio';
 import { createDefaultWallet } from './domain/wallet';
+import { createDefaultAutonomousPilotState } from './domain/autonomousPilot';
 
 export const SCHEMA_VERSION = 7;
 const STORAGE_KEY = 'lumen_cockpit_state_v7';
@@ -272,6 +273,7 @@ export function freshState(customCash = 50000, mode: SimulationMode = 'clean'): 
     strategies: initialStrategies,
     pausedMarkets: [],
     lossPreventionMode: 'strict',
+    autonomousPilot: createDefaultAutonomousPilotState(startingEquity),
     settings: {
       geminiApiKey: '',
       geminiModel: 'gemini-3.8-flash',
@@ -364,6 +366,9 @@ export function migrateState(rawState: any): AppState {
     })(),
     pausedMarkets: Array.isArray(rawState.pausedMarkets) ? rawState.pausedMarkets : [],
     lossPreventionMode: rawState.lossPreventionMode === 'aggressive' || rawState.lossPreventionMode === 'balanced' ? rawState.lossPreventionMode : 'strict',
+    autonomousPilot: rawState.autonomousPilot && typeof rawState.autonomousPilot === 'object'
+      ? { ...createDefaultAutonomousPilotState(base.startingEquity), ...rawState.autonomousPilot }
+      : createDefaultAutonomousPilotState(base.startingEquity),
     settings: {
       ...base.settings,
       ...(rawState.settings || {}),

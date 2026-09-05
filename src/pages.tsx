@@ -4,6 +4,8 @@ import { decryptApiKey, isEncryptedApiKey } from './services/keyVault';
 import { ASSETS, INDIAN_ASSETS, Asset, Timeframe, Side, OrderType, StrategyKind } from './types';
 import { LineChart, Sparkline } from './Chart';
 import { MarketHeatmap } from './components/MarketHeatmap';
+import { AutonomousQuantPilot } from './components/AutonomousQuantPilot';
+import { evaluateMarketOpportunity } from './domain/autonomousPilot';
 import {
   indicators,
   money,
@@ -177,6 +179,9 @@ export function Dashboard() {
           Launch Interactive Guide →
         </button>
       </div>
+
+      {/* Autonomous Local Quant AI Pilot (Capital Protection & 1-Click Execution) */}
+      <AutonomousQuantPilot />
 
       {marketError && (
         <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 text-xs flex items-center gap-2.5">
@@ -1905,6 +1910,8 @@ export function Orders() {
     exchangeAccount,
     upstoxAccount,
     openUpstoxDrawer,
+    triggerToast,
+    autonomousPilot,
   } = useLumen();
   const [selectedAsset, setSelectedAsset] = useState<Asset>(state.selectedAsset);
   const [side, setSide] = useState<Side>('buy');
@@ -1922,6 +1929,44 @@ export function Orders() {
   const formatMoney = (val: number) => (isIndian ? moneyINR(val) : money(val));
 
   const m = markets[selectedAsset];
+
+  const handleAutoPilotFill = () => {
+    const opp = evaluateMarketOpportunity(selectedAsset, m, state, autonomousPilot?.profile || 'conservative');
+    if (opp) {
+      setSide('buy');
+      setOrderType('limit');
+      setLimitPriceStr(opp.entryPrice.toString());
+      setStopLossStr(opp.stopLossPrice.toString());
+      setTakeProfitStr(opp.takeProfitPrice.toString());
+      setAmountStr(opp.recommendedUnits.toString());
+      triggerToast(
+        'AI Safe Bracket Applied',
+        `Calculated ${opp.recommendedUnits} units with Stop-Loss at ${opp.stopLossPrice} and Take-Profit at ${opp.takeProfitPrice} (${opp.riskRewardRatio}:1 R:R).`,
+        'success'
+      );
+    } else {
+      const price = m?.price || 100;
+      const ind = m ? indicators(m.history) : null;
+      const atr = ind?.atr || price * 0.02;
+      const sl = isIndian ? Math.round((price - atr * 1.5) * 20) / 20 : +(price - atr * 1.5).toFixed(2);
+      const tp = isIndian ? Math.round((price + atr * 3.5) * 20) / 20 : +(price + atr * 3.5).toFixed(2);
+      const riskPerUnit = Math.max(0.01, price - sl);
+      const units = isIndian
+        ? Math.max(1, Math.floor((Math.max(1000, state.cash) * 0.01) / riskPerUnit))
+        : +((Math.max(1000, state.cash) * 0.01) / riskPerUnit).toFixed(4);
+      setSide('buy');
+      setOrderType('limit');
+      setLimitPriceStr(price.toFixed(2));
+      setStopLossStr(sl.toFixed(2));
+      setTakeProfitStr(tp.toFixed(2));
+      setAmountStr(units.toString());
+      triggerToast(
+        'Defensive ATR Bracket Applied',
+        `Armed 2.3:1 bracket for ${selectedAsset} with ${units} units (Stop-Loss: ${sl}, Take-Profit: ${tp}).`,
+        'info'
+      );
+    }
+  };
   const currentHolding = state.positions[selectedAsset] || 0;
   const numAmount = Math.max(0, Number(amountStr) || 0);
   const estPrice = orderType === 'limit' && limitPriceStr ? Number(limitPriceStr) : (m?.price || 0);
@@ -2060,6 +2105,26 @@ export function Orders() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* AI Auto-Pilot Safe Sizing & Bracket Assist */}
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-emerald-500/10 border border-indigo-500/20 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                </div>
+                <div>
+                  <span className="font-bold text-xs text-zinc-900 block">AI Auto-Pilot Assist</span>
+                  <span className="text-[10px] text-zinc-500">Auto-calculate units &amp; 2.5:1+ profit/stop brackets</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleAutoPilotFill}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition-all apple-btn-tactile shrink-0"
+              >
+                Auto-Fill Bracket
+              </button>
+            </div>
+
             {/* Buy / Sell Tabs */}
             <div className="grid grid-cols-2 p-1 rounded-2xl bg-black/[0.04] border border-black/[0.04]">
               <button

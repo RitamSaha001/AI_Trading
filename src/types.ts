@@ -525,11 +525,74 @@ export type AppState = {
   strategies: StrategyConfig[];
   pausedMarkets?: Asset[];
   lossPreventionMode?: 'strict' | 'balanced' | 'aggressive';
+  autonomousPilot?: AutonomousPilotState;
   settings: Settings;
   notifications: NotificationItem[];
   timeframe: Timeframe;
   selectedAsset: Asset;
 };
+
+// ---------------------------------------------------------------------------
+// AUTONOMOUS LOCAL QUANT PILOT & CAPITAL PROTECTION TYPES
+// ---------------------------------------------------------------------------
+
+export type AutonomousPilotProfile = 'conservative' | 'balanced' | 'momentum';
+
+export type MarketRegime =
+  | 'BULLISH_EXPANSION'
+  | 'BEARISH_CONTRACTION'
+  | 'RANGE_BOUND_ACCUMULATION'
+  | 'HIGH_VOLATILITY_CHOP'
+  | 'LOW_LIQUIDITY_DANGER';
+
+export interface QuantitativeOpportunity {
+  id: string;
+  asset: Asset;
+  action: 'BUY' | 'SELL' | 'HOLD' | 'DE_RISK';
+  compositeScore: number; // 0 - 100
+  confidenceLabel: 'HIGH' | 'VERY_HIGH' | 'EXTREME';
+  regime: MarketRegime;
+  entryPrice: number;
+  stopLossPrice: number;
+  takeProfitPrice: number;
+  takeProfit2Price?: number;
+  riskRewardRatio: number; // e.g. 2.8
+  riskPerUnit: number;
+  recommendedUnits: number;
+  maxCapitalAtRisk: number;
+  projectedGain: number;
+  projectedLoss: number;
+  plainEnglishRationale: string;
+  beginnerExplanation: {
+    verdict: string;
+    why: string;
+    whatCouldGoWrong: string;
+    safeguardNotice: string;
+  };
+  indicatorsSummary: {
+    rsi: number;
+    atr: number;
+    trend: 'UP' | 'DOWN' | 'SIDEWAYS';
+    volatilityPct: number;
+  };
+  timestamp: number;
+}
+
+export interface AutonomousPilotState {
+  enabled: boolean;
+  profile: AutonomousPilotProfile;
+  maxDailyDrawdownPct: number;
+  riskPerTradePct: number;
+  activeOpportunities: QuantitativeOpportunity[];
+  lastScanAt: number | null;
+  dailyStartingValue: number;
+  dailyDrawdownPct: number;
+  circuitBreakerTripped: boolean;
+  tripReason?: string;
+  totalAutopilotTradesExecuted: number;
+  autoPilotProfitTotal: number;
+};
+
 
 // ---------------------------------------------------------------------------
 // AUTHENTICATION & USER PROFILE TYPES

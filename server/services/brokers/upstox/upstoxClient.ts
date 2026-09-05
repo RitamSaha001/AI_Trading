@@ -25,6 +25,7 @@ import {
   UpstoxOrderBookItem,
   UpstoxOrderBookItemSchema,
   UpstoxPlaceOrderPayload,
+  UpstoxPlaceOrderResponse,
   UpstoxPlaceOrderResponseSchema,
   UpstoxPositionData,
   UpstoxPositionSchema,
@@ -65,6 +66,56 @@ export type UpstoxTransport = (
   }
 ) => Promise<{ status: number; ok: boolean; json: () => Promise<any>; text: () => Promise<string> }>;
 
+/**
+ * Upstox Venue Rate Limiter
+ * Enforces Upstox venue API limits:
+ * - 10 general requests/sec with burst capacity 20
+ * - 500 order transactions (place/modify/cancel) per minute
+ */
+export class UpstoxRateLimiter {
+  private static readonly MAX_REQUESTS_PER_SECOND = 10;
+  private static readonly BURST_CAPACITY = 20;
+  private static tokens = 20;
+  private static lastRefill = Date.now();
+
+  private static orderTimestamps: number[] = [];
+  private static readonly MAX_ORDERS_PER_MINUTE = 500;
+
+  public static async throttleRequest(): Promise<void> {
+    const now = Date.now();
+    const elapsedSeconds = (now - this.lastRefill) / 1000;
+    this.tokens = Math.min(this.BURST_CAPACITY, this.tokens + elapsedSeconds * this.MAX_REQUESTS_PER_SECOND);
+    this.lastRefill = now;
+
+    if (this.tokens < 1) {
+      const waitMs = Math.ceil(((1 - this.tokens) / this.MAX_REQUESTS_PER_SECOND) * 1000);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 2000)));
+      this.tokens = 0;
+      this.lastRefill = Date.now();
+    } else {
+      this.tokens -= 1;
+    }
+  }
+
+  public static async throttleOrder(): Promise<void> {
+    await this.throttleRequest();
+    const now = Date.now();
+    this.orderTimestamps = this.orderTimestamps.filter((ts) => now - ts < 60_000);
+    if (this.orderTimestamps.length >= this.MAX_ORDERS_PER_MINUTE) {
+      const oldest = this.orderTimestamps[0];
+      const waitMs = Math.max(100, 60_000 - (now - oldest));
+      await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 3000)));
+    }
+    this.orderTimestamps.push(Date.now());
+  }
+
+  public static resetForTesting(): void {
+    this.tokens = 20;
+    this.lastRefill = Date.now();
+    this.orderTimestamps = [];
+  }
+}
+
 export class UpstoxClient {
   private static customTransport: UpstoxTransport | null = null;
   private static mockOutboundIp: string | null = null;
@@ -87,6 +138,7 @@ export class UpstoxClient {
     this.mockOutboundIp = null;
     this.mockRegisteredIps = null;
     this.cachedIpDiagnostic = null;
+    UpstoxRateLimiter.resetForTesting();
   }
 
   private static cachedIpDiagnostic: { result: UpstoxIpDiagnostic; expiresAt: number } | null = null;
@@ -96,6 +148,13 @@ export class UpstoxClient {
    */
   private static getBaseHostUrl(): string {
     return config.UPSTOX_API_BASE_URL.replace(/\/v[23]\/?$/, '');
+  }
+
+  /**
+   * Returns authoritative High-Frequency Trading (HFT) v3 base URL for orders.
+   */
+  public static getHftBaseUrl(): string {
+    return (config.UPSTOX_HFT_BASE_URL || 'https://api-hft.upstox.com/v3').replace(/\/+$/, '');
   }
 
   /**
@@ -486,16 +545,17 @@ export class UpstoxClient {
   }
 
   /**
-   * Places an order with Upstox via recommended v3 endpoint (/v3/order/place).
-   * Supports auto-slicing via `slice` flag.
+   * Places an order with Upstox via recommended v3 HFT endpoint (/order/place).
+   * Supports auto-slicing via `slice` flag, returning single or multi-slice order_ids.
    */
   public static async placeOrder(
     accessToken: string,
     payload: UpstoxPlaceOrderPayload
-  ): Promise<{ order_id: string }> {
-    const baseHost = this.getBaseHostUrl();
-    const res = await this.request<{ order_id: string }>(
-      `${baseHost}/v3/order/place`,
+  ): Promise<UpstoxPlaceOrderResponse> {
+    await UpstoxRateLimiter.throttleOrder();
+    const hftBase = this.getHftBaseUrl();
+    const res = await this.request<any>(
+      `${hftBase}/order/place`,
       'POST',
       accessToken,
       payload
@@ -513,34 +573,36 @@ export class UpstoxClient {
   }
 
   /**
-   * Cancels an order with Upstox via recommended v3 endpoint (/v3/order/cancel?order_id=...).
+   * Cancels an order with Upstox via recommended v3 HFT endpoint (/order/cancel?order_id=...).
    */
   public static async cancelOrder(
     accessToken: string,
     orderId: string
-  ): Promise<{ order_id: string }> {
-    const baseHost = this.getBaseHostUrl();
+  ): Promise<UpstoxPlaceOrderResponse> {
+    await UpstoxRateLimiter.throttleOrder();
+    const hftBase = this.getHftBaseUrl();
     const query = new URLSearchParams({ order_id: orderId });
-    const res = await this.request<{ order_id: string }>(
-      `${baseHost}/v3/order/cancel?${query.toString()}`,
+    const res = await this.request<any>(
+      `${hftBase}/order/cancel?${query.toString()}`,
       'DELETE',
       accessToken
     );
 
     const parsed = UpstoxPlaceOrderResponseSchema.safeParse(res.data);
-    return parsed.success ? parsed.data : { order_id: orderId };
+    return parsed.success ? parsed.data : { order_id: orderId, order_ids: [orderId] };
   }
 
   /**
-   * Modifies an existing open order with Upstox via recommended v3 endpoint (/v3/order/modify).
+   * Modifies an existing open order with Upstox via recommended v3 HFT endpoint (/order/modify).
    */
   public static async modifyOrder(
     accessToken: string,
     payload: UpstoxModifyOrderPayload
-  ): Promise<{ order_id: string }> {
-    const baseHost = this.getBaseHostUrl();
-    const res = await this.request<{ order_id: string }>(
-      `${baseHost}/v3/order/modify`,
+  ): Promise<UpstoxPlaceOrderResponse> {
+    await UpstoxRateLimiter.throttleOrder();
+    const hftBase = this.getHftBaseUrl();
+    const res = await this.request<any>(
+      `${hftBase}/order/modify`,
       'PUT',
       accessToken,
       payload
@@ -683,6 +745,8 @@ export class UpstoxClient {
         'upstox'
       );
     }
+
+    await UpstoxRateLimiter.throttleRequest();
 
     const url = endpoint.startsWith('http')
       ? endpoint

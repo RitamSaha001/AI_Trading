@@ -303,9 +303,27 @@ export interface UpstoxApiResponse<T = any> {
   };
 }
 
-export const UpstoxPlaceOrderResponseSchema = z.object({
-  order_id: z.string().min(1),
-});
+export const UpstoxPlaceOrderResponseSchema = z
+  .object({
+    order_id: z.string().optional(),
+    order_ids: z.array(z.string()).optional(),
+  })
+  .refine(
+    (data) => Boolean((data.order_id && data.order_id.trim()) || (data.order_ids && data.order_ids.length > 0)),
+    {
+      message: 'Expected at least one valid order_id or non-empty order_ids array in Upstox response',
+    }
+  )
+  .transform((data) => {
+    const primary = (data.order_id && data.order_id.trim()) || (data.order_ids && data.order_ids[0]) || '';
+    const all = data.order_ids && data.order_ids.length > 0 ? data.order_ids : (primary ? [primary] : []);
+    return {
+      order_id: primary,
+      order_ids: all,
+    };
+  });
+
+export type UpstoxPlaceOrderResponse = z.infer<typeof UpstoxPlaceOrderResponseSchema>;
 
 export interface UpstoxOAuthTokenResponse {
   access_token: string;

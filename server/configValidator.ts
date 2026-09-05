@@ -37,6 +37,7 @@ export interface ServerConfig {
   UPSTOX_REDIRECT_URI?: string;
   UPSTOX_ENV: 'sandbox' | 'production';
   UPSTOX_API_BASE_URL: string;
+  UPSTOX_HFT_BASE_URL: string;
   UPSTOX_STATIC_IP?: string;
   UPSTOX_SECONDARY_STATIC_IP?: string;
   UPSTOX_LIVE_TRADING_ENABLED: boolean;
@@ -95,6 +96,7 @@ const DEV_TEST_FALLBACKS = {
   BINANCE_ENV: 'testnet' as const,
   UPSTOX_ENV: 'sandbox' as const,
   UPSTOX_API_BASE_URL: 'https://api.upstox.com/v2',
+  UPSTOX_HFT_BASE_URL: 'https://api-hft.upstox.com/v3',
   UPSTOX_LIVE_TRADING_ENABLED: false,
 };
 
@@ -311,6 +313,7 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     UPSTOX_REDIRECT_URI: z.string().optional(),
     UPSTOX_ENV: z.enum(['sandbox', 'production']).optional(),
     UPSTOX_API_BASE_URL: z.string().optional(),
+    UPSTOX_HFT_BASE_URL: z.string().optional(),
     UPSTOX_STATIC_IP: z.string().optional(),
     UPSTOX_SECONDARY_STATIC_IP: z.string().optional(),
     UPSTOX_LIVE_TRADING_ENABLED: z.union([z.boolean(), z.string()]).optional(),
@@ -530,6 +533,7 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     UPSTOX_REDIRECT_URI: candidate.UPSTOX_REDIRECT_URI,
     UPSTOX_ENV: upstoxEnv as 'sandbox' | 'production',
     UPSTOX_API_BASE_URL: upstoxApiBaseUrl,
+    UPSTOX_HFT_BASE_URL: candidate.UPSTOX_HFT_BASE_URL || 'https://api-hft.upstox.com/v3',
     UPSTOX_STATIC_IP: candidate.UPSTOX_STATIC_IP,
     UPSTOX_SECONDARY_STATIC_IP: candidate.UPSTOX_SECONDARY_STATIC_IP,
     UPSTOX_LIVE_TRADING_ENABLED: upstoxLiveTradingEnabled,

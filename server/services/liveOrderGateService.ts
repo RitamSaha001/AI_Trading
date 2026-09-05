@@ -180,10 +180,10 @@ export class LiveOrderGateService {
 
     // 7. Authoritative Outbound Egress IP Verification
     const ipCheck = await UpstoxClient.checkOutboundIp(false, accessToken);
-    if (ipCheck.status === 'FAIL') {
+    if (ipCheck.status === 'FAIL' || (config.NODE_ENV === 'production' && ipCheck.authoritativeSource !== 'UPSTOX_API')) {
       throw new StandardBrokerError(
         'STATIC_IP_MISMATCH',
-        `Upstox live order blocked: outbound IP does not match registered static IP. ${ipCheck.error || ''}`,
+        `Upstox live order blocked: outbound IP does not match registered static IP verified by Upstox API. ${ipCheck.error || ''}`,
         brokerId
       );
     }
@@ -337,7 +337,12 @@ export class LiveOrderGateService {
     }
 
     // 12. Final Pre-Submission Risk Engine Revalidation (Section 8 & 13)
-    const price = order.price ? Number(order.price) : (instrumentProvider.getEstimatedPrice(order.symbol) || 0);
+    const upstoxAdapter = new UpstoxAdapter();
+    const liveQuote = await upstoxAdapter.getMarketQuote(order.symbol, order.userId, accessToken).catch(() => null);
+    const quoteTime = liveQuote?.quoteTime || Date.now();
+    const serverQuoteAgeMs = Math.max(0, Date.now() - quoteTime);
+
+    const price = order.price ? Number(order.price) : (liveQuote?.lastPrice || instrumentProvider.getEstimatedPrice(order.symbol) || 0);
     const riskResult = await RiskEngine.evaluateTrade({
       userId: order.userId,
       broker: 'upstox',
@@ -351,7 +356,7 @@ export class LiveOrderGateService {
       type: order.type as any,
       quantity: order.quantity,
       price,
-      marketQuoteAgeMs: order.marketQuoteAgeMs || 0,
+      marketQuoteAgeMs: serverQuoteAgeMs,
       idempotencyKey: order.clientOrderId || order.idempotencyKey,
     });
 

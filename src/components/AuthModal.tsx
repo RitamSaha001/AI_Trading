@@ -375,20 +375,24 @@ export function AuthModal() {
             </div>
           )}
 
-          {/* Server Offline / Standalone Sandbox Notification */}
+          {/* Server Offline Notification */}
           {serverOffline && (
             <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
-              <p className="font-semibold">Standalone Mode Active</p>
+              <p className="font-semibold">Backend Offline</p>
               <p className="text-[11px] text-amber-700">
-                You are on static hosting without a connected backend. You can continue instantly in isolated Sandbox Mode.
+                {import.meta.env.PROD
+                  ? 'The backend server is currently unreachable. Trading and authentication are temporarily paused for security.'
+                  : 'You are in local development without a connected backend. You can continue in isolated Sandbox Mode.'}
               </p>
-              <button
-                type="button"
-                onClick={handleSandboxLogin}
-                className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition-colors shadow-2xs"
-              >
-                Continue with Sandbox Login
-              </button>
+              {!import.meta.env.PROD && (
+                <button
+                  type="button"
+                  onClick={handleSandboxLogin}
+                  className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition-colors shadow-2xs"
+                >
+                  Continue with Dev Sandbox Login
+                </button>
+              )}
             </div>
           )}
 

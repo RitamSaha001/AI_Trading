@@ -13,7 +13,7 @@ export interface AuthoritativeInstrument {
   tradingSymbol: string;
   companyName: string;
   exchange: 'NSE' | 'BSE';
-  segment: 'NSE_EQ' | 'BSE_EQ';
+  segment: 'NSE_EQ' | 'BSE_EQ' | 'NSE_FO' | 'BSE_FO' | string;
   isin: string;
   tickSize: number;
   lotSize: number;
@@ -25,11 +25,52 @@ export interface AuthoritativeInstrument {
   upperCircuitLimit?: number;
   lastPrice?: number;
   active: boolean;
+  instrumentType?: 'EQUITY' | 'FUT' | 'OPT' | 'INDEX';
+  expiryDate?: string;
+  strikePrice?: number;
+  optionType?: 'CE' | 'PE';
+  contractMultiplier?: number;
 }
 
 export class UpstoxInstrumentRegistry {
-  // Master definitions for liquid Nifty 50 and major Indian equities
+  // Master definitions for liquid Nifty 50, F&O derivatives, and major Indian equities
   private static readonly MASTER_INSTRUMENTS: Record<string, AuthoritativeInstrument> = {
+    NIFTY_FUT: {
+      instrumentKey: 'NSE_FO|NIFTY24SEP',
+      tradingSymbol: 'NIFTY_FUT',
+      companyName: 'Nifty 50 Futures',
+      exchange: 'NSE',
+      segment: 'NSE_FO',
+      isin: 'NSE_FO_NIFTY_FUT',
+      tickSize: 0.05,
+      lotSize: 25,
+      minQuantity: 25,
+      maxQuantity: 1800,
+      freezeQuantity: 1800,
+      currency: 'INR',
+      instrumentType: 'FUT',
+      contractMultiplier: 1,
+      lastPrice: 24650.0,
+      active: true,
+    },
+    BANKNIFTY_FUT: {
+      instrumentKey: 'NSE_FO|BANKNIFTY24SEP',
+      tradingSymbol: 'BANKNIFTY_FUT',
+      companyName: 'Bank Nifty Futures',
+      exchange: 'NSE',
+      segment: 'NSE_FO',
+      isin: 'NSE_FO_BANKNIFTY_FUT',
+      tickSize: 0.05,
+      lotSize: 15,
+      minQuantity: 15,
+      maxQuantity: 900,
+      freezeQuantity: 900,
+      currency: 'INR',
+      instrumentType: 'FUT',
+      contractMultiplier: 1,
+      lastPrice: 51200.0,
+      active: true,
+    },
     RELIANCE: {
       instrumentKey: 'NSE_EQ|INE002A01018',
       tradingSymbol: 'RELIANCE',
