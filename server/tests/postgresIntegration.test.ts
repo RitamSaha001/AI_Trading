@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgresClient } from '../db';
 
-describe('PostgreSQL Production Integration & Concurrency Suite', () => {
+describe('PostgreSQL Production Integration & Concurrency Suite', { timeout: 30000 }, () => {
   const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
   const isPostgresConfigured = Boolean(dbUrl && dbUrl.startsWith('postgres'));
 

@@ -306,6 +306,14 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     BINANCE_API_SECRET: z.string().optional(),
     ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000'),
     RECONCILIATION_SLA_MS: z.coerce.number().positive().default(300_000),
+    UPSTOX_CLIENT_ID: z.string().optional(),
+    UPSTOX_CLIENT_SECRET: z.string().optional(),
+    UPSTOX_REDIRECT_URI: z.string().optional(),
+    UPSTOX_ENV: z.enum(['sandbox', 'production']).optional(),
+    UPSTOX_API_BASE_URL: z.string().optional(),
+    UPSTOX_STATIC_IP: z.string().optional(),
+    UPSTOX_SECONDARY_STATIC_IP: z.string().optional(),
+    UPSTOX_LIVE_TRADING_ENABLED: z.union([z.boolean(), z.string()]).optional(),
   });
 
   const parsedBase = baseSchema.safeParse(rawEnv);

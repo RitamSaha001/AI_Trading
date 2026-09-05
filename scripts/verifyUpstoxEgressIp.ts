@@ -13,6 +13,11 @@
  *   1: Semantic FAIL (Mismatched IP or undetectable in production)
  */
 
+import dns from 'node:dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
 import { config } from '../server/config';
 import { getDb, initDb } from '../server/db';
 import { UpstoxClient } from '../server/services/brokers/upstox/upstoxClient';

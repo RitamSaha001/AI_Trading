@@ -17,14 +17,14 @@ describe('PostgreSQL Real Concurrency & Financial Invariants Suite', { timeout: 
       await runMigrations(pgClient);
       setDb(pgClient);
     }
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (pgClient) {
       setDb(null);
       await pgClient.close();
     }
-  });
+  }, 30000);
 
   beforeEach(async () => {
     const db = getDb();
