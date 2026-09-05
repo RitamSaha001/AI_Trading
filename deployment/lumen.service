@@ -1,13 +1,22 @@
 [Unit]
 Description=Lumen AI Trading Platform (Production Server)
-After=network.target postgresql.service
-Wants=postgresql.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=lumen
 Group=lumen
-WorkingDirectory=/var/www/lumen
+WorkingDirectory=/opt/lumen
+
+# Environment Setup
+Environment="NODE_ENV=production"
+Environment="START_SERVER=true"
+Environment="npm_config_cache=/tmp/npm-cache"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/etc/lumen/lumen.env
+
+# Execution
 ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=5s
@@ -23,9 +32,7 @@ PrivateTmp=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictRealtime=true
-
-# Environment Variables Isolation
-EnvironmentFile=/etc/lumen/lumen.env
+ReadWritePaths=/opt/lumen
 
 # Journald Log Bounding
 StandardOutput=journal
@@ -34,3 +41,4 @@ SyslogIdentifier=lumen-trading
 
 [Install]
 WantedBy=multi-user.target
+
