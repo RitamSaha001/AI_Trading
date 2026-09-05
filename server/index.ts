@@ -13,6 +13,7 @@ import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
 import { ExactDecimal } from './services/precision';
 import { BinanceGateway } from './services/binanceGateway';
+import { BrokerRegistry, BrokerGateway } from './services/brokers';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
 import { OrderRecoveryService } from './services/orderRecoveryService';
@@ -60,8 +61,9 @@ export async function shutdownServer(server?: FastifyInstance): Promise<void> {
     }
   }
 
-  // 3. Disconnect exchange WebSockets
+  // 3. Disconnect exchange WebSockets & broker gateways
   try {
+    await BrokerRegistry.shutdown();
     await BinanceGateway.closeAllConnections();
   } catch (err: any) {
     logger.warn('Error closing exchange connections:', err.message);
@@ -811,13 +813,14 @@ export function buildServer(): FastifyInstance {
   // ==========================================================================
 
   server.post('/api/exchange/connect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { apiKey: string; apiSecret: string; environment: 'testnet' | 'mainnet' };
+    const body = req.body as { apiKey: string; apiSecret: string; environment: 'testnet' | 'mainnet'; broker?: string };
     if (!body?.apiKey || !body.apiSecret) {
       return reply.status(400).send({ success: false, error: 'API Key and Secret required' });
     }
 
     try {
-      const audit = await BinanceGateway.saveExchangeCredentials(req.user!.id, body);
+      const broker = BrokerRegistry.get(body.broker || 'binance');
+      const audit = await broker.saveCredentials!(req.user!.id, body);
       let reconciliationResult: any = null;
       try {
         reconciliationResult = await ReconciliationWorker.runReconciliation(req.user!.id);
@@ -837,7 +840,8 @@ export function buildServer(): FastifyInstance {
 
   server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      await BinanceGateway.disconnectExchange(req.user!.id);
+      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      await broker.disconnectAccount!(req.user!.id);
       return { success: true, message: 'Exchange disconnected and credentials wiped.' };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
@@ -846,7 +850,8 @@ export function buildServer(): FastifyInstance {
 
   server.get('/api/exchange/account', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const info = await BinanceGateway.getExchangeAccountInfo(req.user!.id);
+      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const info = await broker.getAccount(req.user!.id);
       return { success: true, account: info || { connected: false } };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
@@ -855,7 +860,8 @@ export function buildServer(): FastifyInstance {
 
   server.post('/api/exchange/listen-key', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const listenKey = await BinanceGateway.createListenKey(req.user!.id);
+      const broker = BrokerRegistry.get((req.body as any)?.broker || 'binance');
+      const listenKey = await broker.createListenKey!(req.user!.id);
       if (!listenKey) {
         return reply.status(400).send({ success: false, error: 'Could not create listenKey. Verify exchange credentials.' });
       }
@@ -868,14 +874,15 @@ export function buildServer(): FastifyInstance {
   server.post('/api/orders/submit', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as {
       symbol: string;
-      asset: string;
-      quoteAsset: string;
+      asset?: string;
+      quoteAsset?: string;
       side: 'BUY' | 'SELL';
-      type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT';
+      type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT' | string;
       quantity: number;
       price?: number;
-      marketQuoteAgeMs: number;
-      idempotencyKey: string;
+      marketQuoteAgeMs?: number;
+      idempotencyKey?: string;
+      broker?: string;
     };
 
     if (!body?.symbol || !body.quantity || body.quantity <= 0) {
@@ -883,8 +890,10 @@ export function buildServer(): FastifyInstance {
     }
 
     try {
-      const order = await BinanceGateway.submitOrder({
+      const broker = BrokerRegistry.get(body.broker || 'binance');
+      const order = await broker.placeOrder({
         userId: req.user!.id,
+        broker: broker.id,
         symbol: body.symbol,
         asset: body.asset,
         quoteAsset: body.quoteAsset || 'USDT',
@@ -912,12 +921,13 @@ export function buildServer(): FastifyInstance {
   });
 
   server.post('/api/orders/cancel', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { clientOrderId: string };
+    const body = req.body as { clientOrderId: string; broker?: string };
     if (!body?.clientOrderId) {
       return reply.status(400).send({ success: false, error: 'clientOrderId is required' });
     }
     try {
-      const order = await BinanceGateway.cancelOrder(req.user!.id, body.clientOrderId);
+      const broker = BrokerRegistry.get(body.broker || 'binance');
+      const order = await broker.cancelOrder(req.user!.id, body.clientOrderId);
       return { success: true, order };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
@@ -999,23 +1009,36 @@ if (isMain || process.env.START_SERVER === 'true') {
         `[Recovery] Sweep completed: ${recovery.ordersInspected} inspected, ${recovery.recoveredCount} recovered, ${recovery.unresolvedCount} unresolved.`
       );
 
-      console.log(`[ExchangeRules] Loading authoritative Binance exchange rules...`);
+      console.log(`[BrokerRegistry] Initializing registered broker execution gateways...`);
+      await BrokerRegistry.initialize();
+
+      const registeredBrokers = BrokerRegistry.getAll();
+      const needsClockSync = registeredBrokers.some((b) => b.capabilities.supportsClockSync);
+      const needsPortfolioStream = registeredBrokers.some((b) => b.capabilities.supportsPortfolioStream);
+
+      console.log(`[ExchangeRules] Loading authoritative exchange rules...`);
       await SymbolRulesService.refreshRules().catch((err: any) => {
         if (config.NODE_ENV === 'production') {
-          throw new Error(`Failed to load authoritative Binance exchange rules on startup: ${err.message}`);
+          throw new Error(`Failed to load authoritative exchange rules on startup: ${err.message}`);
         }
         console.warn(`[ExchangeRules] Non-production startup: exchangeInfo refresh skipped or failed: ${err.message}`);
       });
 
-      console.log(`[ClockSync] Synchronizing server clock with Binance exchange venue...`);
-      await ClockSyncService.synchronize().catch((err: any) => {
-        console.warn(`[ClockSync] Initial clock sync warning: ${err.message}`);
-      });
-      ClockSyncService.startPeriodicSync();
-      UserDataStreamManager.startKeepAliveLoop();
-      await UserDataStreamManager.restoreAllActiveStreams().catch((err: any) => {
-        console.warn(`[UserDataStream] Failed to restore active streams: ${err.message}`);
-      });
+      if (needsClockSync) {
+        console.log(`[ClockSync] Synchronizing server clock with exchange venue...`);
+        await ClockSyncService.synchronize().catch((err: any) => {
+          console.warn(`[ClockSync] Initial clock sync warning: ${err.message}`);
+        });
+        ClockSyncService.startPeriodicSync();
+      }
+
+      if (needsPortfolioStream) {
+        UserDataStreamManager.startKeepAliveLoop();
+        await UserDataStreamManager.restoreAllActiveStreams().catch((err: any) => {
+          console.warn(`[UserDataStream] Failed to restore active streams: ${err.message}`);
+        });
+      }
+
       console.log(`[Reconciliation] Running authoritative startup reconciliation sweep...`);
       await ReconciliationWorker.runReconciliation().catch((err: any) => {
         console.warn(`[Reconciliation] Initial startup reconciliation sweep warning: ${err.message}`);

@@ -5,10 +5,12 @@ import { ExactDecimal } from './precision';
 
 export interface RiskEvaluationRequest {
   userId: string;
-  asset: string;
-  quoteAsset: string;
+  asset?: string;
+  quoteAsset?: string;
+  symbol?: string;
+  broker?: string;
   side: 'BUY' | 'SELL';
-  type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT';
+  type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT' | string;
   quantity: number | string | ExactDecimal;
   price: number | string | ExactDecimal;
   marketQuoteAgeMs: number;
@@ -90,18 +92,22 @@ export class ServerRiskEngine {
     const notionalDec = qtyDec.mul(priceDec);
     const notionalUsd = notionalDec.toDisplayNumber();
 
+    const quoteAsset = req.quoteAsset || 'USDT';
+    const asset = req.asset || (req.symbol ? req.symbol.replace(quoteAsset, '') : 'UNKNOWN');
+    const symbolPattern = req.symbol || `${asset}%`;
+
     // 3. Duplicate Order Rate-Limit / Cooldown Check (5 seconds window)
     const recentDuplicate = await db.queryOne<any>(
-      `SELECT id FROM exchange_orders
-       WHERE user_id = ? AND symbol LIKE ? AND side = ?
+      `SELECT id FROM exchange_orders 
+       WHERE user_id = ? AND symbol LIKE ? AND side = ? 
        AND created_at > ? AND status IN ('SUBMITTING', 'OPEN')`,
-      [req.userId, `${req.asset}%`, req.side, Date.now() - 5000]
+      [req.userId, symbolPattern, req.side, Date.now() - 5000]
     );
 
     if (recentDuplicate) {
       return {
         approved: false,
-        rejectReason: `Duplicate order rate-limit breached: active ${req.side} order on ${req.asset} placed within last 5s.`,
+        rejectReason: `Duplicate order rate-limit breached: active ${req.side} order on ${req.symbol || asset} placed within last 5s.`,
         requiredCashReserve: 0,
         notionalUsd,
         portfolioEquityUsd: 0,
@@ -132,8 +138,8 @@ export class ServerRiskEngine {
     // 5. Balance & Portfolio Valuation
     const balances = await LedgerService.getUserBalances(req.userId);
     const tradingCashMinor = BigInt(
-      balances[`trading_allocated:${req.quoteAsset}`]?.free ??
-        balances[`sovereign_cash:${req.quoteAsset}`]?.free ??
+      balances[`trading_allocated:${quoteAsset}`]?.free ??
+        balances[`sovereign_cash:${quoteAsset}`]?.free ??
         0
     );
     const tradingCashDec = ExactDecimal.fromMinor(tradingCashMinor, 2);
@@ -141,7 +147,7 @@ export class ServerRiskEngine {
     // Calculate portfolio equity
     let portfolioEquityDec = tradingCashDec;
     for (const [key, bal] of Object.entries(balances)) {
-      if (key.startsWith('crypto_holdings:') && key.includes(req.asset)) {
+      if (key.startsWith('crypto_holdings:') && key.includes(asset)) {
         const balMinor = BigInt(bal.balance || 0);
         const balDec = ExactDecimal.fromMinor(balMinor, 8);
         portfolioEquityDec = portfolioEquityDec.add(balDec.mul(priceDec));

@@ -1,6 +1,6 @@
 import { getDb } from '../db';
 import { AuditService, logger } from './auditService';
-import { BinanceGateway } from './binanceGateway';
+import { BrokerRegistry } from './brokers/brokerRegistry';
 import { LedgerService } from './ledgerService';
 import { ExactDecimal } from './precision';
 import { DistributedLockService } from './distributedLockService';
@@ -189,7 +189,8 @@ export class ReconciliationWorker {
       for (const ord of unknownOrders) {
         ordersChecked++;
         try {
-          const recOrder = await BinanceGateway.reconcileUnknownOrder(ord.client_order_id);
+          const broker = BrokerRegistry.get(ord.broker || 'binance');
+          const recOrder = await broker.reconcileUnknownOrder(ord.client_order_id);
           if (recOrder.status === 'UNKNOWN') {
             // Indeterminate state: could not confirm on exchange and remains UNKNOWN
             unknownOrdersFailed = true;
@@ -580,7 +581,8 @@ export class ReconciliationWorker {
     }
 
     if (!venueTrades) {
-      const creds = await BinanceGateway.getCredentials(userId);
+      const broker = BrokerRegistry.get('binance');
+      const creds = await (broker as any).getCredentials?.(userId);
       if (!creds?.apiKey) {
         return {
           success: false,
@@ -927,7 +929,8 @@ export class ReconciliationWorker {
     }
 
     if (!venueOpenOrders) {
-      const creds = await BinanceGateway.getCredentials(userId);
+      const broker = BrokerRegistry.get('binance');
+      const creds = await (broker as any).getCredentials?.(userId);
       if (!creds?.apiKey) {
         return {
           success: false,
@@ -1068,7 +1071,8 @@ export class ReconciliationWorker {
     }
 
     if (!exchangeBalances) {
-      const creds = await BinanceGateway.getCredentials(userId);
+      const broker = BrokerRegistry.get('binance');
+      const creds = await (broker as any).getCredentials?.(userId);
       if (!creds?.apiKey) {
         return {
           success: false,

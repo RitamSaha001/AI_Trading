@@ -1,5 +1,6 @@
 import { getDb } from '../db';
-import { BinanceGateway } from './binanceGateway';
+import { BrokerRegistry } from './brokers/brokerRegistry';
+import { BrokerGateway } from './brokers/brokerGateway';
 import { LedgerService } from './ledgerService';
 import { OrderStateMachine } from './orderStateMachine';
 import { ExactDecimal } from './precision';
@@ -70,9 +71,11 @@ export class OrderRecoveryService {
 
       const clientOrderId = order.client_order_id;
       const currentStatus = order.status;
+      const brokerId = order.broker || 'binance';
+      const broker: BrokerGateway = BrokerRegistry.get(brokerId);
 
       try {
-        const venueResult = await BinanceGateway.reconcileUnknownOrder(
+        const venueResult = await broker.reconcileUnknownOrder(
           clientOrderId,
           order.symbol,
           order.user_id
@@ -122,7 +125,7 @@ export class OrderRecoveryService {
             let fills = venueResult.fills;
             if (!fills || fills.length === 0) {
               try {
-                fills = await BinanceGateway.fetchOrderFillsFromVenue(
+                fills = await broker.fetchOrderFills(
                   order.user_id,
                   order.symbol,
                   venueResult.exchangeOrderId || order.exchange_order_id,
@@ -265,8 +268,8 @@ export class OrderRecoveryService {
                 const fillCommissionDec = ExactDecimal.from(fill.commission);
                 const fillAsset = fill.commissionAsset || order.quote_asset;
                 const tradeId = fill.tradeId || `${clientOrderId}_rec_${idx}`;
-                const canonicalFillKey = `binance:${order.user_id}:${order.symbol}:${tradeId}`;
-                const accountingEventId = `settlement:binance:${order.user_id}:${order.symbol}:${tradeId}`;
+                const canonicalFillKey = `${broker.id}:${order.user_id}:${order.symbol}:${tradeId}`;
+                const accountingEventId = `settlement:${broker.id}:${order.user_id}:${order.symbol}:${tradeId}`;
                 const fillDbId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
                 await tx.execute(
