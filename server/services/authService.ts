@@ -188,6 +188,42 @@ export class ServerAuthService {
       };
     }
 
+    // Dispatch real email via Resend if configured
+    if (process.env.EMAIL_DELIVERY_API_KEY) {
+      try {
+        const fromEmail = process.env.EMAIL_FROM_ADDRESS || 'Lumen AI Trading <onboarding@resend.dev>';
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.EMAIL_DELIVERY_API_KEY.trim()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: fromEmail,
+            to: [cleanEmail],
+            subject: `Your Lumen Verification Code: ${code}`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 16px;">
+                <h2 style="color: #18181b; font-size: 20px; font-weight: 700; margin-bottom: 8px;">Lumen AI Trading</h2>
+                <p style="color: #71717a; font-size: 14px; margin-bottom: 24px;">Your passwordless authentication code is:</p>
+                <div style="background-color: #f4f4f5; padding: 16px; border-radius: 12px; text-align: center; margin-bottom: 24px;">
+                  <span style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #4f46e5; font-family: monospace;">${code}</span>
+                </div>
+                <p style="color: #a1a1aa; font-size: 12px;">This code is valid for 10 minutes. If you did not request this code, you can safely ignore this email.</p>
+              </div>
+            `,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.warn('[AuthService] Resend email delivery warning:', errData);
+        }
+      } catch (sendErr: any) {
+        console.warn('[AuthService] Failed to send email via Resend:', sendErr.message);
+      }
+    }
+
     return {
       success: true,
       message: 'Verification challenge sent to your email address',

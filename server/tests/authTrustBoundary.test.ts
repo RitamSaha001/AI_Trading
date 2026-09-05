@@ -299,12 +299,20 @@ describe('Authentication & Session Trust Boundary Test Suite', () => {
   // EMAIL AUTHENTICATION SECURITY
   // ==========================================================================
   describe('Passwordless Email Challenge Flow', () => {
-    it('21. arbitrary email alone cannot authenticate in production', async () => {
-      const res = await ServerAuthService.requestEmailChallenge('victim@lumen.io', 'production')
-        .catch((err) => err);
+    it('21. arbitrary email alone cannot authenticate in production without email provider', async () => {
+      const origKey = process.env.EMAIL_DELIVERY_API_KEY;
+      delete process.env.EMAIL_DELIVERY_API_KEY;
+      try {
+        const res = await ServerAuthService.requestEmailChallenge('victim@lumen.io', 'production')
+          .catch((err) => err);
 
-      expect(res).toBeInstanceOf(Error);
-      expect(res.message).toContain('EMAIL_AUTH_UNAVAILABLE');
+        expect(res).toBeInstanceOf(Error);
+        expect(res.message).toContain('EMAIL_AUTH_UNAVAILABLE');
+      } finally {
+        if (origKey !== undefined) {
+          process.env.EMAIL_DELIVERY_API_KEY = origKey;
+        }
+      }
     });
 
     it('22. email verification challenge expires after 10 minutes', async () => {
