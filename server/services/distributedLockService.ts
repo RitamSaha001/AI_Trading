@@ -161,9 +161,20 @@ export class DistributedLockService {
       return null;
     }
 
+    // Auto-renew lease in background to prevent expiration during long tasks
+    const heartbeatInterval = Math.max(5000, Math.floor(ttlMs / 3));
+    const heartbeatTimer = setInterval(async () => {
+      try {
+        await this.renewLease(workerName, ttlMs, leaseId, db);
+      } catch (err: any) {
+        console.warn(`[DistributedLockService] Heartbeat lease renewal failed for ${workerName}:`, err.message);
+      }
+    }, heartbeatInterval);
+
     try {
       return await fn(leaseId);
     } finally {
+      clearInterval(heartbeatTimer);
       await this.releaseLease(workerName, leaseId, db).catch((err) => {
         console.warn(`[DistributedLockService] Error releasing lease for ${workerName}:`, err.message);
       });

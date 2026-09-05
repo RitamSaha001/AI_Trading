@@ -24,6 +24,7 @@ import {
   DEFAULT_AUTO_LOCK_MS,
 } from '../services/keyVault';
 import { money } from '../domain/portfolio';
+import { ApiClient } from '../services/apiClient';
 
 interface Props {
   open: boolean;
@@ -98,6 +99,7 @@ export function ExchangeOnboardingDrawer({ open, onClose }: Props) {
       const res = await connectExchange(creds, passphrase);
       if (res.ok) {
         setSuccessMessage('Exchange connected and security audit verified!');
+        void ApiClient.runReconciliation();
         setApiKey('');
         setApiSecret('');
         setPassphrase('');

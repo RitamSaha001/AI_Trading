@@ -182,16 +182,19 @@ export class UserDataStreamManager {
     });
 
     // Reconcile via REST to catch any missed executions while key was lost
+    let recResult: any = null;
     try {
-      await ReconciliationWorker.runReconciliation(userId);
+      recResult = await ReconciliationWorker.runReconciliation(userId);
     } catch (err: any) {
       logger.error(`[UserDataStreamManager] Reconciliation failed after lost listen key: ${err.message}`);
     }
 
     // Re-acquire fresh listenKey
     const freshKey = await this.acquireListenKey(userId);
-    if (freshKey) {
-      await CircuitBreakerService.reset('websocket_outage', 'ACCOUNT', userId, 'system', 'Acquired replacement key');
+    if (freshKey && recResult?.status === 'SUCCESS') {
+      await CircuitBreakerService.reset('websocket_outage', 'ACCOUNT', userId, 'system', 'Acquired replacement key and verified clean reconciliation');
+    } else {
+      logger.warn(`[UserDataStreamManager] WebSocket circuit breaker NOT reset for user ${userId}: reconciliation status is ${recResult?.status || 'UNKNOWN'}`);
     }
   }
 
@@ -232,7 +235,7 @@ export class UserDataStreamManager {
     const recResult = await ReconciliationWorker.runReconciliation(userId);
 
     if (session) {
-      session.status = recResult.status === 'FAILED' ? 'UNHEALTHY' : 'ACTIVE';
+      session.status = recResult.status === 'SUCCESS' ? 'ACTIVE' : 'UNHEALTHY';
       session.reconnectAttempts = 0;
     }
 

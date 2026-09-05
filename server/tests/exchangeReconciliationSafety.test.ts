@@ -11,6 +11,8 @@ import { UserDataStreamManager } from '../services/userDataStreamManager';
 import { BinanceUserStreamTransport } from '../services/binanceUserStreamTransport';
 import { ExactDecimal } from '../services/precision';
 import { AuditService } from '../services/auditService';
+import { DistributedLockService } from '../services/distributedLockService';
+import { config } from '../config';
 
 describe('Exchange Reconciliation & Operational Safety Suite', () => {
   const userId = 'usr_ops_safety_001';
@@ -1120,7 +1122,7 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
         isLive: true,
       });
       expect(check.allowed).toBe(false);
-      expect(check.reason).toContain('No exchange reconciliation has ever completed');
+      expect(check.reason).toContain("Exchange REST health is 'UNAVAILABLE'");
     });
 
     it('Invariant: UserDataStreamManager.restoreAllActiveStreams rehydrates streams for all active accounts', async () => {
@@ -1137,6 +1139,246 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
 
       const count = await UserDataStreamManager.restoreAllActiveStreams();
       expect(count).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // =========================================================================
+  // 11. RECONCILIATION INTEGRITY & RESILIENCE VERIFICATION
+  // =========================================================================
+  describe('11. Advanced Reconciliation Edge Cases & Fail-Closed Invariants', () => {
+    const testUserEdge = 'usr_rec_edge_001';
+
+    beforeEach(async () => {
+      ReconciliationWorker.resetForTesting();
+      const db = getDb();
+      const now = Date.now();
+      await db.execute(
+        `INSERT INTO users (id, email, display_name, provider, provider_id, created_at, updated_at)
+         VALUES (?, 'edge@lumen.io', 'Edge Trader', 'email', 'prov_edge', ?, ?)
+         ON CONFLICT(id) DO NOTHING`,
+        [testUserEdge, now, now]
+      );
+      await BinanceGateway.saveExchangeCredentials(testUserEdge, {
+        apiKey: 'mock_sim_edge_key',
+        apiSecret: 'mock_sim_edge_secret',
+        environment: 'testnet',
+      });
+      ClockSyncService.setSimulatedOffset(50);
+    });
+
+    afterEach(async () => {
+      ReconciliationWorker.resetForTesting();
+      const db = getDb();
+      await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = ?`, [`rec_${testUserEdge}`]);
+      await db.execute(`DELETE FROM exchange_orders WHERE user_id = ?`, [testUserEdge]);
+      await db.execute(`DELETE FROM reconciliation_mismatches WHERE user_id = ?`, [testUserEdge]);
+      await db.execute(`DELETE FROM exchange_accounts WHERE user_id = ?`, [testUserEdge]);
+      await db.execute(`DELETE FROM users WHERE id = ?`, [testUserEdge]);
+    });
+
+    it('Issue 1: Failed reconciliation invalidates previously fresh timestamp to 0 and marks UNAVAILABLE', async () => {
+      const db = getDb();
+
+      // 1. Establish initial healthy state with fresh timestamp
+      const initialRec = await ReconciliationWorker.runReconciliation(testUserEdge);
+      expect(initialRec.status).toBe('SUCCESS');
+
+      const freshSync = await db.queryOne<any>(`SELECT * FROM exchange_sync_state WHERE account_id = ?`, [`rec_${testUserEdge}`]);
+      expect(Number(freshSync.last_sync_at)).toBeGreaterThan(0);
+      expect(freshSync.rest_health).toBe('HEALTHY');
+
+      // Gate allows live order
+      const initialGate = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: testUserEdge,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(initialGate.allowed).toBe(true);
+
+      // 2. Simulate subsequent venue failure
+      ReconciliationWorker.setMockExchangeState(testUserEdge, {
+        shouldFail: true,
+        failureError: 'Simulated 500 Internal Server Error on Binance API',
+      });
+
+      const failedRec = await ReconciliationWorker.runReconciliation(testUserEdge);
+      expect(failedRec.status).toBe('FAILED');
+
+      // 3. Verify that ON CONFLICT DO UPDATE actively overwrote the old fresh timestamp to 0
+      const failedSync = await db.queryOne<any>(`SELECT * FROM exchange_sync_state WHERE account_id = ?`, [`rec_${testUserEdge}`]);
+      expect(Number(failedSync.last_sync_at)).toBe(0);
+      expect(failedSync.rest_health).toBe('UNAVAILABLE');
+      expect(ReconciliationWorker.getLastSuccessfulRunAt(testUserEdge)).toBe(0);
+
+      // 4. Pre-trade gate MUST fail-closed immediately
+      const postFailureGate = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: testUserEdge,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(postFailureGate.allowed).toBe(false);
+      expect(postFailureGate.reason).toContain("Exchange REST health is 'UNAVAILABLE'");
+    });
+
+    it('Issue 2: Locked reconciliation returns LOCKED status and does NOT reset circuit breaker', async () => {
+      // Trip the breaker
+      await CircuitBreakerService.trip('websocket_outage', 'ACCOUNT', testUserEdge, 'Simulated WS outage');
+      expect((await CircuitBreakerService.isOpen('websocket_outage', 'ACCOUNT', testUserEdge)).isOpen).toBe(true);
+
+      // Hold lock externally with a different instance ID to simulate concurrent worker
+      const originalInstance = DistributedLockService.getInstanceId();
+      DistributedLockService.setInstanceId('concurrent_instance_999');
+      const leaseId = await DistributedLockService.acquireLease('worker:reconciliation', 30_000);
+      expect(leaseId).toBe('concurrent_instance_999');
+      DistributedLockService.setInstanceId(originalInstance);
+
+      try {
+        const recResult = await ReconciliationWorker.runReconciliation(testUserEdge);
+        expect(recResult.status).toBe('LOCKED');
+        expect(recResult.runId).toBe('skipped_locked');
+
+        // Verify breaker is STILL OPEN because reconciliation did not run
+        expect((await CircuitBreakerService.isOpen('websocket_outage', 'ACCOUNT', testUserEdge)).isOpen).toBe(true);
+      } finally {
+        await DistributedLockService.releaseLease('worker:reconciliation', 'concurrent_instance_999');
+      }
+    });
+
+    it('Issue 5: Orphaned open orders fail clean reconciliation and mark rest_health DEGRADED with last_sync_at = 0', async () => {
+      const db = getDb();
+
+      // Reconcile with an orphaned venue order that does not exist in local DB
+      const recResult = await ReconciliationWorker.reconcileOpenOrders(testUserEdge, 'test_orphan_run', [
+        {
+          orderId: 999888777,
+          clientOrderId: 'orphaned_exchange_order_xyz',
+          symbol: 'BTCUSDT',
+          origQty: '0.5',
+          status: 'NEW',
+        },
+      ]);
+      expect(recResult.success).toBe(true);
+      expect(recResult.mismatches).toBe(1);
+
+      // Now run full reconciliation with mock state containing this orphaned order
+      ReconciliationWorker.setMockExchangeState(testUserEdge, {
+        openOrders: [
+          {
+            orderId: 999888777,
+            clientOrderId: 'orphaned_exchange_order_xyz',
+            symbol: 'BTCUSDT',
+            origQty: '0.5',
+            status: 'NEW',
+          },
+        ],
+      });
+
+      const fullRec = await ReconciliationWorker.runReconciliation(testUserEdge);
+      expect(fullRec.status).toBe('MISMATCH_DETECTED');
+      expect(fullRec.mismatchesFound).toBeGreaterThan(0);
+
+      // Sync state must be DEGRADED, last_sync_at = 0
+      const syncState = await db.queryOne<any>(`SELECT * FROM exchange_sync_state WHERE account_id = ?`, [`rec_${testUserEdge}`]);
+      expect(Number(syncState.last_sync_at)).toBe(0);
+      expect(syncState.rest_health).toBe('DEGRADED');
+
+      // Pre-trade gate MUST block
+      const gate = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: testUserEdge,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(gate.allowed).toBe(false);
+      expect(gate.reason).toMatch(/Unresolved HIGH reconciliation mismatch|Exchange REST health is 'DEGRADED'/);
+    });
+
+    it('Issue 6: OperationalSafetyGate blocks when rest_health is UNAVAILABLE even if timestamp is fresh', async () => {
+      const db = getDb();
+      // Artificially inject a fresh timestamp alongside UNAVAILABLE rest_health
+      await db.execute(
+        `INSERT INTO exchange_sync_state (account_id, last_sync_at, rest_health, updated_at)
+         VALUES (?, ?, 'UNAVAILABLE', ?)
+         ON CONFLICT(account_id) DO UPDATE SET
+           last_sync_at = excluded.last_sync_at,
+           rest_health = excluded.rest_health,
+           updated_at = excluded.updated_at`,
+        [`rec_${testUserEdge}`, Date.now(), Date.now()]
+      );
+
+      const check = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: testUserEdge,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+
+      expect(check.allowed).toBe(false);
+      expect(check.reason).toContain("Exchange REST health is 'UNAVAILABLE' (must be HEALTHY)");
+    });
+
+    it('Issue 7: OperationalHealthReport surfaces live reconciliation and userStream status to frontend', async () => {
+      const db = getDb();
+      const now = Date.now();
+
+      // Setup healthy reconciliation state
+      await db.execute(
+        `INSERT INTO exchange_sync_state (account_id, last_sync_at, rest_health, updated_at)
+         VALUES (?, ?, 'HEALTHY', ?)
+         ON CONFLICT(account_id) DO UPDATE SET
+           last_sync_at = excluded.last_sync_at,
+           rest_health = excluded.rest_health,
+           updated_at = excluded.updated_at`,
+        [`rec_${testUserEdge}`, now, now]
+      );
+
+      // Acquire a stream session
+      await UserDataStreamManager.acquireListenKey(testUserEdge);
+
+      const report = await OperationalSafetyService.getHealthReport(testUserEdge);
+      expect(report.reconciliation).toBeDefined();
+      expect(report.reconciliation?.restHealth).toBe('HEALTHY');
+      expect(report.reconciliation?.isFresh).toBe(true);
+      expect(report.reconciliation?.lastSyncAt).toBe(now);
+
+      expect(report.userStream).toBeDefined();
+      expect(report.userStream?.status).toBe('ACTIVE');
+      expect(report.overallState).toBe('HEALTHY');
+    });
+
+    it('Issue 8: Production invariant strictly blocks mock credentials when NODE_ENV is production', async () => {
+      const originalEnv = config.NODE_ENV;
+      try {
+        (config as any).NODE_ENV = 'production';
+
+        await expect(
+          BinanceGateway.saveExchangeCredentials('usr_prod_mock_reject', {
+            apiKey: 'mock_test_key_xyz',
+            apiSecret: 'mock_secret_xyz',
+            environment: 'mainnet',
+          })
+        ).rejects.toThrow(/Security Invariant Violation: Mock or test credentials are strictly forbidden/);
+      } finally {
+        (config as any).NODE_ENV = originalEnv;
+      }
     });
   });
 });

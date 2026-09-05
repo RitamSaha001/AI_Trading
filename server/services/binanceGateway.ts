@@ -413,6 +413,19 @@ export class BinanceGateway {
   ): Promise<BinanceAccountAudit> {
     const db = getDb();
 
+    // Strict production invariant: mock or test credentials can never be saved in production mode
+    if (config.NODE_ENV === 'production' && (creds.apiKey.startsWith('mock_') || creds.apiKey.startsWith('test_'))) {
+      await AuditService.logEvent({
+        userId,
+        eventType: 'EXCHANGE_CREDENTIALS_REJECTED',
+        source: 'binance_gateway',
+        actor: 'user',
+        metadata: { environment: creds.environment, reason: 'Mock credentials forbidden in production' },
+        result: 'BLOCKED',
+      });
+      throw new Error('Security Invariant Violation: Mock or test credentials are strictly forbidden in production mode.');
+    }
+
     // Perform live permissions audit BEFORE storing anything
     const audit = await this.auditCredentials(creds);
 

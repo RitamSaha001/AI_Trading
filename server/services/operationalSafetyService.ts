@@ -5,6 +5,7 @@ import { RateLimitTracker } from './rateLimitTracker';
 import { CircuitBreakerService } from './circuitBreakerService';
 import { SymbolRulesService } from './symbolRules';
 import { ReconciliationWorker } from './reconciliationWorker';
+import { UserDataStreamManager } from './userDataStreamManager';
 import { config } from '../config';
 import crypto from 'node:crypto';
 
@@ -29,6 +30,15 @@ export interface OperationalHealthReport {
   circuitBreakers: {
     openCount: number;
     breakers: Array<{ name: string; scope: string; reason?: string }>;
+  };
+  reconciliation?: {
+    lastSyncAt: number;
+    restHealth: string;
+    isFresh: boolean;
+  };
+  userStream?: {
+    status: string;
+    lastKeepAliveAt: number;
   };
   unresolvedMismatches: number;
   timestamp: number;
@@ -191,13 +201,43 @@ export class OperationalSafetyService {
     );
     const unresolvedMismatches = Number(criticalMismatches[0]?.cnt || 0);
 
+    // Query exchange sync state (per-user or global fallback)
+    let syncRow: any = null;
+    if (userId) {
+      syncRow = await db.queryOne<any>(
+        `SELECT last_sync_at, rest_health FROM exchange_sync_state WHERE account_id = ?`,
+        [`rec_${userId}`]
+      );
+    }
+    if (!syncRow) {
+      syncRow = await db.queryOne<any>(
+        `SELECT last_sync_at, rest_health FROM exchange_sync_state WHERE account_id = 'rec_global'`
+      );
+    }
+
+    const lastSyncAt = Number(syncRow?.last_sync_at || 0);
+    const restHealth = syncRow?.rest_health || (syncRow ? 'UNAVAILABLE' : 'INITIALIZING');
+    const isFresh = lastSyncAt > 0 && Date.now() - lastSyncAt <= 300_000 && restHealth === 'HEALTHY';
+
+    // Query user stream status if userId provided
+    let userStream: { status: string; lastKeepAliveAt: number } | undefined = undefined;
+    if (userId) {
+      const session = UserDataStreamManager.getSession(userId);
+      if (session) {
+        userStream = {
+          status: session.status,
+          lastKeepAliveAt: session.lastKeepAliveAt,
+        };
+      }
+    }
+
     // Determine overall state
     let overallState: ExchangeHealthState = 'HEALTHY';
     if (isGlobalFrozen || activeBreakers.some((b) => b.scope === 'GLOBAL')) {
       overallState = 'BLOCKED';
-    } else if (unresolvedMismatches > 0 || rateLimitStatus.isBlocked) {
+    } else if (unresolvedMismatches > 0 || rateLimitStatus.isBlocked || restHealth === 'UNAVAILABLE') {
       overallState = 'UNAVAILABLE';
-    } else if (!clockStatus.isHealthy || rateLimitStatus.isThrottled || activeBreakers.length > 0) {
+    } else if (!clockStatus.isHealthy || rateLimitStatus.isThrottled || activeBreakers.length > 0 || restHealth === 'DEGRADED' || (syncRow && !isFresh)) {
       overallState = 'DEGRADED';
     }
 
@@ -228,6 +268,12 @@ export class OperationalSafetyService {
           reason: b.reason,
         })),
       },
+      reconciliation: {
+        lastSyncAt,
+        restHealth,
+        isFresh,
+      },
+      userStream,
       unresolvedMismatches,
       timestamp: Date.now(),
     };
@@ -309,16 +355,16 @@ export class OperationalSafetyGate {
     }
     checks.circuitBreakerClosed = true;
 
-    // 4. Reconciliation Health (No unresolved CRITICAL mismatches for user or symbol)
-    const criticalMismatches = await db.query<any>(
-      `SELECT id, notes FROM reconciliation_mismatches 
-       WHERE severity = 'CRITICAL' AND resolved = 0 AND (user_id = ? OR entity_id = ?)`,
+    // 4. Reconciliation Health (No unresolved CRITICAL or HIGH mismatches for user or symbol)
+    const activeMismatches = await db.query<any>(
+      `SELECT id, notes, severity FROM reconciliation_mismatches 
+       WHERE severity IN ('CRITICAL', 'HIGH') AND resolved = 0 AND (user_id = ? OR entity_id = ?)`,
       [params.userId, params.symbol]
     );
-    if (criticalMismatches.length > 0) {
+    if (activeMismatches.length > 0) {
       return {
         allowed: false,
-        reason: `Trading blocked: Unresolved CRITICAL reconciliation mismatch exists (${criticalMismatches[0].notes})`,
+        reason: `Trading blocked: Unresolved ${activeMismatches[0].severity} reconciliation mismatch exists (${activeMismatches[0].notes})`,
         checks,
       };
     }
@@ -358,20 +404,42 @@ export class OperationalSafetyGate {
         };
       }
 
-      // Reconciliation Freshness SLA (Reconciliation must have completed within SLA for this user)
+      // Reconciliation Freshness SLA & Operational Health (Must be HEALTHY, fresh, and clean)
       const RECONCILIATION_SLA_MS = config.RECONCILIATION_SLA_MS ?? 300_000;
       const syncState = await db.queryOne<any>(
-        `SELECT last_sync_at FROM exchange_sync_state WHERE account_id = ? LIMIT 1`,
+        `SELECT last_sync_at, rest_health FROM exchange_sync_state WHERE account_id = ? LIMIT 1`,
         [`rec_${params.userId}`]
       );
+
+      // 1. Explicit rest_health failure checks
+      const restHealth = syncState?.rest_health;
+      if (restHealth === 'UNAVAILABLE' || restHealth === 'DEGRADED') {
+        return {
+          allowed: false,
+          reason: `Trading blocked: Exchange REST health is '${restHealth}' (must be HEALTHY).`,
+          checks,
+        };
+      }
+
+      // 2. Reconciliation timestamp must be non-zero and within SLA
       const dbLastSyncAt = syncState?.last_sync_at ? Number(syncState.last_sync_at) : 0;
       const userMemSyncAt = ReconciliationWorker.getLastSuccessfulRunAt(params.userId);
-      const effectiveLastSyncAt = Math.max(dbLastSyncAt, userMemSyncAt);
+      const effectiveLastSyncAt = (dbLastSyncAt === 0 && userMemSyncAt === 0)
+        ? 0
+        : (dbLastSyncAt === 0 ? userMemSyncAt : (userMemSyncAt === 0 ? dbLastSyncAt : Math.min(dbLastSyncAt, userMemSyncAt)));
 
-      if (effectiveLastSyncAt === 0) {
+      if (effectiveLastSyncAt === 0 || restHealth === 'INITIALIZING') {
         return {
           allowed: false,
           reason: 'Trading blocked: No exchange reconciliation has ever completed for this user account.',
+          checks,
+        };
+      }
+
+      if (restHealth && restHealth !== 'HEALTHY') {
+        return {
+          allowed: false,
+          reason: `Trading blocked: Exchange REST health is '${restHealth}' (must be HEALTHY).`,
           checks,
         };
       }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, ShieldAlert, AlertTriangle, RefreshCw, XOctagon, Clock, Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, AlertTriangle, RefreshCw, XOctagon, Clock, Activity, ChevronDown, ChevronUp, Wifi, Database } from 'lucide-react';
 import { ApiClient } from '../services/apiClient';
 
 interface OperationalHealthData {
@@ -20,6 +20,15 @@ interface OperationalHealthData {
   circuitBreakers?: {
     openCount: number;
     breakers: Array<{ name: string; scope: string; reason?: string }>;
+  };
+  reconciliation?: {
+    lastSyncAt: number;
+    restHealth: string;
+    isFresh: boolean;
+  };
+  userStream?: {
+    status: string;
+    lastKeepAliveAt: number;
   };
   unresolvedMismatches?: number;
   timestamp?: number;
@@ -126,6 +135,29 @@ export const OperationalHealthBanner: React.FC<{ accountMode?: string }> = ({ ac
 
   const dotColor = isBlocked ? 'bg-rose-500' : isDegraded ? 'bg-amber-500' : 'bg-emerald-500';
 
+  const formatSyncTime = (timestamp?: number) => {
+    if (!timestamp || timestamp <= 0) return 'Never';
+    const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    return `${Math.floor(diffMin / 60)}h ago`;
+  };
+
+  const restHealth = data?.reconciliation?.restHealth || 'INITIALIZING';
+  const restColor = restHealth === 'HEALTHY'
+    ? 'text-emerald-600'
+    : restHealth === 'DEGRADED'
+    ? 'text-amber-600'
+    : 'text-rose-600';
+
+  const streamStatus = data?.userStream?.status || 'STANDBY';
+  const streamColor = streamStatus === 'ACTIVE'
+    ? 'text-emerald-600'
+    : streamStatus === 'RECONNECTING'
+    ? 'text-amber-600'
+    : 'text-zinc-400 dark:text-zinc-500';
+
   return (
     <div className="relative inline-block" ref={panelRef}>
       <button
@@ -150,7 +182,7 @@ export const OperationalHealthBanner: React.FC<{ accountMode?: string }> = ({ ac
               type="button"
               onClick={fetchHealth}
               disabled={loading}
-              className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer"
               title="Refresh Health"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -158,6 +190,39 @@ export const OperationalHealthBanner: React.FC<{ accountMode?: string }> = ({ ac
           </div>
 
           <div className="py-3 space-y-2.5">
+            {/* Exchange REST API Health */}
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5" /> Exchange REST API
+              </span>
+              <span className={`font-semibold flex items-center gap-1.5 ${restColor}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${restHealth === 'HEALTHY' ? 'bg-emerald-500' : restHealth === 'DEGRADED' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                {restHealth}
+              </span>
+            </div>
+
+            {/* WebSocket User Data Stream */}
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                <Wifi className="w-3.5 h-3.5" /> User Data Stream (WS)
+              </span>
+              <span className={`font-semibold flex items-center gap-1.5 ${streamColor}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${streamStatus === 'ACTIVE' ? 'bg-emerald-500' : streamStatus === 'RECONNECTING' ? 'bg-amber-500 animate-pulse' : 'bg-zinc-400'}`} />
+                {streamStatus}
+              </span>
+            </div>
+
+            {/* Last Authoritative Sync */}
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5" /> Last Reconciliation
+              </span>
+              <span className={`font-mono font-semibold ${data?.reconciliation?.isFresh ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {formatSyncTime(data?.reconciliation?.lastSyncAt)}
+                {data?.reconciliation?.isFresh ? ' (Fresh)' : ' (Stale)'}
+              </span>
+            </div>
+
             {/* Clock Sync Status */}
             <div className="flex items-center justify-between">
               <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
@@ -201,10 +266,10 @@ export const OperationalHealthBanner: React.FC<{ accountMode?: string }> = ({ ac
             {/* Unresolved Mismatches */}
             <div className="flex items-center justify-between">
               <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5" /> Reconciliation Health
+                <ShieldAlert className="w-3.5 h-3.5" /> Discrepancies
               </span>
               <span className={`font-semibold ${(data?.unresolvedMismatches || 0) > 0 ? 'text-rose-600 font-bold' : 'text-emerald-600'}`}>
-                {(data?.unresolvedMismatches || 0) === 0 ? 'Zero Mismatches' : `${data?.unresolvedMismatches} Critical`}
+                {(data?.unresolvedMismatches || 0) === 0 ? 'Zero Discrepancies' : `${data?.unresolvedMismatches} Critical Mismatch`}
               </span>
             </div>
           </div>

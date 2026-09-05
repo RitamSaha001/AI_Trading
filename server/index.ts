@@ -5,7 +5,7 @@ import sensible from '@fastify/sensible';
 import { config, auditServerSecurityConfig } from './config';
 import { getDb, initDb, closeDb, getMigrationStatus } from './db';
 import { ServerAuthService } from './services/authService';
-import { requireAuth, requireActive, requireKYC, extractSessionToken, verifyOriginOrCsrf } from './middleware/authMiddleware';
+import { requireAuth, requireActive, requireKYC, extractSessionToken, verifyOriginOrCsrf, authenticate } from './middleware/authMiddleware';
 import { isValidAllowedOrigin } from './utils/originValidator';
 import { AuthRateLimiter } from './middleware/rateLimiter';
 import { LedgerService } from './services/ledgerService';
@@ -796,8 +796,8 @@ export function buildServer(): FastifyInstance {
   // OPERATIONAL SAFETY & MONITORING
   // ==========================================================================
 
-  server.get('/api/operational/health', async (req: FastifyRequest) => {
-    const report = await OperationalSafetyService.getHealthReport((req as any).user?.id);
+  server.get('/api/operational/health', { preHandler: authenticate }, async (req: FastifyRequest) => {
+    const report = await OperationalSafetyService.getHealthReport(req.user?.id);
     return { success: true, report };
   });
 
@@ -869,6 +869,10 @@ if (isMain || process.env.START_SERVER === 'true') {
       UserDataStreamManager.startKeepAliveLoop();
       await UserDataStreamManager.restoreAllActiveStreams().catch((err: any) => {
         console.warn(`[UserDataStream] Failed to restore active streams: ${err.message}`);
+      });
+      console.log(`[Reconciliation] Running authoritative startup reconciliation sweep...`);
+      await ReconciliationWorker.runReconciliation().catch((err: any) => {
+        console.warn(`[Reconciliation] Initial startup reconciliation sweep warning: ${err.message}`);
       });
       ReconciliationWorker.startPeriodicScheduler(60_000);
 

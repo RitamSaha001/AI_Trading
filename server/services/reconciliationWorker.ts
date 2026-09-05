@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 
 export interface ReconciliationResult {
   runId: string;
-  status: 'SUCCESS' | 'MISMATCH_DETECTED' | 'FAILED';
+  status: 'SUCCESS' | 'MISMATCH_DETECTED' | 'FAILED' | 'SKIPPED' | 'LOCKED';
   ordersChecked: number;
   balancesChecked: number;
   mismatchesFound: number;
@@ -134,7 +134,7 @@ export class ReconciliationWorker {
       logger.warn('Reconciliation run skipped: already in progress on this or another server instance.');
       return {
         runId: 'skipped_locked',
-        status: 'SUCCESS',
+        status: 'LOCKED',
         ordersChecked: 0,
         balancesChecked: 0,
         mismatchesFound: 0,
@@ -150,7 +150,7 @@ export class ReconciliationWorker {
       logger.warn('Reconciliation run skipped: already in progress.');
       return {
         runId: 'skipped',
-        status: 'SUCCESS',
+        status: 'SKIPPED',
         ordersChecked: 0,
         balancesChecked: 0,
         mismatchesFound: 0,
@@ -159,45 +159,75 @@ export class ReconciliationWorker {
     }
 
     this.isRunning = true;
-    const startTime = Date.now();
-    const runId = `rec_run_${startTime}_${crypto.randomBytes(4).toString('hex')}`;
-    const db = getDb();
-
-    // Initialize reconciliation run record so foreign keys in mismatches are satisfied
-    await db.execute(
-      `INSERT INTO reconciliation_runs (id, ran_at, status, orders_checked, balances_checked, mismatches_found, duration_ms)
-       VALUES (?, ?, 'IN_PROGRESS', 0, 0, 0, 0)`,
-      [runId, startTime]
-    );
-
-    let ordersChecked = 0;
-    let balancesChecked = 0;
-    let mismatchesFound = 0;
-
     try {
+      const startTime = Date.now();
+      const runId = `rec_run_${startTime}_${crypto.randomBytes(4).toString('hex')}`;
+      const db = getDb();
+
+      // Initialize reconciliation run record so foreign keys in mismatches are satisfied
+      await db.execute(
+        `INSERT INTO reconciliation_runs (id, ran_at, status, orders_checked, balances_checked, mismatches_found, duration_ms)
+         VALUES (?, ?, 'IN_PROGRESS', 0, 0, 0, 0)`,
+        [runId, startTime]
+      );
+
+      let ordersChecked = 0;
+      let balancesChecked = 0;
+      let mismatchesFound = 0;
+
       // 1. Reconcile any UNKNOWN orders
       const unknownOrders = await db.query<any>(
-        `SELECT client_order_id, user_id FROM exchange_orders WHERE status = 'UNKNOWN' ${userId ? 'AND user_id = ?' : ''}`,
+        `SELECT client_order_id, symbol, user_id FROM exchange_orders WHERE status = 'UNKNOWN' ${userId ? 'AND user_id = ?' : ''}`,
         userId ? [userId] : []
       );
 
+      let unknownOrdersFailed = false;
       for (const ord of unknownOrders) {
         ordersChecked++;
         try {
-          await BinanceGateway.reconcileUnknownOrder(ord.client_order_id);
+          const recOrder = await BinanceGateway.reconcileUnknownOrder(ord.client_order_id);
+          if (recOrder.status === 'UNKNOWN') {
+            // Indeterminate state: could not confirm on exchange and remains UNKNOWN
+            unknownOrdersFailed = true;
+            mismatchesFound++;
+            await this.recordMismatch({
+              runId,
+              userId: ord.user_id,
+              entityType: 'ORDER',
+              entityId: ord.client_order_id,
+              severity: 'CRITICAL',
+              localState: { status: 'UNKNOWN' },
+              exchangeState: { error: 'Order status remains UNKNOWN after venue reconciliation' },
+              notes: 'Order remains in UNKNOWN status after venue reconciliation.',
+              actionTaken: 'FREEZE_ACCOUNT',
+            });
+            await CircuitBreakerService.trip(
+              'reconciliation_mismatch',
+              'ACCOUNT',
+              ord.user_id,
+              `Unresolved UNKNOWN order ${ord.client_order_id}`
+            );
+          }
         } catch (err: any) {
+          unknownOrdersFailed = true;
           mismatchesFound++;
           await this.recordMismatch({
             runId,
             userId: ord.user_id,
             entityType: 'ORDER',
             entityId: ord.client_order_id,
-            severity: 'HIGH',
+            severity: 'CRITICAL',
             localState: { status: 'UNKNOWN' },
             exchangeState: { error: err.message },
             notes: 'Could not query or reconcile unknown order from exchange.',
-            actionTaken: 'DEGRADED',
+            actionTaken: 'FREEZE_ACCOUNT',
           });
+          await CircuitBreakerService.trip(
+            'reconciliation_mismatch',
+            'ACCOUNT',
+            ord.user_id,
+            `Unresolved UNKNOWN order error: ${err.message}`
+          );
         }
       }
 
@@ -300,13 +330,16 @@ export class ReconciliationWorker {
             }
           }
 
-          const userSuccess = balancesResult.success && openOrderMismatches.success && tradesSucceeded;
-          if (!userSuccess) {
+          const stepTransportSuccess = balancesResult.success && openOrderMismatches.success && tradesSucceeded && !unknownOrdersFailed;
+          const userMismatches = balancesResult.mismatches + openOrderMismatches.mismatches + (unknownOrdersFailed ? 1 : 0);
+          const userClean = stepTransportSuccess && userMismatches === 0;
+
+          if (!stepTransportSuccess) {
             overallRunSucceeded = false;
           }
 
           // Update durable exchange_sync_state for this user strictly based on verified success
-          if (userSuccess) {
+          if (userClean) {
             try {
               await db.execute(
                 `INSERT INTO exchange_sync_state (
@@ -323,20 +356,23 @@ export class ReconciliationWorker {
               logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state for ${userId}: ${err.message}`);
             }
           } else {
+            const failureHealth = !stepTransportSuccess ? 'UNAVAILABLE' : 'DEGRADED';
             try {
               await db.execute(
                 `INSERT INTO exchange_sync_state (
                   account_id, last_sync_at, rest_health, updated_at
-                ) VALUES (?, 0, 'UNAVAILABLE', ?)
+                ) VALUES (?, 0, ?, ?)
                 ON CONFLICT(account_id) DO UPDATE SET
+                  last_sync_at = excluded.last_sync_at,
                   rest_health = excluded.rest_health,
                   updated_at = excluded.updated_at`,
-                [`rec_${userId}`, now]
+                [`rec_${userId}`, failureHealth, now]
               );
             } catch (err: any) {
               logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state for ${userId}: ${err.message}`);
             }
-            logger.warn(`[ReconciliationWorker] Exchange query failed for user ${userId}. Freshness timestamp NOT updated.`);
+            this.userLastSuccessfulRuns.set(userId, 0);
+            logger.warn(`[ReconciliationWorker] Reconciliation not clean for user ${userId} (${failureHealth}). Sync timestamp invalidated to 0.`);
           }
         }
       } else {
@@ -345,7 +381,7 @@ export class ReconciliationWorker {
           `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = 1`
         );
 
-        let allUsersSucceeded = registeredUsers.length > 0;
+        let allUsersTransportSucceeded = registeredUsers.length > 0;
 
         for (const userRow of registeredUsers) {
           const uId = userRow.user_id;
@@ -370,9 +406,11 @@ export class ReconciliationWorker {
               }
             }
 
-            const userSuccess = balancesResult.success && openOrderMismatches.success && userTradesSucceeded;
+            const userTransportSuccess = balancesResult.success && openOrderMismatches.success && userTradesSucceeded;
+            const userMismatches = balancesResult.mismatches + openOrderMismatches.mismatches;
+            const userClean = userTransportSuccess && userMismatches === 0;
 
-            if (userSuccess) {
+            if (userClean) {
               // Update per-user exchange_sync_state
               await db.execute(
                 `INSERT INTO exchange_sync_state (
@@ -386,28 +424,47 @@ export class ReconciliationWorker {
               );
               this.userLastSuccessfulRuns.set(uId, now);
             } else {
-              allUsersSucceeded = false;
+              if (!userTransportSuccess) {
+                allUsersTransportSucceeded = false;
+              }
+              const failureHealth = !userTransportSuccess ? 'UNAVAILABLE' : 'DEGRADED';
+              await db.execute(
+                `INSERT INTO exchange_sync_state (
+                  account_id, last_sync_at, rest_health, updated_at
+                ) VALUES (?, 0, ?, ?)
+                ON CONFLICT(account_id) DO UPDATE SET
+                  last_sync_at = excluded.last_sync_at,
+                  rest_health = excluded.rest_health,
+                  updated_at = excluded.updated_at`,
+                [`rec_${uId}`, failureHealth, now]
+              );
+              this.userLastSuccessfulRuns.set(uId, 0);
+              logger.warn(`[ReconciliationWorker] Reconciliation not clean for user ${uId} (${failureHealth}). Sync timestamp invalidated to 0.`);
+            }
+          } catch (userErr: any) {
+            allUsersTransportSucceeded = false;
+            this.userLastSuccessfulRuns.set(uId, 0);
+            try {
               await db.execute(
                 `INSERT INTO exchange_sync_state (
                   account_id, last_sync_at, rest_health, updated_at
                 ) VALUES (?, 0, 'UNAVAILABLE', ?)
                 ON CONFLICT(account_id) DO UPDATE SET
+                  last_sync_at = excluded.last_sync_at,
                   rest_health = excluded.rest_health,
                   updated_at = excluded.updated_at`,
                 [`rec_${uId}`, now]
               );
-              logger.warn(`[ReconciliationWorker] Exchange query failed for user ${uId}. Freshness timestamp NOT updated.`);
-            }
-          } catch (userErr: any) {
-            allUsersSucceeded = false;
+            } catch {}
             logger.error(`[ReconciliationWorker] Error reconciling exchange state for user ${uId}: ${userErr.message}`);
           }
         }
 
-        overallRunSucceeded = allUsersSucceeded;
+        overallRunSucceeded = allUsersTransportSucceeded && !unknownOrdersFailed;
 
         // Also update rec_global for overall system health
-        const globalHealth = allUsersSucceeded ? 'HEALTHY' : 'DEGRADED';
+        const globalHealth = overallRunSucceeded && mismatchesFound === 0 ? 'HEALTHY' : (mismatchesFound > 0 ? 'DEGRADED' : 'UNAVAILABLE');
+        const globalSyncAt = overallRunSucceeded && mismatchesFound === 0 ? now : 0;
         try {
           await db.execute(
             `INSERT INTO exchange_sync_state (
@@ -417,13 +474,15 @@ export class ReconciliationWorker {
               last_sync_at = excluded.last_sync_at,
               rest_health = excluded.rest_health,
               updated_at = excluded.updated_at`,
-            [now, globalHealth, now]
+            [globalSyncAt, globalHealth, now]
           );
         } catch (err: any) {
           logger.warn(`[ReconciliationWorker] Failed to update global exchange_sync_state: ${err.message}`);
         }
-        if (allUsersSucceeded) {
+        if (overallRunSucceeded && mismatchesFound === 0) {
           this.lastSuccessfulRunAt = now;
+        } else {
+          this.lastSuccessfulRunAt = 0;
         }
       }
 
@@ -476,7 +535,7 @@ export class ReconciliationWorker {
     let mismatches = 0;
     const db = getDb();
 
-    let venueTrades: any[] | null = mockVenueTrades || null;
+    let venueTrades: any[] | null = (config.NODE_ENV === 'test' ? mockVenueTrades : null) || null;
 
     if (!venueTrades) {
       const mockState = config.NODE_ENV === 'test' ? this.mockExchangeStates.get(userId) : undefined;
@@ -823,7 +882,7 @@ export class ReconciliationWorker {
     let mismatches = 0;
     const db = getDb();
 
-    let venueOpenOrders: any[] | null = mockVenueOpenOrders || null;
+    let venueOpenOrders: any[] | null = (config.NODE_ENV === 'test' ? mockVenueOpenOrders : null) || null;
 
     if (!venueOpenOrders) {
       const mockState = config.NODE_ENV === 'test' ? this.mockExchangeStates.get(userId) : undefined;
@@ -962,8 +1021,8 @@ export class ReconciliationWorker {
     let mismatches = 0;
     const localProjection = await LedgerService.getAuthoritativeProjection(userId, 'live');
 
-    let exchangeBalances: Record<string, number | string> | null = mockExchangeBalances || null;
-    let exchangeLocked: Record<string, number | string> | null = mockExchangeLocked || null;
+    let exchangeBalances: Record<string, number | string> | null = (config.NODE_ENV === 'test' ? mockExchangeBalances : null) || null;
+    let exchangeLocked: Record<string, number | string> | null = (config.NODE_ENV === 'test' ? mockExchangeLocked : null) || null;
 
     if (!exchangeBalances) {
       const mockState = config.NODE_ENV === 'test' ? this.mockExchangeStates.get(userId) : undefined;
@@ -1182,11 +1241,14 @@ export class ReconciliationWorker {
       [params.runId, Date.now()]
     );
 
+    const resolved = params.actionStatus === 'RESOLVED' ? 1 : 0;
+    const resolvedAt = resolved ? Date.now() : null;
+
     await db.execute(
       `INSERT INTO reconciliation_mismatches (
         id, run_id, user_id, entity_type, entity_id, severity,
-        local_state, exchange_state, action_taken, action_status, notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        local_state, exchange_state, action_taken, action_status, notes, resolved, resolved_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         params.runId,
@@ -1199,6 +1261,8 @@ export class ReconciliationWorker {
         params.actionTaken || 'NONE',
         params.actionStatus || 'PENDING',
         params.notes,
+        resolved,
+        resolvedAt,
         Date.now(),
       ]
     );
