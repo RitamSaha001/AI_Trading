@@ -365,8 +365,8 @@ export class ReconciliationWorker {
         params.entityType,
         params.entityId,
         params.severity,
-        JSON.stringify(params.localState),
-        JSON.stringify(params.exchangeState),
+        JSON.stringify(params.localState, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
+        JSON.stringify(params.exchangeState, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
         params.notes,
         Date.now(),
       ]

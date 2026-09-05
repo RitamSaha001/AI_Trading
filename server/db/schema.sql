@@ -205,6 +205,11 @@ CREATE TABLE IF NOT EXISTS exchange_orders (
   notional_exact TEXT,
   fee_exact TEXT DEFAULT '0',
   fee_asset TEXT,
+  estimated_fee_exact TEXT DEFAULT '0',
+  actual_commission_exact TEXT,
+  actual_commission_asset TEXT,
+  commission_status TEXT NOT NULL DEFAULT 'ESTIMATED',
+  executed_notional_exact TEXT DEFAULT '0',
   reserved_cash_minor BIGINT NOT NULL DEFAULT 0,
   reserved_qty_minor BIGINT NOT NULL DEFAULT 0,
   idempotency_key TEXT UNIQUE NOT NULL,
@@ -243,6 +248,7 @@ CREATE TABLE IF NOT EXISTS exchange_fills (
   id TEXT PRIMARY KEY,
   order_id TEXT NOT NULL REFERENCES exchange_orders(id) ON DELETE CASCADE,
   exchange_trade_id TEXT NOT NULL,
+  canonical_fill_key TEXT UNIQUE,
   symbol TEXT NOT NULL,
   price REAL NOT NULL,
   qty REAL NOT NULL,
@@ -253,6 +259,7 @@ CREATE TABLE IF NOT EXISTS exchange_fills (
   qty_exact TEXT,
   commission_exact TEXT,
   quote_qty_exact TEXT,
+  commission_status TEXT NOT NULL DEFAULT 'AUTHORITATIVE',
   ledger_processed BOOLEAN NOT NULL DEFAULT 0,
   ledger_transaction_id TEXT,
   executed_at BIGINT NOT NULL,
@@ -260,6 +267,21 @@ CREATE TABLE IF NOT EXISTS exchange_fills (
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_fills_order ON exchange_fills(order_id);
 CREATE INDEX IF NOT EXISTS idx_exchange_fills_processed ON exchange_fills(ledger_processed);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_fills_canonical_key ON exchange_fills(canonical_fill_key);
+
+-- Double-Entry Settlement Idempotency & Financial Events
+CREATE TABLE IF NOT EXISTS accounting_events (
+  event_id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  account_mode TEXT NOT NULL DEFAULT 'live',
+  event_type TEXT NOT NULL,
+  fill_id TEXT,
+  order_id TEXT,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_accounting_events_tx ON accounting_events(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_accounting_events_fill ON accounting_events(fill_id);
 
 -- Authoritative Position Projections with Cost Basis & Realized P&L
 CREATE TABLE IF NOT EXISTS authoritative_positions (

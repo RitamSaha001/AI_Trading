@@ -44,7 +44,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   CREATED: ['RESERVING', 'RESERVED', 'REJECTED', 'FAILED'],
   RESERVING: ['RESERVED', 'REJECTED', 'FAILED'],
   RESERVED: ['SUBMITTING', 'CANCEL_REQUESTED', 'CANCELLED', 'CANCELED', 'REJECTED', 'FAILED'],
-  SUBMITTING: ['OPEN', 'PARTIALLY_FILLED', 'FILLED', 'REJECTED', 'UNKNOWN', 'FAILED', 'CANCEL_REQUESTED'],
+  SUBMITTING: ['OPEN', 'PARTIALLY_FILLED', 'FILLED', 'REJECTED', 'UNKNOWN', 'RECONCILING', 'FAILED', 'CANCEL_REQUESTED'],
   OPEN: ['PARTIALLY_FILLED', 'FILLED', 'CANCEL_REQUESTED', 'CANCELLED', 'CANCELED', 'EXPIRED', 'UNKNOWN', 'RECONCILING'],
   PARTIALLY_FILLED: ['PARTIALLY_FILLED', 'FILLED', 'CANCEL_REQUESTED', 'CANCELLED', 'CANCELED', 'EXPIRED', 'UNKNOWN', 'RECONCILING'],
   CANCEL_REQUESTED: ['CANCELLED', 'CANCELED', 'FILLED', 'PARTIALLY_FILLED', 'UNKNOWN', 'RECONCILING'],
@@ -77,8 +77,8 @@ export class OrderStateMachine {
     const toNorm = this.normalizeStatus(to);
 
     if (fromNorm === toNorm) {
-      // Re-entrant transition allowed only for PARTIALLY_FILLED (additional fills)
-      return fromNorm === 'PARTIALLY_FILLED';
+      // Re-entrant transition allowed only for PARTIALLY_FILLED (additional fills) or RECONCILING (repeated sweeps)
+      return fromNorm === 'PARTIALLY_FILLED' || fromNorm === 'RECONCILING';
     }
 
     const allowed = VALID_TRANSITIONS[fromNorm];

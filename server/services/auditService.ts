@@ -68,10 +68,10 @@ export class AuditService {
           correlationId,
           payload.idempotencyKey || null,
           payload.actor,
-          payload.beforeState ? JSON.stringify(payload.beforeState) : null,
-          payload.afterState ? JSON.stringify(payload.afterState) : null,
+          payload.beforeState ? JSON.stringify(payload.beforeState, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
+          payload.afterState ? JSON.stringify(payload.afterState, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
           payload.externalId || null,
-          payload.metadata ? JSON.stringify(payload.metadata) : null,
+          payload.metadata ? JSON.stringify(payload.metadata, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
           payload.result,
           payload.error || null,
         ]

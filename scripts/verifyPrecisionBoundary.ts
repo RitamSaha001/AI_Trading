@@ -36,9 +36,18 @@ export const PRECISION_FORBIDDEN_RULES: {
     targetFiles: ["server/services/symbolRules.ts"],
   },
   {
-    pattern: /const feeAmountDec\s*=\s*notionalSettledDec\.mul\s*\(\s*ExactDecimal\.from\s*\(\s*['"]0\.00075['"]\s*\)\s*\);/g,
-    description: "Unconditional hardcoded 0.00075 fee assignment bypassing fill commission",
-    targetFiles: ["server/services/binanceGateway.ts"],
+    pattern: /(const\s+)?(recFeeAmountDec|feeAmountDec)\s*=\s*notionalSettledDec\.mul\s*\(\s*ExactDecimal\.from\s*\(\s*['"]0\.00075['"]\s*\)\s*\)/g,
+    description: "Hardcoded 0.00075 fallback fee assignment in settlement/recovery path",
+    targetFiles: ["server/services/binanceGateway.ts", "server/services/orderRecoveryService.ts", "server/services/ledgerService.ts"],
+  },
+  {
+    pattern: /\bNumber\s*\(\s*(amountMinor|reservedCashMinor|reservedQtyMinor|balanceMinor)\s*\)/g,
+    description: "Dangerous conversion of BIGINT minor unit to JavaScript Number",
+    targetFiles: [
+      "server/services/ledgerService.ts",
+      "server/services/binanceGateway.ts",
+      "server/services/orderRecoveryService.ts",
+    ],
   },
   {
     pattern: /Promise<.*executedQty:\s*number/g,

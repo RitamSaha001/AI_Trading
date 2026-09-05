@@ -56,7 +56,19 @@ export class SQLiteClient implements DBClient {
   async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
     const cleaned = this.cleanSql(sql);
     const stmt = this.db.prepare(cleaned);
-    return stmt.all(...params) as T[];
+    stmt.setReadBigInts(true);
+    const rows = stmt.all(...params) as any[];
+    return rows.map((r) => {
+      const o: any = {};
+      for (const [k, v] of Object.entries(r)) {
+        if (typeof v === 'bigint' && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)) {
+          o[k] = Number(v);
+        } else {
+          o[k] = v;
+        }
+      }
+      return o;
+    }) as T[];
   }
 
   async queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {

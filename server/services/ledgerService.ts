@@ -95,6 +95,9 @@ export interface ProcessFillParams {
   quantity: number | string | ExactDecimal;
   fee?: number | string | ExactDecimal;
   feeAsset?: string;
+  commissionStatus?: 'ESTIMATED' | 'AUTHORITATIVE' | 'PENDING' | 'UNRESOLVED';
+  accountingEventId?: string;
+  canonicalFillKey?: string;
   executedAt?: number;
   idempotencyKey?: string;
   tx?: DBClient;
@@ -310,7 +313,7 @@ export class LedgerService {
       // Update From Account
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newFromBal), now, fromAcc.id]
+        [newFromBal, now, fromAcc.id]
       );
 
       // Record Debit Entry
@@ -327,8 +330,8 @@ export class LedgerService {
           fromAcc.id,
           params.userId,
           accountMode,
-          Number(amount),
-          Number(newFromBal),
+          amount,
+          newFromBal,
           params.assetOrCurrency,
           params.referenceType,
           params.referenceId,
@@ -341,7 +344,7 @@ export class LedgerService {
       // Update To Account
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newToBal), now, toAcc.id]
+        [newToBal, now, toAcc.id]
       );
 
       // Record Credit Entry
@@ -358,8 +361,8 @@ export class LedgerService {
           toAcc.id,
           params.userId,
           accountMode,
-          Number(amount),
-          Number(newToBal),
+          amount,
+          newToBal,
           params.assetOrCurrency,
           params.referenceType,
           params.referenceId,
@@ -383,7 +386,7 @@ export class LedgerService {
           fromAccount: params.fromAccountType,
           toAccount: params.toAccountType,
           asset: params.assetOrCurrency,
-          amountMinor: Number(amount),
+          amountMinor: amount,
           transactionId: txId,
         },
         result: 'SUCCESS',
@@ -485,7 +488,7 @@ export class LedgerService {
       const newClearingBal = currentClearingBal - amount;
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newClearingBal), now, clearingAcc.id]
+        [newClearingBal, now, clearingAcc.id]
       );
 
       const debitEntryId = `ent_deb_${crypto.randomBytes(8).toString('hex')}`;
@@ -501,8 +504,8 @@ export class LedgerService {
           clearingAcc.id,
           params.userId,
           accountMode,
-          Number(amount),
-          Number(newClearingBal),
+          amount,
+          newClearingBal,
           params.assetOrCurrency,
           params.paymentId,
           params.idempotencyKey ? `${params.idempotencyKey}_clearing` : null,
@@ -517,7 +520,7 @@ export class LedgerService {
 
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newBal), now, acc.id]
+        [newBal, now, acc.id]
       );
 
       const entryId = `ent_crd_${crypto.randomBytes(8).toString('hex')}`;
@@ -533,8 +536,8 @@ export class LedgerService {
           acc.id,
           params.userId,
           accountMode,
-          Number(amount),
-          Number(newBal),
+          amount,
+          newBal,
           params.assetOrCurrency,
           params.paymentId,
           params.idempotencyKey || null,
@@ -555,8 +558,8 @@ export class LedgerService {
         metadata: {
           accountMode,
           asset: params.assetOrCurrency,
-          amountMinor: Number(amount),
-          newBalanceMinor: Number(newBal),
+          amountMinor: amount,
+          newBalanceMinor: newBal,
         },
         result: 'SUCCESS',
       });
@@ -606,7 +609,7 @@ export class LedgerService {
 
       await tx.execute(
         `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newReserved), now, acc.id]
+        [newReserved, now, acc.id]
       );
 
       return true;
@@ -645,7 +648,7 @@ export class LedgerService {
 
       await tx.execute(
         `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newReserved), now, acc.id]
+        [newReserved, now, acc.id]
       );
 
       return true;
@@ -693,7 +696,7 @@ export class LedgerService {
 
       await tx.execute(
         `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newReserved), now, acc.id]
+        [newReserved, now, acc.id]
       );
 
       const resId = `res_${params.orderId}_${crypto.randomBytes(4).toString('hex')}`;
@@ -709,7 +712,7 @@ export class LedgerService {
           params.userId,
           accountMode,
           params.assetOrCurrency,
-          Number(amount),
+          amount,
           now,
           now,
         ]
@@ -717,13 +720,13 @@ export class LedgerService {
 
       if (params.accountType === 'trading_allocated') {
         await tx.execute(
-          `UPDATE exchange_orders SET reserved_cash_minor = ?, reserved_cash = ? WHERE client_order_id = ?`,
-          [Number(amount), Number(amount) / 100, params.orderId]
+          `UPDATE exchange_orders SET reserved_cash_minor = ?, reserved_cash = 0.0 WHERE client_order_id = ?`,
+          [amount, params.orderId]
         );
       } else if (params.accountType === 'crypto_holdings') {
         await tx.execute(
-          `UPDATE exchange_orders SET reserved_qty_minor = ?, reserved_qty = ? WHERE client_order_id = ?`,
-          [Number(amount), Number(amount) / 1e8, params.orderId]
+          `UPDATE exchange_orders SET reserved_qty_minor = ?, reserved_qty = 0.0 WHERE client_order_id = ?`,
+          [amount, params.orderId]
         );
       }
     };
@@ -779,7 +782,7 @@ export class LedgerService {
 
     await params.tx.execute(
       `UPDATE order_reservations SET consumed_minor = ?, status = ?, updated_at = ? WHERE id = ?`,
-      [Number(newConsumed), newStatus, now, reservation.id]
+      [newConsumed, newStatus, now, reservation.id]
     );
 
     const acc = await params.tx.queryOne<LedgerAccountRecord>(
@@ -791,7 +794,7 @@ export class LedgerService {
       const newReserved = currentReserved >= toConsume ? currentReserved - toConsume : 0n;
       await params.tx.execute(
         `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newReserved), now, acc.id]
+        [newReserved, now, acc.id]
       );
     }
 
@@ -828,7 +831,7 @@ export class LedgerService {
           const newStatus = consumed > 0n ? 'PARTIALLY_CONSUMED' : 'RELEASED';
           await tx.execute(
             `UPDATE order_reservations SET released_minor = ?, status = ?, updated_at = ? WHERE id = ?`,
-            [Number(newReleased), newStatus, now, res.id]
+            [newReleased, newStatus, now, res.id]
           );
 
           const acc = await tx.queryOne<LedgerAccountRecord>(
@@ -840,7 +843,7 @@ export class LedgerService {
             const newReserved = currentReserved >= unconsumed ? currentReserved - unconsumed : 0n;
             await tx.execute(
               `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
-              [Number(newReserved), now, acc.id]
+              [newReserved, now, acc.id]
             );
           }
 
@@ -849,7 +852,7 @@ export class LedgerService {
       }
 
       await tx.execute(
-        `UPDATE exchange_orders SET reserved_cash = 0, reserved_qty = 0, reserved_cash_minor = 0, reserved_qty_minor = 0 WHERE client_order_id = ?`,
+        `UPDATE exchange_orders SET reserved_cash = 0.0, reserved_qty = 0.0, reserved_cash_minor = 0, reserved_qty_minor = 0 WHERE client_order_id = ?`,
         [params.orderId]
       );
 
@@ -868,6 +871,8 @@ export class LedgerService {
    */
   static async processFill(params: ProcessFillParams): Promise<ProcessFillResult> {
     const accountMode = params.accountMode || 'live';
+    const accountingEventId =
+      params.accountingEventId || `settlement:binance:${params.userId}:${params.fillId}`;
     const idempKey =
       params.idempotencyKey || `fill_${accountMode}_${params.orderId}_${params.fillId}`;
 
@@ -875,13 +880,18 @@ export class LedgerService {
 
     // Perform ACID Fill Accounting with strict transactional idempotency check
     const executeInTx = async (tx: DBClient) => {
-      // 1. Strict Server-Side Idempotency Check inside transaction
+      // 1. Strict Server-Side Idempotency Check inside transaction via accounting_events and ledger_entries
+      const existingEvent = await tx.queryOne<{ event_id: string; transaction_id: string }>(
+        `SELECT event_id, transaction_id FROM accounting_events WHERE event_id = ?`,
+        [accountingEventId]
+      );
+
       const existingEntry = await tx.queryOne<LedgerEntryRecord>(
         `SELECT * FROM ledger_entries WHERE idempotency_key = ? OR (reference_type = 'trade_fill' AND fill_id = ? AND account_mode = ?)`,
         [idempKey, params.fillId, accountMode]
       );
 
-      if (existingEntry) {
+      if (existingEvent || existingEntry) {
         // Already processed! Return current authoritative account state without duplicate accounting
         const cashAcc = await this.getOrCreateAccount(
           params.userId,
@@ -906,7 +916,7 @@ export class LedgerService {
 
         return {
           alreadyProcessed: true,
-          transactionId: existingEntry.transaction_id,
+          transactionId: existingEvent?.transaction_id || existingEntry?.transaction_id || '',
           cashBalanceAfterMinor: BigInt(cashAcc.balance_minor),
           assetBalanceAfterMinor: BigInt(assetAcc.balance_minor),
           feeMinor: 0n,
@@ -915,6 +925,7 @@ export class LedgerService {
           totalQuantityMinor: BigInt(pos.total_quantity_minor),
         };
       }
+
       const priceDec = params.price instanceof ExactDecimal ? params.price : ExactDecimal.from(params.price);
       const qtyDec = params.quantity instanceof ExactDecimal ? params.quantity : ExactDecimal.from(params.quantity);
       const notionalDec = priceDec.mul(qtyDec);
@@ -930,14 +941,45 @@ export class LedgerService {
       let feeDec: ExactDecimal;
       let feeMinor: bigint;
 
-      if (params.fee !== undefined) {
+      if (params.fee !== undefined && params.fee !== null) {
         feeDec = params.fee instanceof ExactDecimal ? params.fee : ExactDecimal.from(params.fee);
         feeMinor = feeDec.toMinor(getAssetDecimals(feeAsset));
+      } else if (accountMode === 'paper') {
+        feeDec = ExactDecimal.zero();
+        feeMinor = 0n;
       } else {
-        // Default 0.075% fee
-        const computedFeeCashMinor = (notionalCashMinor * 75n) / 100000n;
-        feeMinor = computedFeeCashMinor;
-        feeDec = fromCashMinor(computedFeeCashMinor);
+        if (params.side === 'BUY') {
+          const cashAccCheck = await this.getOrCreateAccount(
+            params.userId,
+            'trading_allocated',
+            params.quoteAsset,
+            accountMode,
+            tx
+          );
+          const currentCashBal = BigInt(cashAccCheck.balance_minor);
+          if (currentCashBal < notionalCashMinor) {
+            throw new Error(
+              `Insufficient cash balance to settle fill: current ${currentCashBal.toString()}, needed ${notionalCashMinor.toString()}`
+            );
+          }
+        } else {
+          const assetAccCheck = await this.getOrCreateAccount(
+            params.userId,
+            'crypto_holdings',
+            params.baseAsset,
+            accountMode,
+            tx
+          );
+          const currentAssetBal = BigInt(assetAccCheck.balance_minor);
+          if (currentAssetBal < qtyAssetMinor) {
+            throw new Error(
+              `Insufficient asset balance to settle sell fill: current ${currentAssetBal.toString()}, needed ${qtyAssetMinor.toString()}`
+            );
+          }
+        }
+        throw new Error(
+          `Cannot settle fill ${params.fillId} for order ${params.orderId}: authoritative commission fee is required. Estimated or fallback fees are forbidden.`
+        );
       }
       const feeExact = feeDec.toString();
 
@@ -1026,7 +1068,7 @@ export class LedgerService {
         newCashBal = currentCashBal - totalCashNeeded;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, reserved_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newCashBal), Number(currentReserved), now, cashAcc.id]
+          [newCashBal, currentReserved, now, cashAcc.id]
         );
 
         // 1. Quote Leg (Notional): Debit user cash, Credit trading clearing
@@ -1042,8 +1084,8 @@ export class LedgerService {
             cashAcc.id,
             params.userId,
             accountMode,
-            Number(notionalCashMinor),
-            Number(currentCashBal - notionalCashMinor),
+            notionalCashMinor,
+            currentCashBal - notionalCashMinor,
             params.quoteAsset,
             params.orderId,
             idempKey,
@@ -1058,7 +1100,7 @@ export class LedgerService {
         const newClearingQuoteBal = currentClearingQuoteBal + notionalCashMinor;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newClearingQuoteBal), now, clearingQuoteAcc.id]
+          [newClearingQuoteBal, now, clearingQuoteAcc.id]
         );
         await tx.execute(
           `INSERT INTO ledger_entries (
@@ -1072,8 +1114,8 @@ export class LedgerService {
             clearingQuoteAcc.id,
             params.userId,
             accountMode,
-            Number(notionalCashMinor),
-            Number(newClearingQuoteBal),
+            notionalCashMinor,
+            newClearingQuoteBal,
             params.quoteAsset,
             params.orderId,
             idempKey ? `${idempKey}_clr_q` : null,
@@ -1089,7 +1131,7 @@ export class LedgerService {
         const newClearingBaseBal = currentClearingBaseBal - qtyAssetMinor;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newClearingBaseBal), now, clearingBaseAcc.id]
+          [newClearingBaseBal, now, clearingBaseAcc.id]
         );
         await tx.execute(
           `INSERT INTO ledger_entries (
@@ -1103,8 +1145,8 @@ export class LedgerService {
             clearingBaseAcc.id,
             params.userId,
             accountMode,
-            Number(qtyAssetMinor),
-            Number(newClearingBaseBal),
+            qtyAssetMinor,
+            newClearingBaseBal,
             params.baseAsset,
             params.orderId,
             idempKey ? `${idempKey}_clr_b` : null,
@@ -1119,7 +1161,7 @@ export class LedgerService {
         newAssetBal = currentAssetBal + qtyAssetMinor;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newAssetBal), now, assetAcc.id]
+          [newAssetBal, now, assetAcc.id]
         );
         await tx.execute(
           `INSERT INTO ledger_entries (
@@ -1133,8 +1175,8 @@ export class LedgerService {
             assetAcc.id,
             params.userId,
             accountMode,
-            Number(qtyAssetMinor),
-            Number(newAssetBal),
+            qtyAssetMinor,
+            newAssetBal,
             params.baseAsset,
             params.orderId,
             idempKey,
@@ -1151,7 +1193,7 @@ export class LedgerService {
           const newTreasuryBal = currentTreasuryBal + feeMinor;
           await tx.execute(
             `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-            [Number(newTreasuryBal), now, feeTreasuryAcc.id]
+            [newTreasuryBal, now, feeTreasuryAcc.id]
           );
 
           if (feeAsset === params.quoteAsset) {
@@ -1167,8 +1209,8 @@ export class LedgerService {
                 cashAcc.id,
                 params.userId,
                 accountMode,
-                Number(feeMinor),
-                Number(newCashBal),
+                feeMinor,
+                newCashBal,
                 feeAsset,
                 params.orderId,
                 null,
@@ -1182,7 +1224,7 @@ export class LedgerService {
             newAssetBal = newAssetBal - feeMinor;
             await tx.execute(
               `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-              [Number(newAssetBal), now, assetAcc.id]
+              [newAssetBal, now, assetAcc.id]
             );
             await tx.execute(
               `INSERT INTO ledger_entries (
@@ -1196,8 +1238,8 @@ export class LedgerService {
                 assetAcc.id,
                 params.userId,
                 accountMode,
-                Number(feeMinor),
-                Number(newAssetBal),
+                feeMinor,
+                newAssetBal,
                 feeAsset,
                 params.orderId,
                 null,
@@ -1220,7 +1262,7 @@ export class LedgerService {
             const newThirdBal = currentThirdBal - feeMinor;
             await tx.execute(
               `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-              [Number(newThirdBal), now, thirdAssetAcc.id]
+              [newThirdBal, now, thirdAssetAcc.id]
             );
             await tx.execute(
               `INSERT INTO ledger_entries (
@@ -1234,8 +1276,8 @@ export class LedgerService {
                 thirdAssetAcc.id,
                 params.userId,
                 accountMode,
-                Number(feeMinor),
-                Number(newThirdBal),
+                feeMinor,
+                newThirdBal,
                 feeAsset,
                 params.orderId,
                 null,
@@ -1259,8 +1301,8 @@ export class LedgerService {
               feeTreasuryAcc.id,
               params.userId,
               accountMode,
-              Number(feeMinor),
-              Number(newTreasuryBal),
+              feeMinor,
+              newTreasuryBal,
               feeAsset,
               params.orderId,
               null,
@@ -1284,7 +1326,7 @@ export class LedgerService {
           `UPDATE authoritative_positions SET
             total_quantity_minor = ?, cost_basis_minor = ?, total_fees_minor = ?, updated_at = ?
            WHERE id = ?`,
-          [Number(newTotalQtyMinor), Number(newCostBasisMinor), Number(newTotalFees), now, pos.id]
+          [newTotalQtyMinor, newCostBasisMinor, newTotalFees, now, pos.id]
         );
       } else {
         // SELL
@@ -1317,7 +1359,7 @@ export class LedgerService {
         newAssetBal = currentAssetBal - qtyAssetMinor;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, reserved_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newAssetBal), Number(currentReserved), now, assetAcc.id]
+          [newAssetBal, currentReserved, now, assetAcc.id]
         );
 
         // 1. Base Leg (Quantity): Debit user asset, Credit trading clearing
@@ -1333,8 +1375,8 @@ export class LedgerService {
             assetAcc.id,
             params.userId,
             accountMode,
-            Number(qtyAssetMinor),
-            Number(newAssetBal),
+            qtyAssetMinor,
+            newAssetBal,
             params.baseAsset,
             params.orderId,
             idempKey,
@@ -1349,7 +1391,7 @@ export class LedgerService {
         const newClearingBaseBal = currentClearingBaseBal + qtyAssetMinor;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newClearingBaseBal), now, clearingBaseAcc.id]
+          [newClearingBaseBal, now, clearingBaseAcc.id]
         );
         await tx.execute(
           `INSERT INTO ledger_entries (
@@ -1363,8 +1405,8 @@ export class LedgerService {
             clearingBaseAcc.id,
             params.userId,
             accountMode,
-            Number(qtyAssetMinor),
-            Number(newClearingBaseBal),
+            qtyAssetMinor,
+            newClearingBaseBal,
             params.baseAsset,
             params.orderId,
             idempKey ? `${idempKey}_clr_b` : null,
@@ -1388,7 +1430,7 @@ export class LedgerService {
         const newClearingQuoteBal = currentClearingQuoteBal - notionalCashMinor;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newClearingQuoteBal), now, clearingQuoteAcc.id]
+          [newClearingQuoteBal, now, clearingQuoteAcc.id]
         );
         await tx.execute(
           `INSERT INTO ledger_entries (
@@ -1402,8 +1444,8 @@ export class LedgerService {
             clearingQuoteAcc.id,
             params.userId,
             accountMode,
-            Number(notionalCashMinor),
-            Number(newClearingQuoteBal),
+            notionalCashMinor,
+            newClearingQuoteBal,
             params.quoteAsset,
             params.orderId,
             idempKey ? `${idempKey}_clr_q` : null,
@@ -1418,7 +1460,7 @@ export class LedgerService {
         newCashBal = currentCashBal + netProceedsMinor;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newCashBal), now, cashAcc.id]
+          [newCashBal, now, cashAcc.id]
         );
         await tx.execute(
           `INSERT INTO ledger_entries (
@@ -1432,8 +1474,8 @@ export class LedgerService {
             cashAcc.id,
             params.userId,
             accountMode,
-            Number(notionalCashMinor),
-            Number(currentCashBal + notionalCashMinor),
+            notionalCashMinor,
+            currentCashBal + notionalCashMinor,
             params.quoteAsset,
             params.orderId,
             idempKey,
@@ -1450,7 +1492,7 @@ export class LedgerService {
           const newTreasuryBal = currentTreasuryBal + feeMinor;
           await tx.execute(
             `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-            [Number(newTreasuryBal), now, feeTreasuryAcc.id]
+            [newTreasuryBal, now, feeTreasuryAcc.id]
           );
 
           if (feeAsset === params.quoteAsset) {
@@ -1466,8 +1508,8 @@ export class LedgerService {
                 cashAcc.id,
                 params.userId,
                 accountMode,
-                Number(feeMinor),
-                Number(newCashBal),
+                feeMinor,
+                newCashBal,
                 feeAsset,
                 params.orderId,
                 null,
@@ -1483,7 +1525,7 @@ export class LedgerService {
             const curBal = BigInt(feeSourceAcc.balance_minor);
             await tx.execute(
               `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-              [Number(curBal - feeMinor), now, feeSourceAcc.id]
+              [curBal - feeMinor, now, feeSourceAcc.id]
             );
             await tx.execute(
               `INSERT INTO ledger_entries (
@@ -1497,8 +1539,8 @@ export class LedgerService {
                 feeSourceAcc.id,
                 params.userId,
                 accountMode,
-                Number(feeMinor),
-                Number(curBal - feeMinor),
+                feeMinor,
+                curBal - feeMinor,
                 feeAsset,
                 params.orderId,
                 null,
@@ -1522,8 +1564,8 @@ export class LedgerService {
               feeTreasuryAcc.id,
               params.userId,
               accountMode,
-              Number(feeMinor),
-              Number(newTreasuryBal),
+              feeMinor,
+              newTreasuryBal,
               feeAsset,
               params.orderId,
               null,
@@ -1547,7 +1589,7 @@ export class LedgerService {
         const newPnlBal = currentPnlBal + realizedPnlMinor;
         await tx.execute(
           `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-          [Number(newPnlBal), now, pnlAcc.id]
+          [newPnlBal, now, pnlAcc.id]
         );
 
         const absPnl = realizedPnlMinor < 0n ? -realizedPnlMinor : realizedPnlMinor;
@@ -1556,7 +1598,7 @@ export class LedgerService {
           const curClr = BigInt(clearingQuoteAcc.balance_minor);
           await tx.execute(
             `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-            [Number(curClr - absPnl), now, clearingQuoteAcc.id]
+            [curClr - absPnl, now, clearingQuoteAcc.id]
           );
           await tx.execute(
             `INSERT INTO ledger_entries (
@@ -1570,8 +1612,8 @@ export class LedgerService {
               pnlAcc.id,
               params.userId,
               accountMode,
-              Number(absPnl),
-              Number(newPnlBal),
+              absPnl,
+              newPnlBal,
               params.quoteAsset,
               params.orderId,
               null,
@@ -1593,8 +1635,8 @@ export class LedgerService {
               clearingQuoteAcc.id,
               params.userId,
               accountMode,
-              Number(absPnl),
-              Number(curClr - absPnl),
+              absPnl,
+              curClr - absPnl,
               params.quoteAsset,
               params.orderId,
               null,
@@ -1609,7 +1651,7 @@ export class LedgerService {
           const curClr = BigInt(clearingQuoteAcc.balance_minor);
           await tx.execute(
             `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-            [Number(curClr + absPnl), now, clearingQuoteAcc.id]
+            [curClr + absPnl, now, clearingQuoteAcc.id]
           );
           await tx.execute(
             `INSERT INTO ledger_entries (
@@ -1623,8 +1665,8 @@ export class LedgerService {
               pnlAcc.id,
               params.userId,
               accountMode,
-              Number(absPnl),
-              Number(newPnlBal),
+              absPnl,
+              newPnlBal,
               params.quoteAsset,
               params.orderId,
               null,
@@ -1646,8 +1688,8 @@ export class LedgerService {
               clearingQuoteAcc.id,
               params.userId,
               accountMode,
-              Number(absPnl),
-              Number(curClr + absPnl),
+              absPnl,
+              curClr + absPnl,
               params.quoteAsset,
               params.orderId,
               null,
@@ -1676,10 +1718,10 @@ export class LedgerService {
             total_fees_minor = ?, updated_at = ?
            WHERE id = ?`,
           [
-            Number(newTotalQtyMinor),
-            Number(newCostBasisMinor),
-            Number(newRealizedPnl),
-            Number(newTotalFees),
+            newTotalQtyMinor,
+            newCostBasisMinor,
+            newRealizedPnl,
+            newTotalFees,
             now,
             pos.id,
           ]
@@ -1699,8 +1741,24 @@ export class LedgerService {
         `UPDATE exchange_fills SET
           ledger_processed = 1, ledger_transaction_id = ?, price_exact = ?, qty_exact = ?,
           commission_exact = ?, quote_qty_exact = ?
-         WHERE order_id = ? AND exchange_trade_id = ?`,
-        [txId, priceExact, quantityExact, feeExact, notionalExact, params.orderId, params.fillId]
+         WHERE (order_id = ? AND exchange_trade_id = ?) OR (canonical_fill_key = ?)`,
+        [txId, priceExact, quantityExact, feeExact, notionalExact, params.orderId, params.fillId, params.canonicalFillKey || '']
+      );
+
+      // Record independent double-entry accounting event for idempotency
+      await tx.execute(
+        `INSERT INTO accounting_events (
+          event_id, transaction_id, user_id, account_mode, event_type, fill_id, order_id, created_at
+        ) VALUES (?, ?, ?, ?, 'FILL_SETTLEMENT', ?, ?, ?)`,
+        [
+          accountingEventId,
+          txId,
+          params.userId,
+          accountMode,
+          params.fillId,
+          params.orderId,
+          now,
+        ]
       );
 
       // Verify transaction is balanced per currency!
@@ -1721,9 +1779,10 @@ export class LedgerService {
           symbol: params.symbol,
           quantity: quantityExact,
           price: priceExact,
-          feeMinor: Number(feeMinor),
-          realizedPnlMinor: realizedPnlMinor !== undefined ? Number(realizedPnlMinor) : undefined,
+          feeMinor: feeMinor,
+          realizedPnlMinor: realizedPnlMinor !== undefined ? realizedPnlMinor : undefined,
           transactionId: txId,
+          accountingEventId,
         },
         result: 'SUCCESS',
       });
@@ -1768,6 +1827,7 @@ export class LedgerService {
 
     for (const r of rows) {
       const key = `${r.account_type}:${r.asset_or_currency}`;
+      // PRECISION_BOUNDARY: legacy number conversion for backward-compatible getUserBalances display API
       const bal = Number(r.balance_minor);
       const res = Number(r.reserved_minor);
       result[key] = {
@@ -1978,7 +2038,7 @@ export class LedgerService {
 
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newBal), now, acc.id]
+        [newBal, now, acc.id]
       );
 
       const entryType = adjustment > 0n ? 'credit' : 'debit';
@@ -1997,8 +2057,8 @@ export class LedgerService {
           params.userId,
           accountMode,
           entryType,
-          Number(absAmount),
-          Number(newBal),
+          absAmount,
+          newBal,
           params.assetOrCurrency,
           params.mismatchId || `mismatch_${now}`,
           params.idempotencyKey || null,
@@ -2012,7 +2072,7 @@ export class LedgerService {
       const newClearingBal = currentClearingBal - adjustment;
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
-        [Number(newClearingBal), now, clearingAcc.id]
+        [newClearingBal, now, clearingAcc.id]
       );
 
       const clearingEntryType = adjustment > 0n ? 'debit' : 'credit';
@@ -2029,8 +2089,8 @@ export class LedgerService {
           params.userId,
           accountMode,
           clearingEntryType,
-          Number(absAmount),
-          Number(newClearingBal),
+          absAmount,
+          newClearingBal,
           params.assetOrCurrency,
           params.mismatchId || `mismatch_${now}`,
           params.idempotencyKey ? `${params.idempotencyKey}_clearing` : null,
@@ -2052,8 +2112,8 @@ export class LedgerService {
           accountMode,
           accountType: params.accountType,
           asset: params.assetOrCurrency,
-          adjustmentMinor: Number(adjustment),
-          newBalanceMinor: Number(newBal),
+          adjustmentMinor: adjustment,
+          newBalanceMinor: newBal,
           reason: params.reason,
         },
         result: 'SUCCESS',
