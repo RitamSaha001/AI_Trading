@@ -501,7 +501,7 @@ describe("Authoritative Fills, Commissions, Idempotency & Exact Values Suite", (
       // Verify accounting_events table contains exactly ONE settlement row
       const accountingEvents = await db.query<any>(
         "SELECT * FROM accounting_events WHERE event_id = ?",
-        [`settlement:binance:${userId}:${tradeId}`]
+        [`settlement:binance:${userId}:BTCUSDT:${tradeId}`]
       );
       expect(accountingEvents.length).toBe(1);
 
@@ -782,4 +782,842 @@ describe("Authoritative Fills, Commissions, Idempotency & Exact Values Suite", (
       expect(exact.toString()).toBe("90071992547409.93");
     });
   });
+
+  // =========================================================================
+  // Scenario 8: Section 17 Failure Injection & Crash Safety (Cases A - F)
+  // =========================================================================
+  describe("Scenario 8: Section 17 Failure Injection & Crash Safety", () => {
+    it("Case A: Recovers cleanly when process crashes after venue fills but before local recording", async () => {
+      const db = getDb();
+      const orderId = "ord_case_a_001";
+      const now = Date.now();
+
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 1_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_case_a",
+        description: "Fund for Case A",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_case_a",
+        description: "Allocate for Case A",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 500_375n,
+      });
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, user_id, client_order_id, symbol, side, type, status,
+          orig_qty, price, notional, quote_asset, idempotency_key,
+          orig_qty_exact, price_exact, notional_exact, estimated_fee_exact,
+          reserved_cash, reserved_cash_minor, created_at, updated_at
+        ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'UNKNOWN', 0.1, 50000, 5000, 'USDT', 'idemp_case_a', '0.1', '50000', '5000', '3.75', 5003.75, 500375, ?, ?)`,
+        [orderId, userId, orderId, now, now]
+      );
+
+      vi.spyOn(BinanceGateway, "reconcileUnknownOrder").mockResolvedValueOnce({
+        found: true,
+        status: "FILLED",
+        exchangeOrderId: "bin_venue_case_a",
+        executedQtyExact: "0.1",
+        avgPriceExact: "50000",
+        fills: [
+          {
+            tradeId: "trd_case_a_99",
+            price: "50000.00",
+            qty: "0.1",
+            commission: "3.75",
+            commissionAsset: "USDT",
+          },
+        ],
+      });
+
+      const sweep = await OrderRecoveryService.runRecoverySweep();
+      expect(sweep.recoveredCount).toBe(1);
+
+      const ord = await db.queryOne<any>("SELECT status, commission_status FROM exchange_orders WHERE client_order_id = ?", [orderId]);
+      expect(ord.status).toBe("FILLED");
+      expect(ord.commission_status).toBe("AUTHORITATIVE");
+
+      const fills = await db.query<any>("SELECT * FROM exchange_fills WHERE order_id = ?", [orderId]);
+      expect(fills.length).toBe(1);
+      expect(fills[0].exchange_trade_id).toBe("trd_case_a_99");
+
+      const events = await db.query<any>("SELECT * FROM accounting_events WHERE order_id = ?", [orderId]);
+      expect(events.length).toBe(1);
+    });
+
+    it("Case B: Recovers cleanly when process crashes after persisting fill but before ledger settlement", async () => {
+      const db = getDb();
+      const orderId = "ord_case_b_001";
+      const now = Date.now();
+      const tradeId = "trd_case_b_99";
+      const canonicalKey = `binance:${userId}:BTCUSDT:${tradeId}`;
+
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 1_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_case_b",
+        description: "Fund for Case B",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_case_b",
+        description: "Allocate for Case B",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 500_375n,
+      });
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, user_id, client_order_id, symbol, side, type, status,
+          orig_qty, price, notional, quote_asset, idempotency_key,
+          orig_qty_exact, price_exact, notional_exact, estimated_fee_exact,
+          reserved_cash, reserved_cash_minor, created_at, updated_at
+        ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'OPEN', 0.1, 50000, 5000, 'USDT', 'idemp_case_b', '0.1', '50000', '5000', '3.75', 5003.75, 500375, ?, ?)`,
+        [orderId, userId, orderId, now, now]
+      );
+
+      await db.execute(
+        `INSERT INTO exchange_fills (
+          id, order_id, exchange_trade_id, canonical_fill_key, symbol,
+          price, price_exact, qty, qty_exact, commission, commission_exact, commission_asset,
+          commission_status, quote_qty, quote_qty_exact, executed_at
+        ) VALUES ('fill_case_b', ?, ?, ?, 'BTCUSDT', 50000, '50000', 0.1, '0.1', 3.75, '3.75', 'USDT', 'AUTHORITATIVE', 5000, '5000', ?)`,
+        [orderId, tradeId, canonicalKey, now]
+      );
+
+      const fillRes = await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId,
+        fillId: tradeId,
+        canonicalFillKey: canonicalKey,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "50000.00",
+        quantity: "0.1",
+        fee: "3.75",
+        feeAsset: "USDT",
+      });
+
+      expect(fillRes.alreadyProcessed).toBe(false);
+      expect(fillRes.cashBalanceAfterMinor).toBe(499_625n);
+      expect(fillRes.assetBalanceAfterMinor).toBe(10_000_000n);
+
+      const events = await db.query<any>("SELECT * FROM accounting_events WHERE order_id = ?", [orderId]);
+      expect(events.length).toBe(1);
+    });
+
+    it("Case C: Idempotent when ledger settlement succeeds but response was lost and caller retries", async () => {
+      const db = getDb();
+      const orderId = "ord_case_c_001";
+      const tradeId = "trd_case_c_99";
+      const canonicalKey = `binance:${userId}:BTCUSDT:${tradeId}`;
+
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 1_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_case_c",
+        description: "Fund for Case C",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_case_c",
+        description: "Allocate for Case C",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 500_375n,
+      });
+
+      const fill1 = await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId,
+        fillId: tradeId,
+        canonicalFillKey: canonicalKey,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "50000.00",
+        quantity: "0.1",
+        fee: "3.75",
+        feeAsset: "USDT",
+      });
+      expect(fill1.alreadyProcessed).toBe(false);
+
+      const fill2 = await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId,
+        fillId: tradeId,
+        canonicalFillKey: canonicalKey,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "50000.00",
+        quantity: "0.1",
+        fee: "3.75",
+        feeAsset: "USDT",
+      });
+      expect(fill2.alreadyProcessed).toBe(true);
+      expect(fill2.cashBalanceAfterMinor).toBe(fill1.cashBalanceAfterMinor);
+      expect(fill2.assetBalanceAfterMinor).toBe(fill1.assetBalanceAfterMinor);
+
+      const entries = await db.query<any>("SELECT * FROM ledger_entries WHERE user_id = ? AND reference_type = 'trade_fill'", [userId]);
+      expect(entries.length).toBe(2);
+    });
+
+    it("Case D: Handles concurrent simultaneous delivery of same fill across instances without duplicate accounting", async () => {
+      const db = getDb();
+      const orderId = "ord_case_d_001";
+      const tradeId = "trd_case_d_99";
+      const canonicalKey = `binance:${userId}:BTCUSDT:${tradeId}`;
+
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 1_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_case_d",
+        description: "Fund for Case D",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_case_d",
+        description: "Allocate for Case D",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 500_375n,
+      });
+
+      const results = await Promise.all([
+        LedgerService.processFill({
+          userId,
+          accountMode: "live",
+          orderId,
+          fillId: tradeId,
+          canonicalFillKey: canonicalKey,
+          symbol: "BTCUSDT",
+          baseAsset: "BTC",
+          quoteAsset: "USDT",
+          side: "BUY",
+          price: "50000.00",
+          quantity: "0.1",
+          fee: "3.75",
+          feeAsset: "USDT",
+        }),
+        LedgerService.processFill({
+          userId,
+          accountMode: "live",
+          orderId,
+          fillId: tradeId,
+          canonicalFillKey: canonicalKey,
+          symbol: "BTCUSDT",
+          baseAsset: "BTC",
+          quoteAsset: "USDT",
+          side: "BUY",
+          price: "50000.00",
+          quantity: "0.1",
+          fee: "3.75",
+          feeAsset: "USDT",
+        }),
+        LedgerService.processFill({
+          userId,
+          accountMode: "live",
+          orderId,
+          fillId: tradeId,
+          canonicalFillKey: canonicalKey,
+          symbol: "BTCUSDT",
+          baseAsset: "BTC",
+          quoteAsset: "USDT",
+          side: "BUY",
+          price: "50000.00",
+          quantity: "0.1",
+          fee: "3.75",
+          feeAsset: "USDT",
+        }),
+        LedgerService.processFill({
+          userId,
+          accountMode: "live",
+          orderId,
+          fillId: tradeId,
+          canonicalFillKey: canonicalKey,
+          symbol: "BTCUSDT",
+          baseAsset: "BTC",
+          quoteAsset: "USDT",
+          side: "BUY",
+          price: "50000.00",
+          quantity: "0.1",
+          fee: "3.75",
+          feeAsset: "USDT",
+        }),
+      ]);
+
+      const processedCount = results.filter(r => !r.alreadyProcessed).length;
+      const alreadySettledCount = results.filter(r => r.alreadyProcessed).length;
+
+      expect(processedCount).toBe(1);
+      expect(alreadySettledCount).toBe(3);
+
+      const events = await db.query<any>("SELECT * FROM accounting_events WHERE order_id = ?", [orderId]);
+      expect(events.length).toBe(1);
+
+      const balances = await LedgerService.getUserBalances(userId, "live");
+      expect(balances["fee_treasury:USDT"]?.balance).toBe(375);
+    });
+
+    it("Case E: Reconciliation handles fill that is already processed locally without double-counting", async () => {
+      const db = getDb();
+      const orderId = "ord_case_e_001";
+      const tradeId = "trd_case_e_99";
+      const canonicalKey = `binance:${userId}:BTCUSDT:${tradeId}`;
+      const now = Date.now();
+
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 1_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_case_e",
+        description: "Fund for Case E",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_case_e",
+        description: "Allocate for Case E",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 500_375n,
+      });
+
+      await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId,
+        fillId: tradeId,
+        canonicalFillKey: canonicalKey,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "50000.00",
+        quantity: "0.1",
+        fee: "3.75",
+        feeAsset: "USDT",
+      });
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, user_id, client_order_id, symbol, side, type, status,
+          orig_qty, price, notional, quote_asset, idempotency_key,
+          orig_qty_exact, price_exact, notional_exact, estimated_fee_exact,
+          reserved_cash, reserved_cash_minor, created_at, updated_at
+        ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'UNKNOWN', 0.1, 50000, 5000, 'USDT', 'idemp_case_e', '0.1', '50000', '5000', '3.75', 5003.75, 500375, ?, ?)`,
+        [orderId, userId, orderId, now, now]
+      );
+
+      vi.spyOn(BinanceGateway, "reconcileUnknownOrder").mockResolvedValueOnce({
+        found: true,
+        status: "FILLED",
+        exchangeOrderId: "bin_venue_case_e",
+        executedQtyExact: "0.1",
+        avgPriceExact: "50000",
+        fills: [
+          {
+            tradeId,
+            price: "50000.00",
+            qty: "0.1",
+            commission: "3.75",
+            commissionAsset: "USDT",
+          },
+        ],
+      });
+
+      const sweep = await OrderRecoveryService.runRecoverySweep();
+      expect(sweep.recoveredCount).toBe(1);
+
+      const events = await db.query<any>("SELECT * FROM accounting_events WHERE order_id = ?", [orderId]);
+      expect(events.length).toBe(1);
+    });
+
+    it("Case F: Reconciliation processes newly arrived fill without duplicating already processed fill", async () => {
+      const db = getDb();
+      const orderId = "ord_case_f_001";
+      const tradeId1 = "trd_case_f_1";
+      const tradeId2 = "trd_case_f_2";
+      const now = Date.now();
+
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 2_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_case_f",
+        description: "Fund for Case F",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 2_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_case_f",
+        description: "Allocate for Case F",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1000_750n,
+      });
+
+      await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId,
+        fillId: tradeId1,
+        canonicalFillKey: `binance:${userId}:BTCUSDT:${tradeId1}`,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "50000.00",
+        quantity: "0.1",
+        fee: "3.75",
+        feeAsset: "USDT",
+      });
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, user_id, client_order_id, symbol, side, type, status,
+          orig_qty, price, notional, quote_asset, idempotency_key,
+          orig_qty_exact, price_exact, notional_exact, estimated_fee_exact,
+          reserved_cash, reserved_cash_minor, created_at, updated_at
+        ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'UNKNOWN', 0.2, 50000, 10000, 'USDT', 'idemp_case_f', '0.2', '50000', '10000', '7.50', 10007.50, 1000750, ?, ?)`,
+        [orderId, userId, orderId, now, now]
+      );
+
+      await db.execute(
+        `INSERT INTO exchange_fills (
+          id, order_id, exchange_trade_id, canonical_fill_key, symbol,
+          price, price_exact, qty, qty_exact, commission, commission_exact, commission_asset,
+          commission_status, quote_qty, quote_qty_exact, executed_at
+        ) VALUES ('fill_f_1', ?, ?, ?, 'BTCUSDT', 50000, '50000', 0.1, '0.1', 3.75, '3.75', 'USDT', 'AUTHORITATIVE', 5000, '5000', ?)`,
+        [orderId, tradeId1, `binance:${userId}:BTCUSDT:${tradeId1}`, now]
+      );
+
+      vi.spyOn(BinanceGateway, "reconcileUnknownOrder").mockResolvedValueOnce({
+        found: true,
+        status: "FILLED",
+        exchangeOrderId: "bin_venue_case_f",
+        executedQtyExact: "0.2",
+        avgPriceExact: "50000",
+        fills: [
+          {
+            tradeId: tradeId1,
+            price: "50000.00",
+            qty: "0.1",
+            commission: "3.75",
+            commissionAsset: "USDT",
+          },
+          {
+            tradeId: tradeId2,
+            price: "50000.00",
+            qty: "0.1",
+            commission: "3.75",
+            commissionAsset: "USDT",
+          },
+        ],
+      });
+
+      const sweep = await OrderRecoveryService.runRecoverySweep();
+      expect(sweep.recoveredCount).toBe(1);
+
+      const allFills = await db.query<any>("SELECT * FROM exchange_fills WHERE order_id = ?", [orderId]);
+      expect(allFills.length).toBe(2);
+
+      const events = await db.query<any>("SELECT * FROM accounting_events WHERE order_id = ?", [orderId]);
+      expect(events.length).toBe(2);
+    });
+  });
+
+  // =========================================================================
+  // Scenario 9: Zero-Fee Promotional Pairs
+  // =========================================================================
+  describe("Scenario 9: Zero-Fee Promotional Pairs", () => {
+    it("processes zero-fee promotional fills (e.g. BTC/FDUSD) without ledger failure or invalid treasury entries", async () => {
+      const orderId = "ord_scen9_zerofee";
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 1_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_scen9",
+        description: "Fund for Zero-Fee",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_scen9",
+        description: "Allocate for Zero-Fee",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 500_000n,
+      });
+
+      const fillRes = await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId,
+        fillId: "trd_zero_fee_001",
+        canonicalFillKey: `binance:${userId}:BTCUSDT:trd_zero_fee_001`,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "50000.00",
+        quantity: "0.1",
+        fee: "0",
+        feeAsset: "USDT",
+      });
+
+      expect(fillRes.alreadyProcessed).toBe(false);
+      expect(fillRes.feeMinor).toBe(0n);
+      expect(fillRes.cashBalanceAfterMinor).toBe(500_000n);
+      expect(fillRes.assetBalanceAfterMinor).toBe(10_000_000n);
+
+      const db = getDb();
+      const feeEntries = await db.query<any>(
+        "SELECT * FROM ledger_entries WHERE order_id = ? AND reference_type = 'fee'",
+        [orderId]
+      );
+      expect(feeEntries.length).toBe(0);
+    });
+  });
+
+  // =========================================================================
+  // Scenario 10: Late Fill on Cancelled Order
+  // =========================================================================
+  describe("Scenario 10: Late Fill on Cancelled Order", () => {
+    it("settles late arriving fill on CANCELED order and permits order state transition", async () => {
+      const db = getDb();
+      const orderId = "ord_scen10_late";
+      const now = Date.now();
+
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 2_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_scen10",
+        description: "Fund for late fill",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 2_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_scen10",
+        description: "Allocate for late fill",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1000_750n,
+      });
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, user_id, client_order_id, symbol, side, type, status,
+          orig_qty, price, notional, quote_asset, idempotency_key,
+          orig_qty_exact, price_exact, notional_exact, estimated_fee_exact,
+          reserved_cash, reserved_cash_minor, created_at, updated_at
+        ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'CANCELED', 0.2, 50000, 10000, 'USDT', 'idemp_scen10', '0.2', '50000', '10000', '7.50', 10007.50, 1000750, ?, ?)`,
+        [orderId, userId, orderId, now, now]
+      );
+
+      const fillRes = await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId,
+        fillId: "trd_late_fill_99",
+        canonicalFillKey: `binance:${userId}:BTCUSDT:trd_late_fill_99`,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "50000.00",
+        quantity: "0.1",
+        fee: "3.75",
+        feeAsset: "USDT",
+      });
+
+      expect(fillRes.alreadyProcessed).toBe(false);
+      expect(fillRes.cashBalanceAfterMinor).toBe(1_499_625n);
+      expect(fillRes.assetBalanceAfterMinor).toBe(10_000_000n);
+
+      await LedgerService.releaseOrderReservation({ orderId });
+      const acc = await LedgerService.getOrCreateAccount(userId, "trading_allocated", "USDT", "live");
+      expect(BigInt(acc.reserved_minor)).toBe(0n);
+    });
+  });
+
+  // =========================================================================
+  // Scenario 11: Multi-Currency Symbol Isolation in Accounting Events
+  // =========================================================================
+  describe("Scenario 11: Multi-Currency Symbol Isolation in Accounting Events", () => {
+    it("ensures identical tradeId on different symbols (BTCUSDT vs ETHUSDT) do not collide", async () => {
+      const db = getDb();
+      const tradeId = "987654";
+
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 2_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_scen11",
+        description: "Fund for Symbol Isolation",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 2_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_scen11",
+        description: "Allocate for Symbol Isolation",
+      });
+
+      const btcOrder = "ord_btc_iso";
+      const ethOrder = "ord_eth_iso";
+
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId: btcOrder,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 500_375n,
+      });
+
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId: ethOrder,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 300_225n,
+      });
+
+      const btcFill = await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId: btcOrder,
+        fillId: tradeId,
+        canonicalFillKey: `binance:${userId}:BTCUSDT:${tradeId}`,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "50000.00",
+        quantity: "0.1",
+        fee: "3.75",
+        feeAsset: "USDT",
+      });
+      expect(btcFill.alreadyProcessed).toBe(false);
+
+      const ethFill = await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId: ethOrder,
+        fillId: tradeId,
+        canonicalFillKey: `binance:${userId}:ETHUSDT:${tradeId}`,
+        symbol: "ETHUSDT",
+        baseAsset: "ETH",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "3000.00",
+        quantity: "1.0",
+        fee: "2.25",
+        feeAsset: "USDT",
+      });
+      expect(ethFill.alreadyProcessed).toBe(false);
+
+      const btcEvent = await db.queryOne<any>(
+        "SELECT * FROM accounting_events WHERE event_id = ?",
+        [`settlement:binance:${userId}:BTCUSDT:${tradeId}`]
+      );
+      const ethEvent = await db.queryOne<any>(
+        "SELECT * FROM accounting_events WHERE event_id = ?",
+        [`settlement:binance:${userId}:ETHUSDT:${tradeId}`]
+      );
+      expect(btcEvent).not.toBeNull();
+      expect(ethEvent).not.toBeNull();
+      expect(btcEvent.event_id).not.toBe(ethEvent.event_id);
+    });
+  });
+
+  // =========================================================================
+  // Scenario 12: End-to-End Exactness Lifecycle
+  // =========================================================================
+  describe("Scenario 12: End-to-End Exactness Lifecycle", () => {
+    it("traces fractional, boundary, and large values through fill -> database -> settlement -> ledger without precision leakage", async () => {
+      const db = getDb();
+      const d1 = ExactDecimal.from("0.1");
+      const d2 = ExactDecimal.from("0.2");
+      const d3 = d1.add(d2);
+      expect(d3.toString()).toBe("0.3");
+
+      const sat = ExactDecimal.from("0.00000001");
+      expect(sat.toMinor(8)).toBe(1n);
+
+      const large = ExactDecimal.from("99999999.12345678");
+      expect(large.toMinor(8)).toBe(9999999912345678n);
+
+      const huge = 9007199254740993n;
+      const decFromHuge = ExactDecimal.fromMinor(huge, 2);
+      expect(decFromHuge.toString()).toBe("90071992547409.93");
+      expect(decFromHuge.toMinor(2)).toBe(huge);
+
+      const orderId = "ord_satoshi_lifecycle";
+      await LedgerService.creditDeposit({
+        userId,
+        amountMinor: 1_000_000n,
+        assetOrCurrency: "USDT",
+        accountMode: "live",
+        paymentId: "dep_sat",
+        description: "Fund for Satoshi",
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: "sovereign_cash",
+        toAccountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 1_000_000n,
+        accountMode: "live",
+        referenceType: "allocation",
+        referenceId: "alloc_sat",
+        description: "Allocate for Satoshi",
+      });
+      await LedgerService.reserveOrderFunds({
+        userId,
+        orderId,
+        accountMode: "live",
+        accountType: "trading_allocated",
+        assetOrCurrency: "USDT",
+        amountMinor: 100n,
+      });
+
+      const fillRes = await LedgerService.processFill({
+        userId,
+        accountMode: "live",
+        orderId,
+        fillId: "trd_sat_001",
+        canonicalFillKey: `binance:${userId}:BTCUSDT:trd_sat_001`,
+        symbol: "BTCUSDT",
+        baseAsset: "BTC",
+        quoteAsset: "USDT",
+        side: "BUY",
+        price: "100000.00",
+        quantity: "0.00000001",
+        fee: "0.01",
+        feeAsset: "USDT",
+      });
+
+      expect(fillRes.alreadyProcessed).toBe(false);
+      expect(fillRes.assetBalanceAfterMinor).toBe(1n);
+    });
+  });
 });
+

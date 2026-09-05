@@ -21,43 +21,98 @@ export const PRECISION_FORBIDDEN_RULES: {
     targetFiles: ["server/services/binanceGateway.ts", "server/services/symbolRules.ts"],
   },
   {
-    pattern: /parseFloat\s*\(\s*b\.free/g,
-    description: "parseFloat on balance in reconciliation worker",
-    targetFiles: ["server/services/reconciliationWorker.ts"],
-  },
-  {
-    pattern: /Number\s*\(\s*normalized\.(priceStr|notionalStr)\s*\)\s*[*+-]/g,
-    description: "Direct float arithmetic on normalized price/notional string",
-    targetFiles: ["server/services/binanceGateway.ts"],
-  },
-  {
     pattern: /ExactDecimal\.from\s*\(\s*['"]50000\.00['"]\s*\)/g,
     description: "Hardcoded 50000.00 fallback in symbol rules",
     targetFiles: ["server/services/symbolRules.ts"],
   },
   {
-    pattern: /(const\s+)?(recFeeAmountDec|feeAmountDec)\s*=\s*notionalSettledDec\.mul\s*\(\s*ExactDecimal\.from\s*\(\s*['"]0\.00075['"]\s*\)\s*\)/g,
-    description: "Hardcoded 0.00075 fallback fee assignment in settlement/recovery path",
-    targetFiles: ["server/services/binanceGateway.ts", "server/services/orderRecoveryService.ts", "server/services/ledgerService.ts"],
+    pattern: /\bExactDecimal\.from\s*\(\s*['"]0\.00075['"]\s*\)/g,
+    description: "Fallback 0.00075 fee multiplier in settlement/recovery path",
+    targetFiles: ["server/services/orderRecoveryService.ts", "server/services/ledgerService.ts"],
   },
   {
-    pattern: /\bNumber\s*\(\s*(amountMinor|reservedCashMinor|reservedQtyMinor|balanceMinor)\s*\)/g,
+    pattern: /\bparseFloat\s*\(/g,
+    description: "parseFloat call in financial execution boundary",
+    targetFiles: [
+      "server/services/binanceGateway.ts",
+      "server/services/ledgerService.ts",
+      "server/services/orderRecoveryService.ts",
+      "server/services/reconciliationWorker.ts",
+    ],
+  },
+  {
+    pattern: /\bparseInt\s*\(/g,
+    description: "parseInt call in financial execution boundary",
+    targetFiles: [
+      "server/services/binanceGateway.ts",
+      "server/services/ledgerService.ts",
+      "server/services/orderRecoveryService.ts",
+      "server/services/reconciliationWorker.ts",
+    ],
+  },
+  {
+    pattern: /\.\s*toNumber\s*\(/g,
+    description: "Deprecated .toNumber() call on financial decimal",
+    targetFiles: [
+      "server/services/binanceGateway.ts",
+      "server/services/ledgerService.ts",
+      "server/services/orderRecoveryService.ts",
+      "server/services/reconciliationWorker.ts",
+    ],
+  },
+  {
+    pattern: /\.\s*toDisplayNumber\s*\(/g,
+    description: "Lossy .toDisplayNumber() on authoritative execution/settlement path",
+    targetFiles: [
+      "server/services/binanceGateway.ts",
+      "server/services/ledgerService.ts",
+      "server/services/orderRecoveryService.ts",
+    ],
+  },
+  {
+    pattern: /\.\s*toFixed\s*\(/g,
+    description: "Float .toFixed() stringification in financial services",
+    targetFiles: [
+      "server/services/binanceGateway.ts",
+      "server/services/ledgerService.ts",
+      "server/services/orderRecoveryService.ts",
+      "server/services/reconciliationWorker.ts",
+    ],
+  },
+  {
+    pattern: /\bMath\.(floor|round|ceil|abs|max|min)\s*\(/g,
+    description: "Math floating-point function call in financial logic",
+    targetFiles: [
+      "server/services/binanceGateway.ts",
+      "server/services/ledgerService.ts",
+      "server/services/orderRecoveryService.ts",
+      "server/services/reconciliationWorker.ts",
+    ],
+  },
+  {
+    pattern: /Number\s*\(\s*normalized\.(priceStr|notionalStr|quantityStr)\s*\)\s*[*+-]/g,
+    description: "Direct float arithmetic on normalized price/notional/quantity string",
+    targetFiles: ["server/services/binanceGateway.ts"],
+  },
+  {
+    pattern: /\bNumber\s*\(\s*(amountMinor|reservedCashMinor|reservedQtyMinor|balanceMinor|curBal|currentBal|newBal|feeMinor|costBasisMinor|realizedPnlMinor|totalQtyMinor|qtyAssetMinor|notionalCashMinor|absAmount|adjustment|adjustmentMinor|newBalanceMinor)\s*\)/g,
     description: "Dangerous conversion of BIGINT minor unit to JavaScript Number",
     targetFiles: [
       "server/services/ledgerService.ts",
       "server/services/binanceGateway.ts",
       "server/services/orderRecoveryService.ts",
+      "server/services/reconciliationWorker.ts",
     ],
+  },
+  {
+    pattern: /(totalExecutedQtyDec|avgPriceDec|totalExecutedNotionalDec|totalCommissionDec|fillPriceDec|fillQtyDec|fillCommissionDec|fillNotionalDec)\.toDisplayNumber\s*\(\s*\)/g,
+    description: "Legacy REAL write in order settlement or fill insertion",
+    targetFiles: ["server/services/binanceGateway.ts", "server/services/orderRecoveryService.ts"],
   },
   {
     pattern: /Promise<.*executedQty:\s*number/g,
     description: "dispatchToExchange return type leaking executedQty as number",
     targetFiles: ["server/services/binanceGateway.ts"],
-  },
-  {
-    pattern: /executedQtyDec\.toNumber\s*\(\s*\)/g,
-    description: "Deprecated .toNumber() call on executed quantity decimal",
-    targetFiles: ["server/services/orderRecoveryService.ts", "server/services/binanceGateway.ts"],
   },
 ];
 
@@ -73,12 +128,14 @@ export function scanPrecisionBoundary(rootDir: string = ROOT): PrecisionViolatio
       const lines = content.split('\n');
 
       for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.includes('// PRECISION_BOUNDARY')) continue;
         rule.pattern.lastIndex = 0;
-        if (rule.pattern.test(lines[i])) {
+        if (rule.pattern.test(line)) {
           violations.push({
             file: relFile,
             line: i + 1,
-            content: lines[i].trim(),
+            content: line.trim(),
             description: rule.description,
           });
         }

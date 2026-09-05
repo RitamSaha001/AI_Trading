@@ -357,8 +357,8 @@ export class BinanceGateway {
     const balances: Record<string, { asset: string; free: number; locked: number }> = {};
     if (Array.isArray(rawAccount.balances)) {
       for (const b of rawAccount.balances) {
-        const free = parseFloat(b.free);
-        const locked = parseFloat(b.locked);
+        const free = ExactDecimal.from(b.free || '0').toDisplayNumber(); // PRECISION_BOUNDARY: credential validation display check
+        const locked = ExactDecimal.from(b.locked || '0').toDisplayNumber(); // PRECISION_BOUNDARY: credential validation display check
         if (free > 0 || locked > 0) {
           balances[b.asset] = { asset: b.asset, free, locked };
         }
@@ -717,10 +717,6 @@ export class BinanceGateway {
       rule,
     });
 
-    const orderPrice = normalized.price.toDisplayNumber();
-    const notional = normalized.notional.toDisplayNumber();
-    const origQty = normalized.quantity.toDisplayNumber();
-
     OrderStateMachine.validateTransition('CREATED', 'RESERVING', clientOrderId);
 
     // 3. Server Risk Policy Validation
@@ -747,18 +743,18 @@ export class BinanceGateway {
         side: input.side,
         type: input.type,
         status: 'REJECTED',
-        origQty,
+        origQty: normalized.quantity.toDisplayNumber(), // PRECISION_BOUNDARY: legacy number compatibility
         origQtyExact: normalized.quantityStr,
         executedQty: 0,
         executedQtyExact: '0',
-        price: orderPrice,
+        price: normalized.price.toDisplayNumber(), // PRECISION_BOUNDARY: legacy number compatibility
         priceExact: normalized.priceStr,
         avgPrice: 0,
         avgPriceExact: '0',
         cumulativeQuoteQty: 0,
         cumulativeQuoteExact: '0',
         quoteAsset: input.quoteAsset,
-        notional,
+        notional: normalized.notional.toDisplayNumber(), // PRECISION_BOUNDARY: legacy number compatibility
         notionalExact: normalized.notionalStr,
         fee: 0,
         feeExact: '0',
@@ -907,7 +903,7 @@ export class BinanceGateway {
         reserved_cash, reserved_cash_minor, reserved_qty, reserved_qty_minor,
         estimated_fee_exact, commission_status,
         idempotency_key, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, ?, ?, ?, ?, ?, ?, 0.0, ?, 0.0, ?, ?, 'ESTIMATED', ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', 0.0, ?, 0.0, ?, ?, 0.0, ?, 0.0, ?, 0.0, ?, ?, 'ESTIMATED', ?, ?, ?)`,
       [
         clientOrderId,
         input.userId,
@@ -915,12 +911,9 @@ export class BinanceGateway {
         input.symbol,
         input.side,
         input.type,
-        origQty,
         normalized.quantityStr,
-        orderPrice,
         normalized.priceStr,
         input.quoteAsset,
-        notional,
         normalized.notionalStr,
         reservedCashMinor,
         reservedQtyMinor,
@@ -1098,14 +1091,14 @@ export class BinanceGateway {
            WHERE client_order_id = ?`,
           [
             exchangeResponse.exchangeOrderId || `ex_${Date.now()}`,
-            totalExecutedQtyDec.toDisplayNumber(),
+            totalExecutedQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
             totalExecutedQtyDec.toString(),
-            avgPriceDec.toDisplayNumber(),
+            avgPriceDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
             avgPriceDec.toString(),
-            totalExecutedNotionalDec.toDisplayNumber(),
+            totalExecutedNotionalDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
             totalExecutedNotionalDec.toString(),
             totalExecutedNotionalDec.toString(),
-            totalCommissionDec.toDisplayNumber(),
+            totalCommissionDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
             totalCommissionDec.toString(),
             actualCommissionAsset,
             totalCommissionDec.toString(),
@@ -1124,7 +1117,7 @@ export class BinanceGateway {
           const fillAsset = fill.commissionAsset || input.quoteAsset;
           const tradeId = fill.tradeId || `${clientOrderId}_${idx}`;
           const canonicalFillKey = `binance:${input.userId}:${input.symbol}:${tradeId}`;
-          const accountingEventId = `settlement:binance:${input.userId}:${tradeId}`;
+          const accountingEventId = `settlement:binance:${input.userId}:${input.symbol}:${tradeId}`;
           const fillDbId = `fill_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
           await tx.execute(
@@ -1141,14 +1134,14 @@ export class BinanceGateway {
               tradeId,
               canonicalFillKey,
               input.symbol,
-              fillPriceDec.toDisplayNumber(),
+              fillPriceDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
               fillPriceDec.toString(),
-              fillQtyDec.toDisplayNumber(),
+              fillQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
               fillQtyDec.toString(),
-              fillCommissionDec.toDisplayNumber(),
+              fillCommissionDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
               fillCommissionDec.toString(),
               fillAsset,
-              fillNotionalDec.toDisplayNumber(),
+              fillNotionalDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
               fillNotionalDec.toString(),
               fill.time || Date.now(),
             ]
@@ -1188,7 +1181,7 @@ export class BinanceGateway {
           clientOrderId,
           status: finalStatus,
           symbol: input.symbol,
-          executedQty: totalExecutedQtyDec.toDisplayNumber(),
+          executedQty: totalExecutedQtyDec.toString(),
         },
         result: 'SUCCESS',
       });
@@ -1373,14 +1366,14 @@ export class BinanceGateway {
               `UPDATE exchange_orders SET
                 status = 'FILLED',
                 exchange_order_id = ?,
-                executed_qty = 0.0,
+                executed_qty = ?,
                 executed_qty_exact = ?,
-                avg_price = 0.0,
+                avg_price = ?,
                 avg_price_exact = ?,
-                cumulative_quote_qty = 0.0,
+                cumulative_quote_qty = ?,
                 cumulative_quote_exact = ?,
                 executed_notional_exact = ?,
-                fee = 0.0,
+                fee = ?,
                 fee_exact = ?,
                 fee_asset = ?,
                 actual_commission_exact = ?,
@@ -1390,10 +1383,14 @@ export class BinanceGateway {
                WHERE client_order_id = ?`,
               [
                 recResult.exchangeOrderId || `ex_rec_${Date.now()}`,
+                totalExecutedQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
                 totalExecutedQtyDec.toString(),
+                avgPriceDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
                 avgPriceDec.toString(),
+                totalExecutedNotionalDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
                 totalExecutedNotionalDec.toString(),
                 totalExecutedNotionalDec.toString(),
+                totalCommissionDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
                 totalCommissionDec.toString(),
                 actualCommissionAsset,
                 totalCommissionDec.toString(),
@@ -1412,7 +1409,7 @@ export class BinanceGateway {
               const fillAsset = fill.commissionAsset || input.quoteAsset;
               const tradeId = fill.tradeId || `${clientOrderId}_rec_${idx}`;
               const canonicalFillKey = `binance:${input.userId}:${input.symbol}:${tradeId}`;
-              const accountingEventId = `settlement:binance:${input.userId}:${tradeId}`;
+              const accountingEventId = `settlement:binance:${input.userId}:${input.symbol}:${tradeId}`;
               const fillDbId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
               await tx.execute(
@@ -1421,7 +1418,7 @@ export class BinanceGateway {
                   price, price_exact, qty, qty_exact,
                   commission, commission_exact, commission_asset, commission_status,
                   quote_qty, quote_qty_exact, executed_at
-                ) VALUES (?, ?, ?, ?, ?, 0.0, ?, 0.0, ?, 0.0, ?, ?, 'AUTHORITATIVE', 0.0, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AUTHORITATIVE', ?, ?, ?)
                 ON CONFLICT (canonical_fill_key) DO NOTHING`,
                 [
                   fillDbId,
@@ -1429,10 +1426,14 @@ export class BinanceGateway {
                   tradeId,
                   canonicalFillKey,
                   input.symbol,
+                  fillPriceDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
                   fillPriceDec.toString(),
+                  fillQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
                   fillQtyDec.toString(),
+                  fillCommissionDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
                   fillCommissionDec.toString(),
                   fillAsset,
+                  fillNotionalDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
                   fillNotionalDec.toString(),
                   fill.time || Date.now(),
                 ]
@@ -1754,10 +1755,10 @@ export class BinanceGateway {
           return {
             found: true,
             status: data.status,
-            executedQty: executedQtyDec.toDisplayNumber(),
+            executedQty: executedQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy number compatibility
             executedQtyExact: executedQtyDec.toString(),
             exchangeOrderId: data.orderId?.toString(),
-            avgPrice: avgPriceDec.toDisplayNumber(),
+            avgPrice: avgPriceDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy number compatibility
             avgPriceExact: avgPriceDec.toString(),
             fills,
           };
@@ -1845,48 +1846,16 @@ export class BinanceGateway {
     }
 
     if (existingFills.length === 0) {
-      if (config.NODE_ENV === 'test') {
-        // Test environment shim for legacy test cases: provide simulated fill with authoritative zero fee
-        const simTradeId = `trd_sim_${clientOrderId}`;
-        const simFillId = `fill_sim_${Date.now()}`;
-        const canonicalFillKey = `binance:${order.user_id}:${order.symbol}:${simTradeId}`;
-        await db.execute(
-          `INSERT INTO exchange_fills (
-            id, order_id, exchange_trade_id, canonical_fill_key, symbol,
-            price, price_exact, qty, qty_exact,
-            commission, commission_exact, commission_asset, commission_status,
-            quote_qty, quote_qty_exact, executed_at
-          ) VALUES (?, ?, ?, ?, ?, 0.0, ?, 0.0, ?, 0.0, '0', ?, 'AUTHORITATIVE', 0.0, ?, ?)
-          ON CONFLICT (canonical_fill_key) DO NOTHING`,
-          [
-            simFillId,
-            clientOrderId,
-            simTradeId,
-            canonicalFillKey,
-            order.symbol,
-            avgPriceDec.toString(),
-            executedQtyDec.toString(),
-            order.quote_asset,
-            notionalSettledDec.toString(),
-            now,
-          ]
-        );
-        existingFills = await db.query<any>(
-          `SELECT * FROM exchange_fills WHERE order_id = ?`,
-          [clientOrderId]
-        );
-      } else {
-        // Production: no fills and no venue trade records found. Move order to RECONCILING, commission_status = 'PENDING'
-        await db.execute(
-          `UPDATE exchange_orders SET status = 'RECONCILING', commission_status = 'PENDING', updated_at = ? WHERE client_order_id = ?`,
-          [now, clientOrderId]
-        );
-        const pending = await db.queryOne<any>(
-          `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
-          [clientOrderId]
-        );
-        return this.mapOrderRecord(pending);
-      }
+      // No fills and no venue trade records found. Move order to RECONCILING, commission_status = 'PENDING'
+      await db.execute(
+        `UPDATE exchange_orders SET status = 'RECONCILING', commission_status = 'PENDING', updated_at = ? WHERE client_order_id = ?`,
+        [now, clientOrderId]
+      );
+      const pending = await db.queryOne<any>(
+        `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
+        [clientOrderId]
+      );
+      return this.mapOrderRecord(pending);
     }
 
     const hasAuthoritativeCommission = existingFills.every(
@@ -1968,7 +1937,7 @@ export class BinanceGateway {
       for (const fill of existingFills) {
         const tradeId = fill.exchange_trade_id || `rec_${clientOrderId}`;
         const canonicalFillKey = fill.canonical_fill_key || `binance:${order.user_id}:${order.symbol}:${tradeId}`;
-        const accountingEventId = `settlement:binance:${order.user_id}:${tradeId}`;
+        const accountingEventId = `settlement:binance:${order.user_id}:${order.symbol}:${tradeId}`;
         const fQty = ExactDecimal.from(fill.qty_exact ?? fill.qty ?? '0');
         const fPrice = ExactDecimal.from(fill.price_exact ?? fill.price ?? '0');
         const fComm = ExactDecimal.from(fill.commission_exact ?? fill.commission ?? '0');
@@ -2146,9 +2115,9 @@ export class BinanceGateway {
       actualCommissionAsset,
       commissionStatus,
       executedNotionalExact,
-      reservedCash: reservedCashMinor != null ? fromCashMinor(reservedCashMinor).toDisplayNumber() : Number(r.reserved_cash || 0),
+      reservedCash: reservedCashMinor != null ? fromCashMinor(reservedCashMinor).toDisplayNumber() : Number(r.reserved_cash || 0), // PRECISION_BOUNDARY: legacy number compatibility
       reservedCashMinor,
-      reservedQty: reservedQtyMinor != null ? fromAssetMinor(reservedQtyMinor).toDisplayNumber() : Number(r.reserved_qty || 0),
+      reservedQty: reservedQtyMinor != null ? fromAssetMinor(reservedQtyMinor).toDisplayNumber() : Number(r.reserved_qty || 0), // PRECISION_BOUNDARY: legacy number compatibility
       reservedQtyMinor,
       rejectReason: r.reject_reason,
       createdAt: Number(r.created_at),

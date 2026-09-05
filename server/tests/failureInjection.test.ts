@@ -45,11 +45,48 @@ describe('Phase 26 Production Failure Injection & Fault Tolerance Tests', () => 
     const clientOrderId = BinanceGateway.generateClientOrderId(userId, 'idemp_s1');
     const now = Date.now();
 
+    await LedgerService.creditDeposit({
+      userId,
+      assetOrCurrency: 'USDT',
+      amountMinor: 1_000_000,
+      paymentId: 'pay_fail_inj_1',
+      description: 'Fund for failure injection 1',
+    });
+    await LedgerService.transfer({
+      userId,
+      fromAccountType: 'sovereign_cash',
+      toAccountType: 'trading_allocated',
+      assetOrCurrency: 'USDT',
+      amountMinor: 1_000_000,
+      referenceType: 'allocation',
+      referenceId: 'alloc_fail_inj_1',
+      description: 'Allocate trading capital',
+    });
+    await LedgerService.reserveOrderFunds({
+      userId,
+      orderId: clientOrderId,
+      accountType: 'trading_allocated',
+      assetOrCurrency: 'USDT',
+      amountMinor: 500_375n,
+    });
+
+    BinanceGateway.setMockOrderFills(clientOrderId, [
+      {
+        tradeId: 'trd_s1_001',
+        price: '50000',
+        qty: '0.1',
+        commission: '3.75',
+        commissionAsset: 'USDT',
+        time: now,
+      },
+    ]);
+
     await db.execute(
       `INSERT INTO exchange_orders (
         id, user_id, client_order_id, symbol, side, type, status, orig_qty,
-        price, quote_asset, notional, idempotency_key, created_at, updated_at
-      ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'UNKNOWN', 0.1, 50000, 'USDT', 5000, 'idemp_s1', ?, ?)`,
+        orig_qty_exact, price, price_exact, quote_asset, notional, notional_exact,
+        reserved_cash, reserved_cash_minor, idempotency_key, created_at, updated_at
+      ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'UNKNOWN', 0.1, '0.1', 50000, '50000', 'USDT', 5000, '5000', 5000, 500375, 'idemp_s1', ?, ?)`,
       [clientOrderId, userId, clientOrderId, now, now]
     );
 
@@ -118,12 +155,51 @@ describe('Phase 26 Production Failure Injection & Fault Tolerance Tests', () => 
   it('Scenario 3: exchange error transitions order to UNKNOWN and reconciles safely', async () => {
     const db = getDb();
     const clientOrderId = BinanceGateway.generateClientOrderId(userId, 'idemp_s3');
+    const now = Date.now();
+
+    await LedgerService.creditDeposit({
+      userId,
+      assetOrCurrency: 'USDT',
+      amountMinor: 1_000_000,
+      paymentId: 'pay_fail_inj_3',
+      description: 'Fund for failure injection 3',
+    });
+    await LedgerService.transfer({
+      userId,
+      fromAccountType: 'sovereign_cash',
+      toAccountType: 'trading_allocated',
+      assetOrCurrency: 'USDT',
+      amountMinor: 1_000_000,
+      referenceType: 'allocation',
+      referenceId: 'alloc_fail_inj_3',
+      description: 'Allocate trading capital',
+    });
+    await LedgerService.reserveOrderFunds({
+      userId,
+      orderId: clientOrderId,
+      accountType: 'trading_allocated',
+      assetOrCurrency: 'USDT',
+      amountMinor: 300_225n,
+    });
+
+    BinanceGateway.setMockOrderFills(clientOrderId, [
+      {
+        tradeId: 'trd_s3_001',
+        price: '3000',
+        qty: '1',
+        commission: '2.25',
+        commissionAsset: 'USDT',
+        time: now,
+      },
+    ]);
+
     await db.execute(
       `INSERT INTO exchange_orders (
         id, user_id, client_order_id, symbol, side, type, status, orig_qty,
-        price, quote_asset, notional, idempotency_key, created_at, updated_at
-      ) VALUES (?, ?, ?, 'ETHUSDT', 'BUY', 'MARKET', 'UNKNOWN', 1, 3000, 'USDT', 3000, 'idemp_s3', ?, ?)`,
-      [clientOrderId, userId, clientOrderId, Date.now(), Date.now()]
+        orig_qty_exact, price, price_exact, quote_asset, notional, notional_exact,
+        reserved_cash, reserved_cash_minor, idempotency_key, created_at, updated_at
+      ) VALUES (?, ?, ?, 'ETHUSDT', 'BUY', 'MARKET', 'UNKNOWN', 1, '1', 3000, '3000', 'USDT', 3000, '3000', 3002.25, 300225, 'idemp_s3', ?, ?)`,
+      [clientOrderId, userId, clientOrderId, now, now]
     );
 
     const res = await ReconciliationWorker.runReconciliation(userId);

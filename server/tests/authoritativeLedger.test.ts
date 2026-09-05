@@ -568,7 +568,7 @@ describe('Authoritative Financial Ledger & Accounting Layer', () => {
       [userId]
     );
     expect(adjEntry).not.toBeNull();
-    expect(adjEntry.amount_minor).toBe(150000);
+    expect(BigInt(adjEntry.amount_minor)).toBe(150000n);
   });
 
   it('Scenario 11 (Security): client cannot arbitrarily mutate authoritative balances', async () => {

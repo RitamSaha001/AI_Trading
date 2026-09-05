@@ -124,7 +124,7 @@ describe('Institutional Durability, Recovery & Concurrency Suite (Scenarios A - 
     );
     expect(orderAfter.status).toBe('REJECTED');
     expect(orderAfter.reserved_cash).toBe(0);
-    expect(orderAfter.reserved_cash_minor).toBe(0);
+    expect(BigInt(orderAfter.reserved_cash_minor)).toBe(0n);
 
     // 6. Verify ledger accounts: reserved_minor is 0, full balance is free
     const accAfter = await LedgerService.getOrCreateAccount(testUserId, 'trading_allocated', 'USDT', 'live');
@@ -189,8 +189,20 @@ describe('Institutional Durability, Recovery & Concurrency Suite (Scenarios A - 
       found: true,
       status: 'FILLED',
       executedQty: 0.1,
+      executedQtyExact: '0.1',
       avgPrice: 50000,
+      avgPriceExact: '50000',
       exchangeOrderId: 'bin_venue_b_999',
+      fills: [
+        {
+          tradeId: 'trd_venue_b_999',
+          price: '50000',
+          qty: '0.1',
+          commission: '3.75',
+          commissionAsset: 'USDT',
+          time: Date.now(),
+        },
+      ],
     });
 
     const sweepResult = await OrderRecoveryService.runRecoverySweep();
@@ -273,8 +285,20 @@ describe('Institutional Durability, Recovery & Concurrency Suite (Scenarios A - 
       found: true,
       status: 'FILLED',
       executedQty: 0.2,
+      executedQtyExact: '0.2',
       avgPrice: 50000,
+      avgPriceExact: '50000',
       exchangeOrderId: 'bin_ord_mid_c',
+      fills: [
+        {
+          tradeId: 'trd_ord_mid_c',
+          price: '50000',
+          qty: '0.2',
+          commission: '7.5',
+          commissionAsset: 'USDT',
+          time: Date.now(),
+        },
+      ],
     });
 
     await OrderRecoveryService.runRecoverySweep();

@@ -872,7 +872,7 @@ export class LedgerService {
   static async processFill(params: ProcessFillParams): Promise<ProcessFillResult> {
     const accountMode = params.accountMode || 'live';
     const accountingEventId =
-      params.accountingEventId || `settlement:binance:${params.userId}:${params.fillId}`;
+      params.accountingEventId || `settlement:binance:${params.userId}:${params.symbol}:${params.fillId}`;
     const idempKey =
       params.idempotencyKey || `fill_${accountMode}_${params.orderId}_${params.fillId}`;
 
@@ -887,8 +887,8 @@ export class LedgerService {
       );
 
       const existingEntry = await tx.queryOne<LedgerEntryRecord>(
-        `SELECT * FROM ledger_entries WHERE idempotency_key = ? OR (reference_type = 'trade_fill' AND fill_id = ? AND account_mode = ?)`,
-        [idempKey, params.fillId, accountMode]
+        `SELECT * FROM ledger_entries WHERE idempotency_key = ? OR (user_id = ? AND order_id = ? AND reference_type = 'trade_fill' AND fill_id = ? AND account_mode = ?)`,
+        [idempKey, params.userId, params.orderId, params.fillId, accountMode]
       );
 
       if (existingEvent || existingEntry) {
@@ -1746,20 +1746,40 @@ export class LedgerService {
       );
 
       // Record independent double-entry accounting event for idempotency
-      await tx.execute(
-        `INSERT INTO accounting_events (
-          event_id, transaction_id, user_id, account_mode, event_type, fill_id, order_id, created_at
-        ) VALUES (?, ?, ?, ?, 'FILL_SETTLEMENT', ?, ?, ?)`,
-        [
-          accountingEventId,
-          txId,
-          params.userId,
-          accountMode,
-          params.fillId,
-          params.orderId,
-          now,
-        ]
-      );
+      try {
+        await tx.execute(
+          `INSERT INTO accounting_events (
+            event_id, transaction_id, user_id, account_mode, event_type, fill_id, order_id, created_at
+          ) VALUES (?, ?, ?, ?, 'FILL_SETTLEMENT', ?, ?, ?)`,
+          [
+            accountingEventId,
+            txId,
+            params.userId,
+            accountMode,
+            params.fillId,
+            params.orderId,
+            now,
+          ]
+        );
+      } catch (eventErr: any) {
+        if (
+          String(eventErr.message).includes('UNIQUE constraint failed') ||
+          String(eventErr.message).includes('duplicate key') ||
+          eventErr.code === '23505'
+        ) {
+          return {
+            alreadyProcessed: true,
+            transactionId: txId,
+            cashBalanceAfterMinor: BigInt(cashAcc.balance_minor),
+            assetBalanceAfterMinor: BigInt(assetAcc.balance_minor),
+            feeMinor: 0n,
+            costBasisMinor: BigInt(pos.cost_basis_minor),
+            realizedPnlMinor: BigInt(pos.realized_pnl_minor),
+            totalQuantityMinor: BigInt(pos.total_quantity_minor),
+          };
+        }
+        throw eventErr;
+      }
 
       // Verify transaction is balanced per currency!
       await this.assertTransactionBalanced(tx, txId);
@@ -1833,7 +1853,7 @@ export class LedgerService {
       result[key] = {
         balance: bal,
         reserved: res,
-        free: Math.max(0, bal - res),
+        free: Math.max(0, bal - res), // PRECISION_BOUNDARY: legacy display projection
       };
     }
 
@@ -1888,6 +1908,7 @@ export class LedgerService {
       cumulativeRealizedPnlMinor += rPnlMinor;
       cumulativeTotalFeesMinor += feesMinor;
 
+      // PRECISION_BOUNDARY: legacy number conversion for backward-compatible getUserPositions display API
       const totalQty = fromAssetMinorToDisplayNumber(totalQtyMinor);
       const reservedQty = fromAssetMinorToDisplayNumber(reservedQtyMinor);
       const costBasisUSD = fromCashMinorToDisplayNumber(costBasisMinor);
@@ -1900,7 +1921,7 @@ export class LedgerService {
         availableQuantityMinor: totalQtyMinor >= reservedQtyMinor ? totalQtyMinor - reservedQtyMinor : 0n,
         totalQuantity: totalQty,
         reservedQuantity: reservedQty,
-        availableQuantity: Math.max(0, totalQty - reservedQty),
+        availableQuantity: Math.max(0, totalQty - reservedQty), // PRECISION_BOUNDARY: legacy display projection
         costBasisMinor,
         costBasisUSD,
         avgCostBasisUSD,

@@ -112,12 +112,49 @@ describe('Binance Execution Gateway & State Machine', () => {
     const clientOrderId = BinanceGateway.generateClientOrderId(userId, 'idemp_unk');
     const now = Date.now();
 
+    await LedgerService.creditDeposit({
+      userId,
+      assetOrCurrency: 'USDT',
+      amountMinor: 1_000_000,
+      paymentId: 'pay_unk_test',
+      description: 'Fund for unknown test',
+    });
+    await LedgerService.transfer({
+      userId,
+      fromAccountType: 'sovereign_cash',
+      toAccountType: 'trading_allocated',
+      assetOrCurrency: 'USDT',
+      amountMinor: 1_000_000,
+      referenceType: 'allocation',
+      referenceId: 'alloc_unk_test',
+      description: 'Allocate trading capital',
+    });
+    await LedgerService.reserveOrderFunds({
+      userId,
+      orderId: clientOrderId,
+      accountType: 'trading_allocated',
+      assetOrCurrency: 'USDT',
+      amountMinor: 500_375n,
+    });
+
+    BinanceGateway.setMockOrderFills(clientOrderId, [
+      {
+        tradeId: 'trd_unk_001',
+        price: '50000',
+        qty: '0.1',
+        commission: '3.75',
+        commissionAsset: 'USDT',
+        time: now,
+      },
+    ]);
+
     // Insert simulated order in UNKNOWN status
     await db.execute(
       `INSERT INTO exchange_orders (
         id, user_id, client_order_id, symbol, side, type, status, orig_qty,
-        price, quote_asset, notional, idempotency_key, created_at, updated_at
-      ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'UNKNOWN', 0.1, 50000, 'USDT', 5000, 'idemp_unk', ?, ?)`,
+        orig_qty_exact, price, price_exact, quote_asset, notional, notional_exact,
+        reserved_cash, reserved_cash_minor, idempotency_key, created_at, updated_at
+      ) VALUES (?, ?, ?, 'BTCUSDT', 'BUY', 'LIMIT', 'UNKNOWN', 0.1, '0.1', 50000, '50000', 'USDT', 5000, '5000', 5000, 500375, 'idemp_unk', ?, ?)`,
       [clientOrderId, userId, clientOrderId, now, now]
     );
 

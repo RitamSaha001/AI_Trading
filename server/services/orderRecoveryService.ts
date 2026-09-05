@@ -139,80 +139,59 @@ export class OrderRecoveryService {
               fills.every((f) => f.commission !== undefined && f.commission !== null && f.commission !== '' && f.commissionAsset);
 
             if (!hasAuthoritativeCommission) {
-              if (config.NODE_ENV === 'test' && venueResult.fills === undefined && (!fills || fills.length === 0)) {
-                // Test environment fallback for legacy test mocks that mock reconcileUnknownOrder without fills
-                const executedQtyDec = ExactDecimal.from(
-                  venueResult.executedQtyExact || venueResult.executedQty || order.orig_qty_exact || order.orig_qty || '0'
-                );
-                const avgPriceDec = ExactDecimal.from(
-                  venueResult.avgPriceExact || venueResult.avgPrice || order.price_exact || order.price || '0'
-                );
-                const simTestFee = executedQtyDec.mul(avgPriceDec).mul(ExactDecimal.from('0.00075')).toString();
-                fills = [
-                  {
-                    tradeId: `trd_rec_${clientOrderId}_${executedQtyDec.toString()}`,
-                    price: avgPriceDec.toString(),
-                    qty: executedQtyDec.toString(),
-                    commission: simTestFee,
-                    commissionAsset: order.quote_asset,
-                    time: Date.now(),
-                  },
-                ];
-              } else {
-                // Authoritative fee data missing! Keep order in RECONCILING, commission_status = 'PENDING'
-                if (currentStatus !== 'RECONCILING') {
-                  OrderStateMachine.validateTransition(currentStatus, 'RECONCILING', clientOrderId);
-                }
-
-                await db.execute(
-                  `UPDATE exchange_orders SET
-                    status = 'RECONCILING',
-                    exchange_order_id = ?,
-                    executed_qty = 0.0,
-                    executed_qty_exact = ?,
-                    avg_price = 0.0,
-                    avg_price_exact = ?,
-                    cumulative_quote_qty = 0.0,
-                    cumulative_quote_exact = ?,
-                    executed_notional_exact = ?,
-                    commission_status = 'PENDING',
-                    updated_at = ?
-                   WHERE client_order_id = ?`,
-                  [
-                    venueResult.exchangeOrderId || order.exchange_order_id || `ex_rec_${Date.now()}`,
-                    venueResult.executedQtyExact || order.orig_qty_exact || String(order.orig_qty || 0),
-                    venueResult.avgPriceExact || order.price_exact || String(order.price || 0),
-                    order.notional_exact || String(order.notional || 0),
-                    order.notional_exact || String(order.notional || 0),
-                    Date.now(),
-                    clientOrderId,
-                  ]
-                );
-
-                await AuditService.logEvent({
-                  userId: order.user_id,
-                  eventType: 'ORDER_RECONCILING_PENDING_COMMISSION',
-                  source: 'order_recovery_service',
-                  actor: 'system',
-                  metadata: {
-                    clientOrderId,
-                    exchangeOrderId: venueResult.exchangeOrderId || order.exchange_order_id,
-                    status: 'RECONCILING',
-                    commissionStatus: 'PENDING',
-                  },
-                  result: 'SUCCESS',
-                });
-
-                result.unresolvedCount++;
-                result.actions.push({
-                  clientOrderId,
-                  fromStatus: currentStatus,
-                  toStatus: 'RECONCILING',
-                  action: 'AWAIT_AUTHORITATIVE_COMMISSION',
-                  reason: 'Missing authoritative fee data from exchange venue',
-                });
-                continue;
+              // Authoritative fee data missing! Keep order in RECONCILING, commission_status = 'PENDING'
+              if (currentStatus !== 'RECONCILING') {
+                OrderStateMachine.validateTransition(currentStatus, 'RECONCILING', clientOrderId);
               }
+
+              await db.execute(
+                `UPDATE exchange_orders SET
+                  status = 'RECONCILING',
+                  exchange_order_id = ?,
+                  executed_qty = 0.0,
+                  executed_qty_exact = ?,
+                  avg_price = 0.0,
+                  avg_price_exact = ?,
+                  cumulative_quote_qty = 0.0,
+                  cumulative_quote_exact = ?,
+                  executed_notional_exact = ?,
+                  commission_status = 'PENDING',
+                  updated_at = ?
+                 WHERE client_order_id = ?`,
+                [
+                  venueResult.exchangeOrderId || order.exchange_order_id || `ex_rec_${Date.now()}`,
+                  venueResult.executedQtyExact || order.orig_qty_exact || String(order.orig_qty || 0),
+                  venueResult.avgPriceExact || order.price_exact || String(order.price || 0),
+                  order.notional_exact || String(order.notional || 0),
+                  order.notional_exact || String(order.notional || 0),
+                  Date.now(),
+                  clientOrderId,
+                ]
+              );
+
+              await AuditService.logEvent({
+                userId: order.user_id,
+                eventType: 'ORDER_RECONCILING_PENDING_COMMISSION',
+                source: 'order_recovery_service',
+                actor: 'system',
+                metadata: {
+                  clientOrderId,
+                  exchangeOrderId: venueResult.exchangeOrderId || order.exchange_order_id,
+                  status: 'RECONCILING',
+                  commissionStatus: 'PENDING',
+                },
+                result: 'SUCCESS',
+              });
+
+              result.unresolvedCount++;
+              result.actions.push({
+                clientOrderId,
+                fromStatus: currentStatus,
+                toStatus: 'RECONCILING',
+                action: 'AWAIT_AUTHORITATIVE_COMMISSION',
+                reason: 'Missing authoritative fee data from exchange venue',
+              });
+              continue;
             }
 
             // Authoritative multi-fill settlement
@@ -287,7 +266,7 @@ export class OrderRecoveryService {
                 const fillAsset = fill.commissionAsset || order.quote_asset;
                 const tradeId = fill.tradeId || `${clientOrderId}_rec_${idx}`;
                 const canonicalFillKey = `binance:${order.user_id}:${order.symbol}:${tradeId}`;
-                const accountingEventId = `settlement:binance:${order.user_id}:${tradeId}`;
+                const accountingEventId = `settlement:binance:${order.user_id}:${order.symbol}:${tradeId}`;
                 const fillDbId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
                 await tx.execute(

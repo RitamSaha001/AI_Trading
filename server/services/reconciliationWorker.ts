@@ -149,7 +149,7 @@ export class ReconciliationWorker {
 
       for (const acc of ledgerAccounts) {
         balancesChecked++;
-        if (Number(acc.balance_minor) < 0) {
+        if (BigInt(acc.balance_minor) < 0n) {
           mismatchesFound++;
           await this.recordMismatch({
             runId,
@@ -281,7 +281,7 @@ export class ReconciliationWorker {
         severity: isCritical ? 'CRITICAL' : 'HIGH',
         localState: { availableCash: localCashDec.toString(), currency: quoteAsset },
         exchangeState: { availableCash: exchangeCashDec.toString(), diff: cashDiffDec.toString() },
-        notes: `RECONCILIATION_MISMATCH: Cash discrepancy of ${cashDiffDec.toFixed(2)} ${quoteAsset} detected between local ledger and exchange venue.`,
+        notes: `RECONCILIATION_MISMATCH: Cash discrepancy of ${cashDiffDec.toFixed(2)} ${quoteAsset} detected between local ledger and exchange venue.`, // PRECISION_BOUNDARY: reporting notes
       });
     }
 

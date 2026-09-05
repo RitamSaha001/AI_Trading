@@ -61,8 +61,13 @@ export class SQLiteClient implements DBClient {
     return rows.map((r) => {
       const o: any = {};
       for (const [k, v] of Object.entries(r)) {
-        if (typeof v === 'bigint' && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)) {
-          o[k] = Number(v);
+        if (typeof v === 'bigint') {
+          // Strictly preserve native BigInt for all minor-unit accounting fields and values >= 2^53
+          if (k.endsWith('_minor') || v > BigInt(Number.MAX_SAFE_INTEGER) || v < BigInt(Number.MIN_SAFE_INTEGER)) {
+            o[k] = v;
+          } else {
+            o[k] = Number(v);
+          }
         } else {
           o[k] = v;
         }
