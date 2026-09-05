@@ -1,4 +1,12 @@
+export const INDIAN_ASSETS = [
+  'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL',
+  'ITC', 'KOTAKBANK', 'LT', 'TATAMOTORS', 'AXISBANK', 'MARUTI', 'SUNPHARMA',
+  'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC'
+] as const;
+export type IndianAsset = typeof INDIAN_ASSETS[number];
+
 export const ASSETS = [
+  ...INDIAN_ASSETS,
   'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'SUI', 'SHIB',
   'TON', 'LINK', 'NEAR', 'DOT', 'BCH', 'PEPE', 'UNI', 'APT', 'LTC', 'ICP',
   'FET', 'KAS', 'POL', 'XLM', 'XMR', 'TIA', 'RENDER', 'STX', 'TAO', 'AAVE',
@@ -19,6 +27,8 @@ export type OrderStatus = 'pending' | 'filled' | 'cancelled' | 'rejected';
 export type Timeframe = '1H' | '1D' | '1W' | '1M' | '1Y';
 
 export type DataSource =
+  | 'Upstox REST (Live)'
+  | 'Upstox Heuristic Simulation'
   | 'Binance WebSocket (Live)'
   | 'Binance REST'
   | 'Coinbase REST'
@@ -34,7 +44,7 @@ export type Candle = {
   volume: number;
 };
 
-export type MarketCategory = 'All' | 'Layer 1' | 'DeFi' | 'AI & Compute' | 'Meme' | 'Infra' | 'Gaming';
+export type MarketCategory = 'All' | 'Indian Equities' | 'Nifty 50' | 'Layer 1' | 'DeFi' | 'AI & Compute' | 'Meme' | 'Infra' | 'Gaming';
 
 export type Market = {
   asset: Asset;
@@ -81,7 +91,10 @@ export type Order = {
   reservedAmount?: number;
   partialHarvested?: boolean;
   zeroLossLocked?: boolean;
-  accountMode?: 'paper' | 'exchange' | 'web3';
+  product?: 'CNC' | 'MIS' | 'MTF' | string;
+  validity?: 'DAY' | 'IOC' | string;
+  broker?: 'upstox' | 'binance' | string;
+  accountMode?: 'paper' | 'upstox' | 'exchange' | 'web3';
 };
 
 export type AlertRule = {
@@ -317,7 +330,69 @@ export type AISafetyValidation = {
   };
 };
 
-export type AccountMode = 'paper' | 'exchange' | 'web3';
+export type AccountMode = 'paper' | 'upstox' | 'exchange' | 'web3';
+
+export type UpstoxTokenHealthInfo = {
+  status: 'HEALTHY' | 'EXPIRING_SOON' | 'EXPIRED' | 'UNCONFIGURED';
+  expiresAt: number | null;
+  timeRemainingMs: number;
+  timeRemainingHuman: string;
+  warning?: string;
+};
+
+export type UpstoxHoldingInfo = {
+  instrumentKey: string;
+  symbol: string;
+  isin?: string;
+  quantity: string | number;
+  authorizedQuantity?: string | number;
+  averagePrice: string | number;
+  currentPrice?: string | number;
+  pnl?: string | number;
+};
+
+export type UpstoxPositionInfo = {
+  instrumentKey: string;
+  symbol: string;
+  quantity: string | number;
+  averagePrice: string | number;
+  currentPrice?: string | number;
+  unrealizedPnl?: string | number;
+  realizedPnl?: string | number;
+  product: string;
+};
+
+export type UpstoxIpDiagnosticInfo = {
+  outboundIp: string | null;
+  matches: boolean;
+  status: string;
+  authoritativeSource?: string;
+  isProduction?: boolean;
+  probedAt?: number;
+};
+
+export type UpstoxAccountInfo = {
+  connected: boolean;
+  environment: 'sandbox' | 'production';
+  accountId?: string;
+  accountName?: string;
+  canTrade: boolean;
+  canWithdraw?: boolean;
+  isSafe?: boolean;
+  tokenHealth?: UpstoxTokenHealthInfo;
+  funds?: {
+    currency: 'INR';
+    availableCash: number;
+    usedMargin: number;
+    totalEquity: number;
+  };
+  holdings?: UpstoxHoldingInfo[];
+  positions?: UpstoxPositionInfo[];
+  ipDiagnostics?: UpstoxIpDiagnosticInfo;
+  lastSyncAt: number;
+  latencyMs?: number;
+  error?: string;
+};
 
 export type ExchangeBalance = {
   asset: string;
@@ -428,6 +503,7 @@ export type AppState = {
   authSession?: AuthSession;
   grievanceTickets?: GrievanceTicket[];
   ledgerHistory?: UnifiedLedgerEntry[];
+  upstoxAccount?: UpstoxAccountInfo;
   exchangeAccount?: ExchangeAccountInfo;
   exchangeOrders?: Order[];
   web3Account?: Web3AccountInfo;

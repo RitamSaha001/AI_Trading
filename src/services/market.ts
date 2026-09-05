@@ -89,7 +89,7 @@ export function generateHeuristicMarket(asset: Asset, tf: Timeframe): Market {
     volume24h: +volume24h.toFixed(0),
     history: candles.map((c) => c.close),
     candles,
-    source: 'Synthetic Heuristic Simulation',
+    source: meta.category === 'Indian Equities' ? 'Upstox Heuristic Simulation' : 'Synthetic Heuristic Simulation',
     isSynthetic: true,
     lastUpdated: now,
     category: meta.category,

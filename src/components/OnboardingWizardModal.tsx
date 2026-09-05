@@ -33,6 +33,8 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
     setAccountMode,
     exchangeAccount,
     openExchangeDrawer,
+    upstoxAccount,
+    openUpstoxDrawer,
     setLossPreventionMode,
     addStrategy,
     triggerToast,
@@ -173,11 +175,11 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                 <div className="p-4 rounded-2xl bg-black/[0.02] border border-black/[0.05] space-y-2 text-center sm:text-left">
                   <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto sm:mx-0">
-                    <Cpu className="w-4 h-4" />
+                    <span className="text-base">🇮🇳</span>
                   </div>
-                  <h4 className="text-xs font-bold text-zinc-900">Dual-Desk Engine</h4>
+                  <h4 className="text-xs font-bold text-zinc-900">Upstox NSE / BSE Gateway</h4>
                   <p className="text-[11px] text-zinc-500 leading-tight">
-                    Switch freely between a $50k paper sandbox and live Binance Spot execution with zero balance bleed.
+                    Direct authoritative gateway for 20 liquid Indian equities (RELIANCE, TCS, INFY, HDFC Bank) with live Demat sync.
                   </p>
                 </div>
 
@@ -185,7 +187,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                   <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto sm:mx-0">
                     <Shield className="w-4 h-4" />
                   </div>
-                  <h4 className="text-xs font-bold text-zinc-900">Capital Defense</h4>
+                  <h4 className="text-xs font-bold text-zinc-900">Capital Defense Sentinel</h4>
                   <p className="text-[11px] text-zinc-500 leading-tight">
                     Automated circuit breakers, dynamic ATR trailing stops, and a mandatory 15% cash liquidity floor.
                   </p>
@@ -193,11 +195,11 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
 
                 <div className="p-4 rounded-2xl bg-black/[0.02] border border-black/[0.05] space-y-2 text-center sm:text-left">
                   <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto sm:mx-0">
-                    <Zap className="w-4 h-4" />
+                    <Cpu className="w-4 h-4" />
                   </div>
-                  <h4 className="text-xs font-bold text-zinc-900">Sub-Second Quotes</h4>
+                  <h4 className="text-xs font-bold text-zinc-900">Frontier AI &amp; Paper Sim</h4>
                   <p className="text-[11px] text-zinc-500 leading-tight">
-                    Live Binance WebSocket feeds streaming real-time prices across 108 high-liquidity crypto markets.
+                    Google Gemini 3 reasoning with 26 deterministic quant tools and a $50k practice sandbox.
                   </p>
                 </div>
               </div>
@@ -212,7 +214,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
               <div>
                 <h3 className="text-base font-bold text-zinc-950">Choose Your Trading Desk Mode</h3>
                 <p className="text-xs text-zinc-500 mt-0.5">
-                  You can trade risk-free in paper simulation or connect your Binance exchange account.
+                  Trade risk-free in simulated paper mode or connect your Upstox Demat account.
                 </p>
               </div>
 
@@ -239,7 +241,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                       )}
                     </div>
                     <p className="text-xs text-zinc-600">
-                      $50,000 in virtual sandbox capital. Realistic liquidity slippage, fill simulation, and zero financial risk.
+                      $50,000 in virtual sandbox capital. Practice Indian equities &amp; global contracts with realistic slippage and zero financial risk.
                     </p>
                   </div>
                   <div className="mt-4 pt-3 border-t border-black/[0.06] text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5">
@@ -248,59 +250,62 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                   </div>
                 </div>
 
-                {/* Binance Live Spot Desk Option */}
+                {/* Upstox Indian Equities Desk Option */}
                 <div
                   onClick={() => {
-                    setAccountMode('exchange');
-                    if (!exchangeAccount?.connected) {
-                      openExchangeDrawer();
+                    if (!upstoxAccount?.connected) {
+                      openUpstoxDrawer();
+                    } else {
+                      setAccountMode('upstox');
                     }
                   }}
                   className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                    accountMode === 'exchange'
-                      ? 'border-emerald-600 bg-emerald-50/20 ring-1 ring-emerald-600'
+                    accountMode === 'upstox'
+                      ? 'border-indigo-600 bg-indigo-50/20 ring-1 ring-indigo-600'
                       : 'border-black/[0.08] hover:border-black/20 bg-white'
                   }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Coins className="w-4 h-4 text-emerald-600" />
-                        <h4 className="text-xs font-bold text-zinc-900">Binance Spot Bridge</h4>
+                        <span className="text-lg">🇮🇳</span>
+                        <h4 className="text-xs font-bold text-zinc-900">Upstox (NSE / BSE) Desk</h4>
                       </div>
-                      {accountMode === 'exchange' && (
-                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                      {accountMode === 'upstox' && (
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-600 text-white">
                           Active
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-zinc-600">
-                      Connect Binance Spot API for Testnet (safe live matching) or Mainnet execution with client-side AES-GCM encryption.
+                      Authoritative Upstox gateway for National Stock Exchange &amp; Bombay Stock Exchange. Live Demat sync, CNC/MIS products, and static IP diagnosis.
                     </p>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-black/[0.06] flex items-center justify-between text-[11px]">
                     <span className="text-zinc-500 font-medium">
-                      {exchangeAccount?.connected ? '🟢 Keys Connected' : '⚪ Not Connected'}
+                      {upstoxAccount?.connected
+                        ? `🟢 ${upstoxAccount.accountId || 'Connected'} (Valid to 03:30 AM IST)`
+                        : '⚪ OAuth Not Connected'}
                     </span>
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        openExchangeDrawer();
+                        openUpstoxDrawer();
                       }}
                       className="text-indigo-600 font-bold hover:underline"
                     >
-                      {exchangeAccount?.connected ? 'Settings ⚙️' : 'Configure Keys →'}
+                      {upstoxAccount?.connected ? 'Settings ⚙️' : 'Connect Demat →'}
                     </button>
                   </div>
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 flex items-start gap-2">
-                <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-900 flex items-start gap-2">
+                <Lock className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
                 <p className="text-[11px] leading-tight">
-                  <strong>Zero-Risk Storage:</strong> API secrets are never transmitted to any server. They remain exclusively inside your browser's Web Crypto vault encrypted with your master passphrase.
+                  <strong>SEBI &amp; Production Safety Gate:</strong> Production server defaults to <code>UPSTOX_LIVE_TRADING_ENABLED=false</code>, safeguarding all accounts from unintended executions during testing.
                 </p>
               </div>
             </div>
@@ -524,7 +529,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="p-2.5 rounded-xl bg-black/[0.02] border border-black/[0.04] flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Desk: <strong>{accountMode === 'exchange' ? 'Binance' : 'Paper Desk'}</strong></span>
+                    <span>Desk: <strong>{accountMode === 'upstox' ? 'Upstox (NSE)' : accountMode === 'exchange' ? 'Binance' : 'Simulated Paper'}</strong></span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-black/[0.02] border border-black/[0.04] flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -536,7 +541,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                   </div>
                   <div className="p-2.5 rounded-xl bg-black/[0.02] border border-black/[0.04] flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Markets: <strong>108 Active Streams</strong></span>
+                    <span>Markets: <strong>NSE/BSE &amp; Global Active</strong></span>
                   </div>
                 </div>
               </div>

@@ -318,6 +318,78 @@ export class UpstoxInstrumentRegistry {
       lastPrice: 7000.0,
       active: true,
     },
+    TITAN: {
+      instrumentKey: 'NSE_EQ|INE280A01028',
+      tradingSymbol: 'TITAN',
+      companyName: 'Titan Company Limited',
+      exchange: 'NSE',
+      segment: 'NSE_EQ',
+      isin: 'INE280A01028',
+      tickSize: 0.05,
+      lotSize: 1,
+      minQuantity: 1,
+      maxQuantity: 100000,
+      freezeQuantity: 5000,
+      currency: 'INR',
+      lowerCircuitLimit: 3000.0,
+      upperCircuitLimit: 4000.0,
+      lastPrice: 3500.0,
+      active: true,
+    },
+    ASIANPAINT: {
+      instrumentKey: 'NSE_EQ|INE021A01026',
+      tradingSymbol: 'ASIANPAINT',
+      companyName: 'Asian Paints Limited',
+      exchange: 'NSE',
+      segment: 'NSE_EQ',
+      isin: 'INE021A01026',
+      tickSize: 0.05,
+      lotSize: 1,
+      minQuantity: 1,
+      maxQuantity: 100000,
+      freezeQuantity: 5000,
+      currency: 'INR',
+      lowerCircuitLimit: 2500.0,
+      upperCircuitLimit: 3500.0,
+      lastPrice: 3000.0,
+      active: true,
+    },
+    WIPRO: {
+      instrumentKey: 'NSE_EQ|INE075A01022',
+      tradingSymbol: 'WIPRO',
+      companyName: 'Wipro Limited',
+      exchange: 'NSE',
+      segment: 'NSE_EQ',
+      isin: 'INE075A01022',
+      tickSize: 0.05,
+      lotSize: 1,
+      minQuantity: 1,
+      maxQuantity: 100000,
+      freezeQuantity: 10000,
+      currency: 'INR',
+      lowerCircuitLimit: 400.0,
+      upperCircuitLimit: 650.0,
+      lastPrice: 520.0,
+      active: true,
+    },
+    NTPC: {
+      instrumentKey: 'NSE_EQ|INE733E01010',
+      tradingSymbol: 'NTPC',
+      companyName: 'NTPC Limited',
+      exchange: 'NSE',
+      segment: 'NSE_EQ',
+      isin: 'INE733E01010',
+      tickSize: 0.05,
+      lotSize: 1,
+      minQuantity: 1,
+      maxQuantity: 100000,
+      freezeQuantity: 10000,
+      currency: 'INR',
+      lowerCircuitLimit: 300.0,
+      upperCircuitLimit: 480.0,
+      lastPrice: 390.0,
+      active: true,
+    },
   };
 
   private static dynamicCache: Map<string, AuthoritativeInstrument> = new Map();
@@ -393,6 +465,20 @@ export class UpstoxInstrumentRegistry {
    */
   public static isVerified(symbolOrKey: string): boolean {
     return this.get(symbolOrKey) !== null;
+  }
+
+  /**
+   * Returns list of all authoritative master and dynamic instruments.
+   */
+  public static getAll(): AuthoritativeInstrument[] {
+    const map = new Map<string, AuthoritativeInstrument>();
+    for (const inst of Object.values(this.MASTER_INSTRUMENTS)) {
+      map.set(inst.tradingSymbol, inst);
+    }
+    for (const inst of this.dynamicCache.values()) {
+      map.set(inst.tradingSymbol, inst);
+    }
+    return Array.from(map.values());
   }
 
   /**

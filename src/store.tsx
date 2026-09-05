@@ -14,6 +14,7 @@ import {
   AISafetyValidation,
   ExecutionReceipt,
   AccountMode,
+  UpstoxAccountInfo,
   ExchangeAccountInfo,
   NativeWalletState,
   WalletCurrency,
@@ -133,6 +134,7 @@ type Ctx = {
       strategyName?: string;
       takeProfit?: number;
       stopLoss?: number;
+      product?: 'CNC' | 'MIS' | 'MTF' | string;
     }
   ) => { ok: boolean; error?: string; order?: Order };
   cancelPendingOrder: (orderId: string) => boolean | Promise<boolean>;
@@ -162,8 +164,14 @@ type Ctx = {
   executeActionProposal: (proposal: any) => { ok: boolean; error?: string };
   reset: (startingCash?: number, mode?: SimulationMode) => void;
   refreshMarkets: () => Promise<void>;
-  accountMode: 'paper' | 'exchange' | 'web3';
-  setAccountMode: (mode: 'paper' | 'exchange' | 'web3') => void;
+  accountMode: AccountMode;
+  setAccountMode: (mode: AccountMode) => void;
+  upstoxAccount: UpstoxAccountInfo | null;
+  upstoxDrawerOpen: boolean;
+  openUpstoxDrawer: () => void;
+  closeUpstoxDrawer: () => void;
+  syncUpstoxAccount: () => Promise<void>;
+  disconnectUpstox: () => Promise<void>;
   exchangeAccount: ExchangeAccountInfo | null;
   exchangeDrawerOpen: boolean;
   openExchangeDrawer: () => void;
@@ -418,6 +426,84 @@ export function Provider({ children }: { children: React.ReactNode }) {
     setActiveToast(null);
   }, []);
 
+  // Upstox Indian Equities Desk State
+  const [upstoxAccount, setUpstoxAccount] = useState<UpstoxAccountInfo | null>(() => state.upstoxAccount || null);
+  const [upstoxDrawerOpen, setUpstoxDrawerOpen] = useState(false);
+  const isUpstoxSyncingRef = useRef(false);
+
+  const openUpstoxDrawer = useCallback(() => setUpstoxDrawerOpen(true), []);
+  const closeUpstoxDrawer = useCallback(() => setUpstoxDrawerOpen(false), []);
+
+  const syncUpstoxAccount = useCallback(async () => {
+    if (isUpstoxSyncingRef.current) return;
+    isUpstoxSyncingRef.current = true;
+    try {
+      const [accRes, fundsRes, posRes, hldRes, healthRes, diagRes] = await Promise.allSettled([
+        ApiClient.getExchangeAccount('upstox'),
+        ApiClient.getBrokerFunds('upstox'),
+        ApiClient.getBrokerPositions('upstox'),
+        ApiClient.getBrokerHoldings('upstox'),
+        ApiClient.getUpstoxTokenHealth(),
+        ApiClient.getUpstoxIpDiagnostics(),
+      ]);
+
+      const accData = accRes.status === 'fulfilled' && accRes.value.ok ? accRes.value.data?.account : null;
+      const fundsData = fundsRes.status === 'fulfilled' && fundsRes.value.ok ? fundsRes.value.data?.funds : null;
+      const posData = posRes.status === 'fulfilled' && posRes.value.ok ? posRes.value.data?.positions : [];
+      const hldData = hldRes.status === 'fulfilled' && hldRes.value.ok ? hldRes.value.data?.holdings : [];
+      const healthData = healthRes.status === 'fulfilled' && healthRes.value.ok ? healthRes.value.data?.health : null;
+      const diagData = diagRes.status === 'fulfilled' && diagRes.value.ok ? diagRes.value.data?.diagnostics : null;
+
+      const isConn = Boolean(accData?.connected);
+
+      if (isConn || accData || fundsData) {
+        const updated: UpstoxAccountInfo = {
+          connected: isConn,
+          environment: accData?.environment || 'production',
+          accountId: accData?.accountId,
+          accountName: accData?.accountName,
+          canTrade: Boolean(accData?.canTrade),
+          tokenHealth: healthData || accData?.tokenHealth,
+          funds: fundsData ? {
+            currency: 'INR',
+            availableCash: Number(fundsData.availableCash) || 0,
+            usedMargin: Number(fundsData.usedMargin) || 0,
+            totalEquity: Number(fundsData.totalEquity) || 0,
+          } : undefined,
+          holdings: Array.isArray(hldData) ? hldData : [],
+          positions: Array.isArray(posData) ? posData : [],
+          ipDiagnostics: diagData || undefined,
+          lastSyncAt: Date.now(),
+          latencyMs: accData?.latencyMs,
+        };
+
+        setUpstoxAccount(updated);
+        setState((s) => ({
+          ...s,
+          upstoxAccount: updated,
+          ...(s.accountMode === 'paper' && isConn ? { accountMode: 'upstox' } : {}),
+        }));
+      }
+    } catch (err) {
+      console.warn('Upstox account sync encountered error:', err);
+    } finally {
+      isUpstoxSyncingRef.current = false;
+    }
+  }, []);
+
+  const disconnectUpstox = useCallback(async () => {
+    try {
+      await ApiClient.disconnectExchange('upstox');
+    } catch {}
+    setUpstoxAccount(null);
+    setState((s) => ({
+      ...s,
+      upstoxAccount: undefined,
+      accountMode: 'paper',
+    }));
+    triggerToast('Upstox Disconnected', 'Upstox session terminated and switched back to Simulated Desk.', 'info');
+  }, [triggerToast]);
+
   // Live Exchange Bridge State
   const [exchangeAccount, setExchangeAccount] = useState<ExchangeAccountInfo | null>(() => state.exchangeAccount || null);
   const [exchangeDrawerOpen, setExchangeDrawerOpen] = useState(false);
@@ -452,15 +538,17 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const openWeb3Drawer = useCallback(() => setWeb3DrawerOpen(true), []);
   const closeWeb3Drawer = useCallback(() => setWeb3DrawerOpen(false), []);
 
-  const setAccountMode = useCallback((mode: 'paper' | 'exchange' | 'web3') => {
+  const setAccountMode = useCallback((mode: AccountMode) => {
     setState((s) => ({ ...s, accountMode: mode }));
     triggerToast(
-      'Account Mode Switched',
-      `Active Desk: ${
-        mode === 'web3'
-          ? '⚡ Web3 / UPI Self-Custody Desk'
+      'Desk Switched',
+      `Active Trading Desk: ${
+        mode === 'upstox'
+          ? '🇮🇳 Upstox (NSE / BSE Desk)'
+          : mode === 'web3'
+          ? '⚡ Web3 / UPI Desk'
           : mode === 'exchange'
-          ? '🟢 Live Binance Exchange'
+          ? '🟢 Live Exchange'
           : '📊 Simulated Paper Desk'
       }.`,
       'info'
@@ -1382,6 +1470,26 @@ export function Provider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(pollId);
   }, [refreshMarkets]);
 
+  // Initial probe of Upstox connection on mount
+  useEffect(() => {
+    ApiClient.getExchangeAccount('upstox')
+      .then((res) => {
+        if (res.ok && res.data?.account?.connected) {
+          syncUpstoxAccount();
+        }
+      })
+      .catch(() => {});
+  }, [syncUpstoxAccount]);
+
+  // Periodic Upstox background sync (15s interval)
+  useEffect(() => {
+    if (state.accountMode !== 'upstox' && !upstoxAccount?.connected) return;
+    const interval = setInterval(() => {
+      syncUpstoxAccount();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [state.accountMode, upstoxAccount?.connected, syncUpstoxAccount]);
+
   // Cross-tab synchronization
   useEffect(() => {
     return initCrossTabSync((newState) => {
@@ -1612,11 +1720,94 @@ export function Provider({ children }: { children: React.ReactNode }) {
         strategyName?: string;
         takeProfit?: number;
         stopLoss?: number;
+        product?: 'CNC' | 'MIS' | 'MTF' | string;
       }
     ) => {
       if (stateRef.current.authSession?.user?.isEmergencyLocked) {
         triggerToast('Trading Frozen', 'Emergency Capital Freeze is active on your account.', 'warn');
         return { ok: false, error: 'Emergency capital freeze is active' };
+      }
+
+      const isUpstox = stateRef.current.accountMode === 'upstox';
+
+      if (isUpstox) {
+        const symbol = a;
+        const upstoxOrderType = options?.type === 'limit' ? 'LIMIT' : 'MARKET';
+        const clientOrderId = 'lm_upstox_' + Date.now().toString(36);
+        const quoteAgeMs = Date.now() - (marketsRef.current[a]?.lastUpdated || Date.now());
+        const product = (options as any)?.product || 'CNC';
+        const price = options?.limitPrice || marketsRef.current[a]?.price || 0;
+
+        // NSE 0.05 tick size validation
+        if (options?.type === 'limit' && options.limitPrice) {
+          const rem = Math.round((options.limitPrice * 100) % 5);
+          if (rem !== 0) {
+            triggerToast('Invalid Tick Size', 'NSE/BSE equities require limit prices in multiples of ₹0.05.', 'warn');
+            return { ok: false, error: 'Price must be a multiple of ₹0.05' };
+          }
+        }
+
+        // Safe dispatch: paper mode executes deterministically through Upstox adapter; live orders require two-step confirmation
+        ApiClient.submitOrder({
+          symbol,
+          asset: a,
+          quoteAsset: 'INR',
+          side: side === 'buy' ? 'BUY' : 'SELL',
+          type: upstoxOrderType,
+          quantity: qty,
+          price,
+          product,
+          accountMode: 'paper',
+          broker: 'upstox',
+          marketQuoteAgeMs: quoteAgeMs,
+          idempotencyKey: `ord_${clientOrderId}`,
+        })
+          .then(async (backendRes) => {
+            if (backendRes.ok && backendRes.data?.order) {
+              const ord = backendRes.data.order;
+              triggerToast(
+                'Upstox Order Submitted',
+                `Dispatched ${side.toUpperCase()} ${qty} ${a} (${ord.status})`,
+                ord.status === 'REJECTED' ? 'warn' : 'success'
+              );
+              syncUpstoxAccount();
+              return;
+            }
+            if (backendRes.error) {
+              triggerToast('Upstox Gate Notice', backendRes.error, 'warn');
+            }
+          })
+          .catch((err: any) => {
+            triggerToast('Upstox Order Notice', err?.message || 'Order execution reported notice', 'warn');
+          });
+
+        const newOrder: Order = {
+          id: clientOrderId,
+          ts: Date.now(),
+          side,
+          type: options?.type || 'market',
+          asset: a,
+          amount: qty,
+          price: price,
+          limitPrice: options?.limitPrice,
+          fee: price * qty * 0.0008,
+          notional: price * qty,
+          auto: Boolean(options?.auto),
+          strategyName: options?.strategyName,
+          status: options?.type === 'limit' ? 'pending' : 'filled',
+          stopLoss: options?.stopLoss,
+          takeProfit: options?.takeProfit,
+          product,
+          broker: 'upstox',
+          accountMode: 'upstox',
+        };
+
+        setState((s) => ({
+          ...s,
+          orders: [newOrder, ...s.orders],
+        }));
+
+        return { ok: true, order: newOrder };
       }
 
       const isExchange = stateRef.current.accountMode === 'exchange';
@@ -2674,6 +2865,12 @@ export function Provider({ children }: { children: React.ReactNode }) {
       refreshMarkets,
       accountMode: state.accountMode || 'paper',
       setAccountMode,
+      upstoxAccount,
+      upstoxDrawerOpen,
+      openUpstoxDrawer,
+      closeUpstoxDrawer,
+      syncUpstoxAccount,
+      disconnectUpstox,
       exchangeAccount,
       exchangeDrawerOpen,
       openExchangeDrawer,
@@ -2772,6 +2969,12 @@ export function Provider({ children }: { children: React.ReactNode }) {
       reset,
       refreshMarkets,
       setAccountMode,
+      upstoxAccount,
+      upstoxDrawerOpen,
+      openUpstoxDrawer,
+      closeUpstoxDrawer,
+      syncUpstoxAccount,
+      disconnectUpstox,
       exchangeAccount,
       exchangeDrawerOpen,
       openExchangeDrawer,

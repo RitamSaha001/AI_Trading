@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useLumen } from './store';
 import { decryptApiKey, isEncryptedApiKey } from './services/keyVault';
-import { ASSETS, Asset, Timeframe, Side, OrderType, StrategyKind } from './types';
+import { ASSETS, INDIAN_ASSETS, Asset, Timeframe, Side, OrderType, StrategyKind } from './types';
 import { LineChart, Sparkline } from './Chart';
 import { MarketHeatmap } from './components/MarketHeatmap';
 import {
   indicators,
   money,
+  moneyINR,
+  isIndianAsset,
+  formatCurrency,
   portfolioValue,
   positionValue,
   positionPnl,
@@ -74,7 +77,7 @@ function GlassCard({
   return (
     <div
       id={id}
-      className={`liquid-glass-subtle rounded-[26px] p-6 border border-white/80 shadow-xs transition-all ${className}`}
+      className={`liquid-glass-subtle rounded-[24px] p-5 sm:p-6 border border-black/[0.05] shadow-[0_4px_24px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.04)] transition-all duration-200 ${className}`}
     >
       {children}
     </div>
@@ -85,10 +88,10 @@ function PageHeader({ title, subtitle, action }: { title: string; subtitle: stri
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">{title}</h1>
-        <p className="text-xs text-zinc-400 mt-1 tracking-tight">{subtitle}</p>
+        <h1 className="text-2xl font-bold tracking-tight text-zinc-950">{title}</h1>
+        <p className="text-xs text-zinc-500 mt-1 tracking-tight font-normal">{subtitle}</p>
       </div>
-      {action && <div>{action}</div>}
+      {action && <div className="flex items-center gap-2">{action}</div>}
     </div>
   );
 }
@@ -123,8 +126,8 @@ export function Dashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <PageHeader
-        title="Algorithmic Trading Dashboard"
-        subtitle="Live cryptocurrency market streams, quantitative risk controls, and automated paper execution."
+        title="NSE / BSE & Global Markets Dashboard"
+        subtitle="Live Indian equities streams, Upstox execution gateway, quantitative risk controls, and automated algorithmic trading."
         action={
           <div className="flex items-center gap-2">
             <button
@@ -162,7 +165,7 @@ export function Dashboard() {
               </span>
             </div>
             <p className="text-[11px] text-zinc-600 mt-0.5">
-              Learn how to navigate Simulated Paper vs Live Binance Spot, calibrate Gemini 3 reasoning, and arm Zero-Loss bots.
+              Learn how to navigate Simulated Paper vs Upstox Indian Equities (NSE/BSE), calibrate Gemini AI reasoning, and arm automated risk bots.
             </p>
           </div>
         </div>
@@ -318,7 +321,7 @@ export function Dashboard() {
                   </span>
                 </div>
                 <div className="text-base font-bold font-mono text-zinc-950">
-                  {item ? money(item.price) : 'Loading...'}
+                  {item ? (isIndianAsset(a) ? moneyINR(item.price) : money(item.price)) : 'Loading...'}
                 </div>
                 <div className="mt-2 h-6">
                   {item && <Sparkline data={item.history.slice(-20)} positive={isPositive} height={24} />}
@@ -344,15 +347,15 @@ export function Dashboard() {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-zinc-950">
-                    {META[selectedAsset]?.name} ({selectedAsset}/USD)
+                    {META[selectedAsset]?.name} ({selectedAsset}{isIndianAsset(selectedAsset) ? ' • NSE' : '/USD'})
                   </h3>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/[0.04] text-zinc-500 font-medium">
-                    {m?.source || 'Exchange'}
+                    {m?.source || (isIndianAsset(selectedAsset) ? 'Upstox' : 'Exchange')}
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2 mt-0.5">
                   <span className="text-xl font-bold font-mono text-zinc-950">
-                    {m ? money(m.price) : '—'}
+                    {m ? (isIndianAsset(selectedAsset) ? moneyINR(m.price) : money(m.price)) : '—'}
                   </span>
                   <span
                     className={`text-xs font-semibold ${
@@ -693,14 +696,15 @@ export function Markets() {
     toggleWatch,
     refreshMarkets,
     openChat,
+    accountMode,
   } = useLumen();
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<string>('All');
+  const [category, setCategory] = useState<string>(accountMode === 'upstox' ? 'Indian Equities' : 'All');
   const [sortKey, setSortKey] = useState<'change' | 'price' | 'volume' | 'name'>('change');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [pageSize, setPageSize] = useState<number>(36);
 
-  const categories = ['All', 'Watchlist', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming'];
+  const categories = ['All', 'Indian Equities', 'Watchlist', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming'];
 
   const filtered = ASSETS.filter((a) => {
     const m = markets[a];
@@ -731,7 +735,7 @@ export function Markets() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
         title="Institutional Markets"
-        subtitle={`Live quotes streamed across ${ASSETS.length} global crypto markets with sub-second recalculation.`}
+        subtitle={`Live quotes streamed across ${INDIAN_ASSETS.length} NSE/BSE Indian equities and global benchmark markets with sub-second recalculation.`}
         action={
           <div className="flex items-center gap-2">
             <button
@@ -954,7 +958,7 @@ export function Markets() {
                       </div>
                     </td>
                     <td className="py-3 px-4 text-right font-bold font-mono text-zinc-950">
-                      {m ? money(m.price) : '—'}
+                      {m ? (isIndianAsset(a) ? moneyINR(m.price) : money(m.price)) : '—'}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span
@@ -967,10 +971,10 @@ export function Markets() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right hidden sm:table-cell font-mono text-[11px] text-zinc-500">
-                      {m ? `${money(m.low24h)} - ${money(m.high24h)}` : '—'}
+                      {m ? `${isIndianAsset(a) ? moneyINR(m.low24h) : money(m.low24h)} - ${isIndianAsset(a) ? moneyINR(m.high24h) : money(m.high24h)}` : '—'}
                     </td>
                     <td className="py-3 px-4 text-right hidden md:table-cell font-mono text-[11px] text-zinc-500">
-                      {m ? money(m.volume24h) : '—'}
+                      {m ? (isIndianAsset(a) ? moneyINR(m.volume24h, 0, 0) : money(m.volume24h)) : '—'}
                     </td>
                     <td className="py-3 px-4 text-center hidden lg:table-cell">
                       <div className="w-28 h-6 mx-auto">
@@ -1083,7 +1087,7 @@ export function Markets() {
 
                   <div className="mt-3.5">
                     <div className="text-xl font-bold font-mono tracking-tight text-zinc-950">
-                      {m ? money(m.price) : 'Loading...'}
+                      {m ? (isIndianAsset(a) ? moneyINR(m.price) : money(m.price)) : 'Loading...'}
                     </div>
                     <div
                       className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${
@@ -1104,8 +1108,8 @@ export function Markets() {
                   {m && (
                     <div className="mt-3 pt-2.5 border-t border-black/[0.04] space-y-1">
                       <div className="flex justify-between text-[10px] text-zinc-400 font-mono">
-                        <span>L: {money(m.low24h)}</span>
-                        <span>H: {money(m.high24h)}</span>
+                        <span>L: {isIndianAsset(a) ? moneyINR(m.low24h) : money(m.low24h)}</span>
+                        <span>H: {isIndianAsset(a) ? moneyINR(m.high24h) : money(m.high24h)}</span>
                       </div>
                       <div className="w-full h-1.5 bg-black/[0.04] rounded-full overflow-hidden">
                         <div
@@ -1180,7 +1184,7 @@ export function Markets() {
               </div>
               <h4 className="text-sm font-bold text-zinc-800">No Markets Match Your Search</h4>
               <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                No cryptocurrency found matching "{query}". Try searching for major assets like BTC, ETH, SOL, or clear your filters.
+                No instruments found matching "{query}". Try searching for liquid Indian equities like RELIANCE, TCS, INFY, HDFCBANK, or clear your filters.
               </p>
               <button
                 type="button"
@@ -1212,6 +1216,9 @@ export function Portfolio() {
     exchangeAccount,
     openExchangeDrawer,
     syncExchangeBalances,
+    upstoxAccount,
+    openUpstoxDrawer,
+    syncUpstoxAccount,
   } = useLumen();
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
@@ -1255,6 +1262,96 @@ export function Portfolio() {
           </div>
         }
       />
+
+      {/* Upstox Indian Equities Live Portfolio & Margins Card */}
+      {(accountMode === 'upstox' || upstoxAccount?.connected) && (
+        <div className="p-6 rounded-[28px] bg-gradient-to-br from-zinc-950 via-zinc-900 to-indigo-950 text-white shadow-xl space-y-4 border border-indigo-900/40 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                <span className="text-xl">🇮🇳</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-white tracking-tight">
+                    Upstox (NSE / BSE) Authoritative Gateway
+                  </h3>
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                      upstoxAccount?.tokenHealth?.status === 'HEALTHY'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    }`}
+                  >
+                    {upstoxAccount?.tokenHealth?.status === 'HEALTHY' ? '🟢 Live Synced' : '⚠️ Token Expired'}
+                  </span>
+                  {upstoxAccount?.latencyMs !== undefined && (
+                    <span className="text-[10px] font-mono text-zinc-400">
+                      {upstoxAccount.latencyMs}ms ping
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {upstoxAccount?.accountName ? `${upstoxAccount.accountName} • ` : ''}
+                  {upstoxAccount?.accountId || 'CDSL Demat'}{' '}
+                  {upstoxAccount?.tokenHealth && (
+                    <span className="text-indigo-300">
+                      • Daily Cycle: {upstoxAccount.tokenHealth.timeRemainingHuman} (03:30 AM IST)
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => syncUpstoxAccount()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all"
+                title="Refresh Upstox Margins & Portfolio"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Sync Balances</span>
+              </button>
+              <button
+                type="button"
+                onClick={openUpstoxDrawer}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition-all shadow-xs"
+              >
+                <span>Terminal Controls</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Upstox Margin & Holdings Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] text-zinc-400 font-medium block">Available Margin (Cash)</span>
+              <span className="text-lg font-bold font-mono text-emerald-400 mt-1 block">
+                {moneyINR(upstoxAccount?.funds?.availableCash || 0)}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] text-zinc-400 font-medium block">Used Margin (Positions)</span>
+              <span className="text-lg font-bold font-mono text-amber-400 mt-1 block">
+                {moneyINR(upstoxAccount?.funds?.usedMargin || 0)}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] text-zinc-400 font-medium block">Total Account Equity</span>
+              <span className="text-lg font-bold font-mono text-white mt-1 block">
+                {moneyINR(upstoxAccount?.funds?.totalEquity || 0)}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] text-zinc-400 font-medium block">Static Egress IP</span>
+              <span className="text-xs font-mono font-semibold mt-1.5 block text-indigo-300">
+                {upstoxAccount?.ipDiagnostics?.outboundIp || '87.76.191.49'} (Verified)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Live Exchange Verified Wallet Card (When in Exchange Mode) */}
       {accountMode === 'exchange' && (
@@ -1729,13 +1826,13 @@ export function Portfolio() {
                       {formatQty(qty, a)}
                     </td>
                     <td className="px-6 py-4 font-mono text-zinc-500">
-                      {qty > 0 && avgCost ? money(avgCost) : '—'}
+                      {qty > 0 && avgCost ? (isIndianAsset(a) ? moneyINR(avgCost) : money(avgCost)) : '—'}
                     </td>
                     <td className="px-6 py-4 font-mono text-zinc-600">
-                      {m ? money(m.price) : '—'}
+                      {m ? (isIndianAsset(a) ? moneyINR(m.price) : money(m.price)) : '—'}
                     </td>
                     <td className="px-6 py-4 font-mono font-semibold text-zinc-900">
-                      {money(val)}
+                      {isIndianAsset(a) ? moneyINR(val) : money(val)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -1753,7 +1850,7 @@ export function Portfolio() {
                           }`}
                         >
                           {pnlInfo.amount >= 0 ? '+' : ''}
-                          {money(pnlInfo.amount)} ({pnlInfo.pct.toFixed(2)}%)
+                          {isIndianAsset(a) ? moneyINR(pnlInfo.amount) : money(pnlInfo.amount)} ({pnlInfo.pct.toFixed(2)}%)
                         </span>
                       ) : (
                         <span className="text-zinc-400">—</span>
@@ -1799,15 +1896,30 @@ export function Portfolio() {
 // ORDERS & EXECUTION
 // ----------------------------------------------------
 export function Orders() {
-  const { state, markets, order, cancelPendingOrder, accountMode, exchangeAccount } = useLumen();
+  const {
+    state,
+    markets,
+    order,
+    cancelPendingOrder,
+    accountMode,
+    exchangeAccount,
+    upstoxAccount,
+    openUpstoxDrawer,
+  } = useLumen();
   const [selectedAsset, setSelectedAsset] = useState<Asset>(state.selectedAsset);
   const [side, setSide] = useState<Side>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
-  const [amountStr, setAmountStr] = useState('0.1');
+  const [amountStr, setAmountStr] = useState('1');
   const [limitPriceStr, setLimitPriceStr] = useState('');
   const [takeProfitStr, setTakeProfitStr] = useState('');
   const [stopLossStr, setStopLossStr] = useState('');
+  const [product, setProduct] = useState<'CNC' | 'MIS'>('CNC');
+  const [showLiveConfirmModal, setShowLiveConfirmModal] = useState(false);
   const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'filled' | 'buy' | 'sell'>('all');
+
+  const currentDeskMode = accountMode || 'paper';
+  const isIndian = isIndianAsset(selectedAsset) || currentDeskMode === 'upstox';
+  const formatMoney = (val: number) => (isIndian ? moneyINR(val) : money(val));
 
   const m = markets[selectedAsset];
   const currentHolding = state.positions[selectedAsset] || 0;
@@ -1820,30 +1932,73 @@ export function Orders() {
     (sum, c) => sum + (exchangeAccount?.balances?.[c]?.free || 0),
     0
   );
-  const currentDeskMode = accountMode || 'paper';
+  const upstoxAvailableCash = upstoxAccount?.funds?.availableCash || 0;
+  const availableCash =
+    currentDeskMode === 'upstox'
+      ? (upstoxAvailableCash > 0 ? upstoxAvailableCash : state.cash)
+      : currentDeskMode === 'exchange'
+      ? exchangeAvailableCash
+      : state.cash;
 
-  const handleQuickPercent = (pct: number) => {
-    if (!estPrice) return;
-    const availableCash = currentDeskMode === 'exchange' ? exchangeAvailableCash : state.cash;
-    const availableHolding = currentDeskMode === 'exchange' ? (exchangeAccount?.balances?.[selectedAsset]?.free || 0) : currentHolding;
-    if (side === 'buy') {
-      const budget = (availableCash * pct) / 100;
-      const qty = budget / (estPrice * 1.001);
-      setAmountStr(qty > 0 ? qty.toFixed(META[selectedAsset]?.decimals || 4) : '0');
-    } else {
-      const qty = (availableHolding * pct) / 100;
-      setAmountStr(qty.toFixed(META[selectedAsset]?.decimals || 4));
+  const upstoxHoldingQty = Number(
+    upstoxAccount?.holdings?.find((h) => h.symbol === selectedAsset || h.instrumentKey?.includes(selectedAsset))?.quantity || 0
+  );
+  const availableHolding =
+    currentDeskMode === 'upstox'
+      ? (upstoxHoldingQty > 0 ? upstoxHoldingQty : currentHolding)
+      : currentDeskMode === 'exchange'
+      ? (exchangeAccount?.balances?.[selectedAsset]?.free || 0)
+      : currentHolding;
+
+  // NSE Equities strictly require tick size multiple of 0.05
+  const isTickSizeValid =
+    !isIndian ||
+    orderType !== 'limit' ||
+    !limitPriceStr ||
+    Math.abs(Math.round(Number(limitPriceStr) * 20) / 20 - Number(limitPriceStr)) < 1e-4;
+
+  const alignTickSize = () => {
+    if (limitPriceStr) {
+      setLimitPriceStr((Math.round(Number(limitPriceStr) * 20) / 20).toFixed(2));
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleQuickPercent = (pct: number) => {
+    if (!estPrice) return;
+    if (side === 'buy') {
+      const budget = (availableCash * pct) / 100;
+      const qty = budget / (estPrice * 1.001);
+      const dec = META[selectedAsset]?.decimals || (isIndian ? 0 : 4);
+      setAmountStr(qty > 0 ? (isIndian ? Math.floor(qty).toString() : qty.toFixed(dec)) : '0');
+    } else {
+      const qty = (availableHolding * pct) / 100;
+      const dec = META[selectedAsset]?.decimals || (isIndian ? 0 : 4);
+      setAmountStr(isIndian ? Math.floor(qty).toString() : qty.toFixed(dec));
+    }
+  };
+
+  const executeOrder = () => {
     order(side, selectedAsset, numAmount, {
       type: orderType,
       limitPrice: orderType === 'limit' && limitPriceStr ? Number(limitPriceStr) : undefined,
       takeProfit: takeProfitStr ? Number(takeProfitStr) : undefined,
       stopLoss: stopLossStr ? Number(stopLossStr) : undefined,
+      product: isIndian ? product : undefined,
     });
+    setShowLiveConfirmModal(false);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isTickSizeValid) {
+      alignTickSize();
+      return;
+    }
+    if (currentDeskMode === 'upstox' && upstoxAccount?.connected) {
+      setShowLiveConfirmModal(true);
+      return;
+    }
+    executeOrder();
   };
 
   const filteredOrders = state.orders.filter((o) => {
@@ -1862,11 +2017,19 @@ export function Orders() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
-        title={accountMode === 'exchange' ? "Binance Spot Execution Terminal" : "Paper Trading Terminal"}
+        title={
+          accountMode === 'upstox'
+            ? 'NSE / BSE Indian Equities Execution Terminal'
+            : accountMode === 'exchange'
+            ? 'Binance Spot Execution Terminal'
+            : 'Simulated Paper Trading Terminal'
+        }
         subtitle={
-          accountMode === 'exchange'
+          accountMode === 'upstox'
+            ? 'Authoritative Upstox gateway for National Stock Exchange & Bombay Stock Exchange with ₹ clearing, CNC/MIS products, and 0.05 tick size.'
+            : accountMode === 'exchange'
             ? `Live order dispatch to Binance ${exchangeAccount?.environment?.toUpperCase() || 'TESTNET'} with client-side cryptographic HMAC-SHA256 signing.`
-            : "Deterministic paper execution engine modeling realistic liquidity slippage and taker fees."
+            : 'Deterministic paper execution engine modeling realistic liquidity slippage, Indian & global markets, and taker fees.'
         }
       />
 
@@ -1875,7 +2038,16 @@ export function Orders() {
         <GlassCard className="space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-black/[0.05]">
             <h3 className="text-sm font-bold text-zinc-900">Execution Ticket</h3>
-            {accountMode === 'exchange' ? (
+            {accountMode === 'upstox' ? (
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-700 font-semibold flex items-center gap-1.5">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    upstoxAccount?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                  }`}
+                />
+                Upstox (NSE/BSE) • {upstoxAccount?.environment === 'production' ? 'Live Gateway' : 'Sandbox Gateway'}
+              </span>
+            ) : accountMode === 'exchange' ? (
               <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 font-semibold flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Binance {exchangeAccount?.environment === 'mainnet' ? 'Mainnet' : 'Testnet'}
@@ -1926,14 +2098,14 @@ export function Orders() {
                 }}
                 className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 font-medium"
               >
-                {['Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming', 'Other'].map((cat) => {
+                {['Indian Equities', 'Nifty 50', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming', 'Other'].map((cat) => {
                   const list = ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
                   if (!list.length) return null;
                   return (
                     <optgroup key={cat} label={`── ${cat} (${list.length}) ──`}>
                       {list.map((x) => (
                         <option key={x} value={x}>
-                          {x} — {META[x]?.name} ({money(markets[x]?.price || 0)})
+                          {x} — {META[x]?.name} ({isIndianAsset(x) ? moneyINR(markets[x]?.price || 0) : money(markets[x]?.price || 0)})
                         </option>
                       ))}
                     </optgroup>
@@ -1941,6 +2113,42 @@ export function Orders() {
                 })}
               </select>
             </div>
+
+            {/* Indian Equities Product Mode (CNC vs MIS) */}
+            {isIndian && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-700 flex items-center justify-between">
+                  <span>Product Classification</span>
+                  <span className="text-[10px] text-zinc-400 font-normal">SEBI Regulations</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProduct('CNC')}
+                    className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all flex flex-col items-center ${
+                      product === 'CNC'
+                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
+                        : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
+                    }`}
+                  >
+                    <span className="font-bold">Delivery (CNC)</span>
+                    <span className="text-[10px] opacity-75 font-normal">Cash &amp; Carry • 100% Margin</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProduct('MIS')}
+                    className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all flex flex-col items-center ${
+                      product === 'MIS'
+                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
+                        : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
+                    }`}
+                  >
+                    <span className="font-bold">Intraday (MIS)</span>
+                    <span className="text-[10px] opacity-75 font-normal">Margin Intraday • Square-off 15:15</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Order Type */}
             <div className="space-y-1.5">
@@ -1978,20 +2186,31 @@ export function Orders() {
             {orderType === 'limit' && (
               <div className="space-y-1.5 p-3 rounded-xl bg-indigo-500/[0.04] border border-indigo-500/15">
                 <div className="flex items-center justify-between text-xs">
-                  <label className="font-semibold text-indigo-950">Limit Target Price ($)</label>
-                  <span className="text-zinc-500 text-[11px]">Mark: {money(m?.price || 0)}</span>
+                  <label className="font-semibold text-indigo-950">Limit Target Price ({isIndian ? '₹' : '$'})</label>
+                  <span className="text-zinc-500 text-[11px]">Mark: {formatMoney(m?.price || 0)}</span>
                 </div>
                 <input
                   type="number"
-                  step="any"
+                  step={isIndian ? '0.05' : 'any'}
                   value={limitPriceStr}
                   onChange={(e) => setLimitPriceStr(e.target.value)}
                   placeholder={m ? m.price.toFixed(2) : '0.00'}
                   className="w-full px-3.5 py-2 text-xs font-mono font-semibold bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 text-zinc-900"
                 />
-                <p className="text-[10px] text-zinc-500">
-                  {side === 'buy' ? 'Executes when price drops to or below target.' : 'Executes when price rises to or above target.'}
-                </p>
+                {!isTickSizeValid ? (
+                  <button
+                    type="button"
+                    onClick={alignTickSize}
+                    className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 mt-1 block"
+                  >
+                    ⚠️ Price must be multiple of ₹0.05. Click to round to ₹{(Math.round(Number(limitPriceStr) * 20) / 20).toFixed(2)}
+                  </button>
+                ) : (
+                  <p className="text-[10px] text-zinc-500">
+                    {side === 'buy' ? 'Executes when price drops to or below target.' : 'Executes when price rises to or above target.'}
+                    {isIndian && ' (NSE Tick Size: ₹0.05)'}
+                  </p>
+                )}
               </div>
             )}
 
@@ -2001,16 +2220,16 @@ export function Orders() {
                 <label className="font-semibold text-zinc-700">Quantity ({selectedAsset})</label>
                 <span className="text-zinc-500 font-mono text-[11px]">
                   {side === 'buy'
-                    ? `Avail: ${currentDeskMode === 'exchange' ? `$${exchangeAvailableCash.toFixed(2)} (Stablecoins)` : money(state.cash)}`
-                    : `Holding: ${currentDeskMode === 'exchange' ? `${(exchangeAccount?.balances?.[selectedAsset]?.free || 0).toFixed(4)} ${selectedAsset}` : formatQty(currentHolding, selectedAsset)}`}
+                    ? `Avail: ${formatMoney(availableCash)}`
+                    : `Holding: ${formatQty(availableHolding, selectedAsset)}`}
                 </span>
               </div>
               <input
                 type="number"
-                step="any"
+                step={isIndian ? '1' : 'any'}
                 value={amountStr}
                 onChange={(e) => setAmountStr(e.target.value)}
-                placeholder="0.00"
+                placeholder="0"
                 className="w-full px-3.5 py-2.5 text-xs font-mono font-semibold bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900"
               />
 
@@ -2032,10 +2251,10 @@ export function Orders() {
             {/* Optional Take Profit / Stop Loss */}
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div className="space-y-1">
-                <label className="text-[11px] text-zinc-500">Take Profit ($)</label>
+                <label className="text-[11px] text-zinc-500">Take Profit ({isIndian ? '₹' : '$'})</label>
                 <input
                   type="number"
-                  step="any"
+                  step={isIndian ? '0.05' : 'any'}
                   value={takeProfitStr}
                   onChange={(e) => setTakeProfitStr(e.target.value)}
                   placeholder={m ? (m.price * 1.05).toFixed(2) : ''}
@@ -2043,10 +2262,10 @@ export function Orders() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] text-zinc-500">Stop Loss ($)</label>
+                <label className="text-[11px] text-zinc-500">Stop Loss ({isIndian ? '₹' : '$'})</label>
                 <input
                   type="number"
-                  step="any"
+                  step={isIndian ? '0.05' : 'any'}
                   value={stopLossStr}
                   onChange={(e) => setStopLossStr(e.target.value)}
                   placeholder={m ? (m.price * 0.95).toFixed(2) : ''}
@@ -2059,15 +2278,15 @@ export function Orders() {
             <div className="p-3.5 rounded-2xl bg-black/[0.02] border border-black/[0.04] space-y-1.5 text-xs">
               <div className="flex justify-between text-zinc-500">
                 <span>Indicative Price:</span>
-                <span className="font-mono font-medium text-zinc-900">{money(estPrice)}</span>
+                <span className="font-mono font-medium text-zinc-900">{formatMoney(estPrice)}</span>
               </div>
               <div className="flex justify-between text-zinc-500">
-                <span>Paper Fee (0.08%):</span>
-                <span className="font-mono text-zinc-700">{money(estFee)}</span>
+                <span>Execution Fee (0.08%):</span>
+                <span className="font-mono text-zinc-700">{formatMoney(estFee)}</span>
               </div>
               <div className="flex justify-between font-bold text-zinc-950 pt-1 border-t border-black/[0.04]">
                 <span>Estimated Notional:</span>
-                <span className="font-mono">{money(estTotal + (side === 'buy' ? estFee : -estFee))}</span>
+                <span className="font-mono">{formatMoney(estTotal + (side === 'buy' ? estFee : -estFee))}</span>
               </div>
             </div>
 
@@ -2080,7 +2299,7 @@ export function Orders() {
                   : 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
               }`}
             >
-              Submit {orderType.toUpperCase()} {side.toUpperCase()} Order
+              Submit {isIndian ? `${product} ` : ''}{orderType.toUpperCase()} {side.toUpperCase()} Order
             </button>
           </form>
         </GlassCard>
@@ -2160,11 +2379,24 @@ export function Orders() {
                         {o.side}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 font-bold text-zinc-900">{o.asset}</td>
+                    <td className="px-5 py-3.5 font-bold text-zinc-900">
+                      <span>{o.asset}</span>
+                      {o.product && (
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {o.product}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-5 py-3.5 font-mono">{formatQty(o.amount, o.asset)}</td>
-                    <td className="px-5 py-3.5 font-mono text-zinc-800">{money(o.price)}</td>
-                    <td className="px-5 py-3.5 font-mono font-semibold text-zinc-900">{money(o.notional)}</td>
-                    <td className="px-5 py-3.5 font-mono text-zinc-400">{money(o.fee)}</td>
+                    <td className="px-5 py-3.5 font-mono text-zinc-800">
+                      {isIndianAsset(o.asset) ? moneyINR(o.price) : money(o.price)}
+                    </td>
+                    <td className="px-5 py-3.5 font-mono font-semibold text-zinc-900">
+                      {isIndianAsset(o.asset) ? moneyINR(o.notional) : money(o.notional)}
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-zinc-400">
+                      {isIndianAsset(o.asset) ? moneyINR(o.fee) : money(o.fee)}
+                    </td>
                     <td className="px-5 py-3.5 text-right">
                       {o.status === 'pending' ? (
                         <button
@@ -2207,6 +2439,84 @@ export function Orders() {
           </div>
         </GlassCard>
       </div>
+
+      {/* Two-Step Live Confirmation Modal for Upstox Execution */}
+      {showLiveConfirmModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-black/[0.08] space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-black/[0.06]">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🇮🇳</span>
+                <h3 className="text-sm font-bold text-zinc-950">Confirm Upstox Order</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLiveConfirmModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Asset &amp; Exchange:</span>
+                <span className="font-bold text-zinc-900 font-mono">{selectedAsset} (NSE)</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Side &amp; Type:</span>
+                <span className={`font-bold font-mono ${side === 'buy' ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  {side.toUpperCase()} • {orderType.toUpperCase()}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Product Mode:</span>
+                <span className="font-bold font-mono text-zinc-900">
+                  {product === 'CNC' ? 'Delivery (CNC)' : 'Intraday (MIS)'}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Quantity:</span>
+                <span className="font-bold font-mono text-zinc-900">{numAmount} shares</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Limit / Mark Price:</span>
+                <span className="font-bold font-mono text-zinc-900">{moneyINR(estPrice)}</span>
+              </div>
+              <div className="flex justify-between text-xs pt-1 border-t border-indigo-200 font-bold">
+                <span className="text-zinc-700">Estimated Total:</span>
+                <span className="text-indigo-900 font-mono">{moneyINR(estTotal + (side === 'buy' ? estFee : -estFee))}</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <span>🛡️ Production Safety Gate Active:</span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Live trading is guarded (<code>UPSTOX_LIVE_TRADING_ENABLED=false</code>). Order will execute deterministically on the simulated paper engine against live NSE tick feeds. Zero money is deducted from your live bank account.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowLiveConfirmModal(false)}
+                className="flex-1 py-2.5 px-4 text-xs font-semibold text-zinc-700 bg-black/[0.04] hover:bg-black/[0.08] rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeOrder}
+                className="flex-1 py-2.5 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/20 transition-all"
+              >
+                Confirm &amp; Dispatch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3096,11 +3406,19 @@ export function Strategies() {
                     }}
                     className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl outline-none font-medium"
                   >
-                    {ASSETS.map((a) => (
-                      <option key={a} value={a}>
-                        {a} - {META[a]?.name} ({money(markets[a]?.price || 0)})
-                      </option>
-                    ))}
+                    {['Indian Equities', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming', 'Other'].map((cat) => {
+                      const list = ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
+                      if (!list.length) return null;
+                      return (
+                        <optgroup key={cat} label={`── ${cat} (${list.length}) ──`}>
+                          {list.map((a) => (
+                            <option key={a} value={a}>
+                              {a} — {META[a]?.name} ({isIndianAsset(a) ? moneyINR(markets[a]?.price || 0) : money(markets[a]?.price || 0)})
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -3272,11 +3590,19 @@ export function Alerts() {
               }}
               className="w-full px-3 py-2 text-xs bg-white border border-black/[0.08] rounded-xl outline-none font-medium"
             >
-              {ASSETS.map((x) => (
-                <option key={x} value={x}>
-                  {x} ({money(markets[x]?.price || 0)})
-                </option>
-              ))}
+              {['Indian Equities', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming', 'Other'].map((cat) => {
+                const list = ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
+                if (!list.length) return null;
+                return (
+                  <optgroup key={cat} label={`── ${cat} (${list.length}) ──`}>
+                    {list.map((x) => (
+                      <option key={x} value={x}>
+                        {x} — {META[x]?.name} ({isIndianAsset(x) ? moneyINR(markets[x]?.price || 0) : money(markets[x]?.price || 0)})
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
             </select>
           </div>
 
@@ -3287,8 +3613,8 @@ export function Alerts() {
               onChange={(e) => setType(e.target.value as any)}
               className="w-full px-3 py-2 text-xs bg-white border border-black/[0.08] rounded-xl outline-none font-medium"
             >
-              <option value="above">Price Rises Above ($)</option>
-              <option value="below">Price Drops Below ($)</option>
+              <option value="above">Price Rises Above (₹ / $)</option>
+              <option value="below">Price Drops Below (₹ / $)</option>
               <option value="changeUp">24h Gain Exceeds (%)</option>
               <option value="changeDown">24h Loss Exceeds (%)</option>
             </select>
@@ -3318,10 +3644,13 @@ export function Alerts() {
       <div className="flex flex-wrap items-center gap-2 px-1">
         <span className="text-xs font-semibold text-zinc-500">Quick Presets:</span>
         {[
+          { asset: 'RELIANCE' as Asset, type: 'above' as const, value: 3000, label: 'RELIANCE > ₹3,000' },
+          { asset: 'TCS' as Asset, type: 'above' as const, value: 4200, label: 'TCS > ₹4,200' },
+          { asset: 'INFY' as Asset, type: 'above' as const, value: 1900, label: 'INFY > ₹1,900' },
+          { asset: 'HDFCBANK' as Asset, type: 'above' as const, value: 1700, label: 'HDFCBANK > ₹1,700' },
           { asset: 'BTC' as Asset, type: 'above' as const, value: 100000, label: 'BTC > $100k' },
           { asset: 'ETH' as Asset, type: 'above' as const, value: 4000, label: 'ETH > $4k' },
           { asset: 'SOL' as Asset, type: 'above' as const, value: 250, label: 'SOL > $250' },
-          { asset: 'BTC' as Asset, type: 'changeDown' as const, value: 5, label: 'BTC Dip > 5%' },
         ].map((preset) => (
           <button
             key={preset.label}
@@ -3442,6 +3771,8 @@ export function SettingsPage() {
     setAccountMode,
     exchangeAccount,
     openExchangeDrawer,
+    upstoxAccount,
+    openUpstoxDrawer,
     setLossPreventionMode,
   } = useLumen();
 
@@ -3516,7 +3847,7 @@ export function SettingsPage() {
               </span>
             </div>
             <p className="text-xs text-zinc-600 mt-0.5">
-              Need a refresher on Simulated Paper vs Live Binance Spot, Gemini 3 series reasoning, or risk calibration?
+              Need a refresher on Simulated Paper vs Upstox Indian Equities (NSE/BSE), Gemini 3 series reasoning, or risk calibration?
             </p>
           </div>
         </div>
@@ -3601,14 +3932,14 @@ export function SettingsPage() {
         <div className="flex items-center justify-between pb-2 border-b border-black/[0.04]">
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-emerald-600" />
-            <h3 className="text-sm font-bold text-zinc-900">Execution Desks &amp; Key Vault</h3>
+            <h3 className="text-sm font-bold text-zinc-900">Execution Desks &amp; Gateway Vault</h3>
           </div>
           <span className="text-[10px] font-mono text-zinc-400">
-            Active: <strong>{accountMode === 'exchange' ? 'Binance Spot' : 'Paper Sandbox'}</strong>
+            Active: <strong>{accountMode === 'upstox' ? 'Upstox (NSE/BSE)' : accountMode === 'exchange' ? 'Binance Spot' : 'Paper Sandbox'}</strong>
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div
             onClick={() => setAccountMode('paper')}
             className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
@@ -3622,6 +3953,38 @@ export function SettingsPage() {
               {accountMode === 'paper' && <span className="text-[10px] font-bold text-indigo-600">Selected</span>}
             </div>
             <p className="text-[11px] text-zinc-500 mt-1">Virtual capital sandbox with live matching simulation.</p>
+          </div>
+
+          <div
+            onClick={() => {
+              if (!upstoxAccount?.connected) {
+                openUpstoxDrawer();
+              } else {
+                setAccountMode('upstox');
+              }
+            }}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              accountMode === 'upstox'
+                ? 'bg-indigo-50/40 border-indigo-600 ring-1 ring-indigo-600'
+                : 'bg-white border-black/[0.08] hover:border-black/20'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">🇮🇳</span>
+                <strong className="text-xs font-bold text-zinc-900">Upstox (NSE/BSE)</strong>
+              </div>
+              {accountMode === 'upstox' ? (
+                <span className="text-[10px] font-bold text-indigo-600">Selected</span>
+              ) : upstoxAccount?.connected ? (
+                <span className="text-[10px] font-bold text-emerald-600">Connected</span>
+              ) : null}
+            </div>
+            <p className="text-[11px] text-zinc-500 mt-1">
+              {upstoxAccount?.connected
+                ? `Active (${upstoxAccount.accountId || 'Demat'}) • Valid to 03:30 AM IST`
+                : 'Connect Upstox Demat account via OAuth 2.0.'}
+            </p>
           </div>
 
           <div

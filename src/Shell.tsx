@@ -13,6 +13,7 @@ import { AuthModal } from './components/AuthModal';
 import { UserProfileDrawer } from './components/UserProfileDrawer';
 import { GrievanceModal } from './components/GrievanceModal';
 import { LegalFooter } from './components/LegalFooter';
+import { UpstoxTerminalDrawer } from './components/UpstoxTerminalDrawer';
 import {
   LayoutDashboard,
   BarChart3,
@@ -118,6 +119,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
     openAuthModal,
     openUserProfileDrawer,
     openGrievanceModal,
+    upstoxAccount,
+    upstoxDrawerOpen,
+    openUpstoxDrawer,
+    closeUpstoxDrawer,
+    syncUpstoxAccount,
   } = useLumen();
   const route = useRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -125,6 +131,36 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [search, setSearch] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    // Intercept Upstox OAuth redirect: /?code=...&state=... or #/?code=...
+    try {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code') || new URLSearchParams(window.location.hash.split('?')[1] || '').get('code');
+      const stateParam = url.searchParams.get('state') || new URLSearchParams(window.location.hash.split('?')[1] || '').get('state');
+
+      if (code) {
+        url.searchParams.delete('code');
+        url.searchParams.delete('state');
+        window.history.replaceState({}, document.title, url.pathname + (url.hash ? url.hash.split('?')[0] : ''));
+
+        import('./services/apiClient').then(({ ApiClient }) => {
+          ApiClient.submitUpstoxCallback(code, stateParam || '')
+            .then(async (res) => {
+              if (res.ok) {
+                setAccountMode('upstox');
+                await syncUpstoxAccount();
+              }
+            })
+            .catch((err) => {
+              console.error('Failed to exchange Upstox OAuth code:', err);
+            });
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }, [setAccountMode, syncUpstoxAccount]);
 
   useEffect(() => {
     try {
@@ -191,10 +227,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-base tracking-tight text-zinc-950">Lumen</span>
                 <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-black/[0.05] text-zinc-600">
-                  100+ MKTS
+                  NSE / BSE
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-500">Autonomous Paper Desk</p>
+              <p className="text-[11px] text-zinc-500">Indian Equities &amp; F&amp;O Desk</p>
             </div>
           </div>
 
@@ -314,7 +350,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search 108 markets (e.g. SUI, PEPE, TAO)..."
+                placeholder="Search NSE/BSE & Global (e.g. RELIANCE, TCS, INFY)..."
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const q = search.trim().toUpperCase();
@@ -333,114 +369,68 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-1.5 sm:gap-3">
-            {/* Triple-Account Desk Switcher (Simulated | Binance | Web3) */}
+            {/* Dual-Desk Switcher: Simulated Paper Sandbox | Upstox Indian Equities & F&O */}
             <div className="flex items-center bg-black/[0.04] p-0.5 rounded-full border border-black/[0.06]">
               <button
                 type="button"
                 onClick={() => setAccountMode('paper')}
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
                   accountMode === 'paper'
-                    ? 'bg-white text-zinc-900 shadow-xs'
+                    ? 'bg-white text-zinc-900 shadow-xs font-bold'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
                 title="Switch to Simulated Paper Desk ($50,000 Sandbox)"
               >
                 <span>📊</span>
-                <span className="hidden sm:inline">Simulated</span>
+                <span className="hidden sm:inline">Simulated Desk</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
-                  if (!exchangeAccount?.connected) {
-                    openExchangeDrawer();
+                  if (!upstoxAccount?.connected) {
+                    openUpstoxDrawer();
                   } else {
-                    setAccountMode('exchange');
+                    setAccountMode('upstox');
                   }
                 }}
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
-                  accountMode === 'exchange'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : exchangeAccount?.connected
-                    ? 'text-emerald-700 hover:text-emerald-900'
+                className={`px-3 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+                  accountMode === 'upstox'
+                    ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                    : upstoxAccount?.connected
+                    ? 'text-indigo-700 hover:text-indigo-900 font-medium'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
-                title={exchangeAccount?.connected ? 'Switch to Live Binance Account' : 'Connect Binance Exchange'}
+                title={upstoxAccount?.connected ? 'Switch to Upstox (NSE / BSE) Desk' : 'Connect Upstox Indian Equities & F&O'}
               >
-                {exchangeAccount?.connected ? (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="hidden sm:inline">Binance</span>
-                    <span className="text-[10px] opacity-80 uppercase font-mono">
-                      {exchangeAccount.environment === 'testnet' ? 'Test' : 'Live'}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Coins className="w-3 h-3 text-amber-500" />
-                    <span className="hidden sm:inline">Binance</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!web3Account?.address) {
-                    openWeb3Drawer();
-                  } else {
-                    setAccountMode('web3');
-                  }
-                }}
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
-                  accountMode === 'web3'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : web3Account?.address
-                    ? 'text-indigo-700 hover:text-indigo-900'
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-                title={
-                  web3Account?.address
-                    ? `Switch to Self-Custodial Web3 / UPI Desk (${web3Account.address.slice(0, 6)}...${web3Account.address.slice(-4)})`
-                    : 'Setup Self-Custodial Web3 / UPI Desk'
-                }
-              >
-                {web3Account?.address ? (
+                {upstoxAccount?.connected ? (
                   <>
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${
-                        web3Account.isUnlocked ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                        upstoxAccount.tokenHealth?.status === 'HEALTHY' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
                       }`}
                     />
-                    <span className="hidden sm:inline">Web3</span>
-                    <span className="text-[10px] opacity-80 uppercase font-mono">
-                      {web3Account.network === 'polygon' ? 'POL' : web3Account.network === 'arbitrum' ? 'ARB' : 'DEV'}
-                    </span>
+                    <span>🇮🇳 Upstox (NSE)</span>
+                    {upstoxAccount.tokenHealth && upstoxAccount.tokenHealth.status !== 'EXPIRED' && (
+                      <span className="hidden md:inline text-[9px] font-mono bg-white/20 px-1 py-0.2 rounded text-white">
+                        {upstoxAccount.tokenHealth.timeRemainingHuman}
+                      </span>
+                    )}
                   </>
                 ) : (
                   <>
-                    <Zap className="w-3 h-3 text-indigo-500" />
-                    <span>Web3 / UPI</span>
+                    <span>🇮🇳</span>
+                    <span>Upstox (NSE)</span>
                   </>
                 )}
               </button>
 
-              {web3Account?.address && (
+              {upstoxAccount?.connected && (
                 <button
                   type="button"
-                  onClick={openWeb3Drawer}
-                  className="px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-700 transition-colors"
-                  title="Web3 Self-Custody Vault & Network Settings"
-                >
-                  ⚡
-                </button>
-              )}
-              {exchangeAccount?.connected && (
-                <button
-                  type="button"
-                  onClick={openExchangeDrawer}
-                  className="px-1.5 py-1 text-[10px] font-mono text-zinc-400 hover:text-zinc-700 transition-colors"
-                  title="Exchange Settings & Security Audit"
+                  onClick={openUpstoxDrawer}
+                  className="px-1.5 py-1 text-[11px] text-zinc-400 hover:text-zinc-700 transition-colors"
+                  title="Upstox Terminal & Margin Controls"
                 >
                   ⚙️
                 </button>
@@ -624,6 +614,51 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Open Security Drawer
             </button>
           </div>
+        ) : accountMode === 'upstox' ? (
+          <div className="bg-indigo-950 text-indigo-100 border-b border-indigo-800/80 px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  upstoxAccount?.connected && upstoxAccount?.tokenHealth?.status === 'HEALTHY'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : 'bg-amber-400'
+                } shrink-0`}
+              />
+              <span>
+                <strong>🇮🇳 UPSTOX INDIAN EQUITIES &amp; F&amp;O DESK ACTIVE</strong> — Authoritative Gateway (
+                {upstoxAccount?.accountName ? `${upstoxAccount.accountName} • ` : ''}
+                {upstoxAccount?.accountId || 'Connected'}).
+                {upstoxAccount?.tokenHealth && upstoxAccount.tokenHealth.status !== 'EXPIRED' ? (
+                  <span className="ml-1 text-emerald-300 font-mono">
+                    Token expires in {upstoxAccount.tokenHealth.timeRemainingHuman} (03:30 AM IST).
+                  </span>
+                ) : (
+                  <span className="ml-1 text-amber-300 font-semibold">
+                    Daily token expired at 03:30 AM IST. Re-authenticate to refresh.
+                  </span>
+                )}
+                <span className="ml-1.5 text-indigo-300">
+                  Live safety gate: <strong>UPSTOX_LIVE_TRADING_ENABLED=false</strong> (Zero financial loss risk).
+                </span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={openUpstoxDrawer}
+                className="text-[11px] font-semibold bg-indigo-800 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg border border-indigo-600 transition-colors"
+              >
+                Upstox Terminal Controls
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountMode('paper')}
+                className="text-[11px] font-medium bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-lg transition-colors"
+              >
+                Return to Simulated Desk
+              </button>
+            </div>
+          </div>
         ) : accountMode === 'paper' ? (
           <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 backdrop-blur-xs">
             <div className="flex items-center gap-2">
@@ -638,17 +673,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => {
-                  if (exchangeAccount?.connected) {
-                    setAccountMode('exchange');
-                  } else if (web3Account?.address) {
-                    setAccountMode('web3');
+                  if (upstoxAccount?.connected) {
+                    setAccountMode('upstox');
                   } else {
-                    openWeb3Drawer();
+                    openUpstoxDrawer();
                   }
                 }}
                 className="text-[11px] font-semibold text-amber-900 hover:text-amber-950 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg border border-amber-300/60 transition-colors"
               >
-                Switch to Real Money Desk →
+                Switch to Upstox (NSE) Desk →
               </button>
             </div>
           </div>
@@ -657,18 +690,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
               <span>
-                <strong>LIVE REAL CAPITAL DESK ACTIVE</strong> ({accountMode === 'exchange' ? 'Binance Live Exchange' : 'Self-Custodial Web3 / UPI'}) — Real capital deployed. Circuit breakers &amp; statutory grievance redressal active.
+                <strong>LIVE REAL CAPITAL DESK ACTIVE</strong> ({accountMode === 'exchange' ? 'Binance Live Exchange' : 'Self-Custodial Web3 / UPI'}) — Real capital deployed. Circuit breakers active.
               </span>
             </div>
             <div className="flex items-center gap-2 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => openGrievanceModal()}
-                className="text-[11px] font-medium bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 hover:text-white px-2.5 py-1 rounded-lg border border-emerald-700/60 transition-colors flex items-center gap-1.5"
-              >
-                <LifeBuoy className="w-3 h-3 text-emerald-300" />
-                <span>Grievance Desk</span>
-              </button>
               <button
                 type="button"
                 onClick={() => setAccountMode('paper')}
@@ -759,6 +784,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Nexus AI Drawer */}
       <ChatDrawer open={chatOpen} onClose={closeChat} />
+
+      {/* Upstox Terminal Drawer */}
+      <UpstoxTerminalDrawer open={upstoxDrawerOpen} onClose={closeUpstoxDrawer} />
 
       {/* Binance Exchange Onboarding Drawer */}
       <ExchangeOnboardingDrawer open={exchangeDrawerOpen} onClose={closeExchangeDrawer} />

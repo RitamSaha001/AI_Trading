@@ -18,7 +18,7 @@ import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
 import { ExactDecimal } from './services/precision';
 import { BinanceGateway } from './services/binanceGateway';
-import { BrokerRegistry, BrokerGateway, UpstoxClient, UpstoxConnectivityValidator } from './services/brokers';
+import { BrokerRegistry, BrokerGateway, UpstoxClient, UpstoxConnectivityValidator, UpstoxInstrumentRegistry } from './services/brokers';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
 import { OrderRecoveryService } from './services/orderRecoveryService';
@@ -911,11 +911,17 @@ export function buildServer(): FastifyInstance {
     return { success: true, report };
   });
 
+  server.get('/api/market/instruments/upstox', async () => {
+    const instruments = UpstoxInstrumentRegistry.getAll();
+    return { success: true, instruments };
+  });
+
   server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const brokerParam = (req.query as any)?.broker || 'upstox';
+      const broker = BrokerRegistry.get(brokerParam);
       await broker.disconnectAccount!(req.user!.id);
-      return { success: true, message: 'Exchange disconnected and credentials wiped.' };
+      return { success: true, message: `${broker.name} disconnected and credentials wiped.` };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }
@@ -923,7 +929,8 @@ export function buildServer(): FastifyInstance {
 
   server.get('/api/exchange/account', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const brokerParam = (req.query as any)?.broker || 'upstox';
+      const broker = BrokerRegistry.get(brokerParam);
       const info = await broker.getAccount(req.user!.id);
       return { success: true, account: info || { connected: false } };
     } catch (err: any) {
@@ -933,7 +940,8 @@ export function buildServer(): FastifyInstance {
 
   server.get('/api/exchange/funds', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const brokerParam = (req.query as any)?.broker || 'upstox';
+      const broker = BrokerRegistry.get(brokerParam);
       const funds = broker.getFunds ? await broker.getFunds(req.user!.id) : null;
       return { success: true, funds };
     } catch (err: any) {
@@ -943,7 +951,8 @@ export function buildServer(): FastifyInstance {
 
   server.get('/api/exchange/positions', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const brokerParam = (req.query as any)?.broker || 'upstox';
+      const broker = BrokerRegistry.get(brokerParam);
       const positions = broker.getPositions ? await broker.getPositions(req.user!.id) : [];
       return { success: true, positions };
     } catch (err: any) {
@@ -953,7 +962,8 @@ export function buildServer(): FastifyInstance {
 
   server.get('/api/exchange/holdings', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const broker = BrokerRegistry.get((req.query as any)?.broker || 'binance');
+      const brokerParam = (req.query as any)?.broker || 'upstox';
+      const broker = BrokerRegistry.get(brokerParam);
       const holdings = broker.getHoldings ? await broker.getHoldings(req.user!.id) : [];
       return { success: true, holdings };
     } catch (err: any) {
@@ -1096,7 +1106,27 @@ export function buildServer(): FastifyInstance {
     delete (body as any).isSystemPanic;
 
     const accountMode = body.accountMode || 'live';
-    const brokerId = body.broker || 'binance';
+    let brokerId = body.broker;
+
+    // Strict validation of broker selection according to domain and safety rules
+    if (!brokerId) {
+      const sym = String(body.symbol || '').toUpperCase().trim();
+      const isIndian = UpstoxInstrumentRegistry.isVerified(sym) || body.quoteAsset === 'INR';
+      if (isIndian) {
+        brokerId = 'upstox';
+      } else if (accountMode === 'paper') {
+        brokerId = 'binance';
+      } else {
+        return reply.status(400).send({
+          success: false,
+          error: 'Explicit broker selection is required for live orders.',
+        });
+      }
+    }
+
+    if (!BrokerRegistry.has(brokerId)) {
+      return reply.status(400).send({ success: false, error: `Unsupported broker: ${brokerId}` });
+    }
 
     // Live Upstox orders strictly require two-step confirmation
     if (accountMode === 'live' && brokerId === 'upstox' && !body.confirmationId) {

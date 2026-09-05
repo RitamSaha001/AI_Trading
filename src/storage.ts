@@ -308,7 +308,8 @@ export function migrateState(rawState: any): AppState {
   const migrated: AppState = {
     ...base,
     schemaVersion: SCHEMA_VERSION,
-    accountMode: rawState.accountMode === 'exchange' ? 'exchange' : 'paper',
+    accountMode: rawState.accountMode === 'upstox' ? 'upstox' : (rawState.accountMode === 'exchange' ? 'exchange' : (rawState.accountMode === 'web3' ? 'web3' : 'paper')),
+    upstoxAccount: rawState.upstoxAccount || undefined,
     exchangeAccount: rawState.exchangeAccount || undefined,
     exchangeOrders: Array.isArray(rawState.exchangeOrders) ? rawState.exchangeOrders : [],
     wallet: rawState.wallet && typeof rawState.wallet === 'object' ? rawState.wallet : base.wallet,

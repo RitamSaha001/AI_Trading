@@ -149,6 +149,9 @@ export const ApiClient = {
     type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT';
     quantity: number;
     price?: number;
+    product?: string;
+    broker?: string;
+    accountMode?: string;
     marketQuoteAgeMs: number;
     idempotencyKey?: string;
   }) {
@@ -263,11 +266,11 @@ export const ApiClient = {
     });
   },
 
-  async disconnectExchange(broker: string = 'binance') {
+  async disconnectExchange(broker: string = 'upstox') {
     return apiRequest(`/api/exchange/disconnect?broker=${encodeURIComponent(broker)}`, { method: 'POST' });
   },
 
-  async getExchangeAccount(broker: string = 'binance') {
+  async getExchangeAccount(broker: string = 'upstox') {
     return apiRequest<{ account: any }>(`/api/exchange/account?broker=${encodeURIComponent(broker)}`);
   },
 
@@ -296,15 +299,19 @@ export const ApiClient = {
     return apiRequest<{ report: any }>('/api/exchange/upstox/connectivity-check');
   },
 
-  async getBrokerFunds(broker: string = 'binance') {
+  async getUpstoxInstruments() {
+    return apiRequest<{ success: boolean; instruments: any[] }>('/api/market/instruments/upstox');
+  },
+
+  async getBrokerFunds(broker: string = 'upstox') {
     return apiRequest<{ funds: any }>(`/api/exchange/funds?broker=${encodeURIComponent(broker)}`);
   },
 
-  async getBrokerPositions(broker: string = 'binance') {
+  async getBrokerPositions(broker: string = 'upstox') {
     return apiRequest<{ positions: any[] }>(`/api/exchange/positions?broker=${encodeURIComponent(broker)}`);
   },
 
-  async getBrokerHoldings(broker: string = 'binance') {
+  async getBrokerHoldings(broker: string = 'upstox') {
     return apiRequest<{ holdings: any[] }>(`/api/exchange/holdings?broker=${encodeURIComponent(broker)}`);
   },
 

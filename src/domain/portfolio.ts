@@ -4,6 +4,26 @@ export const META: Record<
   Asset,
   { name: string; symbol: string; cbSymbol: string; basePrice: number; decimals: number; iconColor: string; category: MarketCategory }
 > = {
+  RELIANCE: { name: 'Reliance Industries', symbol: 'RELIANCE', cbSymbol: 'NSE:RELIANCE', basePrice: 2800, decimals: 2, iconColor: '#0052cc', category: 'Indian Equities' },
+  TCS: { name: 'Tata Consultancy Services', symbol: 'TCS', cbSymbol: 'NSE:TCS', basePrice: 4000, decimals: 2, iconColor: '#0070f3', category: 'Indian Equities' },
+  INFY: { name: 'Infosys Limited', symbol: 'INFY', cbSymbol: 'NSE:INFY', basePrice: 1800, decimals: 2, iconColor: '#007cc3', category: 'Indian Equities' },
+  HDFCBANK: { name: 'HDFC Bank Limited', symbol: 'HDFCBANK', cbSymbol: 'NSE:HDFCBANK', basePrice: 1600, decimals: 2, iconColor: '#004c8f', category: 'Indian Equities' },
+  ICICIBANK: { name: 'ICICI Bank Limited', symbol: 'ICICIBANK', cbSymbol: 'NSE:ICICIBANK', basePrice: 1180, decimals: 2, iconColor: '#f37021', category: 'Indian Equities' },
+  SBIN: { name: 'State Bank of India', symbol: 'SBIN', cbSymbol: 'NSE:SBIN', basePrice: 800, decimals: 2, iconColor: '#280071', category: 'Indian Equities' },
+  BHARTIARTL: { name: 'Bharti Airtel Limited', symbol: 'BHARTIARTL', cbSymbol: 'NSE:BHARTIARTL', basePrice: 1580, decimals: 2, iconColor: '#e40000', category: 'Indian Equities' },
+  ITC: { name: 'ITC Limited', symbol: 'ITC', cbSymbol: 'NSE:ITC', basePrice: 480, decimals: 2, iconColor: '#1d4ed8', category: 'Indian Equities' },
+  KOTAKBANK: { name: 'Kotak Mahindra Bank', symbol: 'KOTAKBANK', cbSymbol: 'NSE:KOTAKBANK', basePrice: 1780, decimals: 2, iconColor: '#ed1c24', category: 'Indian Equities' },
+  LT: { name: 'Larsen & Toubro', symbol: 'LT', cbSymbol: 'NSE:LT', basePrice: 3500, decimals: 2, iconColor: '#eab308', category: 'Indian Equities' },
+  TATAMOTORS: { name: 'Tata Motors Limited', symbol: 'TATAMOTORS', cbSymbol: 'NSE:TATAMOTORS', basePrice: 950, decimals: 2, iconColor: '#1e3a8a', category: 'Indian Equities' },
+  AXISBANK: { name: 'Axis Bank Limited', symbol: 'AXISBANK', cbSymbol: 'NSE:AXISBANK', basePrice: 1150, decimals: 2, iconColor: '#97144d', category: 'Indian Equities' },
+  MARUTI: { name: 'Maruti Suzuki India', symbol: 'MARUTI', cbSymbol: 'NSE:MARUTI', basePrice: 12200, decimals: 2, iconColor: '#dc2626', category: 'Indian Equities' },
+  SUNPHARMA: { name: 'Sun Pharma Industries', symbol: 'SUNPHARMA', cbSymbol: 'NSE:SUNPHARMA', basePrice: 1750, decimals: 2, iconColor: '#f97316', category: 'Indian Equities' },
+  TITAN: { name: 'Titan Company Limited', symbol: 'TITAN', cbSymbol: 'NSE:TITAN', basePrice: 3400, decimals: 2, iconColor: '#059669', category: 'Indian Equities' },
+  BAJFINANCE: { name: 'Bajaj Finance Limited', symbol: 'BAJFINANCE', cbSymbol: 'NSE:BAJFINANCE', basePrice: 7000, decimals: 2, iconColor: '#0284c7', category: 'Indian Equities' },
+  HINDUNILVR: { name: 'Hindustan Unilever', symbol: 'HINDUNILVR', cbSymbol: 'NSE:HINDUNILVR', basePrice: 2650, decimals: 2, iconColor: '#005a9c', category: 'Indian Equities' },
+  WIPRO: { name: 'Wipro Limited', symbol: 'WIPRO', cbSymbol: 'NSE:WIPRO', basePrice: 520, decimals: 2, iconColor: '#7c3aed', category: 'Indian Equities' },
+  NTPC: { name: 'NTPC Limited', symbol: 'NTPC', cbSymbol: 'NSE:NTPC', basePrice: 390, decimals: 2, iconColor: '#047857', category: 'Indian Equities' },
+  ONGC: { name: 'Oil & Natural Gas Corp', symbol: 'ONGC', cbSymbol: 'NSE:ONGC', basePrice: 290, decimals: 2, iconColor: '#b91c1c', category: 'Indian Equities' },
   BTC: { name: 'Bitcoin', symbol: 'BTCUSDT', cbSymbol: 'BTC-USD', basePrice: 67850, decimals: 5, iconColor: '#f7931a', category: 'Layer 1' },
   ETH: { name: 'Ethereum', symbol: 'ETHUSDT', cbSymbol: 'ETH-USD', basePrice: 3520, decimals: 4, iconColor: '#627eea', category: 'Layer 1' },
   SOL: { name: 'Solana', symbol: 'SOLUSDT', cbSymbol: 'SOL-USD', basePrice: 152.4, decimals: 3, iconColor: '#14f195', category: 'Layer 1' },
@@ -128,6 +148,26 @@ export const money = (n: number, minDec = 2, maxDec = 2): string => {
       maximumFractionDigits: maxDec,
     })
   );
+};
+
+export const moneyINR = (n: number, minDec = 2, maxDec = 2): string => {
+  if (!Number.isFinite(n)) return '₹0.00';
+  return (
+    '₹' +
+    n.toLocaleString('en-IN', {
+      minimumFractionDigits: minDec,
+      maximumFractionDigits: maxDec,
+    })
+  );
+};
+
+export const isIndianAsset = (asset?: Asset | string): boolean => {
+  if (!asset) return false;
+  return META[asset as Asset]?.category === 'Indian Equities';
+};
+
+export const formatCurrency = (n: number, currency: 'USD' | 'INR' = 'USD', minDec = 2, maxDec = 2): string => {
+  return currency === 'INR' ? moneyINR(n, minDec, maxDec) : money(n, minDec, maxDec);
 };
 
 export const formatQty = (qty: number, asset: Asset): string => {
@@ -320,7 +360,15 @@ export function getReservedCash(state: Pick<AppState, 'orders'> & { accountMode?
 /**
  * Returns currently available liquid cash after subtracting funds reserved for pending limit buys.
  */
-export function getAvailableCash(state: Pick<AppState, 'cash' | 'orders'> & { accountMode?: AppState['accountMode']; exchangeAccount?: AppState['exchangeAccount']; web3Account?: AppState['web3Account'] }): number {
+export function getAvailableCash(state: Pick<AppState, 'cash' | 'orders'> & {
+  accountMode?: AppState['accountMode'];
+  upstoxAccount?: AppState['upstoxAccount'];
+  exchangeAccount?: AppState['exchangeAccount'];
+  web3Account?: AppState['web3Account'];
+}): number {
+  if (state.accountMode === 'upstox' && state.upstoxAccount?.funds) {
+    return state.upstoxAccount.funds.availableCash || 0;
+  }
   if (state.accountMode === 'exchange' && state.exchangeAccount) {
     return ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'].reduce(
       (sum, coin) => sum + (state.exchangeAccount?.balances[coin]?.free || 0),
@@ -354,12 +402,19 @@ export function getReservedPosition(state: Pick<AppState, 'orders'> & { accountM
 export function getAvailablePosition(
   state: Pick<AppState, 'positions' | 'orders'> & {
     accountMode?: AppState['accountMode'];
+    upstoxAccount?: AppState['upstoxAccount'];
     exchangeAccount?: AppState['exchangeAccount'];
     web3Account?: AppState['web3Account'];
     web3Positions?: AppState['web3Positions'];
   },
   asset: Asset
 ): number {
+  if (state.accountMode === 'upstox' && state.upstoxAccount?.holdings) {
+    const h = state.upstoxAccount.holdings.find(
+      (x) => x.symbol.toUpperCase() === asset.toUpperCase()
+    );
+    if (h) return Number(h.quantity) || 0;
+  }
   if (state.accountMode === 'exchange' && state.exchangeAccount) {
     return state.exchangeAccount.balances[asset]?.free || 0;
   }
