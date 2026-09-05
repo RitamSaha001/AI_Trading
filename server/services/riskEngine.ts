@@ -1,7 +1,8 @@
 import { getDb } from '../db';
 import { AuditService } from './auditService';
 import { LedgerService } from './ledgerService';
-import { ExactDecimal } from './precision';
+import { ExactDecimal, getAssetDecimals } from './precision';
+import { UpstoxInstrumentRegistry } from './brokers/upstox/upstoxInstrumentRegistry';
 
 export interface RiskEvaluationRequest {
   userId: string;
@@ -9,6 +10,9 @@ export interface RiskEvaluationRequest {
   quoteAsset?: string;
   symbol?: string;
   broker?: string;
+  assetClass?: 'CRYPTO' | 'EQUITY';
+  currency?: string;
+  accountMode?: 'live' | 'paper';
   side: 'BUY' | 'SELL';
   type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT' | string;
   quantity: number | string | ExactDecimal;
@@ -23,6 +27,10 @@ export interface RiskDecision {
   requiredCashReserve: number;
   notionalUsd: number;
   portfolioEquityUsd: number;
+  notional?: number;
+  portfolioEquity?: number;
+  currency?: string;
+  currencySymbol?: string;
   singleOrderPct: number;
   projectedConcentrationPct: number;
 }
@@ -30,9 +38,14 @@ export interface RiskDecision {
 export class ServerRiskEngine {
   /**
    * Evaluates a trade proposal against server-authoritative institutional risk policies.
+   * Multi-asset and multi-currency aware (USD / INR, CRYPTO / EQUITY).
    */
   static async evaluateTrade(req: RiskEvaluationRequest): Promise<RiskDecision> {
     const db = getDb();
+    const isUpstox = req.broker === 'upstox';
+    const assetClass: 'CRYPTO' | 'EQUITY' = req.assetClass || (isUpstox ? 'EQUITY' : 'CRYPTO');
+    const quoteAsset = (req.currency || req.quoteAsset || (isUpstox ? 'INR' : 'USDT')).toUpperCase();
+    const currencySymbol = quoteAsset === 'INR' ? '₹' : '$';
 
     // 1. Emergency Freeze Check
     const limits = await db.queryOne<any>(
@@ -55,6 +68,10 @@ export class ServerRiskEngine {
         requiredCashReserve: 0,
         notionalUsd: 0,
         portfolioEquityUsd: 0,
+        notional: 0,
+        portfolioEquity: 0,
+        currency: quoteAsset,
+        currencySymbol,
         singleOrderPct: 0,
         projectedConcentrationPct: 0,
       };
@@ -69,6 +86,10 @@ export class ServerRiskEngine {
         requiredCashReserve: 0,
         notionalUsd: 0,
         portfolioEquityUsd: 0,
+        notional: 0,
+        portfolioEquity: 0,
+        currency: quoteAsset,
+        currencySymbol,
         singleOrderPct: 0,
         projectedConcentrationPct: 0,
       };
@@ -84,16 +105,21 @@ export class ServerRiskEngine {
         requiredCashReserve: 0,
         notionalUsd: 0,
         portfolioEquityUsd: 0,
+        notional: 0,
+        portfolioEquity: 0,
+        currency: quoteAsset,
+        currencySymbol,
         singleOrderPct: 0,
         projectedConcentrationPct: 0,
       };
     }
 
     const notionalDec = qtyDec.mul(priceDec);
-    const notionalUsd = notionalDec.toDisplayNumber();
+    const notionalAmount = notionalDec.toDisplayNumber();
+    const notionalUsd = notionalAmount; // retained for backward compatibility
 
-    const quoteAsset = req.quoteAsset || 'USDT';
-    const asset = req.asset || (req.symbol ? req.symbol.replace(quoteAsset, '') : 'UNKNOWN');
+    const rawAsset = req.asset || (req.symbol ? req.symbol.replace(quoteAsset, '').replace('NSE:', '').replace('BSE:', '') : 'UNKNOWN');
+    const asset = rawAsset.trim().toUpperCase();
     const symbolPattern = req.symbol || `${asset}%`;
 
     // 3. Duplicate Order Rate-Limit / Cooldown Check (5 seconds window)
@@ -111,6 +137,10 @@ export class ServerRiskEngine {
         requiredCashReserve: 0,
         notionalUsd,
         portfolioEquityUsd: 0,
+        notional: notionalAmount,
+        portfolioEquity: 0,
+        currency: quoteAsset,
+        currencySymbol,
         singleOrderPct: 0,
         projectedConcentrationPct: 0,
       };
@@ -130,34 +160,86 @@ export class ServerRiskEngine {
         requiredCashReserve: 0,
         notionalUsd,
         portfolioEquityUsd: 0,
+        notional: notionalAmount,
+        portfolioEquity: 0,
+        currency: quoteAsset,
+        currencySymbol,
         singleOrderPct: 0,
         projectedConcentrationPct: 0,
       };
     }
 
-    // 5. Balance & Portfolio Valuation
+    // 5. Balance & Portfolio Valuation (Asset-Class and Currency Aware)
     const balances = await LedgerService.getUserBalances(req.userId);
     const tradingCashMinor = BigInt(
       balances[`trading_allocated:${quoteAsset}`]?.free ??
         balances[`sovereign_cash:${quoteAsset}`]?.free ??
         0
     );
-    const tradingCashDec = ExactDecimal.fromMinor(tradingCashMinor, 2);
+    const cashDecimals = getAssetDecimals(quoteAsset);
+    let tradingCashDec = ExactDecimal.fromMinor(tradingCashMinor, cashDecimals);
 
-    // Calculate portfolio equity
+    // Calculate portfolio equity across holding accounts
     let portfolioEquityDec = tradingCashDec;
     for (const [key, bal] of Object.entries(balances)) {
-      if (key.startsWith('crypto_holdings:') && key.includes(asset)) {
-        const balMinor = BigInt(bal.balance || 0);
-        const balDec = ExactDecimal.fromMinor(balMinor, 8);
-        portfolioEquityDec = portfolioEquityDec.add(balDec.mul(priceDec));
+      const balMinor = BigInt(bal.balance || 0);
+      if (balMinor <= 0n) continue;
+
+      if (assetClass === 'EQUITY') {
+        // Indian equities: check equity_holdings and asset_holdings (0 decimals for whole shares)
+        if (key.startsWith('equity_holdings:') || key.startsWith('asset_holdings:')) {
+          const holdingSymbol = key.split(':')[1]?.toUpperCase();
+          const balDec = ExactDecimal.fromMinor(balMinor, 0);
+          let holdingPriceDec = ExactDecimal.zero();
+          if (holdingSymbol === asset) {
+            holdingPriceDec = priceDec;
+          } else {
+            const authInst = UpstoxInstrumentRegistry.get(holdingSymbol);
+            if (authInst?.lastPrice) {
+              holdingPriceDec = ExactDecimal.from(authInst.lastPrice);
+            }
+          }
+          portfolioEquityDec = portfolioEquityDec.add(balDec.mul(holdingPriceDec));
+        }
+      } else {
+        // Crypto assets: check crypto_holdings (8 decimals for standard crypto)
+        if (key.startsWith('crypto_holdings:') && key.includes(asset)) {
+          const balDec = ExactDecimal.fromMinor(balMinor, 8);
+          portfolioEquityDec = portfolioEquityDec.add(balDec.mul(priceDec));
+        }
       }
     }
+
+    // Portfolio equity fallback
     if (portfolioEquityDec.lte(ExactDecimal.zero())) {
-      portfolioEquityDec = notionalDec; // Genesis baseline
+      if (req.accountMode === 'paper') {
+        // Virtual paper trading capital
+        portfolioEquityDec = quoteAsset === 'INR' ? ExactDecimal.from(1_000_000) : ExactDecimal.from(100_000);
+        tradingCashDec = portfolioEquityDec;
+      } else {
+        portfolioEquityDec = notionalDec;
+      }
     }
 
-    const portfolioEquityUsd = portfolioEquityDec.toDisplayNumber();
+    const portfolioEquityAmount = portfolioEquityDec.toDisplayNumber();
+    const portfolioEquityUsd = portfolioEquityAmount;
+
+    // Check cash availability for live BUY orders
+    if (req.accountMode !== 'paper' && req.side === 'BUY' && tradingCashDec.lte(ExactDecimal.zero())) {
+      return {
+        approved: false,
+        rejectReason: `Insufficient funds: Available cash balance is ${currencySymbol}0.00. Please deposit ${quoteAsset} before live trading.`,
+        requiredCashReserve: 0,
+        notionalUsd,
+        portfolioEquityUsd: 0,
+        notional: notionalAmount,
+        portfolioEquity: 0,
+        currency: quoteAsset,
+        currencySymbol,
+        singleOrderPct: 0,
+        projectedConcentrationPct: 0,
+      };
+    }
 
     // 6. Max Single Order Percentage (40% hard policy)
     const singleOrderPctDec = notionalDec.div(portfolioEquityDec, 4);
@@ -166,10 +248,14 @@ export class ServerRiskEngine {
     if (singleOrderPct > maxSingleOrderPct + 0.001) {
       return {
         approved: false,
-        rejectReason: `Single order size ($${notionalUsd.toFixed(2)}) is ${(singleOrderPct * 100).toFixed(1)}% of portfolio, exceeding maximum allowed limit of ${(maxSingleOrderPct * 100).toFixed(0)}%.`,
+        rejectReason: `Single order size (${currencySymbol}${notionalAmount.toFixed(2)}) is ${(singleOrderPct * 100).toFixed(1)}% of portfolio, exceeding maximum allowed limit of ${(maxSingleOrderPct * 100).toFixed(0)}%.`,
         requiredCashReserve: 0,
         notionalUsd,
         portfolioEquityUsd,
+        notional: notionalAmount,
+        portfolioEquity: portfolioEquityAmount,
+        currency: quoteAsset,
+        currencySymbol,
         singleOrderPct,
         projectedConcentrationPct: singleOrderPct,
       };
@@ -185,10 +271,14 @@ export class ServerRiskEngine {
       if (remainingCashDec.lt(requiredCashReserveDec)) {
         return {
           approved: false,
-          rejectReason: `Order would violate minimum liquid cash reserve of ${(minReservePct * 100).toFixed(0)}% ($${requiredCashReserve.toFixed(2)}). Projected remaining cash: $${remainingCashDec.toFixed(2)}.`,
+          rejectReason: `Order would violate minimum liquid cash reserve of ${(minReservePct * 100).toFixed(0)}% (${currencySymbol}${requiredCashReserve.toFixed(2)}). Projected remaining cash: ${currencySymbol}${remainingCashDec.toFixed(2)}.`,
           requiredCashReserve,
           notionalUsd,
           portfolioEquityUsd,
+          notional: notionalAmount,
+          portfolioEquity: portfolioEquityAmount,
+          currency: quoteAsset,
+          currencySymbol,
           singleOrderPct,
           projectedConcentrationPct: singleOrderPct,
         };
@@ -196,8 +286,21 @@ export class ServerRiskEngine {
     }
 
     // 8. Max Asset Concentration (50% policy)
-    const currentAssetMinor = BigInt(balances[`crypto_holdings:${req.asset}`]?.balance ?? 0);
-    const currentAssetHoldingDec = ExactDecimal.fromMinor(currentAssetMinor, 8);
+    let currentAssetMinor = 0n;
+    let assetHoldingsDecimals = 8;
+    if (assetClass === 'EQUITY') {
+      currentAssetMinor = BigInt(
+        balances[`equity_holdings:${asset}`]?.balance ??
+          balances[`asset_holdings:${asset}`]?.balance ??
+          0
+      );
+      assetHoldingsDecimals = 0;
+    } else {
+      currentAssetMinor = BigInt(balances[`crypto_holdings:${asset}`]?.balance ?? 0);
+      assetHoldingsDecimals = 8;
+    }
+
+    const currentAssetHoldingDec = ExactDecimal.fromMinor(currentAssetMinor, assetHoldingsDecimals);
     const currentHoldingNotionalDec = currentAssetHoldingDec.mul(priceDec);
     const projectedHoldingNotionalDec = req.side === 'BUY'
       ? currentHoldingNotionalDec.add(notionalDec)
@@ -209,10 +312,14 @@ export class ServerRiskEngine {
     if (req.side === 'BUY' && projectedConcentrationPct > maxConcentrationPct + 0.001) {
       return {
         approved: false,
-        rejectReason: `Projected ${req.asset} allocation (${(projectedConcentrationPct * 100).toFixed(1)}%) exceeds maximum asset concentration cap of ${(maxConcentrationPct * 100).toFixed(0)}%.`,
+        rejectReason: `Projected ${asset} allocation (${(projectedConcentrationPct * 100).toFixed(1)}%) exceeds maximum asset concentration cap of ${(maxConcentrationPct * 100).toFixed(0)}%.`,
         requiredCashReserve,
         notionalUsd,
         portfolioEquityUsd,
+        notional: notionalAmount,
+        portfolioEquity: portfolioEquityAmount,
+        currency: quoteAsset,
+        currencySymbol,
         singleOrderPct,
         projectedConcentrationPct,
       };
@@ -225,8 +332,12 @@ export class ServerRiskEngine {
       actor: 'risk_engine',
       idempotencyKey: req.idempotencyKey,
       metadata: {
-        symbol: `${req.asset}${req.quoteAsset}`,
+        symbol: `${asset}${quoteAsset}`,
+        broker: req.broker || 'binance',
+        assetClass,
+        currency: quoteAsset,
         side: req.side,
+        notional: notionalAmount,
         notionalUsd,
         singleOrderPct,
         projectedConcentrationPct,
@@ -239,6 +350,10 @@ export class ServerRiskEngine {
       requiredCashReserve,
       notionalUsd,
       portfolioEquityUsd,
+      notional: notionalAmount,
+      portfolioEquity: portfolioEquityAmount,
+      currency: quoteAsset,
+      currencySymbol,
       singleOrderPct,
       projectedConcentrationPct,
     };

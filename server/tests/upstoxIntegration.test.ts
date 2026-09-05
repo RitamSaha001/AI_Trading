@@ -6,6 +6,7 @@ import { config } from '../config';
 import { BrokerRegistry } from '../services/brokers/brokerRegistry';
 import { UpstoxAdapter } from '../services/brokers/upstox/upstoxAdapter';
 import { UpstoxClient } from '../services/brokers/upstox/upstoxClient';
+import { IndianMarketCalendar } from '../services/brokers/upstox/indianMarketCalendar';
 import { InstrumentRulesService } from '../services/instrumentRules';
 import { BrokerOrderRequest } from '../services/brokers/brokerTypes';
 import { StandardBrokerError } from '../services/brokers/brokerGateway';
@@ -30,6 +31,7 @@ describe('Phase 2: Upstox Broker Gateway Integration Suite', () => {
     config.UPSTOX_CLIENT_ID = 'test_upstox_client_id_001';
     config.UPSTOX_CLIENT_SECRET = 'test_upstox_client_secret_001';
     config.UPSTOX_LIVE_TRADING_ENABLED = false;
+    IndianMarketCalendar.setMockMarketOpen(true);
 
     // Reset BrokerRegistry, InstrumentRulesService, and UpstoxClient
     BrokerRegistry.resetForTesting();
@@ -112,6 +114,7 @@ describe('Phase 2: Upstox Broker Gateway Integration Suite', () => {
     config.UPSTOX_CLIENT_ID = originalClientId;
     config.UPSTOX_CLIENT_SECRET = originalClientSecret;
     config.UPSTOX_LIVE_TRADING_ENABLED = originalLiveEnabled;
+    IndianMarketCalendar.setMockMarketOpen(null);
     UpstoxClient.resetForTesting();
     vi.restoreAllMocks();
   });

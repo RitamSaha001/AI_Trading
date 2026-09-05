@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS ledger_accounts (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   account_mode TEXT NOT NULL DEFAULT 'live', -- 'live' | 'paper'
-  account_type TEXT NOT NULL, -- 'sovereign_cash' | 'trading_allocated' | 'crypto_holdings' | 'reserve_escrow' | 'fee_treasury' | 'realized_pnl'
+  account_type TEXT NOT NULL, -- 'sovereign_cash' | 'trading_allocated' | 'crypto_holdings' | 'equity_holdings' | 'asset_holdings' | 'reserve_escrow' | 'fee_treasury' | 'realized_pnl'
   asset_or_currency TEXT NOT NULL, -- 'USD' | 'INR' | 'BTC' | 'ETH' | 'USDT' etc.
   balance_minor BIGINT NOT NULL DEFAULT 0, -- Minor units (cents/paise/satoshis/wei)
   reserved_minor BIGINT NOT NULL DEFAULT 0,
@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS ledger_accounts (
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_accounts_user ON ledger_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_accounts_user_mode ON ledger_accounts(user_id, account_mode);
+CREATE INDEX IF NOT EXISTS idx_ledger_accounts_asset_type ON ledger_accounts(account_type, asset_or_currency);
+CREATE INDEX IF NOT EXISTS idx_ledger_entries_ref_type ON ledger_entries(reference_type, currency_or_asset);
 
 -- Double-Entry Ledger Immutable Journal Entries
 CREATE TABLE IF NOT EXISTS ledger_entries (

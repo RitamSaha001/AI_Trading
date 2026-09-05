@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getDb } from '../db';
 import { UpstoxClient } from '../services/brokers/upstox/upstoxClient';
 import { UpstoxAdapter } from '../services/brokers/upstox/upstoxAdapter';
+import { IndianMarketCalendar } from '../services/brokers/upstox/indianMarketCalendar';
 import {
   calculateNextUpstoxExpiry,
   getTokenHealth,
@@ -22,7 +23,12 @@ describe('Upstox Security & Production Hardening Suite', () => {
     text: async () => JSON.stringify(data),
   });
 
+  afterEach(() => {
+    IndianMarketCalendar.setMockMarketOpen(null);
+  });
+
   beforeEach(async () => {
+    IndianMarketCalendar.setMockMarketOpen(true);
     UpstoxClient.resetForTesting();
 
     UpstoxClient.setTransport(async (url: string, options: any) => {

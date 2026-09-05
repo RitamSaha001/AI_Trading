@@ -264,7 +264,7 @@ export class ReconciliationWorker {
       // 3. Balance Sanity & Negative Balance Check (client cash and asset accounts must strictly be non-negative)
       const ledgerAccounts = await db.query<any>(
         `SELECT * FROM ledger_accounts 
-         WHERE account_type IN ('sovereign_cash', 'user_vault', 'trading_allocated', 'crypto_holdings')
+         WHERE account_type IN ('sovereign_cash', 'user_vault', 'trading_allocated', 'crypto_holdings', 'equity_holdings', 'asset_holdings')
          ${userId ? 'AND user_id = ?' : ''}`,
         userId ? [userId] : []
       );

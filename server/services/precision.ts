@@ -340,11 +340,37 @@ export const ASSET_FACTOR = 100_000_000n; // 1.00000000 = 100,000,000 satoshis
 
 /**
  * Returns the authoritative decimal precision for an asset or currency.
+ * - FIAT & Stablecoins: 2 decimals (cents / paise)
+ * - Equities (Indian cash shares): 0 decimals (integer lot quantities)
+ * - Crypto assets: 8 decimals (satoshis / wei standard)
  */
-export function getAssetDecimals(assetOrCurrency: string): number {
+export function getAssetDecimals(assetOrCurrency: string, assetClass?: 'CRYPTO' | 'EQUITY' | 'FIAT'): number {
   const norm = assetOrCurrency.toUpperCase().trim();
-  if (['USD', 'INR', 'EUR', 'GBP', 'CAD', 'AUD', 'USDT', 'USDC', 'BUSD', 'DAI', 'FDUSD', 'TUSD'].includes(norm)) {
+  if (
+    assetClass === 'FIAT' ||
+    ['USD', 'INR', 'EUR', 'GBP', 'CAD', 'AUD', 'USDT', 'USDC', 'BUSD', 'DAI', 'FDUSD', 'TUSD'].includes(norm)
+  ) {
     return 2;
+  }
+  if (assetClass === 'EQUITY') {
+    return 0;
+  }
+  if (norm.startsWith('INE') || norm.startsWith('NSE:') || norm.startsWith('BSE:') || norm.startsWith('NSE_EQ|')) {
+    return 0;
+  }
+  // Standard Indian equity symbols list
+  const KNOWN_EQUITIES = new Set([
+    'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL', 'ITC',
+    'KOTAKBANK', 'LT', 'AXISBANK', 'HINDUNILVR', 'BAJFINANCE', 'MARUTI', 'HCLTECH',
+    'SUNPHARMA', 'TATAMOTORS', 'NTPC', 'POWERGRID', 'TITAN', 'ULTRACEMCO', 'ONGC',
+    'ASIANPAINT', 'COALINDIA', 'BAJAJFINSV', 'WIPRO', 'ADANIENT', 'ADANIPORTS',
+    'M&M', 'TATASTEEL', 'JSWSTEEL', 'GRASIM', 'TECHM', 'SBILIFE', 'DRREDDY',
+    'BRITANNIA', 'DIVISLAB', 'HINDALCO', 'CIPLA', 'APOLLOHOSP', 'HEROMOTOCO',
+    'EICHERMOT', 'BPCL', 'TATACONSUM', 'INDUSINDBK', 'NESTLEIND', 'BAJAJ-AUTO',
+    'TRENT', 'BEL', 'SHRIRAMFIN'
+  ]);
+  if (KNOWN_EQUITIES.has(norm)) {
+    return 0;
   }
   return 8;
 }

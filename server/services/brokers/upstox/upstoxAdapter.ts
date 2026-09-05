@@ -47,6 +47,7 @@ import {
   getTokenHealth,
   UpstoxTokenHealth,
 } from './upstoxExpiry';
+import { IndianMarketCalendar } from './indianMarketCalendar';
 
 export class UpstoxAdapter implements BrokerGateway {
   public readonly id: BrokerId = 'upstox';
@@ -242,17 +243,23 @@ export class UpstoxAdapter implements BrokerGateway {
     const db = getDb();
     let accessToken = credentials.accessToken;
 
-    // If OAuth authorization code was supplied, validate state and exchange it
+    // If OAuth authorization code was supplied, strictly require and validate CSRF state before exchange
     if (credentials.code) {
-      if (credentials.state) {
-        const stateRes = await UpstoxClient.validateAndConsumeOAuthState(userId, credentials.state);
-        if (!stateRes.valid) {
-          throw new StandardBrokerError(
-            'AUTHENTICATION_FAILED',
-            `OAuth state validation failed: ${stateRes.reason || 'Invalid state token.'}`,
-            'upstox'
-          );
-        }
+      if (!credentials.state || typeof credentials.state !== 'string' || !credentials.state.trim()) {
+        throw new StandardBrokerError(
+          'AUTHENTICATION_FAILED',
+          'OAuth state parameter is strictly required when exchanging an authorization code.',
+          'upstox'
+        );
+      }
+
+      const stateRes = await UpstoxClient.validateAndConsumeOAuthState(userId, credentials.state.trim());
+      if (!stateRes.valid) {
+        throw new StandardBrokerError(
+          'AUTHENTICATION_FAILED',
+          `OAuth state validation failed: ${stateRes.reason || 'Invalid state token.'}`,
+          'upstox'
+        );
       }
 
       const tokenResp = await UpstoxClient.exchangeAuthorizationCode(
@@ -278,7 +285,8 @@ export class UpstoxAdapter implements BrokerGateway {
 
     const encryptedToken = this.encryptSecret(accessToken.trim());
     const credId = `cred_upstox_${userId}_${Date.now()}`;
-    const environment = credentials.environment || config.UPSTOX_ENV || 'sandbox';
+    const rawEnv = String(credentials.environment || config.UPSTOX_ENV || 'sandbox').toLowerCase();
+    const environment = (rawEnv === 'prod' || rawEnv === 'production' || rawEnv === 'live') ? 'production' : 'sandbox';
 
     const accountId = credentials.accountId || profile.user_id;
     const accountName = credentials.userName || credentials.accountName || profile.user_name;
@@ -358,12 +366,37 @@ export class UpstoxAdapter implements BrokerGateway {
   /**
    * Internal helper: retrieves decrypted credentials for user.
    */
-  async getCredentials(userId: string): Promise<{ accessToken: string; environment: string; accountId?: string; canTrade: boolean } | null> {
+  async getCredentials(
+    userId: string,
+    targetEnv?: string
+  ): Promise<{ accessToken: string; environment: string; accountId?: string; canTrade: boolean } | null> {
     const db = getDb();
-    const row = await db.queryOne<any>(
-      `SELECT * FROM broker_credentials WHERE user_id = ? AND broker = 'upstox' ORDER BY updated_at DESC LIMIT 1`,
-      [userId]
-    );
+    const rawTarget = targetEnv ? String(targetEnv).toLowerCase() : undefined;
+    const normalizedTarget = rawTarget
+      ? (rawTarget === 'prod' || rawTarget === 'production' || rawTarget === 'live' ? 'production' : 'sandbox')
+      : undefined;
+
+    let row: any;
+    if (normalizedTarget) {
+      row = await db.queryOne<any>(
+        `SELECT * FROM broker_credentials WHERE user_id = ? AND broker = 'upstox' AND (environment = ? OR (environment = 'prod' AND ? = 'production')) ORDER BY updated_at DESC LIMIT 1`,
+        [userId, normalizedTarget, normalizedTarget]
+      );
+    } else {
+      const preferredEnv = ((config.UPSTOX_ENV || 'sandbox').toLowerCase() === 'production' || (config.UPSTOX_ENV || '').toLowerCase() === 'prod')
+        ? 'production'
+        : 'sandbox';
+      row = await db.queryOne<any>(
+        `SELECT * FROM broker_credentials WHERE user_id = ? AND broker = 'upstox' AND (environment = ? OR (environment = 'prod' AND ? = 'production')) ORDER BY updated_at DESC LIMIT 1`,
+        [userId, preferredEnv, preferredEnv]
+      );
+      if (!row) {
+        row = await db.queryOne<any>(
+          `SELECT * FROM broker_credentials WHERE user_id = ? AND broker = 'upstox' ORDER BY updated_at DESC LIMIT 1`,
+          [userId]
+        );
+      }
+    }
 
     if (!row || !row.access_token_encrypted) return null;
 
@@ -437,30 +470,7 @@ export class UpstoxAdapter implements BrokerGateway {
       throw new StandardBrokerError('ORDER_REJECTED', `Unknown instrument: ${order.symbol}`, 'upstox');
     }
 
-    // 2. Risk Engine Evaluation
-    const riskResult = await RiskEngine.evaluateTrade({
-      userId: order.userId,
-      broker: 'upstox',
-      symbol: order.symbol,
-      asset: instrument.baseAsset || order.symbol,
-      quoteAsset: instrument.quoteAsset || 'INR',
-      side: order.side,
-      type: order.type,
-      quantity: order.quantity,
-      price: order.price || 0,
-      marketQuoteAgeMs: order.marketQuoteAgeMs || 0,
-      idempotencyKey: clientOrderId,
-    });
-
-    if (!riskResult.approved) {
-      throw new StandardBrokerError(
-        'ORDER_REJECTED',
-        `Risk check rejected: ${riskResult.rejectReason || 'Limits exceeded'}`,
-        'upstox'
-      );
-    }
-
-    // 3. Live Trading Safety Gate & Outbound Static IP Enforcement
+    // 2. Live Trading Safety Gate, Token Health, Outbound Static IP & Market Hours Enforcement
     if (accountMode === 'live') {
       if (!config.UPSTOX_LIVE_TRADING_ENABLED) {
         throw new StandardBrokerError(
@@ -488,8 +498,17 @@ export class UpstoxAdapter implements BrokerGateway {
         );
       }
 
-      const creds = await this.getCredentials(order.userId);
-      const ipCheck = await UpstoxClient.checkOutboundIp(false, creds?.accessToken);
+      // Require explicit production credentials for live trading (Finding 6)
+      const creds = await this.getCredentials(order.userId, 'production');
+      if (!creds || !creds.accessToken || (creds.environment !== 'production' && creds.environment !== 'prod')) {
+        throw new StandardBrokerError(
+          'AUTHENTICATION_FAILED',
+          'Live trading requires production Upstox credentials. Connected credentials are for sandbox or missing.',
+          'upstox'
+        );
+      }
+
+      const ipCheck = await UpstoxClient.checkOutboundIp(false, creds.accessToken);
       if (ipCheck.status === 'FAIL') {
         throw new StandardBrokerError(
           'STATIC_IP_MISMATCH',
@@ -497,6 +516,44 @@ export class UpstoxAdapter implements BrokerGateway {
           'upstox'
         );
       }
+
+      // Check Indian market trading hours & holidays (Finding 9)
+      const isAmo = (order as any).isAmo || (order as any).amo || order.validity === 'AMO';
+      if (!isAmo && !IndianMarketCalendar.isMarketOpen()) {
+        const nextOpen = IndianMarketCalendar.getNextMarketOpen();
+        const istNext = IndianMarketCalendar.toIST(nextOpen);
+        throw new StandardBrokerError(
+          'MARKET_CLOSED',
+          `Indian markets (NSE/BSE) are currently closed. Next regular market open is ${istNext.dateStr} 09:15 IST.`,
+          'upstox'
+        );
+      }
+    }
+
+    // 3. Risk Engine Evaluation
+    const riskResult = await RiskEngine.evaluateTrade({
+      userId: order.userId,
+      broker: 'upstox',
+      assetClass: 'EQUITY',
+      currency: instrument.quoteAsset || 'INR',
+      accountMode,
+      symbol: order.symbol,
+      asset: instrument.baseAsset || order.symbol,
+      quoteAsset: instrument.quoteAsset || 'INR',
+      side: order.side,
+      type: order.type,
+      quantity: order.quantity,
+      price: order.price || 0,
+      marketQuoteAgeMs: order.marketQuoteAgeMs || 0,
+      idempotencyKey: clientOrderId,
+    });
+
+    if (!riskResult.approved) {
+      throw new StandardBrokerError(
+        'ORDER_REJECTED',
+        `Risk check rejected: ${riskResult.rejectReason || 'Limits exceeded'}`,
+        'upstox'
+      );
     }
 
     // 4. Paper Simulation Path
@@ -505,7 +562,7 @@ export class UpstoxAdapter implements BrokerGateway {
     }
 
     // 5. Live Mode Execution Pipeline
-    const creds = await this.getCredentials(order.userId);
+    const creds = await this.getCredentials(order.userId, 'production');
     if (!creds || !creds.accessToken) {
       throw new StandardBrokerError('AUTHENTICATION_FAILED', 'User has no valid Upstox credentials connected.', 'upstox');
     }
@@ -521,7 +578,7 @@ export class UpstoxAdapter implements BrokerGateway {
       ? ExactDecimal.from(order.quantity).toMinor(0)
       : 0n;
 
-    // Ledger Reservation (Cash for BUY, Asset Position for SELL)
+    // Ledger Reservation (Cash for BUY, Equity Shares for SELL - Finding 4)
     if (order.side === 'BUY' && reservedCashMinor > 0n) {
       await LedgerService.reserveOrderFunds({
         userId: order.userId,
@@ -536,7 +593,7 @@ export class UpstoxAdapter implements BrokerGateway {
         userId: order.userId,
         orderId: clientOrderId,
         accountMode: 'live',
-        accountType: 'crypto_holdings',
+        accountType: 'equity_holdings',
         assetOrCurrency: instrument.baseAsset || order.symbol,
         amountMinor: reservedQtyMinor,
       });
@@ -572,15 +629,47 @@ export class UpstoxAdapter implements BrokerGateway {
       ]
     );
 
+    // Dynamic Product Selection (Finding 3)
+    let product: 'D' | 'I' | 'MTF' = 'D';
+    if (order.product) {
+      const p = String(order.product).toUpperCase().trim();
+      if (p === 'I' || p === 'MIS' || p === 'INTRADAY') {
+        product = 'I';
+      } else if (p === 'MTF') {
+        product = 'MTF';
+      } else {
+        product = 'D'; // CNC / DELIVERY / D default
+      }
+    }
+
+    // Expanded Order Intent (Finding 10)
+    const validity: 'DAY' | 'IOC' = (String(order.validity).toUpperCase() === 'IOC') ? 'IOC' : 'DAY';
+    let upstoxOrderType: 'MARKET' | 'LIMIT' | 'SL' | 'SL-M' = 'LIMIT';
+    if (order.type === 'MARKET') {
+      upstoxOrderType = 'MARKET';
+    } else if (order.type === 'STOP_LOSS' || order.type === 'SL-M' || order.type === 'SL_M') {
+      upstoxOrderType = 'SL-M';
+    } else if (order.type === 'STOP_LOSS_LIMIT' || order.type === 'SL') {
+      upstoxOrderType = 'SL';
+    } else {
+      upstoxOrderType = 'LIMIT';
+    }
+
+    const triggerPriceNum = order.triggerPrice ? Number(order.triggerPrice) : undefined;
+    const disclosedQtyNum = order.disclosedQuantity ? Number(order.disclosedQuantity) : undefined;
+
     const payload: UpstoxPlaceOrderPayload = {
-      quantity: order.quantity,
-      product: 'I',
-      validity: 'DAY',
-      price: order.type === 'MARKET' ? 0 : price,
+      quantity: Number(order.quantity),
+      product,
+      validity,
+      price: upstoxOrderType === 'MARKET' ? 0 : price,
       tag: clientOrderId.slice(-20),
       instrument_token: instrument.instrumentKey,
-      order_type: order.type === 'MARKET' ? 'MARKET' : 'LIMIT',
+      order_type: upstoxOrderType,
       transaction_type: order.side,
+      trigger_price: triggerPriceNum,
+      disclosed_quantity: disclosedQtyNum,
+      slice: order.slice,
     };
 
     try {

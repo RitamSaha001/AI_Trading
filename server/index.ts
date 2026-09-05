@@ -976,6 +976,11 @@ export function buildServer(): FastifyInstance {
       type: 'MARKET' | 'LIMIT' | 'STOP_LOSS_LIMIT' | string;
       quantity: number;
       price?: number;
+      product?: string;
+      validity?: string;
+      triggerPrice?: number;
+      disclosedQuantity?: number;
+      slice?: boolean;
       marketQuoteAgeMs?: number;
       idempotencyKey?: string;
       broker?: string;
@@ -987,16 +992,22 @@ export function buildServer(): FastifyInstance {
 
     try {
       const broker = BrokerRegistry.get(body.broker || 'binance');
+      const quoteAsset = body.quoteAsset || (broker.id === 'upstox' ? 'INR' : 'USDT');
       const order = await broker.placeOrder({
         userId: req.user!.id,
         broker: broker.id,
         symbol: body.symbol,
         asset: body.asset,
-        quoteAsset: body.quoteAsset || 'USDT',
+        quoteAsset,
         side: body.side,
         type: body.type,
         quantity: body.quantity,
         price: body.price,
+        product: body.product,
+        validity: body.validity,
+        triggerPrice: body.triggerPrice,
+        disclosedQuantity: body.disclosedQuantity,
+        slice: body.slice,
         marketQuoteAgeMs: body.marketQuoteAgeMs || 0,
         idempotencyKey: body.idempotencyKey || `idemp_ord_${Date.now()}`,
       });

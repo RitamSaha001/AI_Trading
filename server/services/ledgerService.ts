@@ -18,6 +18,8 @@ export type LedgerAccountType =
   | 'sovereign_cash'       // Liquid cash in Sovereign Wallet
   | 'trading_allocated'   // Funds allocated to the active trading desk
   | 'crypto_holdings'     // Spot crypto asset lots held
+  | 'equity_holdings'     // Cash & Carry / Demat equity holdings (for Indian equities)
+  | 'asset_holdings'      // Generalized asset holdings (alias/superset)
   | 'reserve_escrow'      // Escrow for open orders or pending settlements
   | 'fee_treasury'        // System collected fees
   | 'realized_pnl'        // Realized P&L equity account
@@ -96,6 +98,7 @@ export interface ProcessFillParams {
   fee?: number | string | ExactDecimal;
   feeAsset?: string;
   commissionStatus?: 'ESTIMATED' | 'AUTHORITATIVE' | 'PENDING' | 'UNRESOLVED';
+  holdingsAccountType?: 'crypto_holdings' | 'equity_holdings' | 'asset_holdings';
   accountingEventId?: string;
   canonicalFillKey?: string;
   executedAt?: number;
@@ -1064,7 +1067,7 @@ export class LedgerService {
           `UPDATE exchange_orders SET reserved_cash_minor = ?, reserved_cash = 0.0 WHERE client_order_id = ?`,
           [amount, params.orderId]
         );
-      } else if (params.accountType === 'crypto_holdings') {
+      } else if (params.accountType === 'crypto_holdings' || params.accountType === 'equity_holdings' || params.accountType === 'asset_holdings') {
         await tx.execute(
           `UPDATE exchange_orders SET reserved_qty_minor = ?, reserved_qty = 0.0 WHERE client_order_id = ?`,
           [amount, params.orderId]
@@ -1228,6 +1231,8 @@ export class LedgerService {
 
       if (existingEvent || existingEntry) {
         // Already processed! Return current authoritative account state without duplicate accounting
+        const holdingAccType: LedgerAccountType =
+          params.holdingsAccountType || (params.quoteAsset === 'INR' ? 'equity_holdings' : 'crypto_holdings');
         const cashAcc = await this.getOrCreateAccount(
           params.userId,
           'trading_allocated',
@@ -1237,7 +1242,7 @@ export class LedgerService {
         );
         const assetAcc = await this.getOrCreateAccount(
           params.userId,
-          'crypto_holdings',
+          holdingAccType,
           params.baseAsset,
           accountMode,
           tx
@@ -1270,7 +1275,8 @@ export class LedgerService {
       const notionalExact = notionalDec.toString();
 
       const notionalCashMinor = notionalDec.toMinor(2);
-      const qtyAssetMinor = qtyDec.toMinor(8);
+      const assetDecimals = getAssetDecimals(params.baseAsset);
+      const qtyAssetMinor = qtyDec.toMinor(assetDecimals);
 
       const feeAsset = params.feeAsset || params.quoteAsset;
       let feeDec: ExactDecimal;
@@ -1283,6 +1289,8 @@ export class LedgerService {
         feeDec = ExactDecimal.zero();
         feeMinor = 0n;
       } else {
+        const holdingAccType: LedgerAccountType =
+          params.holdingsAccountType || (params.quoteAsset === 'INR' ? 'equity_holdings' : 'crypto_holdings');
         if (params.side === 'BUY') {
           const cashAccCheck = await this.getOrCreateAccount(
             params.userId,
@@ -1300,7 +1308,7 @@ export class LedgerService {
         } else {
           const assetAccCheck = await this.getOrCreateAccount(
             params.userId,
-            'crypto_holdings',
+            holdingAccType,
             params.baseAsset,
             accountMode,
             tx
@@ -1322,6 +1330,8 @@ export class LedgerService {
       const now = params.executedAt || Date.now();
 
       // Relevant user accounts
+      const holdingAccType: LedgerAccountType =
+        params.holdingsAccountType || (params.quoteAsset === 'INR' ? 'equity_holdings' : 'crypto_holdings');
       const cashAcc = await this.getOrCreateAccount(
         params.userId,
         'trading_allocated',
@@ -1331,7 +1341,7 @@ export class LedgerService {
       );
       const assetAcc = await this.getOrCreateAccount(
         params.userId,
-        'crypto_holdings',
+        holdingAccType,
         params.baseAsset,
         accountMode,
         tx

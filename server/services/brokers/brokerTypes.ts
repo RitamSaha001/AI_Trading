@@ -157,8 +157,11 @@ export interface BrokerOrderRequest {
   price?: number | string | ExactDecimal;
   stopPrice?: number | string | ExactDecimal;
   quoteOrderQty?: number | string | ExactDecimal;
-  product?: string;
-  validity?: string;
+  product?: string; // 'CNC' | 'MIS' | 'NRML' | 'MTF' | 'D' | 'I'
+  validity?: string; // 'DAY' | 'IOC'
+  triggerPrice?: number | string | ExactDecimal;
+  disclosedQuantity?: number;
+  slice?: boolean;
   marketQuoteAgeMs?: number;
   idempotencyKey: string;
   clientOrderId?: string;
