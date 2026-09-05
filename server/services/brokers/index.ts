@@ -19,3 +19,4 @@ export * from './binance/binanceAdapter';
 export * from './upstox/upstoxAdapter';
 export * from './upstox/upstoxClient';
 export * from './upstox/upstoxInstrumentProvider';
+export * from './upstox/upstoxConnectivityValidator';

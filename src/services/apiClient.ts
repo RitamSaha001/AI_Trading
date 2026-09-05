@@ -224,6 +224,10 @@ export const ApiClient = {
     return apiRequest<{ diagnostics: any }>(`/api/exchange/upstox/ip-diagnostics${q}`);
   },
 
+  async getUpstoxConnectivityReport() {
+    return apiRequest<{ report: any }>('/api/exchange/upstox/connectivity-check');
+  },
+
   async getBrokerFunds(broker: string = 'binance') {
     return apiRequest<{ funds: any }>(`/api/exchange/funds?broker=${encodeURIComponent(broker)}`);
   },

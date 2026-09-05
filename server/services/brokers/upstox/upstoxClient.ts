@@ -1,12 +1,14 @@
 /**
- * Upstox API v2 HTTP Client & Wire Transport
+ * Upstox API HTTP Client & Wire Transport
  *
- * Implements server-side REST communication with Upstox API v2.
- * Enforces timeouts, normalizes errors into StandardBrokerError,
- * provides static-IP diagnostics, and supports pluggable transports for deterministic unit tests.
+ * Implements server-side REST communication with Upstox API v2/v3.
+ * Enforces timeouts, validates payloads and responses with Zod schemas,
+ * normalizes errors into StandardBrokerError, queries authoritative registered
+ * static IPs (/user/ip), and supports pluggable transports for deterministic unit tests.
  */
 
 import crypto from 'crypto';
+import { z } from 'zod';
 import { config } from '../../../config';
 import { getDb } from '../../../db';
 import { StandardBrokerError } from '../brokerGateway';
@@ -14,14 +16,26 @@ import { BrokerErrorCode } from '../brokerTypes';
 import {
   UpstoxApiResponse,
   UpstoxFundsData,
+  UpstoxFundsSchema,
   UpstoxHoldingData,
+  UpstoxHoldingSchema,
+  UpstoxModifyOrderPayload,
   UpstoxOAuthTokenResponse,
+  UpstoxOAuthTokenResponseSchema,
   UpstoxOrderBookItem,
+  UpstoxOrderBookItemSchema,
   UpstoxPlaceOrderPayload,
+  UpstoxPlaceOrderResponseSchema,
   UpstoxPositionData,
+  UpstoxPositionSchema,
   UpstoxProfileData,
+  UpstoxProfileSchema,
   UpstoxQuoteData,
+  UpstoxQuoteDataSchema,
+  UpstoxRegisteredIpsData,
+  UpstoxRegisteredIpsSchema,
   UpstoxTradeItem,
+  UpstoxTradeItemSchema,
 } from './upstoxTypes';
 
 export type UpstoxIpDiagnosticStatus = 'PASS' | 'FAIL' | 'BYPASS_SANDBOX';
@@ -31,6 +45,11 @@ export interface UpstoxIpDiagnostic {
   outboundIp: string | null;
   matchesRegistered: boolean;
   registeredIps: string[];
+  authoritativeSource: 'UPSTOX_API' | 'CONFIG_FALLBACK' | 'NONE';
+  upstoxRegisteredIps?: {
+    primary: string;
+    secondary?: string | null;
+  };
   isProduction: boolean;
   probedAt: number;
   error?: string;
@@ -49,6 +68,7 @@ export type UpstoxTransport = (
 export class UpstoxClient {
   private static customTransport: UpstoxTransport | null = null;
   private static mockOutboundIp: string | null = null;
+  private static mockRegisteredIps: UpstoxRegisteredIpsData | null = null;
 
   public static setTransport(transport: UpstoxTransport | null): void {
     this.customTransport = transport;
@@ -58,13 +78,25 @@ export class UpstoxClient {
     this.mockOutboundIp = ip;
   }
 
+  public static setMockRegisteredIps(ips: UpstoxRegisteredIpsData | null): void {
+    this.mockRegisteredIps = ips;
+  }
+
   public static resetForTesting(): void {
     this.customTransport = null;
     this.mockOutboundIp = null;
+    this.mockRegisteredIps = null;
     this.cachedIpDiagnostic = null;
   }
 
   private static cachedIpDiagnostic: { result: UpstoxIpDiagnostic; expiresAt: number } | null = null;
+
+  /**
+   * Returns base URL without version segment suffix.
+   */
+  private static getBaseHostUrl(): string {
+    return config.UPSTOX_API_BASE_URL.replace(/\/v[23]\/?$/, '');
+  }
 
   /**
    * Generates the OAuth 2.0 authorization dialog URL.
@@ -73,14 +105,14 @@ export class UpstoxClient {
   public static getAuthorizationUrl(state: string, redirectUri?: string): string {
     const clientId = config.UPSTOX_CLIENT_ID || '';
     const rUri = redirectUri || config.UPSTOX_REDIRECT_URI || '';
-    const baseUrl = config.UPSTOX_API_BASE_URL.replace(/\/v2\/?$/, '');
+    const baseHost = this.getBaseHostUrl();
     const query = new URLSearchParams({
       response_type: 'code',
       client_id: clientId,
       redirect_uri: rUri,
       state,
     });
-    return `${baseUrl}/v2/login/authorization/dialog?${query.toString()}`;
+    return `${baseHost}/v2/login/authorization/dialog?${query.toString()}`;
   }
 
   /**
@@ -195,53 +227,129 @@ export class UpstoxClient {
       body.toString()
     );
 
-    return res.data || res;
+    const rawData = res?.data || res;
+    const validated = UpstoxOAuthTokenResponseSchema.safeParse(rawData);
+    if (!validated.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox token exchange returned invalid response: ${validated.error.message}`,
+        'upstox'
+      );
+    }
+
+    return validated.data;
+  }
+
+  /**
+   * Queries Upstox authoritative registered static IPs (/user/ip).
+   * Returns registered primary and optional secondary static IPs.
+   */
+  public static async getRegisteredIps(accessToken: string): Promise<UpstoxRegisteredIpsData> {
+    if (this.mockRegisteredIps) {
+      return this.mockRegisteredIps;
+    }
+
+    const res = await this.request<UpstoxRegisteredIpsData>('/user/ip', 'GET', accessToken);
+    const parsed = UpstoxRegisteredIpsSchema.safeParse(res.data);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Invalid registered IPs schema received from Upstox: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
    * Probes outbound public IP and evaluates semantic match against registered static IPs.
+   * Compares against authoritative Upstox registered IPs (via /user/ip) when an access token
+   * is provided, with graceful fallback to server configuration.
+   *
    * Returns PASS, FAIL, or BYPASS_SANDBOX with a 60-second in-memory cache.
    */
-  public static async checkOutboundIp(forceRefresh = false): Promise<UpstoxIpDiagnostic> {
+  public static async checkOutboundIp(
+    forceRefresh = false,
+    accessToken?: string
+  ): Promise<UpstoxIpDiagnostic> {
     const now = Date.now();
     if (!forceRefresh && this.cachedIpDiagnostic && this.cachedIpDiagnostic.expiresAt > now) {
       return this.cachedIpDiagnostic.result;
     }
 
-    const registered = [
-      config.UPSTOX_STATIC_IP,
-      config.UPSTOX_SECONDARY_STATIC_IP,
-    ].filter(Boolean) as string[];
+    let authoritativeRegistered: string[] = [];
+    let authoritativeSource: 'UPSTOX_API' | 'CONFIG_FALLBACK' | 'NONE' = 'NONE';
+    let upstoxIpsData: { primary: string; secondary?: string | null } | undefined;
+
+    // 1. Check if mock registered IPs are set (for tests)
+    if (this.mockRegisteredIps) {
+      authoritativeSource = 'UPSTOX_API';
+      upstoxIpsData = {
+        primary: this.mockRegisteredIps.primary_ip,
+        secondary: this.mockRegisteredIps.secondary_ip,
+      };
+      authoritativeRegistered = [
+        this.mockRegisteredIps.primary_ip,
+        this.mockRegisteredIps.secondary_ip,
+      ].filter(Boolean) as string[];
+    } else if (accessToken) {
+      // 2. Query Upstox authoritative registered IPs via /user/ip
+      try {
+        const ipsData = await this.getRegisteredIps(accessToken);
+        authoritativeSource = 'UPSTOX_API';
+        upstoxIpsData = {
+          primary: ipsData.primary_ip,
+          secondary: ipsData.secondary_ip,
+        };
+        authoritativeRegistered = [ipsData.primary_ip, ipsData.secondary_ip].filter(Boolean) as string[];
+      } catch (err: any) {
+        // Fall back to configuration if token is invalid or endpoint fails
+      }
+    }
+
+    // 3. Fallback to local configuration if Upstox API registered IPs are unavailable
+    if (authoritativeRegistered.length === 0) {
+      const configIps = [config.UPSTOX_STATIC_IP, config.UPSTOX_SECONDARY_STATIC_IP].filter(Boolean) as string[];
+      if (configIps.length > 0) {
+        authoritativeRegistered = configIps;
+        authoritativeSource = 'CONFIG_FALLBACK';
+      }
+    }
 
     const isProduction = config.NODE_ENV === 'production' || Boolean(config.UPSTOX_LIVE_TRADING_ENABLED);
 
+    // If mock outbound IP is set for deterministic testing
     if (this.mockOutboundIp) {
-      const matches = registered.length === 0 || registered.includes(this.mockOutboundIp);
+      const matches =
+        authoritativeRegistered.length === 0 || authoritativeRegistered.includes(this.mockOutboundIp);
       const result: UpstoxIpDiagnostic = {
-        status: matches ? (registered.length > 0 ? 'PASS' : 'BYPASS_SANDBOX') : 'FAIL',
+        status: matches ? (authoritativeRegistered.length > 0 ? 'PASS' : 'BYPASS_SANDBOX') : 'FAIL',
         outboundIp: this.mockOutboundIp,
         matchesRegistered: matches,
-        registeredIps: registered,
+        registeredIps: authoritativeRegistered,
+        authoritativeSource,
+        upstoxRegisteredIps: upstoxIpsData,
         isProduction,
         probedAt: now,
         error: !matches
-          ? `Detected outbound egress IP (${this.mockOutboundIp}) does not match registered static IPs [${registered.join(', ')}].`
+          ? `Detected outbound egress IP (${this.mockOutboundIp}) does not match registered static IPs [${authoritativeRegistered.join(', ')}].`
           : undefined,
       };
       return result;
     }
 
-    // If no static IP is configured:
-    if (registered.length === 0) {
+    // If no static IP is configured or discovered:
+    if (authoritativeRegistered.length === 0) {
       const isHardFail = config.NODE_ENV === 'production';
       const result: UpstoxIpDiagnostic = {
         status: isHardFail ? 'FAIL' : 'BYPASS_SANDBOX',
         outboundIp: null,
         matchesRegistered: !isHardFail,
         registeredIps: [],
+        authoritativeSource: 'NONE',
         isProduction,
         probedAt: now,
-        error: isHardFail ? 'UPSTOX_STATIC_IP must be configured in production.' : undefined,
+        error: isHardFail ? 'No registered static IP found on Upstox or local configuration in production.' : undefined,
       };
       return result;
     }
@@ -249,23 +357,37 @@ export class UpstoxClient {
     try {
       let outboundIp: string | null = null;
       try {
-        const res = await this.executeRaw('https://api.ipify.org?format=json', 'GET', { Accept: 'application/json' }, undefined, 3000);
+        const res = await this.executeRaw(
+          'https://api.ipify.org?format=json',
+          'GET',
+          { Accept: 'application/json' },
+          undefined,
+          3000
+        );
         outboundIp = res?.ip || null;
       } catch {
-        const res2 = await this.executeRaw('https://icanhazip.com', 'GET', { Accept: 'text/plain' }, undefined, 3000);
-        outboundIp = typeof res2 === 'string' ? res2.trim() : (res2?.ip || null);
+        const res2 = await this.executeRaw(
+          'https://icanhazip.com',
+          'GET',
+          { Accept: 'text/plain' },
+          undefined,
+          3000
+        );
+        outboundIp = typeof res2 === 'string' ? res2.trim() : res2?.ip || null;
       }
 
-      const matches = Boolean(outboundIp && registered.includes(outboundIp));
+      const matches = Boolean(outboundIp && authoritativeRegistered.includes(outboundIp));
       const result: UpstoxIpDiagnostic = {
         status: matches ? 'PASS' : 'FAIL',
         outboundIp,
         matchesRegistered: matches,
-        registeredIps: registered,
+        registeredIps: authoritativeRegistered,
+        authoritativeSource,
+        upstoxRegisteredIps: upstoxIpsData,
         isProduction,
         probedAt: now,
         error: !matches
-          ? `Detected outbound egress IP (${outboundIp || 'unknown'}) does not match registered static IPs [${registered.join(', ')}].`
+          ? `Detected outbound egress IP (${outboundIp || 'unknown'}) does not match registered static IPs [${authoritativeRegistered.join(', ')}].`
           : undefined,
       };
 
@@ -276,10 +398,12 @@ export class UpstoxClient {
         status: 'FAIL',
         outboundIp: null,
         matchesRegistered: false,
-        registeredIps: registered,
+        registeredIps: authoritativeRegistered,
+        authoritativeSource,
+        upstoxRegisteredIps: upstoxIpsData,
         isProduction,
         probedAt: now,
-        error: `Failed to detect outbound IP: ${err.message}`,
+        error: `Failed to probe outbound IP: ${err.message}`,
       };
       return result;
     }
@@ -290,54 +414,147 @@ export class UpstoxClient {
    */
   public static async getProfile(accessToken: string): Promise<UpstoxProfileData> {
     const res = await this.request<UpstoxProfileData>('/user/profile', 'GET', accessToken);
-    return res.data!;
+    const parsed = UpstoxProfileSchema.safeParse(res.data);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox profile response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
    * Fetches user funds and margins (/user/get-funds-and-margin?segment=SEC).
    */
   public static async getFunds(accessToken: string): Promise<UpstoxFundsData> {
-    const res = await this.request<UpstoxFundsData>('/user/get-funds-and-margin?segment=SEC', 'GET', accessToken);
-    return res.data!;
+    const res = await this.request<UpstoxFundsData>(
+      '/user/get-funds-and-margin?segment=SEC',
+      'GET',
+      accessToken
+    );
+    const parsed = UpstoxFundsSchema.safeParse(res.data);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox funds response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
    * Fetches short-term positions (/portfolio/short-term-positions).
    */
   public static async getPositions(accessToken: string): Promise<UpstoxPositionData[]> {
-    const res = await this.request<UpstoxPositionData[]>('/portfolio/short-term-positions', 'GET', accessToken);
-    return res.data || [];
+    const res = await this.request<UpstoxPositionData[]>(
+      '/portfolio/short-term-positions',
+      'GET',
+      accessToken
+    );
+    const parsed = z.array(UpstoxPositionSchema).safeParse(res.data || []);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox positions response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
    * Fetches long-term holdings (/portfolio/long-term-holdings).
    */
   public static async getHoldings(accessToken: string): Promise<UpstoxHoldingData[]> {
-    const res = await this.request<UpstoxHoldingData[]>('/portfolio/long-term-holdings', 'GET', accessToken);
-    return res.data || [];
+    const res = await this.request<UpstoxHoldingData[]>(
+      '/portfolio/long-term-holdings',
+      'GET',
+      accessToken
+    );
+    const parsed = z.array(UpstoxHoldingSchema).safeParse(res.data || []);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox holdings response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
-   * Places an order with Upstox (/order/place).
+   * Places an order with Upstox via recommended v3 endpoint (/v3/order/place).
+   * Supports auto-slicing via `slice` flag.
    */
   public static async placeOrder(
     accessToken: string,
     payload: UpstoxPlaceOrderPayload
   ): Promise<{ order_id: string }> {
-    const res = await this.request<{ order_id: string }>('/order/place', 'POST', accessToken, payload);
-    return res.data!;
+    const baseHost = this.getBaseHostUrl();
+    const res = await this.request<{ order_id: string }>(
+      `${baseHost}/v3/order/place`,
+      'POST',
+      accessToken,
+      payload
+    );
+
+    const parsed = UpstoxPlaceOrderResponseSchema.safeParse(res.data);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox v3 order placement returned invalid response schema: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
-   * Cancels an order with Upstox (/order/cancel?order_id=...).
+   * Cancels an order with Upstox via recommended v3 endpoint (/v3/order/cancel?order_id=...).
    */
   public static async cancelOrder(
     accessToken: string,
     orderId: string
   ): Promise<{ order_id: string }> {
+    const baseHost = this.getBaseHostUrl();
     const query = new URLSearchParams({ order_id: orderId });
-    const res = await this.request<{ order_id: string }>(`/order/cancel?${query.toString()}`, 'DELETE', accessToken);
-    return res.data!;
+    const res = await this.request<{ order_id: string }>(
+      `${baseHost}/v3/order/cancel?${query.toString()}`,
+      'DELETE',
+      accessToken
+    );
+
+    const parsed = UpstoxPlaceOrderResponseSchema.safeParse(res.data);
+    return parsed.success ? parsed.data : { order_id: orderId };
+  }
+
+  /**
+   * Modifies an existing open order with Upstox via recommended v3 endpoint (/v3/order/modify).
+   */
+  public static async modifyOrder(
+    accessToken: string,
+    payload: UpstoxModifyOrderPayload
+  ): Promise<{ order_id: string }> {
+    const baseHost = this.getBaseHostUrl();
+    const res = await this.request<{ order_id: string }>(
+      `${baseHost}/v3/order/modify`,
+      'PUT',
+      accessToken,
+      payload
+    );
+
+    const parsed = UpstoxPlaceOrderResponseSchema.safeParse(res.data);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox v3 order modification returned invalid response schema: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
@@ -345,7 +562,15 @@ export class UpstoxClient {
    */
   public static async getOrderBook(accessToken: string): Promise<UpstoxOrderBookItem[]> {
     const res = await this.request<UpstoxOrderBookItem[]>('/order/retrieve-all', 'GET', accessToken);
-    return res.data || [];
+    const parsed = z.array(UpstoxOrderBookItemSchema).safeParse(res.data || []);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox order book response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
@@ -356,8 +581,20 @@ export class UpstoxClient {
     orderId: string
   ): Promise<UpstoxOrderBookItem[]> {
     const query = new URLSearchParams({ order_id: orderId });
-    const res = await this.request<UpstoxOrderBookItem[]>(`/order/history?${query.toString()}`, 'GET', accessToken);
-    return res.data || [];
+    const res = await this.request<UpstoxOrderBookItem[]>(
+      `/order/history?${query.toString()}`,
+      'GET',
+      accessToken
+    );
+    const parsed = z.array(UpstoxOrderBookItemSchema).safeParse(res.data || []);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox order history response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
@@ -368,16 +605,40 @@ export class UpstoxClient {
     orderId: string
   ): Promise<UpstoxTradeItem[]> {
     const query = new URLSearchParams({ order_id: orderId });
-    const res = await this.request<UpstoxTradeItem[]>(`/order/trades?${query.toString()}`, 'GET', accessToken);
-    return res.data || [];
+    const res = await this.request<UpstoxTradeItem[]>(
+      `/order/trades?${query.toString()}`,
+      'GET',
+      accessToken
+    );
+    const parsed = z.array(UpstoxTradeItemSchema).safeParse(res.data || []);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox order trades response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
    * Retrieves all trades for the trading day (/order/trades/get-trades-for-day).
    */
   public static async getTradesForDay(accessToken: string): Promise<UpstoxTradeItem[]> {
-    const res = await this.request<UpstoxTradeItem[]>('/order/trades/get-trades-for-day', 'GET', accessToken);
-    return res.data || [];
+    const res = await this.request<UpstoxTradeItem[]>(
+      '/order/trades/get-trades-for-day',
+      'GET',
+      accessToken
+    );
+    const parsed = z.array(UpstoxTradeItemSchema).safeParse(res.data || []);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox trades for day response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
@@ -393,7 +654,16 @@ export class UpstoxClient {
       'GET',
       accessToken
     );
-    return res.data || {};
+    const rawData = res.data || {};
+    const parsed = z.record(z.string(), UpstoxQuoteDataSchema).safeParse(rawData);
+    if (!parsed.success) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox market quote response schema mismatch: ${parsed.error.message}`,
+        'upstox'
+      );
+    }
+    return parsed.data;
   }
 
   /**
@@ -421,7 +691,6 @@ export class UpstoxClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken.trim()}`,
       Accept: 'application/json',
-      'Api-Version': '2.0',
     };
 
     let bodyString: string | undefined;
@@ -436,6 +705,7 @@ export class UpstoxClient {
 
   /**
    * Low-level HTTP executor dispatching to customTransport or native fetch.
+   * Strictly avoids logging any Authorization headers, tokens, or client credentials.
    */
   private static async executeRaw(
     url: string,
@@ -491,9 +761,12 @@ export class UpstoxClient {
 
   /**
    * Maps HTTP 4xx/5xx responses to normalized StandardBrokerError.
+   * Sanitizes all error messages to guarantee no credential or token leakage.
    */
   private static handleHttpError(status: number, data: any): never {
-    const errorDetail = data?.errors?.[0]?.message || data?.message || `HTTP ${status}`;
+    const rawDetail = data?.errors?.[0]?.message || data?.message || `HTTP ${status}`;
+    // Sanitize any potential bearer tokens or secrets from message
+    const errorDetail = String(rawDetail).replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, '[REDACTED_TOKEN]');
     const errorCodeRaw = data?.errors?.[0]?.errorCode || data?.errors?.[0]?.error_code || '';
 
     if (status === 401 || status === 403 || /token|unauthorized|auth/i.test(errorDetail)) {
@@ -541,7 +814,8 @@ export class UpstoxClient {
    */
   private static handleProviderError(data: any): never {
     const firstError = data?.errors?.[0];
-    const message = firstError?.message || data?.message || 'Upstox rejected request';
+    const rawMessage = firstError?.message || data?.message || 'Upstox rejected request';
+    const message = String(rawMessage).replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, '[REDACTED_TOKEN]');
     const code = firstError?.errorCode || firstError?.error_code || '';
 
     let normalizedCode: BrokerErrorCode = 'ORDER_REJECTED';

@@ -1,0 +1,36 @@
+[Unit]
+Description=Lumen AI Trading Platform (Production Server)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=lumen
+Group=lumen
+WorkingDirectory=/var/www/lumen
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=30
+LimitNOFILE=65536
+
+# Security Hardening
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+
+# Environment Variables Isolation
+EnvironmentFile=/etc/lumen/lumen.env
+
+# Journald Log Bounding
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lumen-trading
+
+[Install]
+WantedBy=multi-user.target

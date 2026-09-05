@@ -13,7 +13,7 @@ import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
 import { ExactDecimal } from './services/precision';
 import { BinanceGateway } from './services/binanceGateway';
-import { BrokerRegistry, BrokerGateway, UpstoxClient } from './services/brokers';
+import { BrokerRegistry, BrokerGateway, UpstoxClient, UpstoxConnectivityValidator } from './services/brokers';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
 import { OrderRecoveryService } from './services/orderRecoveryService';
@@ -197,12 +197,28 @@ export function buildServer(): FastifyInstance {
         });
       }
 
+      // 4. Compute tiered operational state (HEALTHY -> READY -> BROKER_READY -> LIVE_TRADING_READY)
+      const brokers = BrokerRegistry.getAll();
+      const brokerReady = brokers.length > 0;
+      let operationalState: 'HEALTHY' | 'READY' | 'BROKER_READY' | 'LIVE_TRADING_READY' = brokerReady ? 'BROKER_READY' : 'READY';
+
+      const isLiveAllowed = Boolean(config.UPSTOX_LIVE_TRADING_ENABLED);
+      if (isLiveAllowed && brokerReady) {
+        operationalState = 'LIVE_TRADING_READY';
+      }
+
       return {
         status: 'READY',
+        operationalState,
         ready: true,
         env: config.NODE_ENV,
         engine: db.getEngine(),
         schemaVersion: migStatus.latestVersion,
+        registeredBrokers: brokers.map((b) => b.id),
+        liveTrading: {
+          enabled: isLiveAllowed,
+          safetyGate: isLiveAllowed ? 'DISENGAGED' : 'ENGAGED_SAFE',
+        },
         timestamp: Date.now(),
       };
     } catch (err: any) {
@@ -217,6 +233,7 @@ export function buildServer(): FastifyInstance {
 
   server.get('/health/readiness', readinessHandler);
   server.get('/ready', readinessHandler);
+  server.get('/api/ready', readinessHandler);
   server.get('/health', readinessHandler);
   server.get('/api/health', readinessHandler);
 
@@ -880,6 +897,11 @@ export function buildServer(): FastifyInstance {
     const forceRefresh = Boolean((req.query as any)?.force);
     const diagnostics = await UpstoxClient.checkOutboundIp(forceRefresh);
     return { success: true, diagnostics };
+  });
+
+  server.get('/api/exchange/upstox/connectivity-check', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const report = await UpstoxConnectivityValidator.runDiagnostics(req.user!.id);
+    return { success: true, report };
   });
 
   server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {

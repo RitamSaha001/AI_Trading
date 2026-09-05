@@ -488,7 +488,8 @@ export class UpstoxAdapter implements BrokerGateway {
         );
       }
 
-      const ipCheck = await UpstoxClient.checkOutboundIp();
+      const creds = await this.getCredentials(order.userId);
+      const ipCheck = await UpstoxClient.checkOutboundIp(false, creds?.accessToken);
       if (ipCheck.status === 'FAIL') {
         throw new StandardBrokerError(
           'STATIC_IP_MISMATCH',
@@ -705,6 +706,58 @@ export class UpstoxAdapter implements BrokerGateway {
       `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
       [clientOrderId]
     );
+    return this.mapOrderRecord(updated);
+  }
+
+  /**
+   * Modifies an existing open order on Upstox.
+   */
+  async modifyOrder(orderId: string, updates: Partial<BrokerOrderRequest>): Promise<BrokerOrder> {
+    const db = getDb();
+    const order = await db.queryOne<any>(
+      `SELECT * FROM exchange_orders WHERE client_order_id = ? OR exchange_order_id = ?`,
+      [orderId, orderId]
+    );
+
+    if (!order) {
+      throw new StandardBrokerError('ORDER_NOT_FOUND', `Order not found for modification: ${orderId}`, 'upstox');
+    }
+
+    if (order.status !== 'OPEN' && order.status !== 'PARTIALLY_FILLED') {
+      throw new StandardBrokerError(
+        'ORDER_REJECTED',
+        `Cannot modify order in status ${order.status}. Only OPEN or PARTIALLY_FILLED orders can be modified.`,
+        'upstox'
+      );
+    }
+
+    const creds = await this.getCredentials(order.user_id);
+    if (!creds || !creds.accessToken) {
+      throw new StandardBrokerError('AUTHENTICATION_FAILED', 'User has no valid Upstox credentials.', 'upstox');
+    }
+
+    const venueOrderId = order.exchange_order_id;
+    if (!venueOrderId) {
+      throw new StandardBrokerError('ORDER_REJECTED', 'Order has not yet been accepted by venue.', 'upstox');
+    }
+
+    const price = updates.price !== undefined ? Number(updates.price) : Number(order.price);
+    const quantity = updates.quantity !== undefined ? Number(updates.quantity) : Number(order.orig_qty);
+
+    await UpstoxClient.modifyOrder(creds.accessToken, {
+      order_id: venueOrderId,
+      price,
+      quantity,
+      order_type: order.type === 'MARKET' ? 'MARKET' : 'LIMIT',
+      validity: 'DAY',
+    });
+
+    await db.execute(
+      `UPDATE exchange_orders SET price = ?, orig_qty = ?, updated_at = ? WHERE id = ?`,
+      [price, quantity, Date.now(), order.id]
+    );
+
+    const updated = await db.queryOne<any>(`SELECT * FROM exchange_orders WHERE id = ?`, [order.id]);
     return this.mapOrderRecord(updated);
   }
 
