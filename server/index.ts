@@ -81,6 +81,16 @@ export function buildServer(): FastifyInstance {
     logger: false, // We use our own pino logger in AuditService
   });
 
+  server.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    (req as any).rawBody = (body as Buffer).toString('utf8');
+    try {
+      const json = JSON.parse((req as any).rawBody);
+      done(null, json);
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
   server.register(sensible);
 
   // Strict Fail-Closed CORS Configuration
@@ -600,7 +610,7 @@ export function buildServer(): FastifyInstance {
   // Authoritative Webhook endpoint
   server.post('/api/webhooks/payments', async (req: FastifyRequest, reply: FastifyReply) => {
     const signature = req.headers['x-webhook-signature'] as string;
-    const rawPayload = JSON.stringify(req.body);
+    const rawPayload = (req as any).rawBody;
 
     if (!signature) {
       return reply.status(400).send({ success: false, error: 'Missing webhook signature header' });
@@ -616,13 +626,32 @@ export function buildServer(): FastifyInstance {
 
   // Dedicated PhonePe Webhook Endpoint (Phase 4)
   server.post('/api/webhooks/phonepe', async (req: FastifyRequest, reply: FastifyReply) => {
-    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    const rawBody = (req as any).rawBody;
     try {
       const result = await PaymentService.processPhonePeWebhook(rawBody, req.headers as any);
       return { success: true, result };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }
+  });
+
+  server.post('/api/payments/:orderId/refund', async (req: FastifyRequest, reply: FastifyReply) => {
+    // Auth check
+    const userId = (req as any).userId;
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
+    
+    const { orderId } = req.params as { orderId: string };
+    const { amountMinor, reason, idempotencyKey } = req.body as any;
+    
+    const result = await PaymentService.refundPayment({
+      orderId,
+      amountMinor: Number(amountMinor),
+      reason: reason || 'User requested refund',
+      idempotencyKey: idempotencyKey || `ref_${orderId}_${Date.now()}`,
+      initiatedBy: userId,
+    });
+    
+    return reply.send(result);
   });
 
   // Authoritative Payment Status Polling Endpoint (Phase 4 UX Callback Independence)

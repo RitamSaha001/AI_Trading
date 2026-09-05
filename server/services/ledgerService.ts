@@ -569,6 +569,136 @@ export class LedgerService {
   }
 
   /**
+   * Debits a refund from the user's sovereign cash ledger account.
+   * Reverse of creditDeposit: debits sovereign_cash, credits settlement_clearing.
+   * Verifies available unreserved balance before proceeding.
+   */
+  static async debitRefund(params: {
+    userId: string;
+    accountMode?: 'live' | 'paper';
+    assetOrCurrency: string;
+    amountMinor: bigint | number;
+    refundId: string;
+    description: string;
+    idempotencyKey?: string;
+  }): Promise<{ transactionId: string; balanceAfter: bigint }> {
+    const amount = BigInt(params.amountMinor);
+    if (amount <= 0n) {
+      throw new Error('Deposit amount must be strictly positive');
+    }
+
+    const accountMode = params.accountMode || 'live';
+    const db = getDb();
+
+    return db.transaction(async (tx) => {
+      const clearingAcc = await this.getOrCreateAccount(
+        params.userId,
+        'settlement_clearing',
+        params.assetOrCurrency,
+        accountMode,
+        tx
+      );
+      const acc = await this.getOrCreateAccount(
+        params.userId,
+        'sovereign_cash',
+        params.assetOrCurrency,
+        accountMode,
+        tx
+      );
+
+      const txId = `ref_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+      const now = Date.now();
+
+      const currentBal = BigInt(acc.balance_minor);
+      const reserved = BigInt(acc.reserved_minor);
+      if (currentBal - reserved < amount) {
+        throw new Error('Insufficient unreserved balance for refund debit');
+      }
+
+      // 1. Debit Sovereign Cash
+      const newBal = currentBal - amount;
+      await tx.execute(
+        `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
+        [newBal, now, acc.id]
+      );
+
+      const debitEntryId = `ent_deb_${crypto.randomBytes(8).toString('hex')}`;
+      await tx.execute(
+        `INSERT INTO ledger_entries (
+          id, transaction_id, account_id, user_id, account_mode, entry_type, amount_minor,
+          balance_after_minor, currency_or_asset, reference_type, reference_id,
+          idempotency_key, description, created_at
+        ) VALUES (?, ?, ?, ?, ?, 'debit', ?, ?, ?, 'refund_debit', ?, ?, ?, ?)`,
+        [
+          debitEntryId,
+          txId,
+          acc.id,
+          params.userId,
+          accountMode,
+          amount,
+          newBal,
+          params.assetOrCurrency,
+          params.refundId,
+          params.idempotencyKey || null,
+          params.description,
+          now,
+        ]
+      );
+
+      // 2. Credit Settlement Clearing
+      const currentClearingBal = BigInt(clearingAcc.balance_minor);
+      const newClearingBal = currentClearingBal + amount;
+      await tx.execute(
+        `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
+        [newClearingBal, now, clearingAcc.id]
+      );
+
+      const creditEntryId = `ent_crd_${crypto.randomBytes(8).toString('hex')}`;
+      await tx.execute(
+        `INSERT INTO ledger_entries (
+          id, transaction_id, account_id, user_id, account_mode, entry_type, amount_minor,
+          balance_after_minor, currency_or_asset, reference_type, reference_id,
+          idempotency_key, description, created_at
+        ) VALUES (?, ?, ?, ?, ?, 'credit', ?, ?, ?, 'refund_source', ?, ?, ?, ?)`,
+        [
+          creditEntryId,
+          txId,
+          clearingAcc.id,
+          params.userId,
+          accountMode,
+          amount,
+          newClearingBal,
+          params.assetOrCurrency,
+          params.refundId,
+          params.idempotencyKey ? `${params.idempotencyKey}_clearing` : null,
+          `External settlement clearing for refund ${params.refundId}`,
+          now,
+        ]
+      );
+
+      await this.assertTransactionBalanced(tx, txId);
+
+      await AuditService.logEvent({
+        userId: params.userId,
+        eventType: 'LEDGER_REFUND_DEBITED',
+        source: 'payment_refund',
+        actor: 'system',
+        idempotencyKey: params.idempotencyKey,
+        externalId: params.refundId,
+        metadata: {
+          accountMode,
+          asset: params.assetOrCurrency,
+          amountMinor: amount.toString(),
+          newBalanceMinor: newBal.toString(),
+        },
+        result: 'SUCCESS',
+      });
+
+      return { transactionId: txId, balanceAfter: newBal };
+    });
+  }
+
+  /**
    * Atomically reserves capital for an open order so concurrent orders cannot overspend.
    */
   static async reserveBalance(params: {

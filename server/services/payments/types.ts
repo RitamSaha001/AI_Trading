@@ -1,3 +1,16 @@
+export type PaymentOrderStatus = 
+  | 'CREATED'
+  | 'INITIATING'
+  | 'PENDING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'EXPIRED'
+  | 'CANCELLED'
+  | 'UNKNOWN_PROVIDER_STATE'
+  | 'REFUND_PENDING'
+  | 'PARTIALLY_REFUNDED'
+  | 'REFUNDED';
+
 export interface CreatePaymentIntentParams {
   userId: string;
   orderId: string;
@@ -27,16 +40,31 @@ export interface WebhookVerificationResult {
   amountMinor?: number;
   currency?: string;
   rawPayload?: Record<string, any>;
+  rawBody?: string;
+  rawHeaders?: Record<string, string>;
 }
 
 export interface PaymentStatusResult {
   providerOrderId: string;
-  status: 'PENDING' | 'SUCCESS' | 'FAILED';
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'UNKNOWN';
   amountMinor: number;
   currency: string;
   providerPaymentId?: string;
   utr?: string;
+  bankRefNumber?: string;
+  paymentMethod?: string; // 'UPI' | 'CARD' | 'NETBANKING'
+  cardBrand?: string;
+  vpa?: string;
 }
+
+export class ProviderNetworkTimeoutError extends Error {
+  constructor(provider: string, operationId: string) {
+    super(`Provider '${provider}' network timeout for operation '${operationId}'`);
+    this.name = 'ProviderNetworkTimeoutError';
+  }
+}
+
+export type SettlementSource = 'WEBHOOK' | 'STATUS_POLL' | 'RECONCILIATION_SWEEP' | 'MANUAL_BANK_RECONCILIATION';
 
 export interface RefundParams {
   providerOrderId: string;

@@ -173,5 +173,5 @@ describe('Binance Execution Gateway & State Machine', () => {
   it('reconciles UNKNOWN order against Binance REST API gracefully when not found', async () => {
     const result = await BinanceGateway.reconcileUnknownOrder('nonexistent_order', 'BTCUSDT', userId);
     expect(result.found).toBe(false);
-  });
+  }, 15000);
 });

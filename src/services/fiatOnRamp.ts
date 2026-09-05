@@ -17,6 +17,11 @@
  * - Cryptographic receipt generation with proof-of-payment hashes
  */
 
+/**
+ * Paper/sandbox simulation rate ONLY. Live mode uses server-authoritative FX quotes from fxService.
+ */
+export const PAPER_SIMULATION_FX_RATE_INR_USD = 87.20;
+
 export interface UPIPaymentDetails {
   payeeVpa: string;
   payeeName: string;
@@ -293,7 +298,7 @@ export async function generatePaymentProofReceipt(params: {
     details: {
       ...params,
       settlementRail: params.paymentMethod === 'UPI' ? 'NPCI Instant IMPS / UPI' : 'Visa / Mastercard 3DS2',
-      currencyPeg: '1 USD = 87.20 INR',
+      currencyPeg: `1 USD = ${PAPER_SIMULATION_FX_RATE_INR_USD.toFixed(2)} INR`,
     },
   };
 }
@@ -308,7 +313,7 @@ export function calculateCryptoFromINR(amountINR: number): {
   pol: number;
   formattedCrypto: string;
 } {
-  const usd = amountINR / 87.20;
+  const usd = amountINR / PAPER_SIMULATION_FX_RATE_INR_USD;
   const pol = usd / 0.45;
   return {
     amountUSD: Math.round(usd * 100) / 100,

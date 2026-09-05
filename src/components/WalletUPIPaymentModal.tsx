@@ -11,7 +11,6 @@ import {
   AlertCircle,
   ExternalLink,
   Clock,
-  ArrowRight,
   FileCheck,
   Sparkles,
   Zap,
@@ -19,7 +18,7 @@ import {
 import {
   validateUPIVpa,
   buildUPIUrl,
-  generateUPIQRCodeSvg,
+  generatePaperModeUPIQRCodeSvg,
   ZeroCostSandboxGateway,
 } from '../services/paymentGateway';
 import { ApiClient } from '../services/apiClient';
@@ -79,7 +78,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
     transactionRefId,
   });
 
-  const qrSvg = generateUPIQRCodeSvg(upiUri);
+  const qrSvg = generatePaperModeUPIQRCodeSvg(upiUri);
   const appIntents = generateUPIAppIntents({
     payeeVpa,
     payeeName,
@@ -119,13 +118,23 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
           amountMinor: Math.round(numericAmountINR * 100),
           currency: 'INR',
           method: 'upi',
-          idempotencyKey: `upi_live_${Date.now()}`,
+          idempotencyKey: crypto.randomUUID(),
         });
 
         if (!intentRes.ok) {
           throw new Error(intentRes.error || 'Failed to create payment intent');
         }
 
+        if (intentRes.data?.intent?.checkoutUrl) {
+          window.location.href = intentRes.data.intent.checkoutUrl;
+          return;
+        }
+
+        if (intentRes.data?.intent?.upiIntentUri) {
+          window.location.href = intentRes.data.intent.upiIntentUri;
+          return;
+        }
+        
         setSuccessReceipt({
           channel: 'UPI Direct / Intent (Live Production)',
           ref: intentRes.data?.intent?.orderId || `UPI-${Date.now()}`,
@@ -284,8 +293,12 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
             <div>
               <h2 className="text-lg font-bold text-zinc-900 tracking-tight flex items-center gap-2">
                 Deposit via Indian UPI
-                <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  0% Fee
+                <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                  accountMode === 'paper' 
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                }`}>
+                  {accountMode === 'paper' ? '🧪 Sandbox Mode — Simulated UPI' : 'Live Mode'}
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
@@ -410,53 +423,78 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
               {/* QR Code Tab */}
               {activeTab === 'qr' && (
                 <div className="space-y-4 text-center">
-                  <div className="relative p-4 bg-white border border-zinc-200 rounded-2xl shadow-inner max-w-[210px] mx-auto">
-                    <div
-                      className="w-full aspect-square"
-                      dangerouslySetInnerHTML={{ __html: qrSvg }}
-                    />
-                    <div className="mt-2 text-[11px] font-semibold text-zinc-500 flex items-center justify-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Expires in {formatTimer(secondsRemaining)}</span>
-                    </div>
-                  </div>
+                  {accountMode === 'paper' ? (
+                    <>
+                      <div className="relative p-4 bg-white border border-zinc-200 rounded-2xl shadow-inner max-w-[210px] mx-auto">
+                        <div
+                          className="w-full aspect-square"
+                          dangerouslySetInnerHTML={{ __html: qrSvg }}
+                        />
+                        <div className="mt-2 text-[11px] font-semibold text-zinc-500 flex items-center justify-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Expires in {formatTimer(secondsRemaining)}</span>
+                        </div>
+                      </div>
 
-                  {/* App Intent Launchers */}
-                  <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-2">
-                    <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-left">
-                      1-Tap Pay via Mobile App:
-                    </div>
-                    <div className="grid grid-cols-5 gap-1.5">
-                      {appIntents.map((app) => (
-                        <a
-                          key={app.appName}
-                          href={app.intentUrl}
-                          onClick={() => handleSimulatePayment(app.appName)}
-                          className="py-2 px-1 rounded-xl bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-800 font-bold text-[10px] shadow-xs text-center block transition-all"
-                        >
-                          {app.appName}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
+                      {/* App Intent Launchers */}
+                      <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-2">
+                        <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-left">
+                          1-Tap Pay via Mobile App:
+                        </div>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {appIntents.map((app) => (
+                            <a
+                              key={app.appName}
+                              href={app.intentUrl}
+                              onClick={() => handleSimulatePayment(app.appName)}
+                              className="py-2 px-1 rounded-xl bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-800 font-bold text-[10px] shadow-xs text-center block transition-all"
+                            >
+                              {app.appName}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
 
-                  <button
-                    type="button"
-                    onClick={handleCopyUri}
-                    className="w-full py-2.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-zinc-700 font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-600" />
-                        <span>Copied UPI Intent URI</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 text-zinc-400" />
-                        <span>Copy NPCI `upi://pay` URI</span>
-                      </>
-                    )}
-                  </button>
+                      <button
+                        type="button"
+                        onClick={handleCopyUri}
+                        className="w-full py-2.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-zinc-700 font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-600" />
+                            <span>Copied UPI Intent URI</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-zinc-400" />
+                            <span>Copy NPCI `upi://pay` URI</span>
+                          </>
+                        )}
+                      </button>
+                    </>
+                  ) : (
+                    <div className="py-8">
+                      <button
+                        type="button"
+                        onClick={() => handleSimulatePayment()}
+                        disabled={isProcessing}
+                        className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <span>Connecting Gateway...</span>
+                          </>
+                        ) : (
+                          <>
+                            <QrCode className="w-4 h-4" />
+                            <span>Pay securely via PhonePe</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -472,19 +510,21 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                       placeholder="username@okhdfcbank"
                       className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-semibold outline-none"
                     />
-                    <div className="flex flex-wrap gap-2 text-[11px] text-zinc-400 pt-0.5">
-                      <span>Handles:</span>
-                      {['@okhdfcbank', '@oksbi', '@paytm', '@ybl'].map((h) => (
-                        <button
-                          key={h}
-                          type="button"
-                          onClick={() => setVpa(`trader${h}`)}
-                          className="text-indigo-600 hover:underline"
-                        >
-                          {h}
-                        </button>
-                      ))}
-                    </div>
+                    {accountMode === 'paper' && (
+                      <div className="flex flex-wrap gap-2 text-[11px] text-zinc-400 pt-0.5">
+                        <span>Handles:</span>
+                        {['@okhdfcbank', '@oksbi', '@paytm', '@ybl'].map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setVpa(`trader${h}`)}
+                            className="text-indigo-600 hover:underline"
+                          >
+                            {h}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <label className="flex items-center gap-2.5 cursor-pointer select-none">
@@ -513,7 +553,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                     ) : (
                       <>
                         <Smartphone className="w-4 h-4" />
-                        <span>Send Collect Request to {vpa || 'App'}</span>
+                        <span>{accountMode === 'exchange' ? 'Proceed with PhonePe' : `Send Collect Request to ${vpa || 'App'}`}</span>
                       </>
                     )}
                   </button>
@@ -546,6 +586,16 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                     <p className="text-[10px] text-zinc-400">
                       Found in SMS or transaction details of Google Pay, PhonePe, Paytm, or HDFC/SBI/ICICI app.
                     </p>
+                    {accountMode === 'exchange' && (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-[10px] text-amber-600 font-medium">
+                          ⚠️ Manual Bank Transfer: Your wallet will NOT be credited immediately.
+                        </p>
+                        <p className="text-[10px] text-amber-600 font-medium">
+                          Funds will be credited after bank statement reconciliation (1-3 business days).
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -556,7 +606,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                     {isProcessing ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Verifying with NPCI Gateway...</span>
+                        <span>Verifying with Gateway...</span>
                       </>
                     ) : (
                       <>

@@ -118,11 +118,15 @@ export const ApiClient = {
     });
   },
 
+  async getPaymentStatus(orderId: string) {
+    return apiRequest(`/api/payments/${orderId}/status`);
+  },
+
   async createPaymentIntent(params: {
     amountMinor: number;
     currency: 'USD' | 'INR';
     method: 'card' | 'upi';
-    idempotencyKey?: string;
+    idempotencyKey: string;
   }) {
     return apiRequest('/api/payments/create-intent', {
       method: 'POST',

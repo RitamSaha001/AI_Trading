@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PaymentService } from '../services/paymentService';
 import { LedgerService } from '../services/ledgerService';
+import { ProviderNetworkTimeoutError } from '../services/payments/types';
 import { getDb } from '../db';
 
 describe('Server Payment Service & Settlement', () => {
@@ -8,6 +9,9 @@ describe('Server Payment Service & Settlement', () => {
 
   beforeEach(async () => {
     const db = getDb();
+    await db.execute(`DELETE FROM payment_refunds`);
+    await db.execute(`DELETE FROM payment_settlements`);
+    await db.execute(`DELETE FROM payment_attempts`);
     await db.execute(`DELETE FROM payments WHERE user_id = ?`, [userId]);
     await db.execute(`DELETE FROM payment_orders WHERE user_id = ?`, [userId]);
     await db.execute(`DELETE FROM payment_webhooks`);
@@ -80,6 +84,16 @@ describe('Server Payment Service & Settlement', () => {
     const balances = await LedgerService.getUserBalances(userId);
     expect(balances['sovereign_cash:USD'].balance).toBe(50000);
 
+    // Verify payment_settlements audit record created
+    const db = getDb();
+    const settlement = await db.queryOne<any>(
+      'SELECT * FROM payment_settlements WHERE payment_order_id = ?',
+      [order.orderId]
+    );
+    expect(settlement).toBeDefined();
+    expect(settlement.settlement_source).toBe('WEBHOOK');
+    expect(Number(settlement.amount_minor)).toBe(50000);
+
     // Replay of same webhook is detected and deduplicated
     const replayResult = await PaymentService.processWebhook(rawPayload, validSignature, eventPayload);
     expect(replayResult.status).toBe('DUPLICATE');
@@ -118,6 +132,151 @@ describe('Server Payment Service & Settlement', () => {
     // Ledger balance remains 0
     const balances = await LedgerService.getUserBalances(userId);
     expect(balances['sovereign_cash:USD']?.balance || 0).toBe(0);
+  });
+
+  it('handles provider network timeout by transitioning order to UNKNOWN_PROVIDER_STATE', async () => {
+    const provider = PaymentService.getProvider();
+    const originalCreate = provider.createOrder;
+
+    // Simulate provider network timeout
+    provider.createOrder = vi.fn().mockRejectedValueOnce(
+      new ProviderNetworkTimeoutError(provider.name, 'req_timeout_sim_001')
+    );
+
+    try {
+      const res = await PaymentService.createPaymentOrder({
+        userId,
+        amountMinor: 15000,
+        currency: 'USD',
+        method: 'card',
+        idempotencyKey: 'idemp_timeout_001',
+      });
+
+      expect(res.status).toBe('UNKNOWN_PROVIDER_STATE');
+
+      const db = getDb();
+      const order = await db.queryOne<any>(
+        'SELECT * FROM payment_orders WHERE id = ?',
+        [res.orderId]
+      );
+      expect(order.status).toBe('UNKNOWN_PROVIDER_STATE');
+
+      const attempt = await db.queryOne<any>(
+        'SELECT * FROM payment_attempts WHERE payment_order_id = ?',
+        [res.orderId]
+      );
+      expect(attempt.status).toBe('TIMEOUT');
+    } finally {
+      provider.createOrder = originalCreate;
+    }
+  });
+
+  it('rejects settlement on amount or currency mismatch', async () => {
+    const order = await PaymentService.createPaymentOrder({
+      userId,
+      amountMinor: 20000, // $200.00
+      currency: 'USD',
+      method: 'card',
+      idempotencyKey: 'idemp_mismatch_001',
+    });
+
+    // Mismatched amount
+    await expect(
+      PaymentService.settlePayment({
+        orderId: order.orderId,
+        providerPaymentId: 'pay_mismatch_01',
+        amountMinor: 99999,
+        currency: 'USD',
+        settlementSource: 'WEBHOOK',
+      })
+    ).rejects.toThrow(/mismatch/i);
+
+    // Mismatched currency
+    await expect(
+      PaymentService.settlePayment({
+        orderId: order.orderId,
+        providerPaymentId: 'pay_mismatch_02',
+        amountMinor: 20000,
+        currency: 'INR',
+        settlementSource: 'WEBHOOK',
+      })
+    ).rejects.toThrow(/mismatch/i);
+  });
+
+  it('executes full refund lifecycle with double-entry ledger debit and status transition', async () => {
+    const order = await PaymentService.createPaymentOrder({
+      userId,
+      amountMinor: 30000, // $300.00
+      currency: 'USD',
+      method: 'card',
+      idempotencyKey: 'idemp_refund_order_001',
+    });
+
+    // Settle order
+    await PaymentService.settlePayment({
+      orderId: order.orderId,
+      providerPaymentId: 'pay_settle_ref_001',
+      amountMinor: 30000,
+      currency: 'USD',
+      settlementSource: 'WEBHOOK',
+    });
+
+    let balances = await LedgerService.getUserBalances(userId);
+    expect(balances['sovereign_cash:USD'].balance).toBe(30000);
+
+    // Partial refund of $100 (10,000 cents)
+    const refund1 = await PaymentService.refundPayment({
+      orderId: order.orderId,
+      amountMinor: 10000,
+      reason: 'Partial customer refund',
+      idempotencyKey: 'ref_idemp_001',
+      initiatedBy: userId,
+    });
+
+    expect(refund1.status).toBe('SUCCESS');
+
+    balances = await LedgerService.getUserBalances(userId);
+    expect(balances['sovereign_cash:USD'].balance).toBe(20000);
+
+    const db = getDb();
+    let updatedOrder = await db.queryOne<any>(
+      'SELECT * FROM payment_orders WHERE id = ?',
+      [order.orderId]
+    );
+    expect(updatedOrder.status).toBe('PARTIALLY_REFUNDED');
+    expect(Number(updatedOrder.refunded_amount_minor)).toBe(10000);
+
+    // Second refund: remaining $200 (20,000 cents)
+    const refund2 = await PaymentService.refundPayment({
+      orderId: order.orderId,
+      amountMinor: 20000,
+      reason: 'Full remaining refund',
+      idempotencyKey: 'ref_idemp_002',
+      initiatedBy: userId,
+    });
+
+    expect(refund2.status).toBe('SUCCESS');
+
+    balances = await LedgerService.getUserBalances(userId);
+    expect(balances['sovereign_cash:USD'].balance).toBe(0);
+
+    updatedOrder = await db.queryOne<any>(
+      'SELECT * FROM payment_orders WHERE id = ?',
+      [order.orderId]
+    );
+    expect(updatedOrder.status).toBe('REFUNDED');
+    expect(Number(updatedOrder.refunded_amount_minor)).toBe(30000);
+
+    // Excess refund attempt rejected
+    await expect(
+      PaymentService.refundPayment({
+        orderId: order.orderId,
+        amountMinor: 5000,
+        reason: 'Excess refund',
+        idempotencyKey: 'ref_idemp_excess',
+        initiatedBy: userId,
+      })
+    ).rejects.toThrow(/(?:exceeds refundable amount|Can only refund successful)/i);
   });
 
   it('strictly marks manual Indian UTR as PENDING_MANUAL_SETTLEMENT without crediting wallet', async () => {

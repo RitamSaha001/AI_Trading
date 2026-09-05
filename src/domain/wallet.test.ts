@@ -9,7 +9,7 @@ import {
   swapWalletToCrypto,
   hashPin,
   timingSafeEqual,
-  FX_RATES_TO_USD,
+  PAPER_SIMULATION_FX_RATES_TO_USD,
 } from './wallet';
 import {
   filterTransactions,

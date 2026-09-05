@@ -103,7 +103,12 @@ export function buildUPIUrl(params: UPIPaymentParams): string {
  * Generates an SVG QR code for UPI payments in pure client-side code.
  * Embeds functional QR patterns with finder eyes, alignment patterns, and data encoding.
  */
-export function generateUPIQRCodeSvg(upiUrl: string): string {
+/**
+ * PAPER/SANDBOX MODE ONLY - Generates a pseudo-random QR-like SVG for demo purposes.
+ * This is NOT a real decodable QR code and MUST NEVER be used in live/production payment flows.
+ * Live mode uses provider-generated QR codes or hosted checkout redirects.
+ */
+export function generatePaperModeUPIQRCodeSvg(upiUrl: string): string {
   // Use deterministic 29x29 matrix encoding with standard QR visual positioning
   const size = 29;
   const matrix: boolean[][] = Array.from({ length: size }, () => Array(size).fill(false));
@@ -179,9 +184,10 @@ export function generateUPIQRCodeSvg(upiUrl: string): string {
 }
 
 /**
- * Tokenizes card details locally into a secure masked descriptor without storing raw PAN.
+ * PAPER/SANDBOX MODE ONLY - Generates a fake local token for demo purposes.
+ * This MUST NEVER be used in live/production payment flows.
  */
-export function tokenizeCardLocally(
+export function paperModeTokenizeCardLocally(
   cardNumber: string,
   expMonth: string,
   expYear: string,

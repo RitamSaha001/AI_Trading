@@ -23,6 +23,10 @@ export interface ServerConfig {
   PHONEPE_SALT_INDEX: string;
   PHONEPE_HOST_URL: string;
   PHONEPE_CALLBACK_URL: string;
+  PHONEPE_CLIENT_ID: string;
+  PHONEPE_CLIENT_SECRET: string;
+  PHONEPE_CLIENT_VERSION: string;
+  PHONEPE_ENV: 'SANDBOX' | 'PRODUCTION';
   BINANCE_ENV: 'testnet' | 'mainnet';
   BINANCE_API_KEY?: string;
   BINANCE_API_SECRET?: string;
@@ -68,6 +72,10 @@ const DEV_TEST_FALLBACKS = {
   PHONEPE_SALT_INDEX: '1',
   PHONEPE_HOST_URL: 'https://api-preprod.phonepe.com/apis/pg-sandbox',
   PHONEPE_CALLBACK_URL: 'http://localhost:3001/api/webhooks/phonepe',
+  PHONEPE_CLIENT_ID: 'TEST-M22QP2QU11O0_25062',
+  PHONEPE_CLIENT_SECRET: 'ZjNlYjg0ZWUtMDBiMy00ZTBiLTkxOTgtZDBjZjAxMDE3OTVk',
+  PHONEPE_CLIENT_VERSION: '1',
+  PHONEPE_ENV: 'SANDBOX' as const,
   BINANCE_ENV: 'testnet' as const,
 };
 
@@ -268,6 +276,10 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     PHONEPE_SALT_INDEX: z.string().default('1'),
     PHONEPE_HOST_URL: z.string().optional(),
     PHONEPE_CALLBACK_URL: z.string().optional(),
+    PHONEPE_CLIENT_ID: z.string().optional(),
+    PHONEPE_CLIENT_SECRET: z.string().optional(),
+    PHONEPE_CLIENT_VERSION: z.string().default('1'),
+    PHONEPE_ENV: z.enum(['SANDBOX', 'PRODUCTION']).default(isProd ? 'PRODUCTION' : 'SANDBOX'),
     BINANCE_ENV: z.enum(['testnet', 'mainnet']).default(isProd ? 'mainnet' : 'testnet'),
     BINANCE_API_KEY: z.string().optional(),
     BINANCE_API_SECRET: z.string().optional(),
@@ -300,6 +312,10 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   const phonepeSaltIndex = candidate.PHONEPE_SALT_INDEX || DEV_TEST_FALLBACKS.PHONEPE_SALT_INDEX;
   const phonepeHostUrl = candidate.PHONEPE_HOST_URL || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_HOST_URL : '');
   const phonepeCallbackUrl = candidate.PHONEPE_CALLBACK_URL || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CALLBACK_URL : '');
+  const phonepeClientId = candidate.PHONEPE_CLIENT_ID || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CLIENT_ID : '');
+  const phonepeClientSecret = candidate.PHONEPE_CLIENT_SECRET || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CLIENT_SECRET : '');
+  const phonepeClientVersion = candidate.PHONEPE_CLIENT_VERSION || DEV_TEST_FALLBACKS.PHONEPE_CLIENT_VERSION;
+  const phonepeEnv = candidate.PHONEPE_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_ENV : 'PRODUCTION');
   const binanceEnv = candidate.BINANCE_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.BINANCE_ENV : 'mainnet');
 
   // Strict Validation: SESSION_SECRET
@@ -350,6 +366,19 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
       }
       if (!paymentWebhookSecret || paymentWebhookSecret === 'whsec_lumen_enterprise_mock_webhook_secret_2026' || paymentWebhookSecret.length < 32 || /mock|test|demo/i.test(paymentWebhookSecret)) {
         errors.push('PAYMENT_WEBHOOK_SECRET must be at least 32 characters and cannot use default mock value in production mode.');
+      }
+      
+      // V2 SDK modern credentials validation
+      if (phonepeClientId && phonepeClientSecret) {
+        if (/test/i.test(phonepeClientId)) {
+          errors.push("Production PHONEPE_CLIENT_ID cannot contain 'TEST'.");
+        }
+        if (phonepeClientSecret === DEV_TEST_FALLBACKS.PHONEPE_CLIENT_SECRET) {
+          errors.push("Production PHONEPE_CLIENT_SECRET cannot be the sandbox default.");
+        }
+        if (phonepeEnv !== 'PRODUCTION') {
+          errors.push("PHONEPE_ENV must be 'PRODUCTION' in production mode.");
+        }
       }
     }
 
@@ -420,6 +449,10 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     PHONEPE_SALT_INDEX: phonepeSaltIndex,
     PHONEPE_HOST_URL: phonepeHostUrl,
     PHONEPE_CALLBACK_URL: phonepeCallbackUrl,
+    PHONEPE_CLIENT_ID: phonepeClientId,
+    PHONEPE_CLIENT_SECRET: phonepeClientSecret,
+    PHONEPE_CLIENT_VERSION: phonepeClientVersion,
+    PHONEPE_ENV: phonepeEnv,
     BINANCE_ENV: binanceEnv,
     BINANCE_API_KEY: candidate.BINANCE_API_KEY,
     BINANCE_API_SECRET: candidate.BINANCE_API_SECRET,
@@ -451,7 +484,7 @@ export function auditServerSecurityConfig(
   const encKeyValid = validateEncryptionMasterKey(config.ENCRYPTION_MASTER_KEY, env).valid;
   const binanceConfigured = Boolean(config.BINANCE_API_KEY && config.BINANCE_API_SECRET);
   const paymentConfigured = config.PAYMENT_PROVIDER === 'phonepe'
-    ? Boolean(config.PHONEPE_MERCHANT_ID && config.PHONEPE_SALT_KEY)
+    ? Boolean((config.PHONEPE_MERCHANT_ID && config.PHONEPE_SALT_KEY) || (config.PHONEPE_CLIENT_ID && config.PHONEPE_CLIENT_SECRET))
     : config.PAYMENT_PROVIDER === 'sandbox';
 
   const isProd = env === 'production';

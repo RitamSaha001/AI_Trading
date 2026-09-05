@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLumen } from '../store';
 import {
   CreditCard,
@@ -7,21 +7,20 @@ import {
   CheckCircle2,
   Lock,
   ArrowRight,
-  Sparkles,
-  AlertCircle,
   Smartphone,
+  AlertCircle,
 } from 'lucide-react';
 import {
   validateCardLuhn,
   detectCardBrand,
   formatCardNumberSpacing,
-  tokenizeCardLocally,
+  paperModeTokenizeCardLocally,
   ZeroCostSandboxGateway,
   CardPaymentSession,
 } from '../services/paymentGateway';
 import { ApiClient } from '../services/apiClient';
 import { WalletCurrency } from '../types';
-import { FX_RATES_TO_USD } from '../domain/wallet';
+import { PAPER_SIMULATION_FX_RATES_TO_USD } from '../domain/wallet';
 
 interface WalletCardPaymentModalProps {
   isOpen: boolean;
@@ -31,7 +30,7 @@ interface WalletCardPaymentModalProps {
 export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentModalProps) {
   const { depositToWallet, savePaymentMethod, accountMode } = useLumen();
 
-  const [step, setStep] = useState<'details' | '3ds' | 'success'>('details');
+  const [step, setStep] = useState<'details' | '3ds' | 'success' | 'polling'>('details');
   const [currency, setCurrency] = useState<WalletCurrency>('USD');
   const [amount, setAmount] = useState<string>('500');
   const [cardNumber, setCardNumber] = useState('');
@@ -42,10 +41,54 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
   const [saveCard, setSaveCard] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [pollingOrderId, setPollingOrderId] = useState<string | null>(null);
 
   // 3DS Challenge State
   const [session3DS, setSession3DS] = useState<CardPaymentSession | null>(null);
   const [enteredOtp, setEnteredOtp] = useState('123456');
+
+  // Check URL on mount for orderId
+  useEffect(() => {
+    if (!isOpen) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('orderId');
+    if (orderId && accountMode === 'exchange') {
+      setStep('polling');
+      setPollingOrderId(orderId);
+      // clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [isOpen, accountMode]);
+
+  // Polling effect
+  useEffect(() => {
+    let timeoutId: any;
+    const pollStatus = async () => {
+      if (!pollingOrderId || step !== 'polling') return;
+      try {
+        const res = await ApiClient.getPaymentStatus(pollingOrderId);
+        if (res.ok && res.data?.status === 'SUCCESS') {
+          setStep('success');
+          setPollingOrderId(null);
+          setTimeout(() => {
+            onClose();
+          }, 2000);
+        } else if (res.ok && res.data?.status === 'FAILED') {
+          setErrorMessage('Payment failed.');
+          setStep('details');
+          setPollingOrderId(null);
+        } else {
+          timeoutId = setTimeout(pollStatus, 3000);
+        }
+      } catch (err) {
+        timeoutId = setTimeout(pollStatus, 3000);
+      }
+    };
+    if (step === 'polling' && pollingOrderId) {
+      pollStatus();
+    }
+    return () => clearTimeout(timeoutId);
+  }, [step, pollingOrderId, onClose]);
 
   if (!isOpen) return null;
 
@@ -53,7 +96,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
   const brand = detectCardBrand(cleanPan);
   const isLuhnValid = cleanPan.length >= 13 && validateCardLuhn(cleanPan);
   const numericAmount = parseFloat(amount) || 0;
-  const amountUSD = currency === 'USD' ? numericAmount : numericAmount * FX_RATES_TO_USD[currency];
+  const amountUSD = currency === 'USD' ? numericAmount : numericAmount * PAPER_SIMULATION_FX_RATES_TO_USD[currency];
 
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCardNumberSpacing(e.target.value);
@@ -85,25 +128,15 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
       return;
     }
 
-    if (!isLuhnValid) {
-      setErrorMessage('Please enter a valid card number that passes Luhn checksum verification.');
-      return;
-    }
-
-    if (cvv.length < 3) {
-      setErrorMessage('Please enter a valid 3 or 4-digit CVV security code.');
-      return;
-    }
-
     setIsProcessing(true);
     try {
       if (accountMode === 'exchange') {
         // LIVE PRODUCTION: Initiate server payment intent and redirect to payment provider
         const intent = await ApiClient.createPaymentIntent({
           amountMinor: Math.round(numericAmount * 100),
-          currency: currency === 'INR' ? 'INR' : 'USD',
+          currency: 'INR',
           method: 'card',
-          idempotencyKey: `card_live_${Date.now()}`,
+          idempotencyKey: crypto.randomUUID(),
         });
 
         if (!intent.ok) {
@@ -120,6 +153,18 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
       }
 
       // PAPER SIMULATION ONLY
+      if (!isLuhnValid) {
+        setErrorMessage('Please enter a valid card number that passes Luhn checksum verification.');
+        setIsProcessing(false);
+        return;
+      }
+  
+      if (cvv.length < 3) {
+        setErrorMessage('Please enter a valid 3 or 4-digit CVV security code.');
+        setIsProcessing(false);
+        return;
+      }
+
       const session = await ZeroCostSandboxGateway.initiateCardPayment({
         cardNumber,
         expMonth,
@@ -145,13 +190,6 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
     setErrorMessage('');
 
     try {
-      if (accountMode === 'exchange') {
-        // LIVE PRODUCTION: In production, 3DS authentication completes at provider ACS.
-        // Funds are settled authoritatively via webhook, not client balance crediting.
-        setStep('success');
-        return;
-      }
-
       // PAPER / SIMULATION MODE ONLY:
       await ZeroCostSandboxGateway.verifyCard3DS(session3DS, enteredOtp);
 
@@ -170,7 +208,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
 
       // Save tokenized card if enabled
       if (saveCard) {
-        const tokenized = tokenizeCardLocally(cardNumber, expMonth, expYear, cardholderName);
+        const tokenized = paperModeTokenizeCardLocally(cardNumber, expMonth, expYear, cardholderName);
         savePaymentMethod(tokenized);
       }
 
@@ -206,7 +244,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                     ? 'bg-amber-50 text-amber-700 border border-amber-200'
                     : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                 }`}>
-                  {accountMode === 'paper' ? 'Simulated Sandbox' : 'Live Capital Gate'}
+                  {accountMode === 'paper' ? '🧪 Sandbox Mode — Demo Cards Only' : 'Live Capital Gate'}
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
@@ -231,73 +269,74 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
             </div>
           )}
 
+          {step === 'polling' && (
+            <div className="text-center py-6 space-y-4">
+              <div className="w-16 h-16 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin mx-auto"></div>
+              <h3 className="font-bold text-lg">Checking Payment Status...</h3>
+              <p className="text-sm text-zinc-500">Please wait while we verify your payment with PhonePe.</p>
+            </div>
+          )}
+
           {step === 'details' && (
             <form onSubmit={handleSubmitDetails} className="space-y-4">
-              {/* Card Visualizer */}
-              <div className="relative p-5 rounded-2xl bg-gradient-to-tr from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl overflow-hidden border border-white/10">
-                <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-9 h-7 rounded-md bg-amber-300/80 border border-amber-200 flex items-center justify-center shadow-inner">
-                    <div className="w-6 h-4 border border-amber-600/40 rounded-sm grid grid-cols-2" />
-                  </div>
-                  <span className="text-xs font-black tracking-widest uppercase text-white/80 bg-white/10 px-2 py-0.5 rounded-md border border-white/10">
-                    {brand !== 'unknown' ? brand : 'CARD'}
-                  </span>
-                </div>
+              {/* Paper Mode Card Inputs */}
+              {accountMode === 'paper' && (
+                <>
+                  <div className="relative p-5 rounded-2xl bg-gradient-to-tr from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl overflow-hidden border border-white/10">
+                    <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-9 h-7 rounded-md bg-amber-300/80 border border-amber-200 flex items-center justify-center shadow-inner">
+                        <div className="w-6 h-4 border border-amber-600/40 rounded-sm grid grid-cols-2" />
+                      </div>
+                      <span className="text-xs font-black tracking-widest uppercase text-white/80 bg-white/10 px-2 py-0.5 rounded-md border border-white/10">
+                        {brand !== 'unknown' ? brand : 'CARD'}
+                      </span>
+                    </div>
 
-                <div className="font-mono text-lg sm:text-xl tracking-wider font-semibold text-white/90 mb-4 drop-shadow-sm">
-                  {cardNumber || '•••• •••• •••• ••••'}
-                </div>
+                    <div className="font-mono text-lg sm:text-xl tracking-wider font-semibold text-white/90 mb-4 drop-shadow-sm">
+                      {cardNumber || '•••• •••• •••• ••••'}
+                    </div>
 
-                <div className="flex items-end justify-between text-xs text-white/70">
-                  <div>
-                    <div className="text-[9px] uppercase tracking-wider text-white/50">Cardholder</div>
-                    <div className="font-semibold text-white/90 truncate max-w-[160px]">
-                      {cardholderName || 'YOUR NAME'}
+                    <div className="flex items-end justify-between text-xs text-white/70">
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-white/50">Cardholder</div>
+                        <div className="font-semibold text-white/90 truncate max-w-[160px]">
+                          {cardholderName || 'YOUR NAME'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-white/50">Expires</div>
+                        <div className="font-semibold text-white/90 font-mono">
+                          {expMonth}/{expYear}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[9px] uppercase tracking-wider text-white/50">Expires</div>
-                    <div className="font-semibold text-white/90 font-mono">
-                      {expMonth}/{expYear}
-                    </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-zinc-400 font-medium text-[11px]">Fill Test Card:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleFillDemoCard('visa')}
+                      className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
+                    >
+                      Visa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleFillDemoCard('mastercard')}
+                      className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
+                    >
+                      Mastercard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleFillDemoCard('rupay')}
+                      className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
+                    >
+                      RuPay
+                    </button>
                   </div>
-                </div>
-              </div>
-
-              {/* Demo Fill Shortcuts (Paper Mode Only) or PCI-DSS Compliance Badge */}
-              {accountMode === 'paper' ? (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-zinc-400 font-medium text-[11px]">Fill Test Card:</span>
-                  <button
-                    type="button"
-                    onClick={() => handleFillDemoCard('visa')}
-                    className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
-                  >
-                    Visa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleFillDemoCard('mastercard')}
-                    className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
-                  >
-                    Mastercard
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleFillDemoCard('rupay')}
-                    className="px-2 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold text-[11px] transition-colors"
-                  >
-                    RuPay
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-zinc-50 border border-zinc-200/70 text-[11px] text-zinc-600">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>
-                    <strong>PCI-DSS Certified:</strong> Client-side cryptographic tokenization ensures credentials are never stored unencrypted.
-                  </span>
-                </div>
+                </>
               )}
 
               {/* Amount & Currency */}
@@ -324,7 +363,8 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                   <select
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value as WalletCurrency)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-semibold outline-none bg-white transition-all"
+                    disabled={accountMode === 'exchange'}
+                    className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-semibold outline-none bg-white transition-all disabled:opacity-50"
                   >
                     <option value="USD">USD ($)</option>
                     <option value="INR">INR (₹)</option>
@@ -341,97 +381,109 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                 </div>
               )}
 
-              {/* Card Inputs */}
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-zinc-600">Card Number</label>
-                  <div className="relative">
+              {/* Live Mode Notice */}
+              {accountMode === 'exchange' && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-[11px]">
+                    Secured by PhonePe. You will be redirected to a PCI-DSS Level 1 certified checkout page.
+                  </span>
+                </div>
+              )}
+
+              {/* Card Inputs - Only in Paper Mode */}
+              {accountMode === 'paper' && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-600">Card Number</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        maxLength={23}
+                        value={cardNumber}
+                        onChange={handleCardNumberChange}
+                        placeholder="4532 0151 1283 0366"
+                        className={`w-full px-3.5 py-2.5 rounded-xl border font-mono text-sm font-semibold outline-none transition-all ${
+                          cardNumber && !isLuhnValid
+                            ? 'border-rose-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
+                            : 'border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'
+                        }`}
+                      />
+                      {isLuhnValid && (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-3 top-3" />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-600">Cardholder Name</label>
                     <input
                       type="text"
-                      maxLength={23}
-                      value={cardNumber}
-                      onChange={handleCardNumberChange}
-                      placeholder="4532 0151 1283 0366"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border font-mono text-sm font-semibold outline-none transition-all ${
-                        cardNumber && !isLuhnValid
-                          ? 'border-rose-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
-                          : 'border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'
-                      }`}
+                      value={cardholderName}
+                      onChange={(e) => setCardholderName(e.target.value)}
+                      placeholder="Alice Quant"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-medium outline-none transition-all"
                     />
-                    {isLuhnValid && (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-3 top-3" />
-                    )}
                   </div>
-                </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-zinc-600">Cardholder Name</label>
-                  <input
-                    type="text"
-                    value={cardholderName}
-                    onChange={(e) => setCardholderName(e.target.value)}
-                    placeholder="Alice Quant"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-medium outline-none transition-all"
-                  />
-                </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-zinc-600">Exp Month</label>
+                      <input
+                        type="text"
+                        maxLength={2}
+                        value={expMonth}
+                        onChange={(e) => setExpMonth(e.target.value)}
+                        placeholder="12"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-mono text-center outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-zinc-600">Exp Year</label>
+                      <input
+                        type="text"
+                        maxLength={2}
+                        value={expYear}
+                        onChange={(e) => setExpYear(e.target.value)}
+                        placeholder="28"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-mono text-center outline-none transition-all"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-zinc-600">CVV</label>
+                      <input
+                        type="password"
+                        maxLength={4}
+                        value={cvv}
+                        onChange={(e) => setCvv(e.target.value.replace(/\D/g, ''))}
+                        placeholder="•••"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-mono text-center outline-none transition-all"
+                      />
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-zinc-600">Exp Month</label>
+                  {/* Privacy & Tokenization Guarantee */}
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600">
+                    <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span className="text-[11px]">
+                      Zero Raw Card Storage: Card credentials are tokenized client-side using Web Crypto AES-GCM-256.
+                    </span>
+                  </div>
+
+                  {/* Save Card Toggle */}
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none pt-1">
                     <input
-                      type="text"
-                      maxLength={2}
-                      value={expMonth}
-                      onChange={(e) => setExpMonth(e.target.value)}
-                      placeholder="12"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-mono text-center outline-none transition-all"
+                      type="checkbox"
+                      checked={saveCard}
+                      onChange={(e) => setSaveCard(e.target.checked)}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-zinc-600">Exp Year</label>
-                    <input
-                      type="text"
-                      maxLength={2}
-                      value={expYear}
-                      onChange={(e) => setExpYear(e.target.value)}
-                      placeholder="28"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-mono text-center outline-none transition-all"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-zinc-600">CVV</label>
-                    <input
-                      type="password"
-                      maxLength={4}
-                      value={cvv}
-                      onChange={(e) => setCvv(e.target.value.replace(/\D/g, ''))}
-                      placeholder="•••"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-mono text-center outline-none transition-all"
-                    />
-                  </div>
+                    <span className="text-xs font-medium text-zinc-700">
+                      Save card safely in local encrypted device vault
+                    </span>
+                  </label>
                 </div>
-              </div>
-
-              {/* Privacy & Tokenization Guarantee */}
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600">
-                <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                <span className="text-[11px]">
-                  Zero Raw Card Storage: Card credentials are tokenized client-side using Web Crypto AES-GCM-256.
-                </span>
-              </div>
-
-              {/* Save Card Toggle */}
-              <label className="flex items-center gap-2.5 cursor-pointer select-none pt-1">
-                <input
-                  type="checkbox"
-                  checked={saveCard}
-                  onChange={(e) => setSaveCard(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                />
-                <span className="text-xs font-medium text-zinc-700">
-                  Save card safely in local encrypted device vault
-                </span>
-              </label>
+              )}
 
               {/* Submit Button */}
               <button
@@ -447,7 +499,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                 ) : (
                   <>
                     <Lock className="w-4 h-4" />
-                    <span>Proceed to 3DS Verification</span>
+                    <span>{accountMode === 'exchange' ? 'Pay Securely via PhonePe' : 'Proceed to 3DS Verification'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -522,42 +574,28 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
 
           {step === 'success' && (
             <div className="text-center py-6 space-y-4 animate-in zoom-in-95 duration-200">
-              {accountMode === 'exchange' ? (
-                <>
-                  <div className="w-16 h-16 rounded-3xl bg-blue-100 text-blue-600 mx-auto flex items-center justify-center shadow-lg shadow-blue-600/10">
-                    <CheckCircle2 className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-zinc-900">3DS Authorization Dispatched</h3>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      Card payment intent initiated for {numericAmount.toFixed(2)} {currency}. Ledger balance will be authoritatively credited upon provider webhook confirmation.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-lg shadow-emerald-600/10">
-                    <CheckCircle2 className="w-8 h-8" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-zinc-900">Deposit Completed!</h3>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      [SIMULATION / PAPER] Credited {numericAmount.toFixed(2)} {currency} ($
-                      {amountUSD.toFixed(2)} USD) to your Sovereign Wallet.
-                    </p>
-                  </div>
-                </>
-              )}
+              <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-lg shadow-emerald-600/10">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-zinc-900">Deposit Completed!</h3>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {accountMode === 'exchange' 
+                    ? `Payment successful! Credited ${numericAmount.toFixed(2)} ${currency} to your wallet.`
+                    : `[SIMULATION / PAPER] Credited ${numericAmount.toFixed(2)} ${currency} ($${amountUSD.toFixed(2)} USD) to your Sovereign Wallet.`
+                  }
+                </p>
+              </div>
 
               <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-600 text-left space-y-1">
                 <div className="flex justify-between">
                   <span>Method:</span>
-                  <span className="font-semibold text-zinc-900">Card ({brand.toUpperCase()})</span>
+                  <span className="font-semibold text-zinc-900">Card {accountMode === 'paper' ? `(${brand.toUpperCase()})` : ''}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Status:</span>
-                  <span className={`font-semibold ${accountMode === 'exchange' ? 'text-blue-600' : 'text-emerald-600'}`}>
-                    {accountMode === 'exchange' ? 'Awaiting Webhook Settlement' : 'Settled (Paper Simulation)'}
+                  <span className="font-semibold text-emerald-600">
+                    {accountMode === 'exchange' ? 'Settled (Live)' : 'Settled (Paper Simulation)'}
                   </span>
                 </div>
                 <div className="flex justify-between">

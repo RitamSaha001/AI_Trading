@@ -20,6 +20,7 @@
     "@fastify/cors": "^11.3.0",
     "@fastify/sensible": "^6.0.5",
     "@google/genai": "^2.21.0",
+    "@phonepe-pg/pg-sdk-node": "^2.0.6",
     "@tailwindcss/vite": "^4.3.3",
     "@types/pg": "^8.23.1",
     "dotenv": "^17.4.2",

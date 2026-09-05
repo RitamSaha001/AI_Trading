@@ -40,9 +40,10 @@ export function timingSafeEqual(a: string, b: string): boolean {
  * Transparent, real-time FX Rates pegged to USD.
  * 1 USD = 87.20 INR
  * 1 EUR = 1.085 USD
- * 1 GBP = 1.282 USD
+/**
+ * PAPER/SANDBOX MODE ONLY. Live mode uses server-authoritative FX quotes.
  */
-export const FX_RATES_TO_USD: Record<WalletCurrency, number> = {
+export const PAPER_SIMULATION_FX_RATES_TO_USD: Record<WalletCurrency, number> = {
   USD: 1.0,
   INR: 1 / 87.2, // ~0.011467889
   EUR: 1.085,
@@ -58,8 +59,8 @@ export function convertCurrency(
   to: WalletCurrency
 ): number {
   if (from === to) return amount;
-  const amountUSD = amount * FX_RATES_TO_USD[from];
-  const targetRate = FX_RATES_TO_USD[to];
+  const amountUSD = amount * PAPER_SIMULATION_FX_RATES_TO_USD[from];
+  const targetRate = PAPER_SIMULATION_FX_RATES_TO_USD[to];
   return amountUSD / targetRate;
 }
 
@@ -132,7 +133,7 @@ export async function depositFunds(
     throw new Error('Deposit amount must be a positive number.');
   }
 
-  const amountUSD = amount * FX_RATES_TO_USD[currency];
+  const amountUSD = amount * PAPER_SIMULATION_FX_RATES_TO_USD[currency];
   const recentDeposits24h = get24hVolume(wallet.transactions, 'deposit');
 
   if (recentDeposits24h + amountUSD > wallet.security.dailyDepositLimitUSD) {
@@ -190,7 +191,7 @@ export async function withdrawFunds(
     throw new Error('Withdrawal amount must be a positive number.');
   }
 
-  const amountUSD = amount * FX_RATES_TO_USD[currency];
+  const amountUSD = amount * PAPER_SIMULATION_FX_RATES_TO_USD[currency];
 
   if (amountUSD > wallet.balanceUSD) {
     throw new Error(

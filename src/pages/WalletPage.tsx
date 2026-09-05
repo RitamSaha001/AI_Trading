@@ -35,7 +35,7 @@ import {
   exportLedgerToCsv,
   TransactionFilterCategory,
 } from '../domain/walletLedger';
-import { convertCurrency, FX_RATES_TO_USD, get24hVolume } from '../domain/wallet';
+import { convertCurrency, PAPER_SIMULATION_FX_RATES_TO_USD, get24hVolume } from '../domain/wallet';
 import { WalletCardPaymentModal } from '../components/WalletCardPaymentModal';
 import { WalletUPIPaymentModal } from '../components/WalletUPIPaymentModal';
 import { WalletAllocateModal } from '../components/WalletAllocateModal';
@@ -84,12 +84,14 @@ export function WalletPage() {
   const totalSovereignNetWorthUSD =
     nativeWallet.balanceUSD + nativeWallet.allocatedToTradingUSD;
 
-  const displayRate = displayCurrency === 'INR' ? 87.2 : 1;
+  // PAPER MODE ONLY: Using simulation FX rate. Live mode uses backend conversion.
+  const simulationRateINR = 1 / PAPER_SIMULATION_FX_RATES_TO_USD['INR'];
+  const displayRate = displayCurrency === 'INR' ? simulationRateINR : 1;
   const currencySymbol = displayCurrency === 'INR' ? '₹' : '$';
 
   const formatDisplayValue = (valUSD: number) => {
     if (displayCurrency === 'INR') {
-      return `₹${(valUSD * 87.2).toLocaleString('en-US', {
+      return `₹${(valUSD * simulationRateINR).toLocaleString('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`;
@@ -809,7 +811,7 @@ export function WalletPage() {
                               relatedUtr: tx.paymentDetails?.referenceNumber || '',
                               relatedTxHash: tx.txHash,
                               amountUSD: tx.amountUSD,
-                              amountINR: tx.currency === 'INR' ? tx.amount : tx.amountUSD * 87.2,
+                              amountINR: tx.currency === 'INR' ? tx.amount : tx.amountUSD * (1 / PAPER_SIMULATION_FX_RATES_TO_USD['INR']),
                             })
                           }
                           className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-[11px] border border-indigo-200/60 inline-flex items-center gap-1 transition-colors shadow-2xs active:scale-95"

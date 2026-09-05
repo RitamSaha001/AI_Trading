@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { WalletCurrency, PaymentMethodType } from '../types';
-import { FX_RATES_TO_USD, convertCurrency } from '../domain/wallet';
+import { PAPER_SIMULATION_FX_RATES_TO_USD, convertCurrency } from '../domain/wallet';
 import { validateUPIVpa } from '../services/paymentGateway';
 
 interface WalletWithdrawModalProps {
@@ -35,7 +35,7 @@ export function WalletWithdrawModal({ isOpen, onClose }: WalletWithdrawModalProp
   if (!isOpen) return null;
 
   const numAmount = parseFloat(amount) || 0;
-  const amountUSD = currency === 'USD' ? numAmount : numAmount * FX_RATES_TO_USD[currency];
+  const amountUSD = currency === 'USD' ? numAmount : numAmount * PAPER_SIMULATION_FX_RATES_TO_USD[currency];
   const maxAvailableUSD = nativeWallet.balanceUSD;
   const maxAvailableInSelected = convertCurrency(maxAvailableUSD, 'USD', currency);
 

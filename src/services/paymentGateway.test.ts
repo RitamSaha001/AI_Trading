@@ -5,8 +5,8 @@ import {
   formatCardNumberSpacing,
   validateUPIVpa,
   buildUPIUrl,
-  generateUPIQRCodeSvg,
-  tokenizeCardLocally,
+  generatePaperModeUPIQRCodeSvg,
+  paperModeTokenizeCardLocally,
   ZeroCostSandboxGateway,
 } from './paymentGateway';
 
@@ -34,8 +34,8 @@ describe('Payment Gateway & Security Services', () => {
       expect(formatCardNumberSpacing('378282246310005')).toBe('3782 8224 6310 005');
     });
 
-    it('tokenizes card details locally without storing full PAN', () => {
-      const token = tokenizeCardLocally('4532015112830366', '12', '28', 'John Doe');
+    it('tokenizes card details locally for paper mode', () => {
+      const token = paperModeTokenizeCardLocally('4532015112830366', '12', '28', 'John Doe');
       expect(token.type).toBe('card');
       expect(token.last4).toBe('0366');
       expect(token.brand).toBe('visa');
@@ -74,8 +74,8 @@ describe('Payment Gateway & Security Services', () => {
       expect(uri).toContain('tr=TX123456');
     });
 
-    it('generates dynamic SVG QR code in pure client-side code', () => {
-      const svg = generateUPIQRCodeSvg('upi://pay?pa=lumen@okhdfcbank&am=500.00');
+    it('generates a paper mode pseudo-QR code SVG string', () => {
+      const svg = generatePaperModeUPIQRCodeSvg('upi://pay?pa=lumen@okhdfcbank&am=500.00');
       expect(svg).toContain('<svg');
       expect(svg).toContain('viewBox=');
       expect(svg).toContain('<rect');
