@@ -90,10 +90,27 @@ export interface RefundResult {
   error?: string;
 }
 
+export interface RefundStatusResult {
+  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'UNKNOWN';
+  providerRefundId?: string;
+  amountMinor?: number;
+  error?: string;
+}
+
+export type WebhookInboxStatus = 
+  | 'received'
+  | 'verified'
+  | 'processing'
+  | 'processed'
+  | 'failed_retryable'
+  | 'failed_permanent'
+  | 'ignored';
+
 export interface PaymentProvider {
   name: string;
   createOrder(params: CreatePaymentIntentParams): Promise<PaymentOrderResult>;
   verifyWebhook(rawBody: string, headers: Record<string, string | string[] | undefined>): Promise<WebhookVerificationResult>;
   checkStatus(providerOrderId: string, merchantTransactionId: string): Promise<PaymentStatusResult>;
   refund(params: RefundParams): Promise<RefundResult>;
+  checkRefundStatus?(refundId: string): Promise<RefundStatusResult>;
 }

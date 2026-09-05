@@ -8,6 +8,7 @@ import {
   PaymentStatusResult,
   RefundParams,
   RefundResult,
+  RefundStatusResult,
   ProviderNetworkTimeoutError,
 } from './types';
 import {
@@ -272,15 +273,23 @@ export class PhonePeProductionAdapter implements PaymentProvider {
         ? response.paymentDetails[response.paymentDetails.length - 1]
         : undefined;
 
+      const upiRail = (latestPayment?.rail && 'utr' in (latestPayment.rail as any))
+        ? (latestPayment.rail as any)
+        : undefined;
+      const pgRail = (latestPayment?.rail && 'serviceTransactionId' in (latestPayment.rail as any))
+        ? (latestPayment.rail as any)
+        : undefined;
+
       return {
         providerOrderId: merchantTransactionId,
         status,
         amountMinor: response.amount || 0,
         currency: 'INR',
         providerPaymentId: response.orderId,
-        utr: latestPayment?.paymentInstrument?.utr,
-        paymentMethod: latestPayment?.paymentInstrument?.type,
-        bankRefNumber: latestPayment?.paymentInstrument?.bankTransactionId,
+        utr: upiRail?.utr,
+        vpa: upiRail?.vpa,
+        paymentMethod: latestPayment?.paymentMode || (upiRail ? 'UPI' : undefined),
+        bankRefNumber: pgRail?.serviceTransactionId || pgRail?.transactionId || upiRail?.upiTransactionId,
       };
     } catch (err: any) {
       return {
@@ -341,6 +350,37 @@ export class PhonePeProductionAdapter implements PaymentProvider {
         amountMinor: params.amountMinor,
         error: err.message,
       };
+    }
+  }
+
+  async checkRefundStatus(refundId: string): Promise<RefundStatusResult> {
+    const client = this.getClient();
+    try {
+      const response = await client.getRefundStatus(refundId);
+      let status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'UNKNOWN' = 'UNKNOWN';
+      if (response.state === 'COMPLETED') {
+        status = 'SUCCESS';
+      } else if (response.state === 'PENDING') {
+        status = 'PENDING';
+      } else if (response.state === 'FAILED') {
+        status = 'FAILED';
+      }
+
+      return {
+        status,
+        providerRefundId: refundId,
+        amountMinor: response.amount,
+      };
+    } catch (err: any) {
+      if (
+        err.name === 'FetchError' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ECONNRESET' ||
+        /timeout|fetch|network|econnrefused/i.test(err.message)
+      ) {
+        return { status: 'UNKNOWN', providerRefundId: refundId, error: err.message };
+      }
+      return { status: 'FAILED', providerRefundId: refundId, error: err.message };
     }
   }
 }

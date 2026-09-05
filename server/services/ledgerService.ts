@@ -256,6 +256,36 @@ export class LedgerService {
   }
 
   /**
+   * Acquires a row-level lock (SELECT ... FOR UPDATE) on a ledger account within a transaction
+   * and returns the fresh authoritative record.
+   */
+  static async lockAccount(accountId: string, tx: DBClient): Promise<LedgerAccountRecord> {
+    const row = await tx.queryOne<LedgerAccountRecord>(
+      `SELECT * FROM ledger_accounts WHERE id = ? FOR UPDATE`,
+      [accountId]
+    );
+    if (!row) {
+      throw new Error(`Ledger account ${accountId} not found for row lock`);
+    }
+    return row;
+  }
+
+  /**
+   * Deterministically locks multiple ledger accounts in sorted ID order within a transaction
+   * to mathematically prevent deadlocks under high concurrency.
+   * Returns a Map of accountId -> LedgerAccountRecord.
+   */
+  static async lockAccounts(accountIds: string[], tx: DBClient): Promise<Map<string, LedgerAccountRecord>> {
+    const uniqueSorted = Array.from(new Set(accountIds)).sort();
+    const map = new Map<string, LedgerAccountRecord>();
+    for (const id of uniqueSorted) {
+      const locked = await this.lockAccount(id, tx);
+      map.set(id, locked);
+    }
+    return map;
+  }
+
+  /**
    * Executes a double-entry journal transaction moving funds between two accounts.
    */
   static async transfer(params: {
@@ -294,8 +324,13 @@ export class LedgerService {
         tx
       );
 
-      const fromBal = BigInt(fromAcc.balance_minor);
-      const fromReserved = BigInt(fromAcc.reserved_minor);
+      // Deterministically acquire row-level locks in sorted ID order to eliminate deadlocks and race conditions
+      const lockedMap = await this.lockAccounts([fromAcc.id, toAcc.id], tx);
+      const lockedFrom = lockedMap.get(fromAcc.id)!;
+      const lockedTo = lockedMap.get(toAcc.id)!;
+
+      const fromBal = BigInt(lockedFrom.balance_minor);
+      const fromReserved = BigInt(lockedFrom.reserved_minor);
       const spendable = fromBal - fromReserved;
 
       if (spendable < amount) {
@@ -308,7 +343,7 @@ export class LedgerService {
       const now = Date.now();
 
       const newFromBal = fromBal - amount;
-      const newToBal = BigInt(toAcc.balance_minor) + amount;
+      const newToBal = BigInt(lockedTo.balance_minor) + amount;
 
       // Update From Account
       await tx.execute(
@@ -482,11 +517,16 @@ export class LedgerService {
         tx
       );
 
+      // Deterministically acquire row-level locks in sorted ID order
+      const lockedMap = await this.lockAccounts([clearingAcc.id, acc.id], tx);
+      const lockedClearing = lockedMap.get(clearingAcc.id)!;
+      const lockedAcc = lockedMap.get(acc.id)!;
+
       const txId = `dep_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
       const now = Date.now();
 
       // 1. Debit Settlement Clearing (External Funding Source)
-      const currentClearingBal = BigInt(clearingAcc.balance_minor);
+      const currentClearingBal = BigInt(lockedClearing.balance_minor);
       const newClearingBal = currentClearingBal - amount;
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
@@ -517,7 +557,7 @@ export class LedgerService {
       );
 
       // 2. Credit Sovereign Cash
-      const currentBal = BigInt(acc.balance_minor);
+      const currentBal = BigInt(lockedAcc.balance_minor);
       const newBal = currentBal + amount;
 
       await tx.execute(
@@ -635,11 +675,16 @@ export class LedgerService {
         tx
       );
 
+      // Deterministically acquire row-level locks in sorted ID order
+      const lockedMap = await this.lockAccounts([acc.id, clearingAcc.id], tx);
+      const lockedAcc = lockedMap.get(acc.id)!;
+      const lockedClearing = lockedMap.get(clearingAcc.id)!;
+
       const txId = `ref_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
       const now = Date.now();
 
-      const currentBal = BigInt(acc.balance_minor);
-      const reserved = BigInt(acc.reserved_minor);
+      const currentBal = BigInt(lockedAcc.balance_minor);
+      const reserved = BigInt(lockedAcc.reserved_minor);
       if (currentBal - reserved < amount) {
         throw new Error('Insufficient unreserved balance for refund debit');
       }
@@ -675,7 +720,7 @@ export class LedgerService {
       );
 
       // 2. Credit Settlement Clearing
-      const currentClearingBal = BigInt(clearingAcc.balance_minor);
+      const currentClearingBal = BigInt(lockedClearing.balance_minor);
       const newClearingBal = currentClearingBal + amount;
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
@@ -758,8 +803,9 @@ export class LedgerService {
         tx
       );
 
-      const bal = BigInt(acc.balance_minor);
-      const reserved = BigInt(acc.reserved_minor);
+      const lockedAcc = await this.lockAccount(acc.id, tx);
+      const bal = BigInt(lockedAcc.balance_minor);
+      const reserved = BigInt(lockedAcc.reserved_minor);
       const free = bal - reserved;
 
       if (free < amount) {
@@ -806,7 +852,8 @@ export class LedgerService {
         tx
       );
 
-      const currentReserved = BigInt(acc.reserved_minor);
+      const lockedAcc = await this.lockAccount(acc.id, tx);
+      const currentReserved = BigInt(lockedAcc.reserved_minor);
       const newReserved = currentReserved >= amount ? currentReserved - amount : 0n;
       const now = Date.now();
 
@@ -845,8 +892,9 @@ export class LedgerService {
         tx
       );
 
-      const bal = BigInt(acc.balance_minor);
-      const reserved = BigInt(acc.reserved_minor);
+      const lockedAcc = await this.lockAccount(acc.id, tx);
+      const bal = BigInt(lockedAcc.balance_minor);
+      const reserved = BigInt(lockedAcc.reserved_minor);
       const free = bal - reserved;
 
       if (free < amount) {
@@ -917,12 +965,12 @@ export class LedgerService {
     let reservation: any;
     if (params.accountId) {
       reservation = await params.tx.queryOne<any>(
-        `SELECT * FROM order_reservations WHERE order_id = ? AND account_id = ? AND status IN ('ACTIVE', 'PARTIALLY_CONSUMED')`,
+        `SELECT * FROM order_reservations WHERE order_id = ? AND account_id = ? AND status IN ('ACTIVE', 'PARTIALLY_CONSUMED') FOR UPDATE`,
         [params.orderId, params.accountId]
       );
     } else {
       reservation = await params.tx.queryOne<any>(
-        `SELECT * FROM order_reservations WHERE order_id = ? AND status IN ('ACTIVE', 'PARTIALLY_CONSUMED')`,
+        `SELECT * FROM order_reservations WHERE order_id = ? AND status IN ('ACTIVE', 'PARTIALLY_CONSUMED') FOR UPDATE`,
         [params.orderId]
       );
     }
@@ -949,16 +997,13 @@ export class LedgerService {
       [newConsumed, newStatus, now, reservation.id]
     );
 
-    const acc = await params.tx.queryOne<LedgerAccountRecord>(
-      `SELECT * FROM ledger_accounts WHERE id = ?`,
-      [reservation.account_id]
-    );
-    if (acc) {
-      const currentReserved = BigInt(acc.reserved_minor);
+    const lockedAcc = await this.lockAccount(reservation.account_id, params.tx);
+    if (lockedAcc) {
+      const currentReserved = BigInt(lockedAcc.reserved_minor);
       const newReserved = currentReserved >= toConsume ? currentReserved - toConsume : 0n;
       await params.tx.execute(
         `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
-        [newReserved, now, acc.id]
+        [newReserved, now, lockedAcc.id]
       );
     }
 
@@ -977,7 +1022,7 @@ export class LedgerService {
     const params = typeof paramsOrOrderId === 'string' ? { orderId: paramsOrOrderId } : paramsOrOrderId;
     const executeInTx = async (tx: DBClient): Promise<{ releasedMinor: bigint }> => {
       const reservations = await tx.query<any>(
-        `SELECT * FROM order_reservations WHERE order_id = ? AND status IN ('ACTIVE', 'PARTIALLY_CONSUMED')`,
+        `SELECT * FROM order_reservations WHERE order_id = ? AND status IN ('ACTIVE', 'PARTIALLY_CONSUMED') FOR UPDATE`,
         [params.orderId]
       );
 
@@ -998,16 +1043,13 @@ export class LedgerService {
             [newReleased, newStatus, now, res.id]
           );
 
-          const acc = await tx.queryOne<LedgerAccountRecord>(
-            `SELECT * FROM ledger_accounts WHERE id = ?`,
-            [res.account_id]
-          );
-          if (acc) {
-            const currentReserved = BigInt(acc.reserved_minor);
+          const lockedAcc = await this.lockAccount(res.account_id, tx);
+          if (lockedAcc) {
+            const currentReserved = BigInt(lockedAcc.reserved_minor);
             const newReserved = currentReserved >= unconsumed ? currentReserved - unconsumed : 0n;
             await tx.execute(
               `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
-              [newReserved, now, acc.id]
+              [newReserved, now, lockedAcc.id]
             );
           }
 
@@ -1186,6 +1228,18 @@ export class LedgerService {
         accountMode,
         tx
       );
+
+      // Deterministically acquire row-level locks on all involved accounts in sorted ID order
+      const lockedAccs = await this.lockAccounts(
+        [cashAcc.id, assetAcc.id, feeTreasuryAcc.id, clearingQuoteAcc.id, clearingBaseAcc.id],
+        tx
+      );
+      const lockedCash = lockedAccs.get(cashAcc.id)!;
+      const lockedAsset = lockedAccs.get(assetAcc.id)!;
+      const lockedTreasury = lockedAccs.get(feeTreasuryAcc.id)!;
+      const lockedClearingQuote = lockedAccs.get(clearingQuoteAcc.id)!;
+      const lockedClearingBase = lockedAccs.get(clearingBaseAcc.id)!;
+
       const pos = await this.getOrCreateAuthoritativePosition(
         params.userId,
         accountMode,
@@ -1202,7 +1256,7 @@ export class LedgerService {
 
       if (params.side === 'BUY') {
         const totalCashNeeded = feeAsset === params.quoteAsset ? (notionalCashMinor + feeMinor) : notionalCashMinor;
-        const currentCashBal = BigInt(cashAcc.balance_minor);
+        const currentCashBal = BigInt(lockedCash.balance_minor);
 
         if (currentCashBal < totalCashNeeded) {
           throw new Error(
@@ -1494,7 +1548,7 @@ export class LedgerService {
         );
       } else {
         // SELL
-        const currentAssetBal = BigInt(assetAcc.balance_minor);
+        const currentAssetBal = BigInt(lockedAsset.balance_minor);
         if (currentAssetBal < qtyAssetMinor) {
           throw new Error(
             `Insufficient asset balance to settle sell fill: current ${currentAssetBal.toString()}, needed ${qtyAssetMinor.toString()}`
@@ -2209,7 +2263,12 @@ export class LedgerService {
         tx
       );
 
-      const currentBal = BigInt(acc.balance_minor);
+      // Deterministically acquire row-level locks in sorted ID order
+      const lockedMap = await this.lockAccounts([clearingAcc.id, acc.id], tx);
+      const lockedAcc = lockedMap.get(acc.id)!;
+      const lockedClearing = lockedMap.get(clearingAcc.id)!;
+
+      const currentBal = BigInt(lockedAcc.balance_minor);
       const newBal = currentBal + adjustment;
 
       if (newBal < 0n) {
@@ -2253,7 +2312,7 @@ export class LedgerService {
       );
 
       // Clearing offsetting leg
-      const currentClearingBal = BigInt(clearingAcc.balance_minor);
+      const currentClearingBal = BigInt(lockedClearing.balance_minor);
       const newClearingBal = currentClearingBal - adjustment;
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,

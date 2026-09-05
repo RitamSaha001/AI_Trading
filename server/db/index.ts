@@ -33,6 +33,22 @@ export class SQLiteClient implements DBClient {
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath);
     this.db.exec('PRAGMA foreign_keys = ON;');
+    this.registerPolyfills();
+  }
+
+  private registerPolyfills(): void {
+    try {
+      this.db.function('GREATEST', { varargs: true }, (...args: any[]) => {
+        const nums = args.map((a) => (typeof a === 'bigint' ? Number(a) : Number(a) || 0));
+        return Math.max(...nums);
+      });
+      this.db.function('LEAST', { varargs: true }, (...args: any[]) => {
+        const nums = args.map((a) => (typeof a === 'bigint' ? Number(a) : Number(a) || 0));
+        return Math.min(...nums);
+      });
+    } catch {
+      // Ignore if already registered
+    }
   }
 
   private txStorage = new AsyncLocalStorage<{ depth: number }>();

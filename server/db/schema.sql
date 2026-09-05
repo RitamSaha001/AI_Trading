@@ -112,16 +112,21 @@ CREATE TABLE IF NOT EXISTS payment_orders (
   amount_minor BIGINT NOT NULL,
   currency TEXT NOT NULL, -- 'USD' | 'INR'
   method TEXT NOT NULL, -- 'card' | 'upi'
-  provider TEXT NOT NULL, -- 'razorpay' | 'stripe' | 'internal'
+  provider TEXT NOT NULL, -- 'phonepe' | 'sandbox' | 'razorpay' | 'stripe' | 'internal'
   provider_order_id TEXT UNIQUE,
-  status TEXT NOT NULL, -- 'created' | 'authorized' | 'captured' | 'failed' | 'pending_manual_settlement' | 'refunded'
+  status TEXT NOT NULL, -- 'CREATED' | 'INITIATING' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'CANCELLED' | 'UNKNOWN_PROVIDER_STATE' | 'REFUND_PENDING' | 'PARTIALLY_REFUNDED' | 'REFUNDED'
   idempotency_key TEXT UNIQUE NOT NULL,
+  checkout_url TEXT,
+  upi_intent_uri TEXT,
+  refunded_amount_minor BIGINT NOT NULL DEFAULT 0,
+  reserved_refund_amount_minor BIGINT NOT NULL DEFAULT 0,
   expires_at BIGINT NOT NULL,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_payment_orders_provider ON payment_orders(provider_order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_status_created ON payment_orders(status, created_at);
 
 -- Payment Transactions
 CREATE TABLE IF NOT EXISTS payments (
@@ -143,19 +148,103 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(payment_order_id);
 CREATE INDEX IF NOT EXISTS idx_payments_utr ON payments(utr);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_provider_payment_id_unique ON payments(provider_payment_id) WHERE provider_payment_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_utr_unique ON payments(utr) WHERE utr IS NOT NULL;
 
 -- Webhook Ingestion Records (Replay & Deduplication Protection)
 CREATE TABLE IF NOT EXISTS payment_webhooks (
   id TEXT PRIMARY KEY,
   provider TEXT NOT NULL,
-  event_id TEXT UNIQUE NOT NULL,
+  event_id TEXT NOT NULL,
   payload_hash TEXT NOT NULL,
-  status TEXT NOT NULL, -- 'processed' | 'ignored' | 'failed'
+  status TEXT NOT NULL, -- 'received' | 'verified' | 'processing' | 'processed' | 'failed_retryable' | 'failed_permanent' | 'ignored'
   error TEXT,
+  raw_headers TEXT,
+  raw_body TEXT,
+  processing_started_at BIGINT,
+  processing_attempt INTEGER NOT NULL DEFAULT 0,
+  worker_id TEXT,
+  lease_expires_at BIGINT,
+  next_retry_at BIGINT,
   processed_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_webhooks_event ON payment_webhooks(event_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_webhooks_provider_event ON payment_webhooks(provider, event_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_webhooks_provider_event_unique ON payment_webhooks(provider, event_id);
+CREATE INDEX IF NOT EXISTS idx_payment_webhooks_lease ON payment_webhooks(status, lease_expires_at);
+
+-- Payment Attempts
+CREATE TABLE IF NOT EXISTS payment_attempts (
+  id TEXT PRIMARY KEY,
+  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE CASCADE,
+  attempt_number INTEGER NOT NULL,
+  provider TEXT NOT NULL,
+  provider_order_id TEXT,
+  request_payload TEXT,
+  response_payload TEXT,
+  status TEXT NOT NULL, -- 'INITIATING' | 'SUCCESS' | 'FAILED' | 'TIMEOUT' | 'UNKNOWN'
+  error_code TEXT,
+  error_message TEXT,
+  started_at BIGINT NOT NULL,
+  completed_at BIGINT,
+  created_at BIGINT,
+  updated_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_payment_attempts_order ON payment_attempts(payment_order_id);
+
+-- Payment Settlements
+CREATE TABLE IF NOT EXISTS payment_settlements (
+  id TEXT PRIMARY KEY,
+  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE CASCADE,
+  payment_id TEXT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  settlement_source TEXT NOT NULL, -- 'WEBHOOK' | 'STATUS_POLL' | 'RECONCILIATION_SWEEP' | 'MANUAL_BANK_RECONCILIATION'
+  external_settlement_id TEXT,
+  amount_minor BIGINT NOT NULL,
+  currency TEXT NOT NULL,
+  fx_quote_id TEXT,
+  settled_amount_minor BIGINT NOT NULL,
+  settled_currency TEXT NOT NULL,
+  ledger_transaction_id TEXT,
+  settled_at BIGINT NOT NULL,
+  created_at BIGINT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_settlements_order_unique ON payment_settlements(payment_order_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_settlements_payment_unique ON payment_settlements(payment_id);
+CREATE INDEX IF NOT EXISTS idx_payment_settlements_order ON payment_settlements(payment_order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_settlements_payment ON payment_settlements(payment_id);
+
+-- Payment Refunds
+CREATE TABLE IF NOT EXISTS payment_refunds (
+  id TEXT PRIMARY KEY,
+  payment_order_id TEXT NOT NULL REFERENCES payment_orders(id) ON DELETE CASCADE,
+  payment_id TEXT REFERENCES payments(id) ON DELETE CASCADE,
+  provider_refund_id TEXT UNIQUE,
+  amount_minor BIGINT NOT NULL,
+  currency TEXT NOT NULL,
+  status TEXT NOT NULL, -- 'INITIATING' | 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUND_UNKNOWN'
+  reason TEXT NOT NULL,
+  idempotency_key TEXT UNIQUE NOT NULL,
+  ledger_transaction_id TEXT,
+  initiated_by TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_payment_refunds_order ON payment_refunds(payment_order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_refunds_status_order ON payment_refunds(status, payment_order_id);
+
+-- Foreign Exchange Quotes
+CREATE TABLE IF NOT EXISTS fx_quotes (
+  id TEXT PRIMARY KEY,
+  base_currency TEXT NOT NULL,
+  quote_currency TEXT NOT NULL,
+  rate_minor BIGINT NOT NULL, -- Scaled by 1e8 for precise integer arithmetic
+  rate_decimals INTEGER NOT NULL DEFAULT 8,
+  effective_rate TEXT NOT NULL,
+  source TEXT NOT NULL, -- 'ORACLE_FEED' | 'BANK_RATE' | 'PAPER_SIMULATION'
+  valid_from BIGINT NOT NULL,
+  valid_until BIGINT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fx_quotes_pair ON fx_quotes(base_currency, quote_currency, valid_until);
 
 -- Exchange Accounts (Encrypted Credentials At Rest)
 CREATE TABLE IF NOT EXISTS exchange_accounts (

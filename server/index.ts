@@ -5,8 +5,9 @@ import sensible from '@fastify/sensible';
 import { config, auditServerSecurityConfig } from './config';
 import { getDb, initDb, closeDb, getMigrationStatus } from './db';
 import { ServerAuthService } from './services/authService';
-import { requireAuth, requireActive, requireKYC, extractSessionToken, verifyOriginOrCsrf, authenticate } from './middleware/authMiddleware';
+import { requireAuth, requireActive, requireKYC, requireAdmin, extractSessionToken, verifyOriginOrCsrf, authenticate } from './middleware/authMiddleware';
 import { isValidAllowedOrigin } from './utils/originValidator';
+import { z } from 'zod';
 import { AuthRateLimiter } from './middleware/rateLimiter';
 import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
@@ -569,19 +570,30 @@ export function buildServer(): FastifyInstance {
   // PAYMENTS & WEBHOOKS (Phase 4, Phase 5, Phase 22)
   // ==========================================================================
 
+  const CreateIntentSchema = z.object({
+    amountMinor: z.number().int().positive('Amount must be a positive integer in minor units'),
+    currency: z.enum(['USD', 'INR']),
+    method: z.enum(['card', 'upi']),
+    idempotencyKey: z.string().min(1).max(256),
+  });
+
   server.post('/api/payments/create-intent', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { amountMinor: number; currency: 'USD' | 'INR'; method: 'card' | 'upi'; idempotencyKey: string };
-    if (!body?.amountMinor || body.amountMinor <= 0) {
-      return reply.status(400).send({ success: false, error: 'Positive amount required' });
+    const parseResult = CreateIntentSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: parseResult.error.issues[0]?.message || 'Invalid payment intent parameters',
+      });
     }
 
+    const body = parseResult.data;
     try {
       const intent = await PaymentService.createPaymentOrder({
         userId: req.user!.id,
         amountMinor: body.amountMinor,
         currency: body.currency,
         method: body.method,
-        idempotencyKey: body.idempotencyKey || `idemp_${Date.now()}`,
+        idempotencyKey: body.idempotencyKey,
       });
       return { success: true, intent };
     } catch (err: any) {
@@ -592,12 +604,22 @@ export function buildServer(): FastifyInstance {
     }
   });
 
+  const SubmitUtrSchema = z.object({
+    utr: z.string().trim().min(6, 'UTR must be at least 6 characters').max(30, 'UTR must not exceed 30 characters').regex(/^[a-zA-Z0-9]+$/, 'UTR must be alphanumeric'),
+    amountINR: z.number().positive('amountINR must be positive'),
+    orderId: z.string().min(1).optional(),
+  });
+
   server.post('/api/payments/submit-utr', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { utr: string; amountINR: number; orderId?: string };
-    if (!body?.utr || !body.amountINR) {
-      return reply.status(400).send({ success: false, error: 'UTR and amountINR are required' });
+    const parseResult = SubmitUtrSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: parseResult.error.issues[0]?.message || 'Invalid UTR submission parameters',
+      });
     }
 
+    const body = parseResult.data;
     try {
       const result = await PaymentService.submitManualUTR({
         userId: req.user!.id,
@@ -639,14 +661,29 @@ export function buildServer(): FastifyInstance {
     }
   });
 
-  server.post('/api/payments/:orderId/refund', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = req.user!.id;
-    const { orderId } = req.params as { orderId: string };
-    const { amountMinor, reason, idempotencyKey } = req.body as any;
+  const RefundParamsSchema = z.object({
+    orderId: z.string().min(1, 'Order ID is required'),
+  });
 
-    if (!amountMinor || Number(amountMinor) <= 0) {
-      return reply.status(400).send({ success: false, error: 'Positive refund amountMinor required' });
+  const RefundBodySchema = z.object({
+    amountMinor: z.number().int().positive('amountMinor must be a positive integer'),
+    reason: z.string().max(500).optional(),
+    idempotencyKey: z.string().min(1).max(256).optional(),
+  });
+
+  server.post('/api/payments/:orderId/refund', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const paramsParsed = RefundParamsSchema.safeParse(req.params);
+    if (!paramsParsed.success) {
+      return reply.status(400).send({ success: false, error: paramsParsed.error.issues[0]?.message || 'Invalid orderId' });
     }
+    const bodyParsed = RefundBodySchema.safeParse(req.body);
+    if (!bodyParsed.success) {
+      return reply.status(400).send({ success: false, error: bodyParsed.error.issues[0]?.message || 'Invalid refund parameters' });
+    }
+
+    const { orderId } = paramsParsed.data;
+    const { amountMinor, reason, idempotencyKey } = bodyParsed.data;
+    const userId = req.user!.id;
 
     const db = getDb();
     const order = await db.queryOne<any>(`SELECT * FROM payment_orders WHERE id = ?`, [orderId]);
@@ -660,13 +697,46 @@ export function buildServer(): FastifyInstance {
     try {
       const result = await PaymentService.refundPayment({
         orderId,
-        amountMinor: Number(amountMinor),
+        amountMinor,
         reason: reason || 'User requested refund',
         idempotencyKey: idempotencyKey || `ref_${orderId}_${Date.now()}`,
         initiatedBy: userId,
       });
 
       return reply.send({ success: true, ...result });
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  // Authoritative Admin Manual UTR Reconciliation Endpoint
+  const ReconcileUtrSchema = z.object({
+    paymentId: z.string().min(1, 'paymentId is required'),
+    bankReference: z.string().min(1, 'bankReference is required'),
+  });
+
+  server.post('/api/admin/payments/reconcile-utr', { preHandler: requireAdmin }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const parseResult = ReconcileUtrSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: parseResult.error.issues[0]?.message || 'Invalid reconciliation parameters',
+      });
+    }
+
+    const { paymentId, bankReference } = parseResult.data;
+    try {
+      const result = await PaymentService.reconcileManualUTR({
+        paymentId,
+        reconciledBy: req.user!.id,
+        bankReference,
+      });
+      return reply.send({
+        success: true,
+        cleared: result.cleared,
+        paymentId: result.paymentId,
+        balanceAfter: Number(result.balanceAfter),
+      });
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }

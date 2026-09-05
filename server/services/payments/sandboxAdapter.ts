@@ -7,6 +7,7 @@ import {
   PaymentStatusResult,
   RefundParams,
   RefundResult,
+  RefundStatusResult,
 } from './types';
 
 /**
@@ -84,4 +85,12 @@ export class SandboxAdapter implements PaymentProvider {
       amountMinor: params.amountMinor,
     };
   }
+
+  async checkRefundStatus(refundId: string): Promise<RefundStatusResult> {
+    return {
+      status: 'SUCCESS',
+      providerRefundId: refundId,
+    };
+  }
 }
+

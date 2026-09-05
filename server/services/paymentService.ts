@@ -8,6 +8,7 @@ import {
   SettlementSource,
   ProviderNetworkTimeoutError,
   IdempotencyConflictError,
+  WebhookInboxStatus,
 } from './payments/types';
 import { PhonePeProductionAdapter } from './payments/phonepeAdapter';
 import { SandboxAdapter } from './payments/sandboxAdapter';
@@ -85,12 +86,12 @@ export class PaymentService {
     const now = Date.now();
     const expiresAt = now + 15 * 60 * 1000;
 
-    // First: Insert payment_orders with 'INITIATING'
+    // First: Insert payment_orders with 'INITIATING' and NULL provider_order_id
     const existing = await db.queryOne<any>(
       `INSERT INTO payment_orders (
         id, user_id, amount_minor, currency, method, provider, provider_order_id,
         status, idempotency_key, expires_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'INITIATING', ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, NULL, 'INITIATING', ?, ?, ?, ?)
       ON CONFLICT(idempotency_key) DO UPDATE SET id = payment_orders.id RETURNING *`,
       [
         orderId,
@@ -99,7 +100,6 @@ export class PaymentService {
         params.currency,
         params.method,
         provider.name,
-        `temp_${orderId}`, // Placeholder
         params.idempotencyKey,
         expiresAt,
         now,
@@ -119,14 +119,23 @@ export class PaymentService {
         );
       }
 
+      let latestOrder = existing;
+      if (latestOrder.status === 'INITIATING') {
+        const pollDeadline = Date.now() + 3000;
+        while (Date.now() < pollDeadline && latestOrder.status === 'INITIATING') {
+          await new Promise((r) => setTimeout(r, 20));
+          latestOrder = (await db.queryOne<any>(`SELECT * FROM payment_orders WHERE id = ?`, [existing.id])) || latestOrder;
+        }
+      }
+
       return {
-        orderId: existing.id,
-        providerOrderId: existing.provider_order_id,
-        amountMinor: Number(existing.amount_minor),
-        currency: existing.currency,
-        method: existing.method,
-        expiresAt: Number(existing.expires_at),
-        status: existing.status,
+        orderId: latestOrder.id,
+        providerOrderId: latestOrder.provider_order_id || '',
+        amountMinor: Number(latestOrder.amount_minor),
+        currency: latestOrder.currency,
+        method: latestOrder.method,
+        expiresAt: Number(latestOrder.expires_at),
+        status: latestOrder.status,
       };
     }
 
@@ -146,7 +155,10 @@ export class PaymentService {
         method: params.method,
       });
 
-      const providerOrderId = providerResult.providerOrderId || `prov_ord_${Date.now()}`;
+      const providerOrderId = providerResult.providerOrderId;
+      if (!providerOrderId) {
+        throw new Error('Payment provider did not return a valid providerOrderId');
+      }
 
       await db.execute(
         `UPDATE payment_attempts SET status = 'SUCCESS', provider_order_id = ?, completed_at = ?, updated_at = ? WHERE id = ?`,
@@ -154,8 +166,8 @@ export class PaymentService {
       );
 
       await db.execute(
-        `UPDATE payment_orders SET status = 'PENDING', provider_order_id = ?, updated_at = ? WHERE id = ?`,
-        [providerOrderId, Date.now(), orderId]
+        `UPDATE payment_orders SET status = 'PENDING', provider_order_id = ?, checkout_url = ?, upi_intent_uri = ?, updated_at = ? WHERE id = ?`,
+        [providerOrderId, providerResult.checkoutUrl || null, providerResult.upiIntentUri || null, Date.now(), orderId]
       );
 
       await AuditService.logEvent({
@@ -204,7 +216,7 @@ export class PaymentService {
       if (isTimeout) {
         return {
           orderId,
-          providerOrderId: `temp_${orderId}`,
+          providerOrderId: '',
           amountMinor: params.amountMinor,
           currency: params.currency,
           method: params.method,
@@ -232,11 +244,15 @@ export class PaymentService {
     },
     client?: DBClient
   ): Promise<{ status: 'SETTLED' | 'DUPLICATE'; paymentId?: string; balanceAfter?: bigint }> {
+    if (!params.providerPaymentId || typeof params.providerPaymentId !== 'string' || params.providerPaymentId.trim() === '') {
+      throw new Error('Malformed provider event: providerPaymentId is strictly required for authoritative settlement');
+    }
+
     const db = getDb();
     const now = Date.now();
 
     const runner = async (tx: DBClient) => {
-      // Use FOR UPDATE if postgres
+      // 1. Lock payment order row FOR UPDATE
       let orderQuery = `SELECT * FROM payment_orders WHERE id = ?`;
       if (tx.isPostgres()) {
         orderQuery += ` FOR UPDATE`;
@@ -248,11 +264,40 @@ export class PaymentService {
       }
 
       if (order.status === 'SUCCESS') {
-        return { status: 'DUPLICATE' as const };
+        const existingSettlement = await tx.queryOne<any>(
+          `SELECT * FROM payment_settlements WHERE payment_order_id = ?`,
+          [params.orderId]
+        );
+        return { status: 'DUPLICATE' as const, paymentId: existingSettlement?.payment_id };
       }
 
+      // Legal state transition check
+      const legalPriorStates = ['PENDING', 'UNKNOWN_PROVIDER_STATE', 'pending_manual_settlement', 'INITIATING'];
+      if (!legalPriorStates.includes(order.status)) {
+        throw new Error(`Cannot settle order in status '${order.status}'`);
+      }
+
+      // Exact monetary validation
       if (Number(order.amount_minor) !== params.amountMinor || order.currency !== params.currency) {
-        throw new Error('Amount or currency mismatch');
+        throw new Error('Amount or currency mismatch between order and settlement');
+      }
+
+      // Settlement record uniqueness check
+      const existingSettlement = await tx.queryOne<any>(
+        `SELECT * FROM payment_settlements WHERE payment_order_id = ?`,
+        [params.orderId]
+      );
+      if (existingSettlement) {
+        return { status: 'DUPLICATE' as const, paymentId: existingSettlement.payment_id };
+      }
+
+      // Provider payment ID uniqueness across orders
+      const existingPaymentForOtherOrder = await tx.queryOne<any>(
+        `SELECT * FROM payments WHERE provider_payment_id = ? AND payment_order_id != ?`,
+        [params.providerPaymentId, params.orderId]
+      );
+      if (existingPaymentForOtherOrder) {
+        throw new Error(`Provider payment ID '${params.providerPaymentId}' has already been credited to another order.`);
       }
 
       const paymentId = `pay_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
@@ -260,8 +305,8 @@ export class PaymentService {
 
       // Check if a payment record was already created for this order (e.g. manual UTR claim)
       const existingPayment = await tx.queryOne<any>(
-        `SELECT * FROM payments WHERE payment_order_id = ? OR provider_payment_id = ?`,
-        [params.orderId, params.providerPaymentId]
+        `SELECT * FROM payments WHERE payment_order_id = ?`,
+        [params.orderId]
       );
 
       let finalPaymentId = paymentId;
@@ -271,6 +316,7 @@ export class PaymentService {
         await tx.execute(
           `UPDATE payments SET
             status = 'succeeded',
+            provider_payment_id = ?,
             settlement_reference = ?,
             cleared_at = ?,
             card_last4 = COALESCE(?, card_last4),
@@ -279,6 +325,7 @@ export class PaymentService {
             utr = COALESCE(?, utr)
            WHERE id = ?`,
           [
+            params.providerPaymentId,
             params.externalSettlementId || `SETTL-${params.providerPaymentId}`,
             now,
             params.cardLast4 || null,
@@ -390,45 +437,83 @@ export class PaymentService {
     }
 
     const db = getDb();
-    const existingWebhook = await db.queryOne<any>(
-      `SELECT * FROM payment_webhooks WHERE event_id = ?`,
-      [event.eventId]
-    );
-
-    if (existingWebhook) {
-      if (existingWebhook.status === 'processed' || existingWebhook.status === 'ignored') {
-        return { status: 'DUPLICATE' };
-      }
-    }
-
     const payloadHash = crypto.createHash('sha256').update(rawPayload).digest('hex');
     const now = Date.now();
-    const webhookId = existingWebhook?.id || `wh_${crypto.randomBytes(8).toString('hex')}`;
+    const webhookId = `wh_${crypto.randomBytes(8).toString('hex')}`;
     const rawHeadersStr = headers ? JSON.stringify(headers) : null;
 
-    if (existingWebhook) {
+    let webhookRecord: any;
+
+    try {
       await db.execute(
-        `UPDATE payment_webhooks SET status = 'processing', error = NULL, processed_at = ? WHERE id = ?`,
-        [now, webhookId]
-      );
-    } else {
-      await db.execute(
-        `INSERT INTO payment_webhooks (id, provider, event_id, payload_hash, status, raw_headers, raw_body, processed_at)
-         VALUES (?, ?, ?, ?, 'processing', ?, ?, ?)`,
+        `INSERT INTO payment_webhooks (
+          id, provider, event_id, payload_hash, status, raw_headers, raw_body, processed_at
+        ) VALUES (?, ?, ?, ?, 'received', ?, ?, ?)`,
         [webhookId, event.provider, event.eventId, payloadHash, rawHeadersStr, rawPayload, now]
       );
+      webhookRecord = { id: webhookId, status: 'received' };
+    } catch {
+      // Primary duplicate deduplication via DB constraint
+      webhookRecord = await db.queryOne<any>(
+        `SELECT * FROM payment_webhooks WHERE provider = ? AND event_id = ?`,
+        [event.provider, event.eventId]
+      );
+    }
+
+    if (!webhookRecord) {
+      throw new Error('Failed to record webhook in durable inbox');
+    }
+
+    if (
+      webhookRecord.status === 'processed' ||
+      webhookRecord.status === 'ignored' ||
+      webhookRecord.status === 'failed_permanent'
+    ) {
+      return { status: 'DUPLICATE' };
+    }
+
+    // Atomic lease acquisition (5-minute lease)
+    const workerId = `worker_${process.pid}_${crypto.randomBytes(4).toString('hex')}`;
+    const leaseExpiresAt = now + 5 * 60 * 1000;
+    const leaseClaim = await db.execute(
+      `UPDATE payment_webhooks
+       SET status = 'processing',
+           worker_id = ?,
+           processing_started_at = ?,
+           lease_expires_at = ?,
+           processing_attempt = COALESCE(processing_attempt, 0) + 1,
+           error = NULL
+       WHERE id = ?
+         AND (
+           status IN ('received', 'verified', 'failed_retryable')
+           OR (status = 'processing' AND lease_expires_at < ?)
+         )`,
+      [workerId, now, leaseExpiresAt, webhookRecord.id, now]
+    );
+
+    if (leaseClaim.changes === 0) {
+      // Another worker holds an active lease
+      return { status: 'DUPLICATE' };
     }
 
     if (event.eventType === 'payment.captured') {
+      if (!event.providerPaymentId || event.providerPaymentId.trim() === '') {
+        await db.execute(
+          `UPDATE payment_webhooks SET status = 'failed_permanent', error = 'Missing providerPaymentId in captured event', processed_at = ? WHERE id = ?`,
+          [Date.now(), webhookRecord.id]
+        );
+        throw new Error('Malformed webhook event: missing providerPaymentId');
+      }
+
       const order = await db.queryOne<any>(
-        `SELECT * FROM payment_orders WHERE provider_order_id = ?`,
-        [event.providerOrderId]
+        `SELECT * FROM payment_orders WHERE provider_order_id = ? OR id = ?`,
+        [event.providerOrderId, event.providerOrderId]
       );
 
       if (!order) {
         await db.execute(
           `UPDATE payment_webhooks SET status = 'ignored', error = 'Order not found', processed_at = ? WHERE id = ?`,
-          [Date.now(), webhookId]
+          [Date.now(), webhookRecord.id]
         );
         return { status: 'IGNORED' };
       }
@@ -448,14 +533,17 @@ export class PaymentService {
 
         await db.execute(
           `UPDATE payment_webhooks SET status = 'processed', error = NULL, processed_at = ? WHERE id = ?`,
-          [Date.now(), webhookId]
+          [Date.now(), webhookRecord.id]
         );
 
+        if (result.status === 'DUPLICATE') {
+          return { status: 'DUPLICATE', paymentId: result.paymentId };
+        }
         return { status: 'PROCESSED', paymentId: result.paymentId };
       } catch (err: any) {
         await db.execute(
           `UPDATE payment_webhooks SET status = 'failed_retryable', error = ?, processed_at = ? WHERE id = ?`,
-          [err.message, Date.now(), webhookId]
+          [err.message, Date.now(), webhookRecord.id]
         );
         throw err;
       }
@@ -463,7 +551,7 @@ export class PaymentService {
 
     await db.execute(
       `UPDATE payment_webhooks SET status = 'processed', processed_at = ? WHERE id = ?`,
-      [Date.now(), webhookId]
+      [Date.now(), webhookRecord.id]
     );
     return { status: 'PROCESSED' };
   }
@@ -607,45 +695,82 @@ export class PaymentService {
     }
 
     const db = getDb();
-    const existingWebhook = await db.queryOne<any>(
-      `SELECT * FROM payment_webhooks WHERE event_id = ?`,
-      [verification.eventId]
-    );
-
-    if (existingWebhook) {
-      if (existingWebhook.status === 'processed' || existingWebhook.status === 'ignored') {
-        return { status: 'DUPLICATE' };
-      }
-    }
-
     const payloadHash = crypto.createHash('sha256').update(rawBody).digest('hex');
     const now = Date.now();
-    const webhookId = existingWebhook?.id || `wh_${crypto.randomBytes(8).toString('hex')}`;
+    const webhookId = `wh_${crypto.randomBytes(8).toString('hex')}`;
     const rawHeadersStr = JSON.stringify(headers);
 
-    if (existingWebhook) {
+    let webhookRecord: any;
+
+    try {
       await db.execute(
-        `UPDATE payment_webhooks SET status = 'processing', error = NULL, processed_at = ? WHERE id = ?`,
-        [now, webhookId]
-      );
-    } else {
-      await db.execute(
-        `INSERT INTO payment_webhooks (id, provider, event_id, payload_hash, status, raw_headers, raw_body, processed_at)
-         VALUES (?, ?, ?, ?, 'processing', ?, ?, ?)`,
+        `INSERT INTO payment_webhooks (
+          id, provider, event_id, payload_hash, status, raw_headers, raw_body, processed_at
+        ) VALUES (?, ?, ?, ?, 'received', ?, ?, ?)`,
         [webhookId, 'phonepe', verification.eventId, payloadHash, rawHeadersStr, rawBody, now]
       );
+      webhookRecord = { id: webhookId, status: 'received' };
+    } catch {
+      // Primary duplicate deduplication via DB unique index
+      webhookRecord = await db.queryOne<any>(
+        `SELECT * FROM payment_webhooks WHERE provider = ? AND event_id = ?`,
+        ['phonepe', verification.eventId]
+      );
+    }
+
+    if (!webhookRecord) {
+      throw new Error('Failed to record PhonePe webhook in durable inbox');
+    }
+
+    if (
+      webhookRecord.status === 'processed' ||
+      webhookRecord.status === 'ignored' ||
+      webhookRecord.status === 'failed_permanent'
+    ) {
+      return { status: 'DUPLICATE' };
+    }
+
+    // Atomic lease acquisition (5-minute lease)
+    const workerId = `worker_${process.pid}_${crypto.randomBytes(4).toString('hex')}`;
+    const leaseExpiresAt = now + 5 * 60 * 1000;
+    const leaseClaim = await db.execute(
+      `UPDATE payment_webhooks
+       SET status = 'processing',
+           worker_id = ?,
+           processing_started_at = ?,
+           lease_expires_at = ?,
+           processing_attempt = COALESCE(processing_attempt, 0) + 1,
+           error = NULL
+       WHERE id = ?
+         AND (
+           status IN ('received', 'verified', 'failed_retryable')
+           OR (status = 'processing' AND lease_expires_at < ?)
+         )`,
+      [workerId, now, leaseExpiresAt, webhookRecord.id, now]
+    );
+
+    if (leaseClaim.changes === 0) {
+      return { status: 'DUPLICATE' };
     }
 
     if (verification.status === 'captured') {
+      if (!verification.providerPaymentId || verification.providerPaymentId.trim() === '') {
+        await db.execute(
+          `UPDATE payment_webhooks SET status = 'failed_permanent', error = 'Missing providerPaymentId', processed_at = ? WHERE id = ?`,
+          [Date.now(), webhookRecord.id]
+        );
+        throw new Error('Malformed PhonePe event: missing providerPaymentId');
+      }
+
       const order = await db.queryOne<any>(
-        `SELECT * FROM payment_orders WHERE provider_order_id = ?`,
-        [verification.providerOrderId]
+        `SELECT * FROM payment_orders WHERE provider_order_id = ? OR id = ?`,
+        [verification.providerOrderId, verification.providerOrderId]
       );
 
       if (!order) {
         await db.execute(
           `UPDATE payment_webhooks SET status = 'ignored', error = 'Order not found', processed_at = ? WHERE id = ?`,
-          [Date.now(), webhookId]
+          [Date.now(), webhookRecord.id]
         );
         return { status: 'IGNORED' };
       }
@@ -653,7 +778,7 @@ export class PaymentService {
       try {
         const result = await this.settlePayment({
           orderId: order.id,
-          providerPaymentId: verification.providerPaymentId || `prov_${Date.now()}`,
+          providerPaymentId: verification.providerPaymentId,
           amountMinor: verification.amountMinor || Number(order.amount_minor),
           currency: verification.currency || order.currency,
           settlementSource: 'WEBHOOK',
@@ -661,14 +786,17 @@ export class PaymentService {
 
         await db.execute(
           `UPDATE payment_webhooks SET status = 'processed', error = NULL, processed_at = ? WHERE id = ?`,
-          [Date.now(), webhookId]
+          [Date.now(), webhookRecord.id]
         );
 
+        if (result.status === 'DUPLICATE') {
+          return { status: 'DUPLICATE', paymentId: result.paymentId };
+        }
         return { status: 'PROCESSED', paymentId: result.paymentId };
       } catch (err: any) {
         await db.execute(
           `UPDATE payment_webhooks SET status = 'failed_retryable', error = ?, processed_at = ? WHERE id = ?`,
-          [err.message, Date.now(), webhookId]
+          [err.message, Date.now(), webhookRecord.id]
         );
         throw err;
       }
@@ -676,7 +804,7 @@ export class PaymentService {
 
     await db.execute(
       `UPDATE payment_webhooks SET status = 'processed', processed_at = ? WHERE id = ?`,
-      [Date.now(), webhookId]
+      [Date.now(), webhookRecord.id]
     );
     return { status: 'PROCESSED' };
   }
@@ -690,59 +818,87 @@ export class PaymentService {
   }): Promise<{ refundId: string; status: string }> {
     const db = getDb();
     const now = Date.now();
-    const order = await db.queryOne<any>(
-      `SELECT * FROM payment_orders WHERE id = ?`,
-      [params.orderId]
-    );
 
-    if (!order) {
-      throw new Error('Order not found');
-    }
+    // Phase 1: Atomically lock order and pre-reserve refundable capacity in DB
+    const reservation = await db.transaction(async (tx) => {
+      let orderQuery = `SELECT * FROM payment_orders WHERE id = ?`;
+      if (tx.isPostgres()) {
+        orderQuery += ` FOR UPDATE`;
+      }
+      const order = await tx.queryOne<any>(orderQuery, [params.orderId]);
 
-    if (
-      order.status !== 'SUCCESS' &&
-      order.status !== 'captured' &&
-      order.status !== 'succeeded' &&
-      order.status !== 'PARTIALLY_REFUNDED'
-    ) {
-      throw new Error('Can only refund successful or partially refunded orders');
-    }
+      if (!order) {
+        throw new Error('Order not found');
+      }
 
-    const refundedSoFar = Number(order.refunded_amount_minor || 0);
-    if (refundedSoFar + params.amountMinor > Number(order.amount_minor)) {
-      throw new Error('Refund amount exceeds refundable amount');
-    }
+      if (
+        order.status !== 'SUCCESS' &&
+        order.status !== 'captured' &&
+        order.status !== 'succeeded' &&
+        order.status !== 'PARTIALLY_REFUNDED'
+      ) {
+        throw new Error('Can only refund successful or partially refunded orders');
+      }
 
-    // 1. Pre-flight check: Verify unreserved balance BEFORE initiating external refund
-    const available = await LedgerService.getAvailableUnreservedBalance(
-      order.user_id,
-      order.currency
-    );
-    if (available < BigInt(params.amountMinor)) {
-      throw new Error('Insufficient unreserved balance for refund debit');
-    }
+      // Query active in-flight or completed refund total
+      const activeRefunds = await tx.queryOne<{ total: bigint | number }>(
+        `SELECT COALESCE(SUM(amount_minor), 0) AS total FROM payment_refunds
+         WHERE payment_order_id = ? AND status IN ('INITIATING', 'PENDING', 'SUCCESS')`,
+        [order.id]
+      );
+      const totalReservedAndSettled = BigInt(activeRefunds?.total || 0);
+      const orderTotal = BigInt(order.amount_minor);
+      const requested = BigInt(params.amountMinor);
 
-    const refundId = `ref_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+      if (totalReservedAndSettled + requested > orderTotal) {
+        throw new Error('Refund amount exceeds available refundable capacity');
+      }
 
-    // 2. Pre-persist refund attempt in INITIATING state
-    await db.execute(
-      `INSERT INTO payment_refunds (
-        id, payment_order_id, amount_minor, currency, status, reason, idempotency_key,
-        initiated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'INITIATING', ?, ?, ?, ?, ?)`,
-      [
-        refundId,
-        order.id,
-        params.amountMinor,
+      // Pre-flight check: Verify unreserved balance in sovereign cash ledger account
+      const available = await LedgerService.getAvailableUnreservedBalance(
+        order.user_id,
         order.currency,
-        params.reason,
-        params.idempotencyKey,
-        params.initiatedBy || order.user_id,
-        now,
-        now,
-      ]
-    );
+        'live',
+        tx
+      );
+      if (available < requested) {
+        throw new Error('Insufficient unreserved balance for refund debit');
+      }
 
+      const refundId = `ref_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+
+      // Reserve capacity on order row
+      await tx.execute(
+        `UPDATE payment_orders
+         SET reserved_refund_amount_minor = COALESCE(reserved_refund_amount_minor, 0) + ?,
+             updated_at = ?
+         WHERE id = ?`,
+        [params.amountMinor, now, order.id]
+      );
+
+      // Pre-persist refund attempt in INITIATING state
+      await tx.execute(
+        `INSERT INTO payment_refunds (
+          id, payment_order_id, amount_minor, currency, status, reason, idempotency_key,
+          initiated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'INITIATING', ?, ?, ?, ?, ?)`,
+        [
+          refundId,
+          order.id,
+          params.amountMinor,
+          order.currency,
+          params.reason,
+          params.idempotencyKey,
+          params.initiatedBy || order.user_id,
+          now,
+          now,
+        ]
+      );
+
+      return { refundId, order };
+    });
+
+    const { refundId, order } = reservation;
     const provider = this.getProvider();
     let providerResult: any;
 
@@ -755,25 +911,47 @@ export class PaymentService {
       });
     } catch (err: any) {
       const isTimeout = err.name === 'ProviderNetworkTimeoutError' || /timeout|fetch|network/i.test(err.message);
-      const refundStatus = isTimeout ? 'REFUND_UNKNOWN' : 'FAILED';
 
-      await db.execute(
-        `UPDATE payment_refunds SET status = ?, updated_at = ? WHERE id = ?`,
-        [refundStatus, Date.now(), refundId]
-      );
-
-      // Customer balance is NEVER debited on provider error or timeout
       if (isTimeout) {
+        await db.execute(
+          `UPDATE payment_refunds SET status = 'REFUND_UNKNOWN', updated_at = ? WHERE id = ?`,
+          [Date.now(), refundId]
+        );
+        // Customer balance is NEVER debited on provider timeout. Capacity remains reserved until reconciled.
         return { refundId, status: 'REFUND_UNKNOWN' };
+      } else {
+        // Explicit provider failure: release reserved capacity
+        await db.transaction(async (tx) => {
+          await tx.execute(
+            `UPDATE payment_orders
+             SET reserved_refund_amount_minor = GREATEST(0, COALESCE(reserved_refund_amount_minor, 0) - ?),
+                 updated_at = ?
+             WHERE id = ?`,
+            [params.amountMinor, Date.now(), order.id]
+          );
+          await tx.execute(
+            `UPDATE payment_refunds SET status = 'FAILED', updated_at = ? WHERE id = ?`,
+            [Date.now(), refundId]
+          );
+        });
+        throw err;
       }
-      throw err;
     }
 
     if (!providerResult.success && providerResult.status === 'FAILED') {
-      await db.execute(
-        `UPDATE payment_refunds SET status = 'FAILED', updated_at = ? WHERE id = ?`,
-        [Date.now(), refundId]
-      );
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          `UPDATE payment_orders
+           SET reserved_refund_amount_minor = GREATEST(0, COALESCE(reserved_refund_amount_minor, 0) - ?),
+               updated_at = ?
+           WHERE id = ?`,
+          [params.amountMinor, Date.now(), order.id]
+        );
+        await tx.execute(
+          `UPDATE payment_refunds SET status = 'FAILED', updated_at = ? WHERE id = ?`,
+          [Date.now(), refundId]
+        );
+      });
       throw new Error(`Refund failed at provider: ${providerResult.error || 'Unknown provider rejection'}`);
     }
 
@@ -786,7 +964,7 @@ export class PaymentService {
       return { refundId, status: 'PENDING' };
     }
 
-    // 3. Provider confirmed SUCCESS: Atomically debit ledger and update refund and order records
+    // Provider confirmed SUCCESS: Atomically debit ledger and update refund and order records
     return db.transaction(async (tx) => {
       const ledgerResult = await LedgerService.debitRefund(
         {
@@ -810,20 +988,18 @@ export class PaymentService {
         [providerResult.refundId, ledgerResult.transactionId, Date.now(), refundId]
       );
 
-      let nextStatus = order.status;
-      if (refundedSoFar + params.amountMinor === Number(order.amount_minor)) {
-        nextStatus = 'REFUNDED';
-      } else {
-        nextStatus = 'PARTIALLY_REFUNDED';
-      }
+      const refreshedOrder = await tx.queryOne<any>(`SELECT * FROM payment_orders WHERE id = ?`, [order.id]);
+      const newRefundedTotal = BigInt(refreshedOrder.refunded_amount_minor || 0) + BigInt(params.amountMinor);
+      const isFullRefund = newRefundedTotal >= BigInt(refreshedOrder.amount_minor);
 
       await tx.execute(
         `UPDATE payment_orders SET
           status = ?,
-          refunded_amount_minor = COALESCE(refunded_amount_minor, 0) + ?,
+          refunded_amount_minor = refunded_amount_minor + ?,
+          reserved_refund_amount_minor = GREATEST(0, COALESCE(reserved_refund_amount_minor, 0) - ?),
           updated_at = ?
          WHERE id = ?`,
-        [nextStatus, params.amountMinor, Date.now(), order.id]
+        [isFullRefund ? 'REFUNDED' : 'PARTIALLY_REFUNDED', params.amountMinor, params.amountMinor, Date.now(), order.id]
       );
 
       await AuditService.logEvent({
@@ -849,6 +1025,7 @@ export class PaymentService {
     const db = getDb();
     const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
 
+    // 1. Reconcile pending & unknown payment orders
     const pendingOrders = await db.query<any>(
       `SELECT * FROM payment_orders WHERE status IN ('PENDING', 'UNKNOWN_PROVIDER_STATE') AND created_at <= ? LIMIT 50`,
       [twoMinutesAgo]
@@ -860,11 +1037,11 @@ export class PaymentService {
 
     for (const order of pendingOrders) {
       try {
-        const statusResult = await provider.checkStatus(order.provider_order_id, order.id);
+        const statusResult = await provider.checkStatus(order.provider_order_id || order.id, order.id);
         if (statusResult.status === 'SUCCESS') {
           await this.settlePayment({
             orderId: order.id,
-            providerPaymentId: statusResult.providerPaymentId || `prov_${order.provider_order_id}`,
+            providerPaymentId: statusResult.providerPaymentId || `prov_${order.provider_order_id || order.id}`,
             amountMinor: statusResult.amountMinor || Number(order.amount_minor),
             currency: statusResult.currency || order.currency,
             settlementSource: 'RECONCILIATION_SWEEP',
@@ -876,13 +1053,79 @@ export class PaymentService {
           if (Date.now() >= Number(order.expires_at)) {
             await db.execute(`UPDATE payment_orders SET status = 'EXPIRED', updated_at = ? WHERE id = ?`, [Date.now(), order.id]);
           }
-          // If still within expiry, do NOT mark failed; let it remain PENDING
         } else if (statusResult.status === 'UNKNOWN') {
-          // Ambiguous / network error: keep in current state
           mismatchCount++;
         }
-      } catch (err) {
+      } catch {
         mismatchCount++;
+      }
+    }
+
+    // 2. Reconcile pending & unknown refunds
+    const pendingRefunds = await db.query<any>(
+      `SELECT * FROM payment_refunds WHERE status IN ('PENDING', 'REFUND_UNKNOWN') AND created_at <= ? LIMIT 50`,
+      [twoMinutesAgo]
+    );
+
+    for (const ref of pendingRefunds) {
+      if (provider.checkRefundStatus) {
+        try {
+          const refStatus = await provider.checkRefundStatus(ref.provider_refund_id || ref.id);
+          if (refStatus.status === 'SUCCESS') {
+            const order = await db.queryOne<any>(`SELECT * FROM payment_orders WHERE id = ?`, [ref.payment_order_id]);
+            if (order) {
+              await db.transaction(async (tx) => {
+                const ledgerResult = await LedgerService.debitRefund(
+                  {
+                    userId: order.user_id,
+                    assetOrCurrency: order.currency,
+                    amountMinor: Number(ref.amount_minor),
+                    refundId: ref.id,
+                    description: ref.reason,
+                    idempotencyKey: ref.idempotency_key,
+                  },
+                  tx
+                );
+
+                await tx.execute(
+                  `UPDATE payment_refunds SET status = 'SUCCESS', ledger_transaction_id = ?, updated_at = ? WHERE id = ?`,
+                  [ledgerResult.transactionId, Date.now(), ref.id]
+                );
+
+                const newRefunded = BigInt(order.refunded_amount_minor || 0) + BigInt(ref.amount_minor);
+                const isFull = newRefunded >= BigInt(order.amount_minor);
+
+                await tx.execute(
+                  `UPDATE payment_orders SET
+                    status = ?,
+                    refunded_amount_minor = refunded_amount_minor + ?,
+                    reserved_refund_amount_minor = GREATEST(0, COALESCE(reserved_refund_amount_minor, 0) - ?),
+                    updated_at = ?
+                   WHERE id = ?`,
+                  [isFull ? 'REFUNDED' : 'PARTIALLY_REFUNDED', Number(ref.amount_minor), Number(ref.amount_minor), Date.now(), order.id]
+                );
+              });
+              reconciledCount++;
+            }
+          } else if (refStatus.status === 'FAILED') {
+            await db.transaction(async (tx) => {
+              await tx.execute(
+                `UPDATE payment_orders SET
+                  reserved_refund_amount_minor = GREATEST(0, COALESCE(reserved_refund_amount_minor, 0) - ?),
+                  updated_at = ?
+                 WHERE id = ?`,
+                [Number(ref.amount_minor), Date.now(), ref.payment_order_id]
+              );
+              await tx.execute(
+                `UPDATE payment_refunds SET status = 'FAILED', updated_at = ? WHERE id = ?`,
+                [Date.now(), ref.id]
+              );
+            });
+            reconciledCount++;
+          }
+        } catch {
+          mismatchCount++;
+        }
       }
     }
 

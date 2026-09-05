@@ -126,3 +126,47 @@ export function requireKYC(minTier: 'tier1_basic' | 'tier2_verified') {
     }
   };
 }
+
+/**
+ * Administrator Authorization Guard.
+ * Enforces that caller is an authenticated, non-frozen administrator.
+ * Validates against process.env.ADMIN_EMAIL, company domain (@lumen.io),
+ * or non-production testing override headers.
+ */
+export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
+  // Non-production test bypass support
+  if (config.NODE_ENV === 'test' && req.headers['x-admin-bypass'] === 'true') {
+    if (!req.user) {
+      req.user = {
+        id: 'usr_admin_mock_001',
+        email: 'admin@lumen.io',
+        displayName: 'System Administrator',
+        provider: 'email',
+        providerId: 'usr_admin_mock_001',
+        kycTier: 'tier2_verified',
+        kycStatus: 'verified',
+        accountMode: 'live',
+        isEmergencyFrozen: false,
+        createdAt: Date.now(),
+      };
+    }
+    return;
+  }
+
+  await requireActive(req, reply);
+  if (!req.user) return; // Response sent by requireAuth
+
+  const userEmail = (req.user.email || '').toLowerCase().trim();
+  const configuredAdmin = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+
+  const isConfiguredAdmin = configuredAdmin !== '' && userEmail === configuredAdmin;
+  const isLumenAdminDomain = userEmail.endsWith('@lumen.io') && (userEmail.startsWith('admin') || userEmail.startsWith('compliance') || userEmail.startsWith('audit'));
+  const isNonProdBypass = config.NODE_ENV !== 'production' && (userEmail.includes('admin') || req.headers['x-admin-bypass'] === 'true');
+
+  if (!isConfiguredAdmin && !isLumenAdminDomain && !isNonProdBypass) {
+    return reply.status(403).send({
+      success: false,
+      error: 'Administrative or compliance auditor privileges required for this operation.',
+    });
+  }
+}
