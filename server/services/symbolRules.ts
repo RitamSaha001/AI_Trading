@@ -29,6 +29,11 @@ export interface BinanceSymbolRule {
   pricePrecision: number;       // Decimal places for price
   quantityPrecision: number;    // Decimal places for quantity
   lastUpdated?: number;         // Timestamp when rules were fetched/registered
+  filtersPresent?: {
+    priceFilter: boolean;
+    lotSize: boolean;
+    notional: boolean;
+  };
 }
 
 export interface ValidatedOrderParams {
@@ -306,14 +311,20 @@ export class SymbolRulesService {
     let applyMaxToMarket = false;
     let maxNumOrders: number | undefined;
 
+    let hasPriceFilter = false;
+    let hasLotSize = false;
+    let hasNotional = false;
+
     for (const filter of info.filters || []) {
       switch (filter.filterType) {
         case 'PRICE_FILTER':
+          hasPriceFilter = true;
           if (filter.tickSize) tickSize = ExactDecimal.from(String(filter.tickSize));
           if (filter.minPrice) minPrice = ExactDecimal.from(String(filter.minPrice));
           if (filter.maxPrice) maxPrice = ExactDecimal.from(String(filter.maxPrice));
           break;
         case 'LOT_SIZE':
+          hasLotSize = true;
           if (filter.stepSize) stepSize = ExactDecimal.from(String(filter.stepSize));
           if (filter.minQty) minQty = ExactDecimal.from(String(filter.minQty));
           if (filter.maxQty) maxQty = ExactDecimal.from(String(filter.maxQty));
@@ -324,10 +335,12 @@ export class SymbolRulesService {
           if (filter.maxQty && filter.maxQty !== '0') marketMaxQty = ExactDecimal.from(String(filter.maxQty));
           break;
         case 'MIN_NOTIONAL':
+          hasNotional = true;
           if (filter.minNotional) minNotional = ExactDecimal.from(String(filter.minNotional));
           if (filter.applyToMarket !== undefined) applyMinToMarket = Boolean(filter.applyToMarket);
           break;
         case 'NOTIONAL':
+          hasNotional = true;
           if (filter.minNotional) minNotional = ExactDecimal.from(String(filter.minNotional));
           if (filter.maxNotional) maxNotional = ExactDecimal.from(String(filter.maxNotional));
           if (filter.applyMinToMarket !== undefined) applyMinToMarket = Boolean(filter.applyMinToMarket);
@@ -363,6 +376,11 @@ export class SymbolRulesService {
       pricePrecision,
       quantityPrecision,
       lastUpdated: Date.now(),
+      filtersPresent: {
+        priceFilter: hasPriceFilter,
+        lotSize: hasLotSize,
+        notional: hasNotional,
+      },
     };
   }
 
@@ -551,6 +569,16 @@ export class SymbolRulesService {
         );
       }
       throw new Error(`Unsupported trading symbol: ${params.symbol}`);
+    }
+
+    // Live trading must fail closed if critical filters were missing from exchangeInfo
+    if (params.accountMode === 'live' && rule.filtersPresent) {
+      if (!rule.filtersPresent.priceFilter || !rule.filtersPresent.lotSize) {
+        throw new AuthoritativeExchangeRulesUnavailableError(
+          params.symbol,
+          'Critical Binance exchange filters (PRICE_FILTER or LOT_SIZE) missing from exchangeInfo'
+        );
+      }
     }
 
     // 1. Price Validation & Exact Decimal Extraction

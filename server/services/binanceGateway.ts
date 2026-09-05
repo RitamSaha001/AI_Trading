@@ -3,7 +3,7 @@ import { config } from '../config';
 import { AuditService } from './auditService';
 import { ServerRiskEngine } from './riskEngine';
 import { LedgerService } from './ledgerService';
-import { ExactDecimal, fromCashMinor } from './precision';
+import { ExactDecimal, fromCashMinor, fromAssetMinor } from './precision';
 import { SymbolRulesService, ValidatedOrderParams } from './symbolRules';
 import { OrderStateMachine } from './orderStateMachine';
 import crypto from 'node:crypto';
@@ -96,11 +96,15 @@ export interface ReconcileVenueResult {
   found: boolean;
   notFoundConfirmed?: boolean;
   status?: string;
+  /** @deprecated Use executedQtyExact. Kept for backward compat; derived from exact string. */
   executedQty?: number;
   executedQtyExact?: string;
   exchangeOrderId?: string;
+  /** @deprecated Use avgPriceExact. Kept for backward compat; derived from exact string. */
   avgPrice?: number;
   avgPriceExact?: string;
+  /** Actual commission data from Binance fill reports, if available */
+  fills?: Array<{ price: string; qty: string; commission: string; commissionAsset: string }>;
 }
 
 export class BinanceGateway {
@@ -814,10 +818,10 @@ export class BinanceGateway {
         input.quoteAsset,
         notional,
         normalized.notionalStr,
-        Number(reservedCashMinor) / 100,
-        Number(reservedCashMinor),
-        Number(reservedQtyMinor) / 1e8,
-        Number(reservedQtyMinor),
+        fromCashMinor(reservedCashMinor).toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+        Number(reservedCashMinor), // PRECISION_BOUNDARY: safe for values < 2^53
+        fromAssetMinor(reservedQtyMinor).toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+        Number(reservedQtyMinor), // PRECISION_BOUNDARY: safe for values < 2^53
         input.idempotencyKey,
         now,
         now,
@@ -828,23 +832,39 @@ export class BinanceGateway {
     try {
       const exchangeResponse = await this.dispatchToExchange(input, clientOrderId, normalized);
 
-      // Successfully acknowledged by exchange
+      // Successfully acknowledged by exchange — all values are exact strings from Binance
       const finalStatus = exchangeResponse.status === 'FILLED' ? 'FILLED' : 'OPEN';
       OrderStateMachine.validateTransition('SUBMITTING', finalStatus, clientOrderId);
 
-      const executedQtyDec = exchangeResponse.executedQty !== undefined
+      // ExactDecimal.from() now receives strings directly — no Number→ExactDecimal round-trip
+      const executedQtyDec = exchangeResponse.executedQty
         ? ExactDecimal.from(exchangeResponse.executedQty)
         : (finalStatus === 'FILLED' ? normalized.quantity : ExactDecimal.zero());
-      const avgPriceDec = exchangeResponse.avgPrice !== undefined && exchangeResponse.avgPrice > 0
+      const avgPriceDec = exchangeResponse.avgPrice && !ExactDecimal.from(exchangeResponse.avgPrice).isZero()
         ? ExactDecimal.from(exchangeResponse.avgPrice)
         : normalized.price;
 
       const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
-      const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
 
-      const executedQty = executedQtyDec.toDisplayNumber();
-      const avgPrice = avgPriceDec.toDisplayNumber();
-      const notionalSettled = notionalSettledDec.toDisplayNumber();
+      // Use actual Binance commission from fill reports if available
+      let feeAmountDec: ExactDecimal;
+      let feeAssetActual = input.quoteAsset;
+      if (exchangeResponse.fills && exchangeResponse.fills.length > 0) {
+        // Sum actual commission across all fill legs
+        feeAmountDec = ExactDecimal.zero();
+        for (const fill of exchangeResponse.fills) {
+          feeAmountDec = feeAmountDec.add(ExactDecimal.from(fill.commission));
+          if (fill.commissionAsset) feeAssetActual = fill.commissionAsset;
+        }
+      } else {
+        // Estimate: 0.075% (7.5 bps) Binance standard fee tier
+        feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
+      }
+
+      // PRECISION_BOUNDARY: toDisplayNumber() used ONLY for legacy REAL columns, not for authoritative data
+      const executedQtyDisplay = executedQtyDec.toDisplayNumber();
+      const avgPriceDisplay = avgPriceDec.toDisplayNumber();
+      const notionalSettledDisplay = notionalSettledDec.toDisplayNumber();
 
       // Atomic ACID transaction for status update, fill recording, and ledger settlement
       await db.transaction(async (tx) => {
@@ -852,24 +872,28 @@ export class BinanceGateway {
           `UPDATE exchange_orders SET
             status = ?, exchange_order_id = ?, executed_qty = ?, executed_qty_exact = ?,
             avg_price = ?, avg_price_exact = ?, cumulative_quote_qty = ?, cumulative_quote_exact = ?,
+            fee = ?, fee_exact = ?, fee_asset = ?,
             updated_at = ?
            WHERE client_order_id = ?`,
           [
             finalStatus,
             exchangeResponse.exchangeOrderId || `ex_${Date.now()}`,
-            executedQty,
-            executedQtyDec.toString(),
-            avgPrice,
-            avgPriceDec.toString(),
-            notionalSettled,
-            notionalSettledDec.toString(),
+            executedQtyDisplay,        // PRECISION_BOUNDARY: legacy REAL column
+            executedQtyDec.toString(),  // Authoritative exact string
+            avgPriceDisplay,           // PRECISION_BOUNDARY: legacy REAL column
+            avgPriceDec.toString(),    // Authoritative exact string
+            notionalSettledDisplay,    // PRECISION_BOUNDARY: legacy REAL column
+            notionalSettledDec.toString(), // Authoritative exact string
+            feeAmountDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+            feeAmountDec.toString(),   // Authoritative exact string
+            feeAssetActual,
             Date.now(),
             clientOrderId,
           ]
         );
 
         if (executedQtyDec.gt(ExactDecimal.zero())) {
-          const tradeId = `trd_${clientOrderId}_${executedQty}`;
+          const tradeId = `trd_${clientOrderId}_${executedQtyDec.toString()}`;
           const fillId = `fill_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
           await tx.execute(
@@ -882,15 +906,15 @@ export class BinanceGateway {
               clientOrderId,
               tradeId,
               input.symbol,
-              avgPrice,
-              avgPriceDec.toString(),
-              executedQty,
-              executedQtyDec.toString(),
-              feeAmountDec.toDisplayNumber(),
-              feeAmountDec.toString(),
-              input.quoteAsset,
-              notionalSettled,
-              notionalSettledDec.toString(),
+              avgPriceDisplay,             // PRECISION_BOUNDARY: legacy REAL column
+              avgPriceDec.toString(),      // Authoritative exact string
+              executedQtyDisplay,          // PRECISION_BOUNDARY: legacy REAL column
+              executedQtyDec.toString(),   // Authoritative exact string
+              feeAmountDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+              feeAmountDec.toString(),     // Authoritative exact string
+              feeAssetActual,
+              notionalSettledDisplay,      // PRECISION_BOUNDARY: legacy REAL column
+              notionalSettledDec.toString(), // Authoritative exact string
               Date.now(),
             ]
           );
@@ -908,7 +932,7 @@ export class BinanceGateway {
             price: avgPriceDec,
             quantity: executedQtyDec,
             fee: feeAmountDec,
-            feeAsset: input.quoteAsset,
+            feeAsset: feeAssetActual,
             executedAt: Date.now(),
             tx,
           });
@@ -929,7 +953,7 @@ export class BinanceGateway {
           clientOrderId,
           status: finalStatus,
           symbol: input.symbol,
-          executedQty,
+          executedQty: executedQtyDisplay,
         },
         result: 'SUCCESS',
       });
@@ -1010,40 +1034,58 @@ export class BinanceGateway {
         OrderStateMachine.validateTransition('UNKNOWN', recStatus, clientOrderId);
         const executedQtyDec = recResult.executedQtyExact
           ? ExactDecimal.from(recResult.executedQtyExact)
-          : (recResult.executedQty != null ? ExactDecimal.from(recResult.executedQty) : ExactDecimal.zero());
+          : ExactDecimal.zero();
         const avgPriceDec = recResult.avgPriceExact
           ? ExactDecimal.from(recResult.avgPriceExact)
-          : (recResult.avgPrice != null && recResult.avgPrice > 0 ? ExactDecimal.from(recResult.avgPrice) : normalized.price);
+          : normalized.price;
         const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
-        const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
 
-        const executedQty = executedQtyDec.toDisplayNumber();
-        const avgPrice = avgPriceDec.toDisplayNumber();
-        const notionalSettled = notionalSettledDec.toDisplayNumber();
+        // Use actual commission from reconciliation fills if available
+        let recFeeAmountDec: ExactDecimal;
+        let recFeeAsset = input.quoteAsset;
+        if (recResult.fills && recResult.fills.length > 0) {
+          recFeeAmountDec = ExactDecimal.zero();
+          for (const fill of recResult.fills) {
+            recFeeAmountDec = recFeeAmountDec.add(ExactDecimal.from(fill.commission));
+            if (fill.commissionAsset) recFeeAsset = fill.commissionAsset;
+          }
+        } else {
+          // Estimate: 0.075% (7.5 bps) Binance standard fee tier
+          recFeeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
+        }
+
+        // PRECISION_BOUNDARY: display numbers only for legacy REAL columns
+        const executedQtyDisplay = executedQtyDec.toDisplayNumber();
+        const avgPriceDisplay = avgPriceDec.toDisplayNumber();
+        const notionalSettledDisplay = notionalSettledDec.toDisplayNumber();
 
         await db.transaction(async (tx) => {
           await tx.execute(
             `UPDATE exchange_orders SET
               status = ?, exchange_order_id = ?, executed_qty = ?, executed_qty_exact = ?,
               avg_price = ?, avg_price_exact = ?, cumulative_quote_qty = ?, cumulative_quote_exact = ?,
+              fee = ?, fee_exact = ?, fee_asset = ?,
               updated_at = ?
              WHERE client_order_id = ?`,
             [
               recStatus,
               recResult.exchangeOrderId || `ex_rec_${Date.now()}`,
-              executedQty,
-              executedQtyDec.toString(),
-              avgPrice,
-              avgPriceDec.toString(),
-              notionalSettled,
-              notionalSettledDec.toString(),
+              executedQtyDisplay,         // PRECISION_BOUNDARY: legacy REAL column
+              executedQtyDec.toString(),   // Authoritative exact string
+              avgPriceDisplay,            // PRECISION_BOUNDARY: legacy REAL column
+              avgPriceDec.toString(),     // Authoritative exact string
+              notionalSettledDisplay,     // PRECISION_BOUNDARY: legacy REAL column
+              notionalSettledDec.toString(), // Authoritative exact string
+              recFeeAmountDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+              recFeeAmountDec.toString(), // Authoritative exact string
+              recFeeAsset,
               Date.now(),
               clientOrderId,
             ]
           );
 
           if (executedQtyDec.gt(ExactDecimal.zero())) {
-            const tradeId = `trd_rec_${clientOrderId}_${executedQty}`;
+            const tradeId = `trd_rec_${clientOrderId}_${executedQtyDec.toString()}`;
             const fillId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
             await tx.execute(
               `INSERT INTO exchange_fills (
@@ -1056,15 +1098,15 @@ export class BinanceGateway {
                 clientOrderId,
                 tradeId,
                 input.symbol,
-                avgPrice,
-                avgPriceDec.toString(),
-                executedQty,
-                executedQtyDec.toString(),
-                feeAmountDec.toDisplayNumber(),
-                feeAmountDec.toString(),
-                input.quoteAsset,
-                notionalSettled,
-                notionalSettledDec.toString(),
+                avgPriceDisplay,              // PRECISION_BOUNDARY: legacy REAL column
+                avgPriceDec.toString(),       // Authoritative exact string
+                executedQtyDisplay,           // PRECISION_BOUNDARY: legacy REAL column
+                executedQtyDec.toString(),    // Authoritative exact string
+                recFeeAmountDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+                recFeeAmountDec.toString(),   // Authoritative exact string
+                recFeeAsset,
+                notionalSettledDisplay,       // PRECISION_BOUNDARY: legacy REAL column
+                notionalSettledDec.toString(), // Authoritative exact string
                 Date.now(),
               ]
             );
@@ -1080,8 +1122,8 @@ export class BinanceGateway {
               side: input.side,
               price: avgPriceDec,
               quantity: executedQtyDec,
-              fee: feeAmountDec,
-              feeAsset: input.quoteAsset,
+              fee: recFeeAmountDec,
+              feeAsset: recFeeAsset,
               executedAt: Date.now(),
               tx,
             });
@@ -1143,12 +1185,19 @@ export class BinanceGateway {
 
   /**
    * Dispatches signed order to Binance REST API.
+   * Returns exact string representations of financial values — NEVER JavaScript number.
    */
   private static async dispatchToExchange(
     input: PlaceOrderInput,
     clientOrderId: string,
     normalized?: ValidatedOrderParams
-  ): Promise<{ exchangeOrderId: string; status: string; executedQty: number; avgPrice: number }> {
+  ): Promise<{
+    exchangeOrderId: string;
+    status: string;
+    executedQty: string;
+    avgPrice: string;
+    fills?: Array<{ price: string; qty: string; commission: string; commissionAsset: string }>;
+  }> {
     const creds = await this.getCredentials(input.userId);
 
     // Mock testing hooks
@@ -1166,15 +1215,15 @@ export class BinanceGateway {
     if (!creds?.apiKey || (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_sim_'))) {
       await new Promise((r) => setTimeout(r, 10));
       const simulatedPrice = normalized?.price && !normalized.price.isZero()
-        ? normalized.price.toDisplayNumber()
-        : (input.price ? ExactDecimal.from(input.price).toDisplayNumber() : 0);
+        ? normalized.price.toString()
+        : (input.price ? ExactDecimal.from(input.price).toString() : '0');
       const simulatedQty = normalized?.quantity && !normalized.quantity.isZero()
-        ? normalized.quantity.toDisplayNumber()
-        : (input.quantity ? ExactDecimal.from(input.quantity).toDisplayNumber() : 0);
+        ? normalized.quantity.toString()
+        : (input.quantity ? ExactDecimal.from(input.quantity).toString() : '0');
       return {
         exchangeOrderId: `bin_ord_${Date.now()}`,
         status: input.type === 'MARKET' ? 'FILLED' : 'OPEN',
-        executedQty: input.type === 'MARKET' ? simulatedQty : 0,
+        executedQty: input.type === 'MARKET' ? simulatedQty : '0',
         avgPrice: simulatedPrice,
       };
     }
@@ -1231,13 +1280,27 @@ export class BinanceGateway {
     }
 
     const data = await res.json();
-    const executedQtyDec = ExactDecimal.from(data.executedQty || '0');
-    const avgPriceDec = ExactDecimal.from(data.price || data.avgPrice || '0');
+    // Preserve Binance response as exact strings — no Number conversion
+    const executedQtyStr = String(data.executedQty || '0');
+    const avgPriceStr = String(data.price || data.avgPrice || '0');
+
+    // Parse individual fill reports for actual commission data
+    const fills: Array<{ price: string; qty: string; commission: string; commissionAsset: string }> | undefined =
+      Array.isArray(data.fills) && data.fills.length > 0
+        ? data.fills.map((f: any) => ({
+            price: String(f.price || '0'),
+            qty: String(f.qty || '0'),
+            commission: String(f.commission || '0'),
+            commissionAsset: String(f.commissionAsset || ''),
+          }))
+        : undefined;
+
     return {
       exchangeOrderId: data.orderId?.toString() || `bin_ord_${Date.now()}`,
       status: data.status || 'OPEN',
-      executedQty: executedQtyDec.toDisplayNumber(),
-      avgPrice: avgPriceDec.toDisplayNumber(),
+      executedQty: executedQtyStr,
+      avgPrice: avgPriceStr,
+      fills,
     };
   }
 
@@ -1265,8 +1328,10 @@ export class BinanceGateway {
           found: true,
           status: 'FILLED',
           executedQty: 0.1,
+          executedQtyExact: '0.1',
           exchangeOrderId: 'bin_ord_reconciled_123',
           avgPrice: 50000,
+          avgPriceExact: '50000',
         };
       }
       if (creds.apiKey === 'mock_rec_not_found' || creds.apiKey === 'mock_timeout_not_found') {
@@ -1299,6 +1364,15 @@ export class BinanceGateway {
           const data = (await response.json()) as any;
           const executedQtyDec = ExactDecimal.from(data.executedQty || '0');
           const avgPriceDec = ExactDecimal.from(data.price || data.avgPrice || '0');
+          const fills: Array<{ price: string; qty: string; commission: string; commissionAsset: string }> | undefined =
+            Array.isArray(data.fills) && data.fills.length > 0
+              ? data.fills.map((f: any) => ({
+                  price: String(f.price || '0'),
+                  qty: String(f.qty || '0'),
+                  commission: String(f.commission || '0'),
+                  commissionAsset: String(f.commissionAsset || ''),
+                }))
+              : undefined;
           return {
             found: true,
             status: data.status,
@@ -1307,6 +1381,7 @@ export class BinanceGateway {
             exchangeOrderId: data.orderId?.toString(),
             avgPrice: avgPriceDec.toDisplayNumber(),
             avgPriceExact: avgPriceDec.toString(),
+            fills,
           };
         } else {
           const errData = await response.json().catch(() => ({}));
@@ -1336,19 +1411,32 @@ export class BinanceGateway {
     const executedQtyDec = order.orig_qty_exact ? ExactDecimal.from(order.orig_qty_exact) : ExactDecimal.from(order.orig_qty);
     const avgPriceDec = order.price_exact ? ExactDecimal.from(order.price_exact) : ExactDecimal.from(order.price);
     const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
-    const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
+    const existingFills = await db.query<any>(
+      `SELECT * FROM exchange_fills WHERE order_id = ?`,
+      [clientOrderId]
+    );
+    let feeAmountDec = ExactDecimal.zero();
+    let feeAsset = order.quote_asset;
+    if (existingFills.length > 0) {
+      for (const fill of existingFills) {
+        feeAmountDec = feeAmountDec.add(ExactDecimal.from(fill.commission_exact || fill.commission || '0'));
+        if (fill.commission_asset) feeAsset = fill.commission_asset;
+      }
+    } else {
+      feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
+    }
 
     const executedQty = executedQtyDec.toDisplayNumber();
     const avgPrice = avgPriceDec.toDisplayNumber();
     const notionalSettled = notionalSettledDec.toDisplayNumber();
-    const tradeId = `trd_rec_${clientOrderId}`;
+    const tradeId = `trd_rec_${clientOrderId}_${executedQtyDec.toString()}`;
     const baseAsset = order.symbol.replace(order.quote_asset, '');
 
     await db.transaction(async (tx) => {
       await tx.execute(
         `UPDATE exchange_orders SET
           status = ?, executed_qty = ?, executed_qty_exact = ?, avg_price = ?, avg_price_exact = ?,
-          cumulative_quote_qty = ?, cumulative_quote_exact = ?, updated_at = ?
+          cumulative_quote_qty = ?, cumulative_quote_exact = ?, fee = ?, fee_exact = ?, fee_asset = ?, updated_at = ?
          WHERE client_order_id = ?`,
         [
           reconciledStatus,
@@ -1358,6 +1446,9 @@ export class BinanceGateway {
           avgPriceDec.toString(),
           notionalSettled,
           notionalSettledDec.toString(),
+          feeAmountDec.toDisplayNumber(),
+          feeAmountDec.toString(),
+          order.quote_asset,
           now,
           clientOrderId,
         ]
@@ -1508,6 +1599,18 @@ export class BinanceGateway {
   }
 
   private static mapOrderRecord(r: any): OrderStateRecord {
+    // Authoritative exact string representations first
+    const origQtyExact = r.orig_qty_exact ?? String(r.orig_qty ?? 0);
+    const executedQtyExact = r.executed_qty_exact ?? String(r.executed_qty ?? 0);
+    const priceExact = r.price_exact ?? String(r.price ?? 0);
+    const avgPriceExact = r.avg_price_exact ?? String(r.avg_price ?? 0);
+    const cumulativeQuoteExact = r.cumulative_quote_exact ?? String(r.cumulative_quote_qty ?? 0);
+    const notionalExact = r.notional_exact ?? String(r.notional ?? 0);
+    const feeExact = r.fee_exact ?? String(r.fee ?? 0);
+
+    const reservedCashMinor = r.reserved_cash_minor != null ? BigInt(r.reserved_cash_minor) : undefined;
+    const reservedQtyMinor = r.reserved_qty_minor != null ? BigInt(r.reserved_qty_minor) : undefined;
+
     return {
       id: r.id,
       userId: r.user_id,
@@ -1517,26 +1620,27 @@ export class BinanceGateway {
       side: r.side,
       type: r.type,
       status: r.status,
-      origQty: Number(r.orig_qty),
-      origQtyExact: r.orig_qty_exact ?? String(r.orig_qty),
-      executedQty: Number(r.executed_qty || 0),
-      executedQtyExact: r.executed_qty_exact ?? String(r.executed_qty || 0),
-      price: Number(r.price),
-      priceExact: r.price_exact ?? String(r.price),
-      avgPrice: Number(r.avg_price || 0),
-      avgPriceExact: r.avg_price_exact ?? String(r.avg_price || 0),
-      cumulativeQuoteQty: Number(r.cumulative_quote_qty || 0),
-      cumulativeQuoteExact: r.cumulative_quote_exact ?? String(r.cumulative_quote_qty || 0),
+      // PRECISION_BOUNDARY: number fields are non-authoritative display/compat shims derived from exact strings
+      origQty: Number(origQtyExact),
+      origQtyExact,
+      executedQty: Number(executedQtyExact),
+      executedQtyExact,
+      price: Number(priceExact),
+      priceExact,
+      avgPrice: Number(avgPriceExact),
+      avgPriceExact,
+      cumulativeQuoteQty: Number(cumulativeQuoteExact),
+      cumulativeQuoteExact,
       quoteAsset: r.quote_asset,
-      notional: Number(r.notional),
-      notionalExact: r.notional_exact ?? String(r.notional),
-      fee: Number(r.fee || 0),
-      feeExact: r.fee_exact ?? String(r.fee || 0),
+      notional: Number(notionalExact),
+      notionalExact,
+      fee: Number(feeExact),
+      feeExact,
       feeAsset: r.fee_asset,
-      reservedCash: Number(r.reserved_cash || 0),
-      reservedCashMinor: r.reserved_cash_minor != null ? BigInt(r.reserved_cash_minor) : undefined,
-      reservedQty: Number(r.reserved_qty || 0),
-      reservedQtyMinor: r.reserved_qty_minor != null ? BigInt(r.reserved_qty_minor) : undefined,
+      reservedCash: reservedCashMinor != null ? fromCashMinor(reservedCashMinor).toDisplayNumber() : Number(r.reserved_cash || 0),
+      reservedCashMinor,
+      reservedQty: reservedQtyMinor != null ? fromAssetMinor(reservedQtyMinor).toDisplayNumber() : Number(r.reserved_qty || 0),
+      reservedQtyMinor,
       rejectReason: r.reject_reason,
       createdAt: Number(r.created_at),
       updatedAt: Number(r.updated_at),

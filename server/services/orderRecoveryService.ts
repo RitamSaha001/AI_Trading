@@ -119,15 +119,26 @@ export class OrderRecoveryService {
 
           if (exchangeStatus === 'FILLED') {
             const executedQtyDec = ExactDecimal.from(
-              venueResult.executedQty || order.orig_qty_exact || order.orig_qty
+              venueResult.executedQtyExact || venueResult.executedQty || order.orig_qty_exact || order.orig_qty
             );
             const avgPriceDec = ExactDecimal.from(
-              venueResult.avgPrice || order.price_exact || order.price
+              venueResult.avgPriceExact || venueResult.avgPrice || order.price_exact || order.price
             );
             const notionalSettledDec = executedQtyDec.mul(avgPriceDec);
-            const feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
 
-            const tradeId = `trd_rec_${clientOrderId}`;
+            let feeAmountDec: ExactDecimal;
+            let feeAssetActual = order.quote_asset;
+            if (venueResult.fills && venueResult.fills.length > 0) {
+              feeAmountDec = ExactDecimal.zero();
+              for (const fill of venueResult.fills) {
+                feeAmountDec = feeAmountDec.add(ExactDecimal.from(fill.commission));
+                if (fill.commissionAsset) feeAssetActual = fill.commissionAsset;
+              }
+            } else {
+              feeAmountDec = notionalSettledDec.mul(ExactDecimal.from('0.00075'));
+            }
+
+            const tradeId = `trd_rec_${clientOrderId}_${executedQtyDec.toString()}`;
             const fillId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
             const baseAsset = order.symbol.replace(order.quote_asset, '');
             const now = Date.now();
@@ -137,16 +148,19 @@ export class OrderRecoveryService {
                 `UPDATE exchange_orders SET
                   status = 'FILLED', exchange_order_id = ?, executed_qty = ?, executed_qty_exact = ?,
                   avg_price = ?, avg_price_exact = ?, cumulative_quote_qty = ?, cumulative_quote_exact = ?,
-                  updated_at = ?
+                  fee = ?, fee_exact = ?, fee_asset = ?, updated_at = ?
                  WHERE client_order_id = ?`,
                 [
                   venueResult.exchangeOrderId || `ex_rec_${now}`,
-                  executedQtyDec.toNumber(),
-                  executedQtyDec.toString(),
-                  avgPriceDec.toNumber(),
-                  avgPriceDec.toString(),
-                  notionalSettledDec.toNumber(),
-                  notionalSettledDec.toString(),
+                  executedQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+                  executedQtyDec.toString(),       // Authoritative exact string
+                  avgPriceDec.toDisplayNumber(),    // PRECISION_BOUNDARY: legacy REAL column
+                  avgPriceDec.toString(),          // Authoritative exact string
+                  notionalSettledDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+                  notionalSettledDec.toString(),   // Authoritative exact string
+                  feeAmountDec.toDisplayNumber(),  // PRECISION_BOUNDARY: legacy REAL column
+                  feeAmountDec.toString(),         // Authoritative exact string
+                  feeAssetActual,
                   now,
                   clientOrderId,
                 ]
@@ -163,15 +177,15 @@ export class OrderRecoveryService {
                   clientOrderId,
                   tradeId,
                   order.symbol,
-                  avgPriceDec.toNumber(),
-                  avgPriceDec.toString(),
-                  executedQtyDec.toNumber(),
-                  executedQtyDec.toString(),
-                  feeAmountDec.toNumber(),
-                  feeAmountDec.toString(),
-                  order.quote_asset,
-                  notionalSettledDec.toNumber(),
-                  notionalSettledDec.toString(),
+                  avgPriceDec.toDisplayNumber(),    // PRECISION_BOUNDARY: legacy REAL column
+                  avgPriceDec.toString(),          // Authoritative exact string
+                  executedQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+                  executedQtyDec.toString(),       // Authoritative exact string
+                  feeAmountDec.toDisplayNumber(),  // PRECISION_BOUNDARY: legacy REAL column
+                  feeAmountDec.toString(),         // Authoritative exact string
+                  feeAssetActual,
+                  notionalSettledDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
+                  notionalSettledDec.toString(),   // Authoritative exact string
                   now,
                 ]
               );
@@ -188,7 +202,7 @@ export class OrderRecoveryService {
                 price: avgPriceDec,
                 quantity: executedQtyDec,
                 fee: feeAmountDec,
-                feeAsset: order.quote_asset,
+                feeAsset: feeAssetActual,
                 executedAt: now,
                 tx,
               });

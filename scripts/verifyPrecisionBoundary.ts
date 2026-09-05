@@ -35,6 +35,21 @@ export const PRECISION_FORBIDDEN_RULES: {
     description: "Hardcoded 50000.00 fallback in symbol rules",
     targetFiles: ["server/services/symbolRules.ts"],
   },
+  {
+    pattern: /const feeAmountDec\s*=\s*notionalSettledDec\.mul\s*\(\s*ExactDecimal\.from\s*\(\s*['"]0\.00075['"]\s*\)\s*\);/g,
+    description: "Unconditional hardcoded 0.00075 fee assignment bypassing fill commission",
+    targetFiles: ["server/services/binanceGateway.ts"],
+  },
+  {
+    pattern: /Promise<.*executedQty:\s*number/g,
+    description: "dispatchToExchange return type leaking executedQty as number",
+    targetFiles: ["server/services/binanceGateway.ts"],
+  },
+  {
+    pattern: /executedQtyDec\.toNumber\s*\(\s*\)/g,
+    description: "Deprecated .toNumber() call on executed quantity decimal",
+    targetFiles: ["server/services/orderRecoveryService.ts", "server/services/binanceGateway.ts"],
+  },
 ];
 
 export function scanPrecisionBoundary(rootDir: string = ROOT): PrecisionViolation[] {
