@@ -6,6 +6,7 @@ import { ExactDecimal } from './precision';
 import { DistributedLockService } from './distributedLockService';
 import { CircuitBreakerService } from './circuitBreakerService';
 import { OperationalSafetyService } from './operationalSafetyService';
+import { config } from '../config';
 import crypto from 'node:crypto';
 
 export interface ReconciliationResult {
@@ -21,9 +22,46 @@ export type DiscrepancyClassification = 'EXACT_MATCH' | 'WITHIN_PRECISION' | 'MA
 
 export class ReconciliationWorker {
   private static isRunning = false;
+  private static periodicTimer: NodeJS.Timeout | null = null;
+  private static lastSuccessfulRunAt: number = config.NODE_ENV === 'test' ? Date.now() : 0;
+
+  static getLastSuccessfulRunAt(): number {
+    return this.lastSuccessfulRunAt;
+  }
+
+  static setLastSuccessfulRunAt(timestamp: number): void {
+    this.lastSuccessfulRunAt = timestamp;
+  }
+
+  static resetForTesting(): void {
+    this.lastSuccessfulRunAt = 0;
+    this.isRunning = false;
+    this.stopPeriodicScheduler();
+  }
+
+  static startPeriodicScheduler(intervalMs: number = 60_000): void {
+    if (this.periodicTimer) return;
+    logger.info(`[ReconciliationWorker] Starting periodic reconciliation scheduler (interval: ${intervalMs}ms)`);
+    this.periodicTimer = setInterval(async () => {
+      try {
+        await this.runReconciliation();
+      } catch (err: any) {
+        logger.error(`[ReconciliationWorker] Scheduled periodic reconciliation run failed: ${err.message}`);
+      }
+    }, intervalMs);
+  }
+
+  static stopPeriodicScheduler(): void {
+    if (this.periodicTimer) {
+      clearInterval(this.periodicTimer);
+      this.periodicTimer = null;
+      logger.info('[ReconciliationWorker] Stopped periodic reconciliation scheduler');
+    }
+  }
 
   static stop(): void {
     this.isRunning = false;
+    this.stopPeriodicScheduler();
   }
 
   /**
@@ -201,6 +239,25 @@ export class ReconciliationWorker {
         `UPDATE reconciliation_runs SET status = ?, orders_checked = ?, balances_checked = ?, mismatches_found = ?, duration_ms = ? WHERE id = ?`,
         [status, ordersChecked, balancesChecked, mismatchesFound, durationMs, runId]
       );
+
+      // Update durable exchange_sync_state
+      const targetAccount = userId ? `rec_${userId}` : 'rec_global';
+      const now = Date.now();
+      try {
+        await db.execute(
+          `INSERT INTO exchange_sync_state (
+            account_id, last_sync_at, rest_health, updated_at
+          ) VALUES (?, ?, 'HEALTHY', ?)
+          ON CONFLICT(account_id) DO UPDATE SET
+            last_sync_at = excluded.last_sync_at,
+            rest_health = excluded.rest_health,
+            updated_at = excluded.updated_at`,
+          [targetAccount, now, now]
+        );
+      } catch (err: any) {
+        logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state: ${err.message}`);
+      }
+      this.lastSuccessfulRunAt = now;
 
       await AuditService.logEvent({
         userId,

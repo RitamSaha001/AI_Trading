@@ -199,4 +199,29 @@ export const ApiClient = {
   async getAuditEvents() {
     return apiRequest('/api/audit/events');
   },
+
+  async getOperationalHealth() {
+    return apiRequest<{ success: boolean; report: any }>('/api/operational/health');
+  },
+
+  async freezeKillSwitch(params: { scope: 'GLOBAL' | 'ACCOUNT' | 'SYMBOL'; target?: string; reason: string }) {
+    return apiRequest('/api/operational/kill-switch/freeze', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async unfreezeKillSwitch(params: { scope: 'GLOBAL' | 'ACCOUNT' | 'SYMBOL'; target?: string; reason: string }) {
+    return apiRequest('/api/operational/kill-switch/unfreeze', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async triggerReconciliation() {
+    return apiRequest('/api/operational/reconciliation/run', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
 };

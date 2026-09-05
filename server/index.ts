@@ -856,6 +856,7 @@ if (isMain || process.env.START_SERVER === 'true') {
       });
       ClockSyncService.startPeriodicSync();
       UserDataStreamManager.startKeepAliveLoop();
+      ReconciliationWorker.startPeriodicScheduler(60_000);
 
       const server = buildServer();
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getDb } from '../db';
 import { ReconciliationWorker } from '../services/reconciliationWorker';
 import { BinanceGateway } from '../services/binanceGateway';
@@ -8,6 +8,7 @@ import { RateLimitTracker } from '../services/rateLimitTracker';
 import { CircuitBreakerService } from '../services/circuitBreakerService';
 import { OperationalSafetyService, OperationalSafetyGate } from '../services/operationalSafetyService';
 import { UserDataStreamManager } from '../services/userDataStreamManager';
+import { BinanceUserStreamTransport } from '../services/binanceUserStreamTransport';
 import { ExactDecimal } from '../services/precision';
 import { AuditService } from '../services/auditService';
 
@@ -30,9 +31,11 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
     await db.execute(`DELETE FROM circuit_breakers`);
     await db.execute(`DELETE FROM users WHERE id = ?`, [userId]);
 
+    CircuitBreakerService.resetForTesting();
     ClockSyncService.reset();
     RateLimitTracker.reset();
     UserDataStreamManager.stop();
+    ReconciliationWorker.stop();
 
     await db.execute(
       `INSERT INTO users (id, email, display_name, provider, provider_id, created_at, updated_at)
@@ -468,4 +471,246 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       expect(recovery.mismatches).toBe(0);
     });
   });
+
+  // =========================================================================
+  // 8. PRODUCTION HARDENING & OPERATIONAL SAFETY GAPS VERIFICATION
+  // =========================================================================
+  describe('8. Production Safety Gaps Hardening Invariants', () => {
+    it('Gap 1 & 8: WebSocket transport ingests executionReport and settles fill authoritatively', async () => {
+      const db = getDb();
+
+      // Seed funds into trading account to settle fill
+      await LedgerService.creditDeposit({
+        userId,
+        assetOrCurrency: 'USDT',
+        amountMinor: 10_000_000n,
+        paymentId: 'dep_ws_test',
+      });
+      await LedgerService.transfer({
+        userId,
+        fromAccountType: 'sovereign_cash',
+        toAccountType: 'trading_allocated',
+        assetOrCurrency: 'USDT',
+        amountMinor: 10_000_000n,
+        referenceType: 'allocation',
+        referenceId: 'alloc_ws_test',
+      });
+
+      const transport = new BinanceUserStreamTransport(userId, 'test_ws_key', 'testnet');
+
+      // Ingest an execution report from Binance user data stream
+      const mockTradeMsg = {
+        e: 'executionReport',
+        E: Date.now(),
+        s: 'BTCUSDT',
+        c: 'ws_order_test_client_01',
+        S: 'BUY',
+        o: 'LIMIT',
+        f: 'GTC',
+        q: '0.05000000',
+        p: '60000.00000000',
+        x: 'TRADE',
+        X: 'FILLED',
+        r: 'NONE',
+        i: 9988776655,
+        l: '0.05000000',
+        z: '0.05000000',
+        L: '60000.00000000',
+        n: '2.25000000',
+        N: 'USDT',
+        T: Date.now(),
+        t: 12345678,
+      };
+
+      transport.handleMessage(JSON.stringify(mockTradeMsg));
+
+      // Wait a tick for async execution processing
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Assert fill was recorded
+      const fill = await db.queryOne<any>(
+        `SELECT * FROM exchange_fills WHERE canonical_fill_key = ?`,
+        [`binance:${userId}:BTCUSDT:12345678`]
+      );
+      expect(fill).not.toBeNull();
+      expect(fill.qty_exact).toBe('0.05');
+      expect(fill.price_exact).toBe('60000');
+      expect(fill.commission_exact).toBe('2.25');
+
+      // Assert duplicate delivery is idempotent
+      transport.handleMessage(JSON.stringify(mockTradeMsg));
+      await new Promise((r) => setTimeout(r, 50));
+
+      const fillCount = await db.queryOne<any>(
+        `SELECT COUNT(*) as count FROM exchange_fills WHERE canonical_fill_key = ?`,
+        [`binance:${userId}:BTCUSDT:12345678`]
+      );
+      expect(Number(fillCount.count)).toBe(1);
+
+      transport.close();
+    });
+
+    it('Gap 2: Periodic reconciliation scheduler starts and stops gracefully', () => {
+      expect(() => {
+        ReconciliationWorker.startPeriodicScheduler(30_000);
+        ReconciliationWorker.startPeriodicScheduler(30_000); // Idempotent start
+        ReconciliationWorker.stopPeriodicScheduler();
+      }).not.toThrow();
+    });
+
+    it('Gap 3: RateLimitTracker persists to exchange_sync_state and synchronizes across instances', async () => {
+      const db = getDb();
+      RateLimitTracker.recordResponse({ 'x-mbx-used-weight-1m': '1050' }, 200);
+
+      // Verify DB row
+      const syncRow = await db.queryOne<any>(
+        `SELECT rate_limit_used_1m FROM exchange_sync_state WHERE account_id = 'global_binance'`
+      );
+      expect(syncRow).not.toBeNull();
+      expect(Number(syncRow.rate_limit_used_1m)).toBe(1050);
+
+      // Reset local in-memory state to simulate fresh node instance
+      RateLimitTracker.reset();
+      expect(RateLimitTracker.getStatus().usedWeight1m).toBe(0);
+
+      // Reload from shared DB
+      await RateLimitTracker.syncFromDb('global_binance');
+      expect(RateLimitTracker.getStatus().usedWeight1m).toBe(1050);
+      expect(RateLimitTracker.getStatus().isThrottled).toBe(true);
+    });
+
+    it('Gap 4: Circuit breaker retains fail-closed state in-memory if DB write throws and propagates error', async () => {
+      const db = getDb();
+      const executeSpy = vi.spyOn(db, 'execute').mockRejectedValueOnce(new Error('Disk I/O failure simulating DB down'));
+
+      await expect(
+        CircuitBreakerService.trip('db_fail_test', 'GLOBAL', '*', 'Simulated DB failure')
+      ).rejects.toThrow('Disk I/O failure simulating DB down');
+
+      // Fail-closed invariant: even though DB write threw, breaker MUST be open in memory!
+      const check = await CircuitBreakerService.isOpen('db_fail_test');
+      expect(check.isOpen).toBe(true);
+      expect(check.breaker?.name).toBe('db_fail_test');
+
+      executeSpy.mockRestore();
+    });
+
+    it('Gap 4: Circuit breaker isOpen fails closed if DB query throws', async () => {
+      const db = getDb();
+      const querySpy = vi.spyOn(db, 'query').mockRejectedValueOnce(new Error('Connection terminated unexpectedly'));
+
+      const check = await CircuitBreakerService.isOpen('any_breaker');
+      expect(check.isOpen).toBe(true);
+      expect(check.breaker?.reason).toContain('fail-closed');
+
+      querySpy.mockRestore();
+    });
+
+    it('Gap 5: ClockSyncService reports unhealthy when never synchronized (lastSyncAt === 0)', () => {
+      ClockSyncService.reset();
+      const status = ClockSyncService.getStatus();
+      expect(status.lastSyncAt).toBe(0);
+      expect(status.isHealthy).toBe(false);
+      expect(ClockSyncService.isClockHealthy()).toBe(false);
+    });
+
+    it('Gap 6: OperationalSafetyGate blocks live orders when reconciliation is overdue (>300s SLA)', async () => {
+      const db = getDb();
+      await db.execute(`DELETE FROM exchange_sync_state WHERE account_id LIKE 'rec_%'`);
+
+      ClockSyncService.setSimulatedOffset(50); // Clock is healthy
+
+      // Simulate reconciliation that ran 400 seconds ago (>300s SLA)
+      ReconciliationWorker.setLastSuccessfulRunAt(Date.now() - 400_000);
+
+      const gateCheck = await OperationalSafetyGate.verifyOrderSubmission({
+        userId,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+
+      expect(gateCheck.allowed).toBe(false);
+      expect(gateCheck.reason).toContain('Exchange reconciliation is overdue');
+      expect(gateCheck.checks.reconciliationFresh).toBe(false);
+
+      // After a fresh reconciliation, orders are allowed
+      ReconciliationWorker.setLastSuccessfulRunAt(Date.now());
+      const passCheck = await OperationalSafetyGate.verifyOrderSubmission({
+        userId,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(passCheck.allowed).toBe(true);
+      expect(passCheck.checks.reconciliationFresh).toBe(true);
+    });
+
+    it('Gap 6: OperationalSafetyGate blocks live orders when no reconciliation has ever completed', async () => {
+      const db = getDb();
+      await db.execute(`DELETE FROM exchange_sync_state WHERE account_id LIKE 'rec_%'`);
+
+      ClockSyncService.setSimulatedOffset(50);
+      ReconciliationWorker.resetForTesting();
+
+      const gateCheck = await OperationalSafetyGate.verifyOrderSubmission({
+        userId,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+
+      expect(gateCheck.allowed).toBe(false);
+      expect(gateCheck.reason).toContain('No exchange reconciliation has ever completed');
+      expect(gateCheck.checks.reconciliationFresh).toBe(false);
+    });
+
+    it('Gap 7: Kill switch freeze and unfreeze execute atomically in a single transaction', async () => {
+      const db = getDb();
+
+      await OperationalSafetyService.freeze('ACCOUNT', userId, 'Transactional freeze test');
+
+      const ks = await db.queryOne<any>(
+        `SELECT * FROM operational_kill_switches WHERE target = ? AND is_frozen = 1`,
+        [userId]
+      );
+      expect(ks).not.toBeNull();
+      expect(ks.freeze_reason).toBe('Transactional freeze test');
+
+      const limits = await db.queryOne<any>(
+        `SELECT is_emergency_frozen, freeze_reason FROM account_limits WHERE user_id = ?`,
+        [userId]
+      );
+      expect(limits.is_emergency_frozen).toBe(1);
+      expect(limits.freeze_reason).toBe('Transactional freeze test');
+
+      await OperationalSafetyService.unfreeze('ACCOUNT', userId, 'Transactional unfreeze test');
+
+      const ksAfter = await db.queryOne<any>(
+        `SELECT * FROM operational_kill_switches WHERE target = ? AND is_frozen = 1`,
+        [userId]
+      );
+      expect(ksAfter).toBeNull();
+
+      const limitsAfter = await db.queryOne<any>(
+        `SELECT is_emergency_frozen, freeze_reason FROM account_limits WHERE user_id = ?`,
+        [userId]
+      );
+      expect(limitsAfter.is_emergency_frozen).toBe(0);
+      expect(limitsAfter.freeze_reason).toBeNull();
+    });
+  });
 });
+

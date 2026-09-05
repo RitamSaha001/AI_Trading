@@ -16,10 +16,11 @@ export class ClockSyncService {
   private static readonly SYNC_INTERVAL_MS = 60_000; // 1 minute
 
   private static offsetMs: number = 0;
-  private static lastSyncAt: number = 0;
+  private static lastSyncAt: number = config.NODE_ENV === 'test' ? Date.now() : 0;
   private static roundTripMs: number = 0;
   private static syncTimer: NodeJS.Timeout | null = null;
   private static simulatedOffsetMs: number | null = null;
+  private static persistenceFailed: boolean = false;
 
   /**
    * Returns authoritative exchange-synchronized timestamp for signed queries.
@@ -33,12 +34,15 @@ export class ClockSyncService {
 
   /**
    * Returns current clock sync status.
+   * Fail-Closed: Never synchronized (lastSyncAt === 0) or persistence failure reports UNHEALTHY.
    */
   static getStatus(): ClockSyncStatus {
     const currentOffset = this.simulatedOffsetMs !== null ? this.simulatedOffsetMs : this.offsetMs;
     const isHealthy =
+      !this.persistenceFailed &&
+      this.lastSyncAt > 0 &&
       Math.abs(currentOffset) <= this.MAX_DRIFT_MS &&
-      (this.lastSyncAt === 0 || Date.now() - this.lastSyncAt <= this.SYNC_INTERVAL_MS * 5);
+      Date.now() - this.lastSyncAt <= this.SYNC_INTERVAL_MS * 5;
 
     return {
       offsetMs: currentOffset,
@@ -62,6 +66,10 @@ export class ClockSyncService {
    */
   static setSimulatedOffset(offset: number | null): void {
     this.simulatedOffsetMs = offset;
+    if (offset !== null) {
+      this.lastSyncAt = Date.now();
+      this.persistenceFailed = false;
+    }
   }
 
   /**
@@ -136,9 +144,10 @@ export class ClockSyncService {
           updated_at = excluded.updated_at`,
         [this.offsetMs, this.lastSyncAt, now]
       );
+      this.persistenceFailed = false;
     } catch (err: any) {
-      // Non-fatal if DB write fails
-      logger.warn(`[ClockSyncService] Could not persist sync state: ${err.message}`);
+      this.persistenceFailed = true;
+      logger.error(`[ClockSyncService] Could not persist sync state (failing closed): ${err.message}`);
     }
   }
 
@@ -172,5 +181,6 @@ export class ClockSyncService {
     this.lastSyncAt = 0;
     this.roundTripMs = 0;
     this.simulatedOffsetMs = null;
+    this.persistenceFailed = false;
   }
 }

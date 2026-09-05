@@ -1,3 +1,4 @@
+import { getDb } from '../db';
 import { logger } from './auditService';
 import { CircuitBreakerService } from './circuitBreakerService';
 
@@ -20,6 +21,59 @@ export class RateLimitTracker {
   private static usedWeight1m: number = 0;
   private static blockedUntil: number = 0;
   private static lastUpdated: number = Date.now();
+  private static lastDbSync: number = 0;
+
+  /**
+   * Persists current rate limit state to database for cross-instance coordination.
+   */
+  static async persistState(accountId: string = 'global_binance'): Promise<void> {
+    try {
+      const db = getDb();
+      const now = Date.now();
+      await db.execute(
+        `INSERT INTO exchange_sync_state (
+          account_id, rate_limit_used_1m, rate_limit_reset_at, updated_at
+        ) VALUES (?, ?, ?, ?)
+        ON CONFLICT(account_id) DO UPDATE SET
+          rate_limit_used_1m = excluded.rate_limit_used_1m,
+          rate_limit_reset_at = excluded.rate_limit_reset_at,
+          updated_at = excluded.updated_at`,
+        [accountId, this.usedWeight1m, this.blockedUntil, now]
+      );
+    } catch (err: any) {
+      logger.warn(`[RateLimitTracker] Failed to persist rate limit state: ${err.message}`);
+    }
+  }
+
+  /**
+   * Synchronizes rate limit state from database to incorporate actions from other instances.
+   */
+  static async syncFromDb(accountId: string = 'global_binance'): Promise<void> {
+    try {
+      const db = getDb();
+      const row = await db.queryOne<any>(
+        `SELECT rate_limit_used_1m, rate_limit_reset_at, updated_at FROM exchange_sync_state WHERE account_id = ?`,
+        [accountId]
+      );
+      if (row) {
+        const dbWeight = Number(row.rate_limit_used_1m || 0);
+        const dbBlocked = Number(row.rate_limit_reset_at || 0);
+        const dbUpdated = Number(row.updated_at || 0);
+
+        // Incorporate the more restrictive constraint
+        if (dbBlocked > this.blockedUntil) {
+          this.blockedUntil = dbBlocked;
+        }
+        if (dbUpdated >= this.lastUpdated || this.usedWeight1m === 0) {
+          this.usedWeight1m = dbWeight;
+          this.lastUpdated = dbUpdated;
+        }
+        this.lastDbSync = Date.now();
+      }
+    } catch (err: any) {
+      logger.warn(`[RateLimitTracker] Failed to sync rate limit state from DB: ${err.message}`);
+    }
+  }
 
   /**
    * Records response headers from Binance REST calls.
@@ -79,6 +133,9 @@ export class RateLimitTracker {
         `[RateLimitTracker] Binance 1m used weight critical: ${this.usedWeight1m}/${this.MAX_WEIGHT_1M}`
       );
     }
+
+    // Persist durably for cross-instance coordination
+    void this.persistState();
   }
 
   /**
@@ -193,6 +250,7 @@ export class RateLimitTracker {
   static reset(): void {
     this.usedWeight1m = 0;
     this.blockedUntil = 0;
-    this.lastUpdated = Date.now();
+    this.lastUpdated = 0;
+    this.lastDbSync = 0;
   }
 }

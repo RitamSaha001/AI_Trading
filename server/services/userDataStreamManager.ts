@@ -2,6 +2,7 @@ import { BinanceGateway } from './binanceGateway';
 import { ReconciliationWorker } from './reconciliationWorker';
 import { CircuitBreakerService } from './circuitBreakerService';
 import { AuditService, logger } from './auditService';
+import { BinanceUserStreamTransport } from './binanceUserStreamTransport';
 import { config } from '../config';
 
 export type StreamHealthState = 'ACTIVE' | 'UNHEALTHY' | 'DISCONNECTED' | 'RECONNECTING';
@@ -46,6 +47,7 @@ export class UserDataStreamManager {
         status: 'ACTIVE',
         reconnectAttempts: 0,
       });
+      BinanceUserStreamTransport.start(userId, mockKey, creds.environment);
       return mockKey;
     }
 
@@ -70,6 +72,8 @@ export class UserDataStreamManager {
         status: 'ACTIVE',
         reconnectAttempts: 0,
       });
+
+      BinanceUserStreamTransport.start(userId, data.listenKey, creds.environment);
 
       logger.info(`[UserDataStreamManager] Acquired listenKey for user ${userId}`);
       return data.listenKey;
@@ -126,6 +130,8 @@ export class UserDataStreamManager {
    * Closes the user data stream listenKey on shutdown.
    */
   static async closeStream(userId: string): Promise<void> {
+    BinanceUserStreamTransport.stop(userId);
+
     const session = this.sessions.get(userId);
     if (!session) return;
 
@@ -258,6 +264,7 @@ export class UserDataStreamManager {
       clearInterval(this.keepAliveTimer);
       this.keepAliveTimer = null;
     }
+    BinanceUserStreamTransport.stopAll();
     this.sessions.clear();
   }
 

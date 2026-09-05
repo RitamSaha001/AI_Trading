@@ -4,6 +4,7 @@ import { ClockSyncService } from './clockSyncService';
 import { RateLimitTracker } from './rateLimitTracker';
 import { CircuitBreakerService } from './circuitBreakerService';
 import { SymbolRulesService } from './symbolRules';
+import { ReconciliationWorker } from './reconciliationWorker';
 import crypto from 'node:crypto';
 
 export type KillSwitchScope = 'GLOBAL' | 'ACCOUNT' | 'SYMBOL';
@@ -34,8 +35,7 @@ export interface OperationalHealthReport {
 
 export class OperationalSafetyService {
   /**
-   * Activates an emergency freeze across the specified scope.
-   * Backed by database persistence and immediately visible across multi-instance nodes.
+   * Activates an emergency freeze for a specific scope and target atomically in a transaction.
    */
   static async freeze(
     scope: KillSwitchScope,
@@ -48,20 +48,22 @@ export class OperationalSafetyService {
     const id = `ks_${crypto.randomBytes(6).toString('hex')}`;
 
     try {
-      await db.execute(
-        `INSERT INTO operational_kill_switches (
-          id, scope, target, is_frozen, freeze_reason, frozen_by, frozen_at
-        ) VALUES (?, ?, ?, 1, ?, ?, ?)`,
-        [id, scope, target, reason, frozenBy, now]
-      );
-
-      // Synchronize with account_limits for backward compatibility if account scope
-      if (scope === 'ACCOUNT') {
-        await db.execute(
-          `UPDATE account_limits SET is_emergency_frozen = 1, freeze_reason = ?, updated_at = ? WHERE user_id = ?`,
-          [reason, now, target]
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          `INSERT INTO operational_kill_switches (
+            id, scope, target, is_frozen, freeze_reason, frozen_by, frozen_at
+          ) VALUES (?, ?, ?, 1, ?, ?, ?)`,
+          [id, scope, target, reason, frozenBy, now]
         );
-      }
+
+        // Synchronize with account_limits for backward compatibility if account scope
+        if (scope === 'ACCOUNT') {
+          await tx.execute(
+            `UPDATE account_limits SET is_emergency_frozen = 1, freeze_reason = ?, updated_at = ? WHERE user_id = ?`,
+            [reason, now, target]
+          );
+        }
+      });
 
       logger.warn(`[OperationalSafetyService] Activated EMERGENCY FREEZE for ${scope}:${target} - Reason: ${reason}`);
 
@@ -81,7 +83,7 @@ export class OperationalSafetyService {
   }
 
   /**
-   * Deactivates an emergency freeze.
+   * Deactivates an emergency freeze atomically in a transaction.
    */
   static async unfreeze(
     scope: KillSwitchScope,
@@ -93,20 +95,22 @@ export class OperationalSafetyService {
     const now = Date.now();
 
     try {
-      await db.execute(
-        `UPDATE operational_kill_switches
-         SET is_frozen = 0, unfrozen_at = ?
-         WHERE scope = ? AND target = ? AND is_frozen = 1`,
-        [now, scope, target]
-      );
-
-      // Synchronize with account_limits if account scope
-      if (scope === 'ACCOUNT') {
-        await db.execute(
-          `UPDATE account_limits SET is_emergency_frozen = 0, freeze_reason = NULL, updated_at = ? WHERE user_id = ?`,
-          [now, target]
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          `UPDATE operational_kill_switches
+           SET is_frozen = 0, unfrozen_at = ?
+           WHERE scope = ? AND target = ? AND is_frozen = 1`,
+          [now, scope, target]
         );
-      }
+
+        // Synchronize with account_limits if account scope
+        if (scope === 'ACCOUNT') {
+          await tx.execute(
+            `UPDATE account_limits SET is_emergency_frozen = 0, freeze_reason = NULL, updated_at = ? WHERE user_id = ?`,
+            [now, target]
+          );
+        }
+      });
 
       logger.info(`[OperationalSafetyService] Deactivated EMERGENCY FREEZE for ${scope}:${target} - Reason: ${reason}`);
 
@@ -249,6 +253,7 @@ export class OperationalSafetyGate {
       killSwitchOff: false,
       circuitBreakerClosed: false,
       reconciliationHealthy: false,
+      reconciliationFresh: false,
       clockSyncValid: false,
       rulesFresh: false,
     };
@@ -274,12 +279,12 @@ export class OperationalSafetyGate {
     }
     checks.killSwitchOff = true;
 
-    // 3. Circuit Breaker Checks
-    const globalBreaker = await CircuitBreakerService.isOpen();
+    // 3. Circuit Breaker Evaluation (Hierarchical)
+    const globalBreaker = await CircuitBreakerService.isOpen(undefined, 'GLOBAL');
     if (globalBreaker.isOpen) {
       return {
         allowed: false,
-        reason: `Trading blocked by open circuit breaker '${globalBreaker.breaker?.name}': ${globalBreaker.breaker?.reason}`,
+        reason: `Trading blocked globally by circuit breaker '${globalBreaker.breaker?.name}': ${globalBreaker.breaker?.reason}`,
         checks,
       };
     }
@@ -329,7 +334,7 @@ export class OperationalSafetyGate {
       return { allowed: false, reason: `Could not retrieve valid exchange rules for ${params.symbol}: ${err.message}`, checks };
     }
 
-    // 6. Live-only checks: Clock Synchronization & Rate Limit Safety
+    // 6. Live-only checks: Clock Synchronization, Rate Limit & Reconciliation Freshness SLA
     if (params.isLive) {
       const clockStatus = ClockSyncService.getStatus();
       if (!clockStatus.isHealthy) {
@@ -341,6 +346,8 @@ export class OperationalSafetyGate {
       }
       checks.clockSyncValid = true;
 
+      // Ensure latest rate limit state is loaded from DB
+      await RateLimitTracker.syncFromDb();
       const rateLimitCheck = RateLimitTracker.canExecute('AMBIGUOUS_WRITE');
       if (!rateLimitCheck.allowed) {
         return {
@@ -349,8 +356,35 @@ export class OperationalSafetyGate {
           checks,
         };
       }
+
+      // Reconciliation Freshness SLA (Reconciliation must have completed within 5 minutes)
+      const RECONCILIATION_SLA_MS = 300_000;
+      const syncState = await db.queryOne<any>(
+        `SELECT last_sync_at FROM exchange_sync_state WHERE account_id = ? OR account_id = 'rec_global' ORDER BY last_sync_at DESC LIMIT 1`,
+        [`rec_${params.userId}`]
+      );
+      const dbLastSyncAt = syncState?.last_sync_at ? Number(syncState.last_sync_at) : 0;
+      const memLastSyncAt = ReconciliationWorker.getLastSuccessfulRunAt();
+      const effectiveLastSyncAt = Math.max(dbLastSyncAt, memLastSyncAt);
+
+      if (effectiveLastSyncAt === 0) {
+        return {
+          allowed: false,
+          reason: 'Trading blocked: No exchange reconciliation has ever completed for this environment.',
+          checks,
+        };
+      }
+      if (Date.now() - effectiveLastSyncAt > RECONCILIATION_SLA_MS) {
+        return {
+          allowed: false,
+          reason: `Trading blocked: Exchange reconciliation is overdue (last run ${Math.round((Date.now() - effectiveLastSyncAt) / 1000)}s ago > 300s SLA).`,
+          checks,
+        };
+      }
+      checks.reconciliationFresh = true;
     } else {
       checks.clockSyncValid = true;
+      checks.reconciliationFresh = true;
     }
 
     return { allowed: true, checks };

@@ -4,6 +4,7 @@ import { ASSETS, Asset } from './types';
 import { SettingsModal } from './Settings';
 import { ChatDrawer } from './ChatDrawer';
 import { DataSourceBadge } from './components/DataSourceBadge';
+import { OperationalHealthBanner } from './components/OperationalHealthBanner';
 import { AISafetyModal } from './components/AISafetyModal';
 import { ExchangeOnboardingDrawer } from './components/ExchangeOnboardingDrawer';
 import { Web3WalletDrawer } from './components/Web3WalletDrawer';
@@ -471,6 +472,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
               <span className="hidden md:inline">Quick Start Guide</span>
             </button>
+
+            {/* Authoritative Operational Health & Safety Indicator */}
+            <div className="hidden sm:block">
+              <OperationalHealthBanner accountMode={state.accountMode} />
+            </div>
 
             {/* Live Data Source Indicator (hidden on smallest screens to preserve space) */}
             <div className="hidden sm:block">
