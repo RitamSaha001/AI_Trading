@@ -27,6 +27,7 @@ export interface ServerConfig {
   BINANCE_API_KEY?: string;
   BINANCE_API_SECRET?: string;
   ALLOWED_ORIGINS: string;
+  RECONCILIATION_SLA_MS: number;
 }
 
 export interface SecurityConfigAuditResult {
@@ -271,6 +272,7 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     BINANCE_API_KEY: z.string().optional(),
     BINANCE_API_SECRET: z.string().optional(),
     ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000'),
+    RECONCILIATION_SLA_MS: z.coerce.number().positive().default(300_000),
   });
 
   const parsedBase = baseSchema.safeParse(rawEnv);
@@ -422,6 +424,7 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     BINANCE_API_KEY: candidate.BINANCE_API_KEY,
     BINANCE_API_SECRET: candidate.BINANCE_API_SECRET,
     ALLOWED_ORIGINS: candidate.ALLOWED_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000',
+    RECONCILIATION_SLA_MS: candidate.RECONCILIATION_SLA_MS ? Number(candidate.RECONCILIATION_SLA_MS) : 300_000,
   };
 
   return {

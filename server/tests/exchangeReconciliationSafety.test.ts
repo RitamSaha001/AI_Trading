@@ -54,6 +54,16 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       apiSecret: 'mock_ops_secret',
       environment: 'testnet',
     });
+
+    // Provide a valid sync anchor for general operational tests
+    const now = Date.now();
+    await getDb().execute(
+      `INSERT INTO exchange_sync_state (account_id, last_sync_at, rest_health, updated_at)
+       VALUES (?, ?, 'HEALTHY', ?)
+       ON CONFLICT(account_id) DO UPDATE SET last_sync_at = excluded.last_sync_at, rest_health = 'HEALTHY'`,
+      [`rec_${userId}`, now, now]
+    );
+    ReconciliationWorker.setLastSuccessfulRunAt(now, userId);
   });
 
   afterEach(() => {
@@ -288,13 +298,14 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
         },
       ];
 
-      const mismatches = await ReconciliationWorker.reconcileOpenOrders(
+      const result = await ReconciliationWorker.reconcileOpenOrders(
         userId,
         'run_test_orphan',
         venueOpenOrders
       );
 
-      expect(mismatches).toBe(1);
+      expect(result.success).toBe(true);
+      expect(result.mismatches).toBe(1);
 
       const db = getDb();
       const mismatch = await db.queryOne<any>(
@@ -336,14 +347,15 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
         },
       ];
 
-      const mismatches = await ReconciliationWorker.reconcileTrades(
+      const result = await ReconciliationWorker.reconcileTrades(
         userId,
         'run_test_missing_trade',
         'BTCUSDT',
         missingVenueTrades
       );
 
-      expect(mismatches).toBe(1);
+      expect(result.success).toBe(true);
+      expect(result.mismatches).toBe(1);
 
       const db = getDb();
       const fill = await db.queryOne<any>(
@@ -359,13 +371,14 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       expect(proj.positions['BTC'].totalQuantity).toBe(0.1);
 
       // Running reconciliation again should be idempotent (0 additional mismatches)
-      const repeatMismatches = await ReconciliationWorker.reconcileTrades(
+      const repeatResult = await ReconciliationWorker.reconcileTrades(
         userId,
         'run_test_missing_trade_2',
         'BTCUSDT',
         missingVenueTrades
       );
-      expect(repeatMismatches).toBe(0);
+      expect(repeatResult.success).toBe(true);
+      expect(repeatResult.mismatches).toBe(0);
     });
   });
 
@@ -397,13 +410,14 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       });
 
       // Venue reports only $90,000 ($10,000 discrepancy)
-      const mismatches = await ReconciliationWorker.reconcileBalancesAgainstExchange(
+      const result = await ReconciliationWorker.reconcileBalancesAgainstExchange(
         userId,
         'run_critical_cash',
         { USDT: 90000 }
       );
 
-      expect(mismatches).toBeGreaterThan(0);
+      expect(result.success).toBe(true);
+      expect(result.mismatches).toBeGreaterThan(0);
 
       // Account should now be emergency frozen in both tables
       const freezeCheck = await OperationalSafetyService.isFrozen(userId);
@@ -720,11 +734,15 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
     const userA = 'usr_ops_multi_a';
     const userB = 'usr_ops_multi_b';
     const userC = 'usr_ops_multi_c';
+    const freshUser = 'user_fresh_reconcile_check';
+    const failUser = 'user_sim_fail_reconcile';
+    const allUsers = [userA, userB, userC, freshUser, failUser];
 
     beforeEach(async () => {
       const db = getDb();
-      for (const u of [userA, userB, userC]) {
+      for (const u of allUsers) {
         await db.execute(`DELETE FROM exchange_fills WHERE canonical_fill_key LIKE ?`, [`%:${u}:%`]);
+        await db.execute(`DELETE FROM order_reservations WHERE user_id = ?`, [u]);
         await db.execute(`DELETE FROM exchange_orders WHERE user_id = ?`, [u]);
         await db.execute(`DELETE FROM exchange_accounts WHERE user_id = ?`, [u]);
         await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = ?`, [`rec_${u}`]);
@@ -732,6 +750,8 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
         await db.execute(`DELETE FROM ledger_accounts WHERE user_id = ?`, [u]);
         await db.execute(`DELETE FROM authoritative_positions WHERE user_id = ?`, [u]);
         await db.execute(`DELETE FROM account_limits WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM reconciliation_mismatches WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM audit_events WHERE user_id = ?`, [u]);
         await db.execute(`DELETE FROM users WHERE id = ?`, [u]);
 
         await db.execute(
@@ -745,10 +765,13 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
           [`lim_${u}`, u, Date.now()]
         );
       }
+
+      ClockSyncService.setSimulatedOffset(50);
     });
 
     afterEach(async () => {
       BinanceUserStreamTransport.stopAll();
+      ReconciliationWorker.resetForTesting();
     });
 
     it('Global periodic reconciliation reconciles all registered users and updates their sync state', async () => {
@@ -978,14 +1001,15 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
         isBuyer: true,
       };
 
-      const mismatchesResolved = await ReconciliationWorker.reconcileTrades(
+      const result = await ReconciliationWorker.reconcileTrades(
         userA,
         `rec_run_${Date.now()}`,
         'BTCUSDT',
         [mockVenueTrade]
       );
 
-      expect(mismatchesResolved).toBe(1);
+      expect(result.success).toBe(true);
+      expect(result.mismatches).toBe(1);
 
       // Invariant: Fill updated to AUTHORITATIVE with exact commission
       const resolvedFill = await db.queryOne<any>(
@@ -1012,6 +1036,107 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
         [userA]
       );
       expect(postLedgerEntries.length).toBeGreaterThan(0);
+    });
+
+    it('Invariant: Newly saved credentials start with last_sync_at = 0 and FAIL CLOSED on pre-trade gate until reconciliation completes', async () => {
+      await BinanceGateway.saveExchangeCredentials(freshUser, {
+        apiKey: 'mock_sim_fresh_key',
+        apiSecret: 'mock_sim_fresh_secret',
+        environment: 'testnet',
+      });
+
+      // Check DB state immediately after saving credentials
+      const db = getDb();
+      const syncState = await db.queryOne<any>(`SELECT * FROM exchange_sync_state WHERE account_id = ?`, [`rec_${freshUser}`]);
+      expect(syncState).not.toBeNull();
+      expect(Number(syncState.last_sync_at)).toBe(0);
+      expect(syncState.rest_health).toBe('INITIALIZING');
+      expect(ReconciliationWorker.getLastSuccessfulRunAt(freshUser)).toBe(0);
+
+      // Pre-trade gate MUST block
+      const check = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: freshUser,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(check.allowed).toBe(false);
+      expect(check.reason).toContain('No exchange reconciliation has ever completed for this user account');
+
+      // Now run reconciliation
+      const recResult = await ReconciliationWorker.runReconciliation(freshUser);
+      expect(recResult.status).toBe('SUCCESS');
+
+      // Pre-trade gate should now allow
+      const checkAfter = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: freshUser,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(checkAfter.allowed).toBe(true);
+    });
+
+    it('Invariant: Exchange REST failure marks rest_health UNAVAILABLE, DOES NOT advance last_sync_at, and BLOCKS live orders', async () => {
+      await BinanceGateway.saveExchangeCredentials(failUser, {
+        apiKey: 'mock_sim_fail_user',
+        apiSecret: 'mock_sim_fail_secret',
+        environment: 'testnet',
+      });
+
+      // Simulate exchange balance fetch failure
+      ReconciliationWorker.setMockExchangeState(failUser, {
+        shouldFail: true,
+        failureError: 'Simulated 503 Service Unavailable on Binance REST endpoint',
+      });
+
+      const recResult = await ReconciliationWorker.runReconciliation(failUser);
+      expect(recResult.status).toBe('FAILED');
+
+      // DB sync state must NOT have advanced last_sync_at, must be UNAVAILABLE
+      const db = getDb();
+      const syncState = await db.queryOne<any>(`SELECT * FROM exchange_sync_state WHERE account_id = ?`, [`rec_${failUser}`]);
+      expect(Number(syncState.last_sync_at)).toBe(0);
+      expect(syncState.rest_health).toBe('UNAVAILABLE');
+      expect(ReconciliationWorker.getLastSuccessfulRunAt(failUser)).toBe(0);
+
+      // Safety gate MUST BLOCK
+      const check = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: failUser,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(check.allowed).toBe(false);
+      expect(check.reason).toContain('No exchange reconciliation has ever completed');
+    });
+
+    it('Invariant: UserDataStreamManager.restoreAllActiveStreams rehydrates streams for all active accounts', async () => {
+      await BinanceGateway.saveExchangeCredentials(userA, {
+        apiKey: 'mock_sim_multi_a',
+        apiSecret: 'mock_sim_secret_a',
+        environment: 'testnet',
+      });
+      await BinanceGateway.saveExchangeCredentials(userB, {
+        apiKey: 'mock_sim_multi_b',
+        apiSecret: 'mock_sim_secret_b',
+        environment: 'testnet',
+      });
+
+      const count = await UserDataStreamManager.restoreAllActiveStreams();
+      expect(count).toBeGreaterThanOrEqual(2);
     });
   });
 });

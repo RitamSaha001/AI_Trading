@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BinanceGateway } from '../services/binanceGateway';
 import { LedgerService } from '../services/ledgerService';
+import { ReconciliationWorker } from '../services/reconciliationWorker';
 import { getDb } from '../db';
 
 describe('Binance Execution Gateway & State Machine', () => {
@@ -33,6 +34,7 @@ describe('Binance Execution Gateway & State Machine', () => {
       apiSecret: 'mock_sim_gateway_secret',
       environment: 'testnet',
     });
+    await ReconciliationWorker.runReconciliation(userId);
   });
 
   it('encrypts and decrypts exchange secrets securely at rest with AES-256-GCM', () => {

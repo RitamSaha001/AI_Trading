@@ -183,7 +183,7 @@ export class BinanceUserStreamTransport {
             `INSERT INTO exchange_sync_state (account_id, last_sync_at, ws_health, updated_at)
              VALUES (?, ?, 'DEGRADED', ?)
              ON CONFLICT(account_id) DO UPDATE SET ws_health = 'DEGRADED', updated_at = excluded.updated_at`,
-            [`rec_${this.userId}`, Date.now(), Date.now()]
+            [`rec_${this.userId}`, 0, Date.now()]
           ).catch((e: any) => logger.warn(`Failed to update exchange_sync_state: ${e.message}`));
 
           // Trigger immediate targeted REST reconciliation

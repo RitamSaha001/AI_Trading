@@ -672,7 +672,18 @@ export function buildServer(): FastifyInstance {
 
     try {
       const audit = await BinanceGateway.saveExchangeCredentials(req.user!.id, body);
-      return { success: true, audit, message: 'Exchange credentials securely audited and encrypted at rest.' };
+      let reconciliationResult: any = null;
+      try {
+        reconciliationResult = await ReconciliationWorker.runReconciliation(req.user!.id);
+      } catch (recErr: any) {
+        logger.warn(`[ExchangeConnect] Initial reconciliation error for user ${req.user!.id}: ${recErr.message}`);
+      }
+      return {
+        success: true,
+        audit,
+        reconciled: reconciliationResult?.success ?? false,
+        message: 'Exchange credentials securely audited and encrypted at rest.',
+      };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }
@@ -856,6 +867,9 @@ if (isMain || process.env.START_SERVER === 'true') {
       });
       ClockSyncService.startPeriodicSync();
       UserDataStreamManager.startKeepAliveLoop();
+      await UserDataStreamManager.restoreAllActiveStreams().catch((err: any) => {
+        console.warn(`[UserDataStream] Failed to restore active streams: ${err.message}`);
+      });
       ReconciliationWorker.startPeriodicScheduler(60_000);
 
       const server = buildServer();

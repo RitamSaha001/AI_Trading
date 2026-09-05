@@ -6,6 +6,8 @@ import { ExactDecimal } from './precision';
 import { DistributedLockService } from './distributedLockService';
 import { CircuitBreakerService } from './circuitBreakerService';
 import { OperationalSafetyService } from './operationalSafetyService';
+import { ClockSyncService } from './clockSyncService';
+import { RateLimitTracker } from './rateLimitTracker';
 import { config } from '../config';
 import crypto from 'node:crypto';
 
@@ -18,13 +20,46 @@ export interface ReconciliationResult {
   durationMs: number;
 }
 
+export interface ReconciliationStepResult {
+  success: boolean;
+  mismatches: number;
+  error?: string;
+}
+
 export type DiscrepancyClassification = 'EXACT_MATCH' | 'WITHIN_PRECISION' | 'MATERIAL_MISMATCH';
 
 export class ReconciliationWorker {
   private static isRunning = false;
   private static periodicTimer: NodeJS.Timeout | null = null;
-  private static lastSuccessfulRunAt: number = config.NODE_ENV === 'test' ? Date.now() : 0;
+  private static lastSuccessfulRunAt: number = 0;
   private static userLastSuccessfulRuns: Map<string, number> = new Map();
+  private static mockExchangeStates: Map<string, {
+    balances?: Record<string, number | string>;
+    locked?: Record<string, number | string>;
+    openOrders?: any[];
+    trades?: Record<string, any[]>;
+    shouldFail?: boolean;
+    failureError?: string;
+  }> = new Map();
+
+  static setMockExchangeState(userId: string, state: {
+    balances?: Record<string, number | string>;
+    locked?: Record<string, number | string>;
+    openOrders?: any[];
+    trades?: Record<string, any[]>;
+    shouldFail?: boolean;
+    failureError?: string;
+  } | null): void {
+    if (!state) {
+      this.mockExchangeStates.delete(userId);
+    } else {
+      this.mockExchangeStates.set(userId, state);
+    }
+  }
+
+  static getMockExchangeState(userId: string) {
+    return this.mockExchangeStates.get(userId);
+  }
 
   static getLastSuccessfulRunAt(userId?: string): number {
     if (userId) {
@@ -44,6 +79,7 @@ export class ReconciliationWorker {
   static resetForTesting(): void {
     this.lastSuccessfulRunAt = 0;
     this.userLastSuccessfulRuns.clear();
+    this.mockExchangeStates.clear();
     this.isRunning = false;
     this.stopPeriodicScheduler();
   }
@@ -232,105 +268,172 @@ export class ReconciliationWorker {
       }
 
       const now = Date.now();
+      let overallRunSucceeded = true;
 
       // 4. Reconcile Local Authoritative Account State vs Exchange State
       if (userId) {
-        // Single user reconciliation: balances, open orders, and trades
-        const mismatchCount = await this.reconcileBalancesAgainstExchange(userId, runId);
-        mismatchesFound += mismatchCount;
-
-        const openOrderMismatches = await this.reconcileOpenOrders(userId, runId);
-        mismatchesFound += openOrderMismatches;
-
-        // Trade reconciliation for user's active symbols
-        const symbolRows = await db.query<any>(
-          `SELECT DISTINCT symbol FROM exchange_orders WHERE user_id = ?`,
+        const hasExchangeAccount = await db.queryOne<any>(
+          `SELECT 1 FROM exchange_accounts WHERE user_id = ?`,
           [userId]
         );
-        const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : ['BTCUSDT'];
-        for (const sym of symbols) {
-          const tradeMismatches = await this.reconcileTrades(userId, runId, sym);
-          mismatchesFound += tradeMismatches;
-        }
 
-        // Update durable exchange_sync_state for this user
-        try {
-          await db.execute(
-            `INSERT INTO exchange_sync_state (
-              account_id, last_sync_at, rest_health, updated_at
-            ) VALUES (?, ?, 'HEALTHY', ?)
-            ON CONFLICT(account_id) DO UPDATE SET
-              last_sync_at = excluded.last_sync_at,
-              rest_health = excluded.rest_health,
-              updated_at = excluded.updated_at`,
-            [`rec_${userId}`, now, now]
+        if (hasExchangeAccount) {
+          // Single user reconciliation: balances, open orders, and trades
+          const balancesResult = await this.reconcileBalancesAgainstExchange(userId, runId);
+          mismatchesFound += balancesResult.mismatches;
+
+          const openOrderMismatches = await this.reconcileOpenOrders(userId, runId);
+          mismatchesFound += openOrderMismatches.mismatches;
+
+          // Trade reconciliation for user's active symbols
+          const symbolRows = await db.query<any>(
+            `SELECT DISTINCT symbol FROM exchange_orders WHERE user_id = ?`,
+            [userId]
           );
-        } catch (err: any) {
-          logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state for ${userId}: ${err.message}`);
+          const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : ['BTCUSDT'];
+          let tradesSucceeded = true;
+          for (const sym of symbols) {
+            const tradeResult = await this.reconcileTrades(userId, runId, sym);
+            mismatchesFound += tradeResult.mismatches;
+            if (!tradeResult.success) {
+              tradesSucceeded = false;
+            }
+          }
+
+          const userSuccess = balancesResult.success && openOrderMismatches.success && tradesSucceeded;
+          if (!userSuccess) {
+            overallRunSucceeded = false;
+          }
+
+          // Update durable exchange_sync_state for this user strictly based on verified success
+          if (userSuccess) {
+            try {
+              await db.execute(
+                `INSERT INTO exchange_sync_state (
+                  account_id, last_sync_at, rest_health, updated_at
+                ) VALUES (?, ?, 'HEALTHY', ?)
+                ON CONFLICT(account_id) DO UPDATE SET
+                  last_sync_at = excluded.last_sync_at,
+                  rest_health = excluded.rest_health,
+                  updated_at = excluded.updated_at`,
+                [`rec_${userId}`, now, now]
+              );
+              this.userLastSuccessfulRuns.set(userId, now);
+            } catch (err: any) {
+              logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state for ${userId}: ${err.message}`);
+            }
+          } else {
+            try {
+              await db.execute(
+                `INSERT INTO exchange_sync_state (
+                  account_id, last_sync_at, rest_health, updated_at
+                ) VALUES (?, 0, 'UNAVAILABLE', ?)
+                ON CONFLICT(account_id) DO UPDATE SET
+                  rest_health = excluded.rest_health,
+                  updated_at = excluded.updated_at`,
+                [`rec_${userId}`, now]
+              );
+            } catch (err: any) {
+              logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state for ${userId}: ${err.message}`);
+            }
+            logger.warn(`[ReconciliationWorker] Exchange query failed for user ${userId}. Freshness timestamp NOT updated.`);
+          }
         }
-        this.userLastSuccessfulRuns.set(userId, now);
       } else {
         // Global scheduled run: Enumerate and reconcile EVERY registered user with exchange credentials
         const registeredUsers = await db.query<any>(
-          `SELECT DISTINCT user_id FROM exchange_accounts`
+          `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = 1`
         );
+
+        let allUsersSucceeded = registeredUsers.length > 0;
 
         for (const userRow of registeredUsers) {
           const uId = userRow.user_id;
           try {
-            const mismatchCount = await this.reconcileBalancesAgainstExchange(uId, runId);
-            mismatchesFound += mismatchCount;
+            const balancesResult = await this.reconcileBalancesAgainstExchange(uId, runId);
+            mismatchesFound += balancesResult.mismatches;
 
             const openOrderMismatches = await this.reconcileOpenOrders(uId, runId);
-            mismatchesFound += openOrderMismatches;
+            mismatchesFound += openOrderMismatches.mismatches;
 
             const symbolRows = await db.query<any>(
               `SELECT DISTINCT symbol FROM exchange_orders WHERE user_id = ?`,
               [uId]
             );
             const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : ['BTCUSDT'];
+            let userTradesSucceeded = true;
             for (const sym of symbols) {
-              const tradeMismatches = await this.reconcileTrades(uId, runId, sym);
-              mismatchesFound += tradeMismatches;
+              const tradeResult = await this.reconcileTrades(uId, runId, sym);
+              mismatchesFound += tradeResult.mismatches;
+              if (!tradeResult.success) {
+                userTradesSucceeded = false;
+              }
             }
 
-            // Update per-user exchange_sync_state
-            await db.execute(
-              `INSERT INTO exchange_sync_state (
-                account_id, last_sync_at, rest_health, updated_at
-              ) VALUES (?, ?, 'HEALTHY', ?)
-              ON CONFLICT(account_id) DO UPDATE SET
-                last_sync_at = excluded.last_sync_at,
-                rest_health = excluded.rest_health,
-                updated_at = excluded.updated_at`,
-              [`rec_${uId}`, now, now]
-            );
-            this.userLastSuccessfulRuns.set(uId, now);
+            const userSuccess = balancesResult.success && openOrderMismatches.success && userTradesSucceeded;
+
+            if (userSuccess) {
+              // Update per-user exchange_sync_state
+              await db.execute(
+                `INSERT INTO exchange_sync_state (
+                  account_id, last_sync_at, rest_health, updated_at
+                ) VALUES (?, ?, 'HEALTHY', ?)
+                ON CONFLICT(account_id) DO UPDATE SET
+                  last_sync_at = excluded.last_sync_at,
+                  rest_health = excluded.rest_health,
+                  updated_at = excluded.updated_at`,
+                [`rec_${uId}`, now, now]
+              );
+              this.userLastSuccessfulRuns.set(uId, now);
+            } else {
+              allUsersSucceeded = false;
+              await db.execute(
+                `INSERT INTO exchange_sync_state (
+                  account_id, last_sync_at, rest_health, updated_at
+                ) VALUES (?, 0, 'UNAVAILABLE', ?)
+                ON CONFLICT(account_id) DO UPDATE SET
+                  rest_health = excluded.rest_health,
+                  updated_at = excluded.updated_at`,
+                [`rec_${uId}`, now]
+              );
+              logger.warn(`[ReconciliationWorker] Exchange query failed for user ${uId}. Freshness timestamp NOT updated.`);
+            }
           } catch (userErr: any) {
+            allUsersSucceeded = false;
             logger.error(`[ReconciliationWorker] Error reconciling exchange state for user ${uId}: ${userErr.message}`);
           }
         }
 
+        overallRunSucceeded = allUsersSucceeded;
+
         // Also update rec_global for overall system health
+        const globalHealth = allUsersSucceeded ? 'HEALTHY' : 'DEGRADED';
         try {
           await db.execute(
             `INSERT INTO exchange_sync_state (
               account_id, last_sync_at, rest_health, updated_at
-            ) VALUES ('rec_global', ?, 'HEALTHY', ?)
+            ) VALUES ('rec_global', ?, ?, ?)
             ON CONFLICT(account_id) DO UPDATE SET
               last_sync_at = excluded.last_sync_at,
               rest_health = excluded.rest_health,
               updated_at = excluded.updated_at`,
-            [now, now]
+            [now, globalHealth, now]
           );
         } catch (err: any) {
           logger.warn(`[ReconciliationWorker] Failed to update global exchange_sync_state: ${err.message}`);
         }
-        this.lastSuccessfulRunAt = now;
+        if (allUsersSucceeded) {
+          this.lastSuccessfulRunAt = now;
+        }
       }
 
       const durationMs = Date.now() - startTime;
-      const status = mismatchesFound > 0 ? 'MISMATCH_DETECTED' : 'SUCCESS';
+      let status: 'SUCCESS' | 'MISMATCH_DETECTED' | 'FAILED' = 'SUCCESS';
+      if (!overallRunSucceeded) {
+        status = 'FAILED';
+      } else if (mismatchesFound > 0) {
+        status = 'MISMATCH_DETECTED';
+      }
 
       await db.execute(
         `UPDATE reconciliation_runs SET status = ?, orders_checked = ?, balances_checked = ?, mismatches_found = ?, duration_ms = ? WHERE id = ?`,
@@ -369,37 +472,96 @@ export class ReconciliationWorker {
     runId: string = `rec_run_${Date.now()}`,
     symbol: string = 'BTCUSDT',
     mockVenueTrades?: any[]
-  ): Promise<number> {
+  ): Promise<ReconciliationStepResult> {
     let mismatches = 0;
     const db = getDb();
 
     let venueTrades: any[] | null = mockVenueTrades || null;
 
     if (!venueTrades) {
+      const mockState = config.NODE_ENV === 'test' ? this.mockExchangeStates.get(userId) : undefined;
+      if (mockState?.shouldFail) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: mockState.failureError || 'Simulated exchange trade fetch failure',
+        };
+      }
+      if (mockState?.trades && mockState.trades[symbol]) {
+        venueTrades = mockState.trades[symbol];
+      }
+    }
+
+    if (!venueTrades) {
       const creds = await BinanceGateway.getCredentials(userId);
-      if (creds?.apiKey && !creds.apiKey.startsWith('mock_') && !creds.apiKey.startsWith('test_')) {
+      if (!creds?.apiKey) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: `No exchange credentials found for user ${userId}`,
+        };
+      }
+
+      if (
+        config.NODE_ENV === 'test' &&
+        (creds.apiKey.startsWith('mock_') || creds.apiKey.startsWith('test_')) &&
+        !creds.apiKey.startsWith('mock_fail')
+      ) {
+        venueTrades = [];
+      } else if (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_fail')) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: 'Simulated failure: mock_fail API key',
+        };
+      } else {
         try {
           const baseUrl =
             creds.environment === 'mainnet' ? 'https://api.binance.com' : 'https://testnet.binance.vision';
           const startTime = Date.now() - 3600_000; // 1 hour overlap window
-          const queryString = `symbol=${symbol}&startTime=${startTime}&timestamp=${Date.now()}`;
+          const timestamp = ClockSyncService.getExchangeTime();
+          const queryString = `symbol=${symbol}&startTime=${startTime}&timestamp=${timestamp}&recvWindow=5000`;
           const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
+
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
 
           const response = await fetch(`${baseUrl}/api/v3/myTrades?${queryString}&signature=${signature}`, {
             headers: { 'X-MBX-APIKEY': creds.apiKey },
+            signal: controller.signal,
           });
+          clearTimeout(timer);
 
-          if (response.ok) {
-            venueTrades = (await response.json()) as any[];
+          RateLimitTracker.recordResponse(response.headers, response.status);
+
+          if (!response.ok) {
+            const errorBody = await response.text().catch(() => '');
+            logger.warn(`[ReconciliationWorker] Failed to query venue trades for ${symbol} (${response.status}): ${errorBody}`);
+            return {
+              success: false,
+              mismatches: 0,
+              error: `Binance myTrades API Error ${response.status}: ${errorBody || response.statusText}`,
+            };
           }
+
+          venueTrades = (await response.json()) as any[];
         } catch (err: any) {
-          logger.warn(`[ReconciliationWorker] Failed to query venue trades for ${symbol}: ${err.message}`);
+          logger.warn(`[ReconciliationWorker] Network error querying venue trades for ${symbol}: ${err.message}`);
+          return {
+            success: false,
+            mismatches: 0,
+            error: `Network error querying Binance myTrades: ${err.message}`,
+          };
         }
       }
     }
 
-    if (!venueTrades || venueTrades.length === 0) {
-      return 0;
+    if (!venueTrades) {
+      return { success: false, mismatches: 0, error: 'Failed to retrieve exchange trades' };
+    }
+
+    if (venueTrades.length === 0) {
+      return { success: true, mismatches: 0 };
     }
 
     for (const trade of venueTrades) {
@@ -646,7 +808,7 @@ export class ReconciliationWorker {
       }
     }
 
-    return mismatches;
+    return { success: true, mismatches };
   }
 
   /**
@@ -657,35 +819,92 @@ export class ReconciliationWorker {
     userId: string,
     runId: string = `rec_run_${Date.now()}`,
     mockVenueOpenOrders?: any[]
-  ): Promise<number> {
+  ): Promise<ReconciliationStepResult> {
     let mismatches = 0;
     const db = getDb();
 
     let venueOpenOrders: any[] | null = mockVenueOpenOrders || null;
 
     if (!venueOpenOrders) {
+      const mockState = config.NODE_ENV === 'test' ? this.mockExchangeStates.get(userId) : undefined;
+      if (mockState?.shouldFail) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: mockState.failureError || 'Simulated exchange open orders fetch failure',
+        };
+      }
+      if (mockState?.openOrders) {
+        venueOpenOrders = mockState.openOrders;
+      }
+    }
+
+    if (!venueOpenOrders) {
       const creds = await BinanceGateway.getCredentials(userId);
-      if (creds?.apiKey && !creds.apiKey.startsWith('mock_') && !creds.apiKey.startsWith('test_')) {
+      if (!creds?.apiKey) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: `No exchange credentials found for user ${userId}`,
+        };
+      }
+
+      if (
+        config.NODE_ENV === 'test' &&
+        (creds.apiKey.startsWith('mock_') || creds.apiKey.startsWith('test_')) &&
+        !creds.apiKey.startsWith('mock_fail')
+      ) {
+        venueOpenOrders = [];
+      } else if (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_fail')) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: 'Simulated failure: mock_fail API key',
+        };
+      } else {
         try {
           const baseUrl =
             creds.environment === 'mainnet' ? 'https://api.binance.com' : 'https://testnet.binance.vision';
-          const queryString = `timestamp=${Date.now()}`;
+          const timestamp = ClockSyncService.getExchangeTime();
+          const queryString = `timestamp=${timestamp}&recvWindow=5000`;
           const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
+
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
 
           const response = await fetch(`${baseUrl}/api/v3/openOrders?${queryString}&signature=${signature}`, {
             headers: { 'X-MBX-APIKEY': creds.apiKey },
+            signal: controller.signal,
           });
+          clearTimeout(timer);
 
-          if (response.ok) {
-            venueOpenOrders = (await response.json()) as any[];
+          RateLimitTracker.recordResponse(response.headers, response.status);
+
+          if (!response.ok) {
+            const errorBody = await response.text().catch(() => '');
+            logger.warn(`[ReconciliationWorker] Failed to query venue open orders (${response.status}): ${errorBody}`);
+            return {
+              success: false,
+              mismatches: 0,
+              error: `Binance openOrders API Error ${response.status}: ${errorBody || response.statusText}`,
+            };
           }
+
+          venueOpenOrders = (await response.json()) as any[];
         } catch (err: any) {
-          logger.warn(`[ReconciliationWorker] Failed to query venue open orders: ${err.message}`);
+          logger.warn(`[ReconciliationWorker] Network error querying venue open orders: ${err.message}`);
+          return {
+            success: false,
+            mismatches: 0,
+            error: `Network error querying Binance openOrders: ${err.message}`,
+          };
         }
       }
     }
 
-    if (!venueOpenOrders) return 0;
+    if (!venueOpenOrders) {
+      return { success: false, mismatches: 0, error: 'Failed to retrieve exchange open orders' };
+    }
 
     const localOpenOrders = await db.query<any>(
       `SELECT * FROM exchange_orders WHERE user_id = ? AND status IN ('SUBMITTING', 'OPEN', 'PARTIALLY_FILLED')`,
@@ -727,7 +946,7 @@ export class ReconciliationWorker {
       }
     }
 
-    return mismatches;
+    return { success: true, mismatches };
   }
 
   /**
@@ -739,7 +958,7 @@ export class ReconciliationWorker {
     runId: string = `rec_run_${Date.now()}`,
     mockExchangeBalances?: Record<string, number | string>,
     mockExchangeLocked?: Record<string, number | string>
-  ): Promise<number> {
+  ): Promise<ReconciliationStepResult> {
     let mismatches = 0;
     const localProjection = await LedgerService.getAuthoritativeProjection(userId, 'live');
 
@@ -747,42 +966,105 @@ export class ReconciliationWorker {
     let exchangeLocked: Record<string, number | string> | null = mockExchangeLocked || null;
 
     if (!exchangeBalances) {
+      const mockState = config.NODE_ENV === 'test' ? this.mockExchangeStates.get(userId) : undefined;
+      if (mockState?.shouldFail) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: mockState.failureError || 'Simulated exchange balance fetch failure',
+        };
+      }
+      if (mockState?.balances) {
+        exchangeBalances = mockState.balances;
+        exchangeLocked = mockState.locked || null;
+      }
+    }
+
+    if (!exchangeBalances) {
       const creds = await BinanceGateway.getCredentials(userId);
-      if (creds?.apiKey) {
+      if (!creds?.apiKey) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: `No exchange credentials found for user ${userId}`,
+        };
+      }
+
+      if (
+        config.NODE_ENV === 'test' &&
+        (creds.apiKey.startsWith('mock_') || creds.apiKey.startsWith('test_')) &&
+        !creds.apiKey.startsWith('mock_fail')
+      ) {
+        const cashAsset = localProjection.cash.currency || 'USDT';
+        exchangeBalances = {
+          [cashAsset]: ExactDecimal.fromMinor(localProjection.cash.availableMinor, 2).toString(),
+        };
+        const positions = localProjection.positions || {};
+        for (const [asset, pos] of Object.entries(positions)) {
+          exchangeBalances[asset] = ExactDecimal.fromMinor(pos.availableQuantityMinor, 8).toString();
+        }
+        exchangeLocked = {};
+      } else if (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_fail')) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: 'Simulated failure: mock_fail API key',
+        };
+      } else {
         try {
           const baseUrl =
             creds.environment === 'mainnet' ? 'https://api.binance.com' : 'https://testnet.binance.vision';
-          const timestamp = Date.now();
-          const queryString = `timestamp=${timestamp}`;
+          const timestamp = ClockSyncService.getExchangeTime();
+          const queryString = `timestamp=${timestamp}&recvWindow=5000`;
           const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
+
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
 
           const response = await fetch(`${baseUrl}/api/v3/account?${queryString}&signature=${signature}`, {
             headers: { 'X-MBX-APIKEY': creds.apiKey },
+            signal: controller.signal,
           });
+          clearTimeout(timer);
 
-          if (response.ok) {
-            const data = (await response.json()) as any;
-            exchangeBalances = {};
-            exchangeLocked = {};
-            for (const b of data.balances || []) {
-              const freeDec = ExactDecimal.from(b.free || '0');
-              const lockedDec = ExactDecimal.from(b.locked || '0');
-              if (freeDec.gt(ExactDecimal.zero())) {
-                exchangeBalances[b.asset] = b.free;
-              }
-              if (lockedDec.gt(ExactDecimal.zero())) {
-                exchangeLocked[b.asset] = b.locked;
-              }
+          RateLimitTracker.recordResponse(response.headers, response.status);
+
+          if (!response.ok) {
+            const errorBody = await response.text().catch(() => '');
+            logger.warn(`[ReconciliationWorker] Failed to query Binance account balances (${response.status}): ${errorBody}`);
+            return {
+              success: false,
+              mismatches: 0,
+              error: `Binance account API Error ${response.status}: ${errorBody || response.statusText}`,
+            };
+          }
+
+          const data = (await response.json()) as any;
+          exchangeBalances = {};
+          exchangeLocked = {};
+          for (const b of data.balances || []) {
+            const freeDec = ExactDecimal.from(b.free || '0');
+            const lockedDec = ExactDecimal.from(b.locked || '0');
+            if (freeDec.gt(ExactDecimal.zero())) {
+              exchangeBalances[b.asset] = b.free;
+            }
+            if (lockedDec.gt(ExactDecimal.zero())) {
+              exchangeLocked[b.asset] = b.locked;
             }
           }
         } catch (e: any) {
-          logger.warn(`Could not query Binance account balances for reconciliation: ${e.message}`);
+          logger.warn(`[ReconciliationWorker] Network error querying Binance account balances: ${e.message}`);
+          return {
+            success: false,
+            mismatches: 0,
+            error: `Network error querying Binance account balances: ${e.message}`,
+          };
         }
       }
     }
 
     if (!exchangeBalances) {
-      return 0;
+      return { success: false, mismatches: 0, error: 'Failed to retrieve exchange balances' };
     }
 
     // 1. Reconcile Cash
@@ -870,7 +1152,7 @@ export class ReconciliationWorker {
       }
     }
 
-    return mismatches;
+    return { success: true, mismatches };
   }
 
   /**

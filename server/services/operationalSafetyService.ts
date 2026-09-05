@@ -5,6 +5,7 @@ import { RateLimitTracker } from './rateLimitTracker';
 import { CircuitBreakerService } from './circuitBreakerService';
 import { SymbolRulesService } from './symbolRules';
 import { ReconciliationWorker } from './reconciliationWorker';
+import { config } from '../config';
 import crypto from 'node:crypto';
 
 export type KillSwitchScope = 'GLOBAL' | 'ACCOUNT' | 'SYMBOL';
@@ -357,8 +358,8 @@ export class OperationalSafetyGate {
         };
       }
 
-      // Reconciliation Freshness SLA (Reconciliation must have completed within 5 minutes for this user)
-      const RECONCILIATION_SLA_MS = 300_000;
+      // Reconciliation Freshness SLA (Reconciliation must have completed within SLA for this user)
+      const RECONCILIATION_SLA_MS = config.RECONCILIATION_SLA_MS ?? 300_000;
       const syncState = await db.queryOne<any>(
         `SELECT last_sync_at FROM exchange_sync_state WHERE account_id = ? LIMIT 1`,
         [`rec_${params.userId}`]
@@ -375,9 +376,10 @@ export class OperationalSafetyGate {
         };
       }
       if (Date.now() - effectiveLastSyncAt > RECONCILIATION_SLA_MS) {
+        const slaSec = Math.round(RECONCILIATION_SLA_MS / 1000);
         return {
           allowed: false,
-          reason: `Trading blocked: Exchange reconciliation is overdue for this user account (last run ${Math.round((Date.now() - effectiveLastSyncAt) / 1000)}s ago > 300s SLA).`,
+          reason: `Trading blocked: Exchange reconciliation is overdue for this user account (last run ${Math.round((Date.now() - effectiveLastSyncAt) / 1000)}s ago > ${slaSec}s SLA).`,
           checks,
         };
       }

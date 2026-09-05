@@ -1,3 +1,4 @@
+import { getDb } from '../db';
 import { BinanceGateway } from './binanceGateway';
 import { ReconciliationWorker } from './reconciliationWorker';
 import { CircuitBreakerService } from './circuitBreakerService';
@@ -31,12 +32,13 @@ export class UserDataStreamManager {
       return null;
     }
 
+    const isTest = process.env.NODE_ENV === 'test' || config.NODE_ENV === 'test';
     if (
-      process.env.NODE_ENV === 'test' ||
-      config.NODE_ENV === 'test' ||
-      creds.apiKey.startsWith('test_') ||
-      creds.apiKey.startsWith('mock_') ||
-      creds.apiKey.startsWith('binance_test_')
+      isTest &&
+      (creds.apiKey.startsWith('test_') ||
+        creds.apiKey.startsWith('mock_') ||
+        creds.apiKey.startsWith('binance_test_') ||
+        !creds.apiSecret)
     ) {
       const mockKey = `test_listen_key_${userId.slice(0, 8)}_${Date.now()}`;
       this.sessions.set(userId, {
@@ -93,11 +95,10 @@ export class UserDataStreamManager {
     const creds = await BinanceGateway.getCredentials(userId);
     if (!creds) return false;
 
+    const isTest = process.env.NODE_ENV === 'test' || config.NODE_ENV === 'test';
     if (
-      process.env.NODE_ENV === 'test' ||
-      config.NODE_ENV === 'test' ||
-      creds.apiKey.startsWith('test_') ||
-      creds.apiKey.startsWith('mock_')
+      isTest &&
+      (creds.apiKey.startsWith('test_') || creds.apiKey.startsWith('mock_'))
     ) {
       session.lastKeepAliveAt = Date.now();
       session.status = 'ACTIVE';
@@ -136,7 +137,8 @@ export class UserDataStreamManager {
     if (!session) return;
 
     const creds = await BinanceGateway.getCredentials(userId);
-    if (creds && !creds.apiKey.startsWith('mock_') && !creds.apiKey.startsWith('test_')) {
+    const isTest = process.env.NODE_ENV === 'test' || config.NODE_ENV === 'test';
+    if (creds && !isTest) {
       const baseUrl = creds.environment === 'testnet' ? 'https://testnet.binance.vision' : 'https://api.binance.com';
       try {
         await fetch(`${baseUrl}/api/v3/userDataStream?listenKey=${encodeURIComponent(session.listenKey)}`, {
@@ -242,6 +244,34 @@ export class UserDataStreamManager {
       metadata: { reconciliationStatus: recResult.status, mismatches: recResult.mismatchesFound },
       result: 'SUCCESS',
     });
+  }
+
+  /**
+   * Restores user stream connections for all active exchange accounts upon server startup.
+   */
+  static async restoreAllActiveStreams(): Promise<number> {
+    const db = getDb();
+    try {
+      const activeAccounts = await db.query<{ user_id: string }>(
+        `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = 1`
+      );
+      let count = 0;
+      for (const acc of activeAccounts) {
+        try {
+          const listenKey = await this.acquireListenKey(acc.user_id);
+          if (listenKey) {
+            count++;
+            logger.info(`[UserDataStreamManager] Restored stream for user ${acc.user_id}`);
+          }
+        } catch (err: any) {
+          logger.warn(`[UserDataStreamManager] Failed to restore stream for user ${acc.user_id}: ${err.message}`);
+        }
+      }
+      return count;
+    } catch (err: any) {
+      logger.error(`[UserDataStreamManager] Error querying active accounts for stream restoration: ${err.message}`);
+      return 0;
+    }
   }
 
   /**

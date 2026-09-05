@@ -39,6 +39,13 @@ describe('Production-Critical Financial Execution Hardening Suite (43 Scenarios)
        VALUES (?, ?, 0, 0.50, 0.60, 0.10, ?)`,
       [`lim_${userId}`, userId, Date.now()]
     );
+
+    await BinanceGateway.saveExchangeCredentials(userId, {
+      apiKey: 'mock_sim_fin_key',
+      apiSecret: 'mock_sim_secret',
+      environment: 'testnet',
+    });
+    await ReconciliationWorker.runReconciliation(userId);
   });
 
   // =========================================================================
@@ -845,6 +852,7 @@ describe('Production-Critical Financial Execution Hardening Suite (43 Scenarios)
         apiSecret: 'mock_secret',
         environment: 'testnet',
       });
+      await ReconciliationWorker.runReconciliation(userId);
 
       const order = await BinanceGateway.submitOrder({
         userId,
@@ -872,6 +880,7 @@ describe('Production-Critical Financial Execution Hardening Suite (43 Scenarios)
         apiSecret: 'mock_secret',
         environment: 'testnet',
       });
+      await ReconciliationWorker.runReconciliation(userId);
 
       const order = await BinanceGateway.submitOrder({
         userId,
@@ -899,6 +908,7 @@ describe('Production-Critical Financial Execution Hardening Suite (43 Scenarios)
         apiSecret: 'mock_secret',
         environment: 'testnet',
       });
+      await ReconciliationWorker.runReconciliation(userId);
 
       const order = await BinanceGateway.submitOrder({
         userId,
@@ -993,13 +1003,14 @@ describe('Production-Critical Financial Execution Hardening Suite (43 Scenarios)
 
     it('Scenario 39: Material discrepancy generates RECONCILIATION_MISMATCH incident without silent overwrite', async () => {
       // Local ledger has $100,000. Exchange reports $95,000. Discrepancy = $5,000.
-      const mismatches = await ReconciliationWorker.reconcileBalancesAgainstExchange(
+      const result = await ReconciliationWorker.reconcileBalancesAgainstExchange(
         userId,
         'rec_run_mismatch_39',
         { USDT: 95000 }
       );
 
-      expect(mismatches).toBeGreaterThan(0);
+      expect(result.success).toBe(true);
+      expect(result.mismatches).toBeGreaterThan(0);
 
       const db = getDb();
       const mismatchRows = await db.query<any>(
@@ -1016,13 +1027,14 @@ describe('Production-Critical Financial Execution Hardening Suite (43 Scenarios)
 
     it('Scenario 40: Unledgered exchange assets detected and flagged for audit review', async () => {
       // User has 0 SOL in ledger. Exchange reports 50 SOL.
-      const mismatches = await ReconciliationWorker.reconcileBalancesAgainstExchange(
+      const result = await ReconciliationWorker.reconcileBalancesAgainstExchange(
         userId,
         'rec_run_unledgered_40',
         { USDT: 100000, SOL: 50 }
       );
 
-      expect(mismatches).toBeGreaterThan(0);
+      expect(result.success).toBe(true);
+      expect(result.mismatches).toBeGreaterThan(0);
 
       const db = getDb();
       const solMismatch = await db.queryOne<any>(

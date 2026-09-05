@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { getDb } from '../db';
 import { BinanceGateway } from '../services/binanceGateway';
 import { LedgerService } from '../services/ledgerService';
+import { ReconciliationWorker } from '../services/reconciliationWorker';
 
 describe('Server-Side Live Binance Execution Architecture', () => {
   const userId = 'usr_live_trader_001';
@@ -201,6 +202,7 @@ describe('Server-Side Live Binance Execution Architecture', () => {
         apiSecret: 'mock_sim_secret',
         environment: 'testnet',
       });
+      await ReconciliationWorker.runReconciliation(userId);
     });
 
     it('successfully places and fills a market buy order with double-entry accounting', async () => {
@@ -278,6 +280,7 @@ describe('Server-Side Live Binance Execution Architecture', () => {
         apiSecret: 'mock_sim_secret',
         environment: 'testnet',
       });
+      await ReconciliationWorker.runReconciliation(userId);
 
       const initialSummary = await LedgerService.getAuthoritativeProjection(userId, 'live');
       const startAvailable = initialSummary.cash.available;
@@ -317,6 +320,7 @@ describe('Server-Side Live Binance Execution Architecture', () => {
         apiSecret: 'mock_secret',
         environment: 'testnet',
       });
+      await ReconciliationWorker.runReconciliation(userId);
 
       const order = await BinanceGateway.submitOrder({
         userId,
@@ -344,6 +348,7 @@ describe('Server-Side Live Binance Execution Architecture', () => {
         apiSecret: 'mock_secret',
         environment: 'testnet',
       });
+      await ReconciliationWorker.runReconciliation(userId);
 
       const order = await BinanceGateway.submitOrder({
         userId,

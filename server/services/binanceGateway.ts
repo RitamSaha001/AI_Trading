@@ -148,14 +148,16 @@ export class BinanceGateway {
     clientOrderId?: string
   ): Promise<ExchangeFillReport[]> {
     const orderIdStr = String(exchangeOrderId);
-    if (clientOrderId && this.mockOrderFills.has(clientOrderId)) {
-      return this.mockOrderFills.get(clientOrderId)!;
-    }
-    if (this.mockOrderFills.has(orderIdStr)) {
-      return this.mockOrderFills.get(orderIdStr)!;
-    }
-    if (this.mockOrderFills.has(symbol)) {
-      return this.mockOrderFills.get(symbol)!;
+    if (config.NODE_ENV === 'test') {
+      if (clientOrderId && this.mockOrderFills.has(clientOrderId)) {
+        return this.mockOrderFills.get(clientOrderId)!;
+      }
+      if (this.mockOrderFills.has(orderIdStr)) {
+        return this.mockOrderFills.get(orderIdStr)!;
+      }
+      if (this.mockOrderFills.has(symbol)) {
+        return this.mockOrderFills.get(symbol)!;
+      }
     }
 
     const creds = await this.getCredentials(userId);
@@ -478,22 +480,24 @@ export class BinanceGateway {
         audit.canDeposit ? 1 : 0,
         audit.isSafe ? 1 : 0,
         audit.securityBadge,
-        now,
+        0, // last_sync_at strictly 0 until authoritative exchange reconciliation completes
         now,
       ]
     );
 
+    // Initialize or reset exchange_sync_state for this account with last_sync_at = 0
+    // so the pre-trade gate strictly blocks until a real reconciliation completes successfully.
     await db.execute(
       `INSERT INTO exchange_sync_state (
         account_id, last_sync_at, rest_health, updated_at
-      ) VALUES (?, ?, 'HEALTHY', ?)
+      ) VALUES (?, 0, 'INITIALIZING', ?)
       ON CONFLICT(account_id) DO UPDATE SET
-        last_sync_at = excluded.last_sync_at,
-        rest_health = excluded.rest_health,
+        last_sync_at = 0,
+        rest_health = 'INITIALIZING',
         updated_at = excluded.updated_at`,
-      [`rec_${userId}`, now, now]
+      [`rec_${userId}`, now]
     );
-    ReconciliationWorker.setLastSuccessfulRunAt(now, userId);
+    ReconciliationWorker.setLastSuccessfulRunAt(0, userId);
 
     await AuditService.logEvent({
       userId,
@@ -1614,56 +1618,61 @@ export class BinanceGateway {
     fills?: ExchangeFillReport[];
   }> {
     const creds = await this.getCredentials(input.userId);
-
-    // Mock testing hooks
-    if (
-      creds?.apiKey === 'mock_timeout_key' ||
-      creds?.apiKey === 'mock_timeout_found' ||
-      creds?.apiKey === 'mock_timeout_not_found'
-    ) {
-      throw new Error('ETIMEDOUT: Connection timed out');
-    }
-    if (creds?.apiKey === 'mock_reject_key') {
-      throw new Error('Binance API Error 400: Filter failure: MIN_NOTIONAL');
+    if (!creds?.apiKey) {
+      throw new Error('No exchange credentials found for user. Connect Binance credentials first.');
     }
 
-    if (!creds?.apiKey || (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_sim_'))) {
-      await new Promise((r) => setTimeout(r, 10));
-      const simulatedPrice = normalized?.price && !normalized.price.isZero()
-        ? normalized.price.toString()
-        : (input.price ? ExactDecimal.from(input.price).toString() : '0');
-      const simulatedQty = normalized?.quantity && !normalized.quantity.isZero()
-        ? normalized.quantity.toString()
-        : (input.quantity ? ExactDecimal.from(input.quantity).toString() : '0');
-
-      let fills: ExchangeFillReport[] | undefined;
-      if (input.type === 'MARKET') {
-        if (creds?.apiKey === 'mock_sim_missing_fee') {
-          // Explicitly simulate missing commission for testing
-          fills = undefined;
-        } else {
-          const notionalDec = ExactDecimal.from(simulatedPrice).mul(ExactDecimal.from(simulatedQty));
-          const simFee = notionalDec.mul(ExactDecimal.from('0.00075')).toString();
-          fills = [
-            {
-              tradeId: `trd_sim_${Date.now()}`,
-              price: simulatedPrice,
-              qty: simulatedQty,
-              commission: simFee,
-              commissionAsset: input.quoteAsset,
-              time: Date.now(),
-            },
-          ];
-        }
+    // Mock testing hooks - strictly enabled only in test environment
+    if (config.NODE_ENV === 'test') {
+      if (
+        creds.apiKey === 'mock_timeout_key' ||
+        creds.apiKey === 'mock_timeout_found' ||
+        creds.apiKey === 'mock_timeout_not_found'
+      ) {
+        throw new Error('ETIMEDOUT: Connection timed out');
+      }
+      if (creds.apiKey === 'mock_reject_key') {
+        throw new Error('Binance API Error 400: Filter failure: MIN_NOTIONAL');
       }
 
-      return {
-        exchangeOrderId: `bin_ord_${Date.now()}`,
-        status: input.type === 'MARKET' ? 'FILLED' : 'OPEN',
-        executedQty: input.type === 'MARKET' ? simulatedQty : '0',
-        avgPrice: simulatedPrice,
-        fills,
-      };
+      if (creds.apiKey.startsWith('mock_sim_')) {
+        await new Promise((r) => setTimeout(r, 10));
+        const simulatedPrice = normalized?.price && !normalized.price.isZero()
+          ? normalized.price.toString()
+          : (input.price ? ExactDecimal.from(input.price).toString() : '0');
+        const simulatedQty = normalized?.quantity && !normalized.quantity.isZero()
+          ? normalized.quantity.toString()
+          : (input.quantity ? ExactDecimal.from(input.quantity).toString() : '0');
+
+        let fills: ExchangeFillReport[] | undefined;
+        if (input.type === 'MARKET') {
+          if (creds.apiKey === 'mock_sim_missing_fee') {
+            // Explicitly simulate missing commission for testing
+            fills = undefined;
+          } else {
+            const notionalDec = ExactDecimal.from(simulatedPrice).mul(ExactDecimal.from(simulatedQty));
+            const simFee = notionalDec.mul(ExactDecimal.from('0.00075')).toString();
+            fills = [
+              {
+                tradeId: `trd_sim_${Date.now()}`,
+                price: simulatedPrice,
+                qty: simulatedQty,
+                commission: simFee,
+                commissionAsset: input.quoteAsset,
+                time: Date.now(),
+              },
+            ];
+          }
+        }
+
+        return {
+          exchangeOrderId: `bin_ord_${Date.now()}`,
+          status: input.type === 'MARKET' ? 'FILLED' : 'OPEN',
+          executedQty: input.type === 'MARKET' ? simulatedQty : '0',
+          avgPrice: simulatedPrice,
+          fills,
+        };
+      }
     }
 
     const baseUrl =
@@ -1784,38 +1793,40 @@ export class BinanceGateway {
       if (!creds) return { found: false, notFoundConfirmed: false };
 
       // Test hooks
-      if (creds.apiKey === 'mock_rec_found' || creds.apiKey === 'mock_timeout_found') {
-        return {
-          found: true,
-          status: 'FILLED',
-          executedQty: 0.1,
-          executedQtyExact: '0.1',
-          exchangeOrderId: 'bin_ord_reconciled_123',
-          avgPrice: 50000,
-          avgPriceExact: '50000',
-          fills: [
-            {
-              tradeId: 'trd_mock_rec_1',
-              price: '50000',
-              qty: '0.1',
-              commission: '3.75',
-              commissionAsset: 'USDT',
-              time: Date.now(),
-            },
-          ],
-        };
-      }
-      if (creds.apiKey === 'mock_rec_not_found' || creds.apiKey === 'mock_timeout_not_found') {
-        return {
-          found: false,
-          notFoundConfirmed: true,
-        };
-      }
-      if (creds.apiKey === 'mock_rec_timeout' || creds.apiKey === 'mock_timeout_key') {
-        return {
-          found: false,
-          notFoundConfirmed: false,
-        };
+      if (config.NODE_ENV === 'test') {
+        if (creds.apiKey === 'mock_rec_found' || creds.apiKey === 'mock_timeout_found') {
+          return {
+            found: true,
+            status: 'FILLED',
+            executedQty: 0.1,
+            executedQtyExact: '0.1',
+            exchangeOrderId: 'bin_ord_reconciled_123',
+            avgPrice: 50000,
+            avgPriceExact: '50000',
+            fills: [
+              {
+                tradeId: 'trd_mock_rec_1',
+                price: '50000',
+                qty: '0.1',
+                commission: '3.75',
+                commissionAsset: 'USDT',
+                time: Date.now(),
+              },
+            ],
+          };
+        }
+        if (creds.apiKey === 'mock_rec_not_found' || creds.apiKey === 'mock_timeout_not_found') {
+          return {
+            found: false,
+            notFoundConfirmed: true,
+          };
+        }
+        if (creds.apiKey === 'mock_rec_timeout' || creds.apiKey === 'mock_timeout_key') {
+          return {
+            found: false,
+            notFoundConfirmed: false,
+          };
+        }
       }
 
       const baseUrl = creds.environment === 'mainnet'

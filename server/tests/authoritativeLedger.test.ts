@@ -37,6 +37,7 @@ describe('Authoritative Financial Ledger & Accounting Layer', () => {
       apiSecret: 'mock_sim_ledger_secret',
       environment: 'testnet',
     });
+    await ReconciliationWorker.runReconciliation(userId);
   });
 
   it('Scenario 1 (BUY): cash decreases, asset quantity increases, fee accounted, cost basis capitalized', async () => {
@@ -535,13 +536,14 @@ describe('Authoritative Financial Ledger & Accounting Layer', () => {
       [runId, Date.now()]
     );
 
-    const mismatches = await ReconciliationWorker.reconcileBalancesAgainstExchange(
+    const result = await ReconciliationWorker.reconcileBalancesAgainstExchange(
       userId,
       runId,
       { USDT: 8500 }
     );
 
-    expect(mismatches).toBe(1);
+    expect(result.success).toBe(true);
+    expect(result.mismatches).toBe(1);
 
     // Ledger balance was NOT silently overwritten!
     const balances = await LedgerService.getUserBalances(userId, 'live');
