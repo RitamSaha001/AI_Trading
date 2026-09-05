@@ -621,7 +621,7 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       ClockSyncService.setSimulatedOffset(50); // Clock is healthy
 
       // Simulate reconciliation that ran 400 seconds ago (>300s SLA)
-      ReconciliationWorker.setLastSuccessfulRunAt(Date.now() - 400_000);
+      ReconciliationWorker.setLastSuccessfulRunAt(Date.now() - 400_000, userId);
 
       const gateCheck = await OperationalSafetyGate.verifyOrderSubmission({
         userId,
@@ -639,7 +639,7 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       expect(gateCheck.checks.reconciliationFresh).toBe(false);
 
       // After a fresh reconciliation, orders are allowed
-      ReconciliationWorker.setLastSuccessfulRunAt(Date.now());
+      ReconciliationWorker.setLastSuccessfulRunAt(Date.now(), userId);
       const passCheck = await OperationalSafetyGate.verifyOrderSubmission({
         userId,
         symbol: 'BTCUSDT',
@@ -710,6 +710,308 @@ describe('Exchange Reconciliation & Operational Safety Suite', () => {
       );
       expect(limitsAfter.is_emergency_frozen).toBe(0);
       expect(limitsAfter.freeze_reason).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // 9. MULTI-USER RECONCILIATION, SAFETY GATE ISOLATION & WS HARDENING
+  // =========================================================================
+  describe('9. Multi-User Reconciliation, Safety Gate Isolation & WS Hardening', () => {
+    const userA = 'usr_ops_multi_a';
+    const userB = 'usr_ops_multi_b';
+    const userC = 'usr_ops_multi_c';
+
+    beforeEach(async () => {
+      const db = getDb();
+      for (const u of [userA, userB, userC]) {
+        await db.execute(`DELETE FROM exchange_fills WHERE canonical_fill_key LIKE ?`, [`%:${u}:%`]);
+        await db.execute(`DELETE FROM exchange_orders WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM exchange_accounts WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = ?`, [`rec_${u}`]);
+        await db.execute(`DELETE FROM ledger_entries WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM ledger_accounts WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM authoritative_positions WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM account_limits WHERE user_id = ?`, [u]);
+        await db.execute(`DELETE FROM users WHERE id = ?`, [u]);
+
+        await db.execute(
+          `INSERT INTO users (id, email, display_name, provider, provider_id, created_at, updated_at)
+           VALUES (?, ?, ?, 'email', ?, ?, ?)`,
+          [u, `${u}@lumen.io`, `User ${u}`, `prov_${u}`, Date.now(), Date.now()]
+        );
+        await db.execute(
+          `INSERT INTO account_limits (id, user_id, is_emergency_frozen, max_single_order_pct, max_asset_concentration_pct, min_cash_reserve_pct, updated_at)
+           VALUES (?, ?, 0, 0.50, 0.60, 0.10, ?)`,
+          [`lim_${u}`, u, Date.now()]
+        );
+      }
+    });
+
+    afterEach(async () => {
+      BinanceUserStreamTransport.stopAll();
+    });
+
+    it('Global periodic reconciliation reconciles all registered users and updates their sync state', async () => {
+      const db = getDb();
+      // Register exchange credentials for userA and userB
+      await BinanceGateway.saveExchangeCredentials(userA, {
+        apiKey: 'mock_sim_multi_a',
+        apiSecret: 'mock_sim_secret_a',
+        environment: 'testnet',
+      });
+      await BinanceGateway.saveExchangeCredentials(userB, {
+        apiKey: 'mock_sim_multi_b',
+        apiSecret: 'mock_sim_secret_b',
+        environment: 'testnet',
+      });
+
+      // Clear sync states to test global run
+      await db.execute(`DELETE FROM exchange_sync_state WHERE account_id LIKE 'rec_%'`);
+      ReconciliationWorker.resetForTesting();
+
+      // Run global reconciliation
+      const res = await ReconciliationWorker.runReconciliation();
+      expect(res.status).toBe('SUCCESS');
+
+      // Verify userA and userB both have fresh sync state in DB and in-memory
+      const syncA = await db.queryOne<any>(`SELECT * FROM exchange_sync_state WHERE account_id = ?`, [`rec_${userA}`]);
+      const syncB = await db.queryOne<any>(`SELECT * FROM exchange_sync_state WHERE account_id = ?`, [`rec_${userB}`]);
+      expect(syncA).not.toBeNull();
+      expect(syncB).not.toBeNull();
+      expect(Number(syncA.last_sync_at)).toBeGreaterThan(0);
+      expect(Number(syncB.last_sync_at)).toBeGreaterThan(0);
+
+      expect(ReconciliationWorker.getLastSuccessfulRunAt(userA)).toBeGreaterThan(0);
+      expect(ReconciliationWorker.getLastSuccessfulRunAt(userB)).toBeGreaterThan(0);
+    });
+
+    it('Safety gate blocks user whose exchange state was never reconciled even if global run ran', async () => {
+      const db = getDb();
+      ClockSyncService.setSimulatedOffset(50);
+
+      // Register userA and run reconciliation for userA
+      await BinanceGateway.saveExchangeCredentials(userA, {
+        apiKey: 'mock_sim_multi_a',
+        apiSecret: 'mock_sim_secret_a',
+        environment: 'testnet',
+      });
+      await ReconciliationWorker.runReconciliation(userA);
+
+      // UserC has NO credentials and NO reconciliation record
+      await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = ?`, [`rec_${userC}`]);
+      ReconciliationWorker.setLastSuccessfulRunAt(0, userC);
+
+      const checkC = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: userC,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+
+      expect(checkC.allowed).toBe(false);
+      expect(checkC.reason).toContain('No exchange reconciliation has ever completed for this user account');
+      expect(checkC.checks.reconciliationFresh).toBe(false);
+
+      // UserA IS allowed because userA has completed reconciliation
+      const checkA = await OperationalSafetyGate.verifyOrderSubmission({
+        userId: userA,
+        symbol: 'BTCUSDT',
+        quoteAsset: 'USDT',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: '0.01',
+        price: '50000',
+        isLive: true,
+      });
+      expect(checkA.allowed).toBe(true);
+      expect(checkA.checks.reconciliationFresh).toBe(true);
+    });
+
+    it('WebSocket transport detects out-of-order sequence reversal and triggers stream degradation', async () => {
+      const db = getDb();
+      const transport = BinanceUserStreamTransport.start(userA, 'mock_listen_key_seq', 'testnet');
+
+      const now = Date.now();
+      // First event at timestamp T
+      await transport.handleMessage(JSON.stringify({
+        e: 'balanceUpdate',
+        E: now,
+        a: 'USDT',
+        d: '10.0',
+        T: now,
+      }));
+      expect(transport.getLastEventTime()).toBe(now);
+      expect(transport.getStreamHealth()).toBe('HEALTHY');
+
+      // Second event arrives with older timestamp T - 5000 (sequence reversal / out-of-order)
+      await transport.handleMessage(JSON.stringify({
+        e: 'balanceUpdate',
+        E: now - 5000,
+        a: 'USDT',
+        d: '5.0',
+        T: now - 5000,
+      }));
+
+      expect(transport.getStreamHealth()).toBe('DEGRADED');
+
+      // Check exchange_sync_state updated to DEGRADED
+      const syncRow = await db.queryOne<any>(`SELECT ws_health FROM exchange_sync_state WHERE account_id = ?`, [`rec_${userA}`]);
+      expect(syncRow?.ws_health).toBe('DEGRADED');
+
+      // Check audit event
+      const audit = await db.queryOne<any>(
+        `SELECT * FROM audit_events WHERE user_id = ? AND event_type = 'WS_SEQUENCE_ANOMALY'`,
+        [userA]
+      );
+      expect(audit).not.toBeNull();
+      expect(audit.result).toBe('DEGRADED');
+    });
+
+    it('WebSocket transport detects stale event (>60s) and marks stream DEGRADED', async () => {
+      const db = getDb();
+      const transport = BinanceUserStreamTransport.start(userA, 'mock_listen_key_stale', 'testnet');
+
+      const staleTime = Date.now() - 120_000; // 2 minutes old
+      await transport.handleMessage(JSON.stringify({
+        e: 'balanceUpdate',
+        E: staleTime,
+        a: 'BTC',
+        d: '0.1',
+        T: staleTime,
+      }));
+
+      expect(transport.getStreamHealth()).toBe('DEGRADED');
+
+      const audit = await db.queryOne<any>(
+        `SELECT * FROM audit_events WHERE user_id = ? AND event_type = 'WS_STALE_EVENT'`,
+        [userA]
+      );
+      expect(audit).not.toBeNull();
+      expect(audit.result).toBe('DEGRADED');
+    });
+
+    it('WebSocket fill with missing commission is recorded as PENDING and resolved authoritatively via REST reconciliation', async () => {
+      const db = getDb();
+
+      // Fund userA with cash for the trade
+      await LedgerService.creditDeposit({
+        userId: userA,
+        accountMode: 'live',
+        assetOrCurrency: 'USDT',
+        amountMinor: 1_000_000, // $10,000 USDT
+        paymentId: 'pay_init_ws_fee',
+        description: 'Fund account',
+      });
+      await LedgerService.transfer({
+        userId: userA,
+        accountMode: 'live',
+        fromAccountType: 'sovereign_cash',
+        toAccountType: 'trading_allocated',
+        assetOrCurrency: 'USDT',
+        amountMinor: 1_000_000,
+        referenceType: 'allocation',
+        referenceId: 'alloc_init_ws_fee',
+        description: 'Allocate trading cash',
+      });
+
+      const transport = BinanceUserStreamTransport.start(userA, 'mock_listen_key_fee', 'testnet');
+
+      const tradeId = 55667788;
+      const canonicalFillKey = `binance:${userA}:BTCUSDT:${tradeId}`;
+
+      // Execution report with missing commission fields (n and N omitted)
+      const executionReportMissingFee = {
+        e: 'executionReport',
+        E: Date.now(),
+        s: 'BTCUSDT',
+        c: 'ws_order_missing_fee_01',
+        i: 88776655,
+        x: 'TRADE',
+        X: 'FILLED',
+        S: 'BUY',
+        L: '50000.00',
+        l: '0.1',
+        T: Date.now(),
+        t: tradeId,
+        // n and N intentionally omitted
+      };
+
+      await transport.handleMessage(JSON.stringify(executionReportMissingFee));
+
+      // Invariant: Fill recorded as PENDING, order kept in RECONCILING, commission_status = PENDING
+      const fill = await db.queryOne<any>(
+        `SELECT * FROM exchange_fills WHERE canonical_fill_key = ?`,
+        [canonicalFillKey]
+      );
+      expect(fill).not.toBeNull();
+      expect(fill.commission_status).toBe('PENDING');
+      expect(fill.commission_exact).toBe('0');
+
+      const order = await db.queryOne<any>(
+        `SELECT status, commission_status FROM exchange_orders WHERE client_order_id = ?`,
+        ['ws_order_missing_fee_01']
+      );
+      expect(order).not.toBeNull();
+      expect(order.status).toBe('RECONCILING');
+      expect(order.commission_status).toBe('PENDING');
+
+      // Invariant: NO ledger entries posted prematurely with zero commission!
+      const ledgerFills = await db.query<any>(
+        `SELECT * FROM ledger_entries WHERE user_id = ? AND reference_type = 'trade_fill'`,
+        [userA]
+      );
+      expect(ledgerFills.length).toBe(0);
+
+      // Now simulate REST trade reconciliation providing the venue authoritative trade with exact commission
+      const mockVenueTrade = {
+        id: tradeId,
+        orderId: 88776655,
+        price: '50000.00',
+        qty: '0.1',
+        commission: '0.000075',
+        commissionAsset: 'BTC',
+        time: Date.now(),
+        isBuyer: true,
+      };
+
+      const mismatchesResolved = await ReconciliationWorker.reconcileTrades(
+        userA,
+        `rec_run_${Date.now()}`,
+        'BTCUSDT',
+        [mockVenueTrade]
+      );
+
+      expect(mismatchesResolved).toBe(1);
+
+      // Invariant: Fill updated to AUTHORITATIVE with exact commission
+      const resolvedFill = await db.queryOne<any>(
+        `SELECT * FROM exchange_fills WHERE canonical_fill_key = ?`,
+        [canonicalFillKey]
+      );
+      expect(resolvedFill.commission_status).toBe('AUTHORITATIVE');
+      expect(resolvedFill.commission_exact).toBe('0.000075');
+      expect(resolvedFill.commission_asset).toBe('BTC');
+
+      // Invariant: Order updated to FILLED and AUTHORITATIVE
+      const resolvedOrder = await db.queryOne<any>(
+        `SELECT status, commission_status, actual_commission_exact, actual_commission_asset FROM exchange_orders WHERE client_order_id = ?`,
+        ['ws_order_missing_fee_01']
+      );
+      expect(resolvedOrder.status).toBe('FILLED');
+      expect(resolvedOrder.commission_status).toBe('AUTHORITATIVE');
+      expect(resolvedOrder.actual_commission_exact).toBe('0.000075');
+      expect(resolvedOrder.actual_commission_asset).toBe('BTC');
+
+      // Invariant: Double-entry ledger settlement processed authoritatively with exact fee!
+      const postLedgerEntries = await db.query<any>(
+        `SELECT * FROM ledger_entries WHERE user_id = ? AND reference_type = 'trade_fill'`,
+        [userA]
+      );
+      expect(postLedgerEntries.length).toBeGreaterThan(0);
     });
   });
 });

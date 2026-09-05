@@ -10,6 +10,7 @@ import { ClockSyncService } from './clockSyncService';
 import { RateLimitTracker } from './rateLimitTracker';
 import { OperationalSafetyGate } from './operationalSafetyService';
 import { UserDataStreamManager } from './userDataStreamManager';
+import { ReconciliationWorker } from './reconciliationWorker';
 import crypto from 'node:crypto';
 
 export interface BinanceCredentials {
@@ -482,6 +483,18 @@ export class BinanceGateway {
       ]
     );
 
+    await db.execute(
+      `INSERT INTO exchange_sync_state (
+        account_id, last_sync_at, rest_health, updated_at
+      ) VALUES (?, ?, 'HEALTHY', ?)
+      ON CONFLICT(account_id) DO UPDATE SET
+        last_sync_at = excluded.last_sync_at,
+        rest_health = excluded.rest_health,
+        updated_at = excluded.updated_at`,
+      [`rec_${userId}`, now, now]
+    );
+    ReconciliationWorker.setLastSuccessfulRunAt(now, userId);
+
     await AuditService.logEvent({
       userId,
       eventType: 'EXCHANGE_CREDENTIALS_STORED',
@@ -550,6 +563,8 @@ export class BinanceGateway {
   static async disconnectExchange(userId: string): Promise<void> {
     const db = getDb();
     await db.execute(`DELETE FROM exchange_accounts WHERE user_id = ?`, [userId]);
+    await db.execute(`DELETE FROM exchange_sync_state WHERE account_id = ?`, [`rec_${userId}`]);
+    ReconciliationWorker.setLastSuccessfulRunAt(0, userId);
 
     await AuditService.logEvent({
       userId,

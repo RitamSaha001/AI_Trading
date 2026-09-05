@@ -31,6 +31,12 @@ describe('Authoritative Financial Ledger & Accounting Layer', () => {
        VALUES (?, ?, 0, 0.40, 0.50, 0.15, ?)`,
       [`lim_${userId}`, userId, Date.now()]
     );
+
+    await BinanceGateway.saveExchangeCredentials(userId, {
+      apiKey: 'mock_sim_ledger_key',
+      apiSecret: 'mock_sim_ledger_secret',
+      environment: 'testnet',
+    });
   });
 
   it('Scenario 1 (BUY): cash decreases, asset quantity increases, fee accounted, cost basis capitalized', async () => {

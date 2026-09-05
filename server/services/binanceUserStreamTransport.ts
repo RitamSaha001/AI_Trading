@@ -3,6 +3,7 @@ import { logger, AuditService } from './auditService';
 import { ExactDecimal } from './precision';
 import { LedgerService } from './ledgerService';
 import { UserDataStreamManager } from './userDataStreamManager';
+import { ReconciliationWorker } from './reconciliationWorker';
 import { config } from '../config';
 import crypto from 'node:crypto';
 
@@ -17,11 +18,25 @@ export class BinanceUserStreamTransport {
   private reconnectAttempts: number = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private pingTimer: NodeJS.Timeout | null = null;
+  private lastEventTime: number = 0;
+  private streamHealth: 'HEALTHY' | 'DEGRADED' = 'HEALTHY';
 
   constructor(userId: string, listenKey: string, environment: 'mainnet' | 'testnet') {
     this.userId = userId;
     this.listenKey = listenKey;
     this.environment = environment;
+  }
+
+  public getLastEventTime(): number {
+    return this.lastEventTime;
+  }
+
+  public getStreamHealth(): 'HEALTHY' | 'DEGRADED' {
+    return this.streamHealth;
+  }
+
+  public setLastEventTimeForTesting(time: number): void {
+    this.lastEventTime = time;
   }
 
   static get(userId: string): BinanceUserStreamTransport | undefined {
@@ -138,18 +153,73 @@ export class BinanceUserStreamTransport {
     }, backoffMs);
   }
 
-  public handleMessage(raw: any): void {
+  public async handleMessage(raw: any): Promise<void> {
     try {
       const text = typeof raw === 'string' ? raw : raw?.toString?.() || '';
       if (!text) return;
       const msg = JSON.parse(text);
 
+      const eventTime = typeof msg.E === 'number' ? msg.E : (typeof msg.E === 'string' ? Number(msg.E) : 0);
+
+      if (eventTime > 0) {
+        // 1. Sequence anomaly / reversal check (out-of-order execution reports)
+        if (this.lastEventTime > 0 && eventTime < this.lastEventTime) {
+          logger.warn(
+            `[UserStreamTransport] Out-of-order event detected for user ${this.userId}: eventTime=${eventTime} < lastEventTime=${this.lastEventTime}. Sequence reversal anomaly!`
+          );
+          this.streamHealth = 'DEGRADED';
+          void AuditService.logEvent({
+            userId: this.userId,
+            eventType: 'WS_SEQUENCE_ANOMALY',
+            source: 'binance_user_stream_transport',
+            actor: 'binance_ws',
+            metadata: { eventTime, lastEventTime: this.lastEventTime, eventType: msg.e },
+            result: 'DEGRADED',
+          });
+
+          // Update exchange_sync_state
+          const db = getDb();
+          void db.execute(
+            `INSERT INTO exchange_sync_state (account_id, last_sync_at, ws_health, updated_at)
+             VALUES (?, ?, 'DEGRADED', ?)
+             ON CONFLICT(account_id) DO UPDATE SET ws_health = 'DEGRADED', updated_at = excluded.updated_at`,
+            [`rec_${this.userId}`, Date.now(), Date.now()]
+          ).catch((e: any) => logger.warn(`Failed to update exchange_sync_state: ${e.message}`));
+
+          // Trigger immediate targeted REST reconciliation
+          void ReconciliationWorker.runReconciliation(this.userId);
+        }
+
+        // 2. Stale event check (replay or lagging WebSocket stream)
+        const now = Date.now();
+        if (now - eventTime > 60_000) {
+          logger.warn(
+            `[UserStreamTransport] Stale event detected for user ${this.userId}: eventTime=${eventTime}, age=${now - eventTime}ms > 60000ms. Possible replay or lagging stream!`
+          );
+          this.streamHealth = 'DEGRADED';
+          void AuditService.logEvent({
+            userId: this.userId,
+            eventType: 'WS_STALE_EVENT',
+            source: 'binance_user_stream_transport',
+            actor: 'binance_ws',
+            metadata: { eventTime, ageMs: now - eventTime, eventType: msg.e },
+            result: 'DEGRADED',
+          });
+
+          // Trigger immediate targeted REST reconciliation
+          void ReconciliationWorker.runReconciliation(this.userId);
+        }
+
+        // Monotonically advance lastEventTime
+        this.lastEventTime = Math.max(this.lastEventTime, eventTime);
+      }
+
       if (msg.e === 'executionReport') {
-        void this.handleExecutionReport(msg);
+        await this.handleExecutionReport(msg);
       } else if (msg.e === 'outboundAccountPosition') {
-        void this.handleAccountPosition(msg);
+        await this.handleAccountPosition(msg);
       } else if (msg.e === 'balanceUpdate') {
-        void this.handleBalanceUpdate(msg);
+        await this.handleBalanceUpdate(msg);
       }
     } catch (err: any) {
       logger.warn(`[UserStreamTransport] Failed to parse message for ${this.userId}: ${err.message}`);
@@ -181,9 +251,18 @@ export class BinanceUserStreamTransport {
     const tradeId = String(msg.t);
     const fillPrice = String(msg.L || '0');
     const fillQty = String(msg.l || '0');
-    const commission = String(msg.n || '0');
-    const commissionAsset = msg.N || 'USDT';
     const executedAt = Number(msg.T || Date.now());
+
+    // Strict Authoritative Commission Check:
+    // Binance MUST provide non-null, non-undefined, non-empty commission and commission asset.
+    const hasAuthoritativeCommission =
+      msg.n !== undefined &&
+      msg.n !== null &&
+      msg.n !== '' &&
+      Boolean(msg.N);
+
+    const commission = hasAuthoritativeCommission ? String(msg.n) : '0';
+    const commissionAsset = hasAuthoritativeCommission ? String(msg.N) : 'USDT';
 
     const canonicalFillKey = `binance:${this.userId}:${symbol}:${tradeId}`;
     const accountingEventId = `settlement:${canonicalFillKey}`;
@@ -191,17 +270,16 @@ export class BinanceUserStreamTransport {
     const db = getDb();
 
     const existing = await db.queryOne<any>(
-      `SELECT id FROM exchange_fills WHERE canonical_fill_key = ?`,
+      `SELECT id, commission_status FROM exchange_fills WHERE canonical_fill_key = ?`,
       [canonicalFillKey]
     );
-    if (existing) {
-      logger.info(`[UserStreamTransport] Fill ${canonicalFillKey} already processed. Skipping duplicate.`);
+    if (existing && existing.commission_status === 'AUTHORITATIVE') {
+      logger.info(`[UserStreamTransport] Fill ${canonicalFillKey} already processed authoritatively. Skipping duplicate.`);
       return;
     }
 
     const priceDec = ExactDecimal.from(fillPrice);
     const qtyDec = ExactDecimal.from(fillQty);
-    const feeDec = ExactDecimal.from(commission);
     const notionalDec = priceDec.mul(qtyDec);
 
     const quoteAsset = symbol.endsWith('USDT')
@@ -222,6 +300,114 @@ export class BinanceUserStreamTransport {
 
     const targetOrderId = localOrder?.id || localOrder?.client_order_id || `ws_order_${orderId || Date.now()}`;
     const fillDbId = `fill_ws_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+    if (!hasAuthoritativeCommission) {
+      logger.warn(
+        `[UserStreamTransport] Missing authoritative commission for fill ${canonicalFillKey}. Storing fill as PENDING and triggering REST reconciliation.`
+      );
+
+      await db.transaction(async (tx) => {
+        if (!localOrder) {
+          await tx.execute(
+            `INSERT INTO exchange_orders (
+              id, user_id, client_order_id, exchange_order_id, symbol, side, type, status,
+              orig_qty, orig_qty_exact, executed_qty, executed_qty_exact,
+              price, price_exact, avg_price, avg_price_exact,
+              cumulative_quote_qty, cumulative_quote_exact,
+              quote_asset, notional, notional_exact,
+              fee, fee_exact, fee_asset,
+              actual_commission_exact, actual_commission_asset, commission_status,
+              executed_notional_exact, reserved_cash_minor, reserved_qty_minor,
+              idempotency_key, created_at, updated_at
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, 'MARKET', 'RECONCILING',
+              0.0, ?, 0.0, ?,
+              0.0, ?, 0.0, ?,
+              0.0, ?,
+              ?, 0.0, ?,
+              0.0, '0', ?,
+              '0', ?, 'PENDING',
+              ?, 0, 0,
+              ?, ?, ?
+            ) ON CONFLICT (id) DO NOTHING`,
+            [
+              targetOrderId,
+              this.userId,
+              clientOrderId || targetOrderId,
+              orderId,
+              symbol,
+              side,
+              qtyDec.toString(),
+              qtyDec.toString(),
+              priceDec.toString(),
+              priceDec.toString(),
+              notionalDec.toString(),
+              quoteAsset,
+              notionalDec.toString(),
+              commissionAsset,
+              commissionAsset,
+              notionalDec.toString(),
+              `idemp_ws_${tradeId}_${this.userId}`,
+              executedAt,
+              executedAt,
+            ]
+          );
+        } else {
+          await tx.execute(
+            `UPDATE exchange_orders SET
+              status = 'RECONCILING',
+              exchange_order_id = COALESCE(exchange_order_id, ?),
+              commission_status = 'PENDING',
+              updated_at = ?
+            WHERE id = ?`,
+            [orderId, executedAt, localOrder.id]
+          );
+        }
+
+        await tx.execute(
+          `INSERT INTO exchange_fills (
+            id, order_id, exchange_trade_id, canonical_fill_key, symbol,
+            price, price_exact, qty, qty_exact,
+            commission, commission_exact, commission_asset, commission_status,
+            quote_qty, quote_qty_exact, executed_at
+          ) VALUES (?, ?, ?, ?, ?, 0.0, ?, 0.0, ?, 0.0, '0', ?, 'PENDING', 0.0, ?, ?)
+          ON CONFLICT (canonical_fill_key) DO UPDATE SET
+            commission_status = 'PENDING'`,
+          [
+            fillDbId,
+            targetOrderId,
+            tradeId,
+            canonicalFillKey,
+            symbol,
+            priceDec.toString(),
+            qtyDec.toString(),
+            commissionAsset,
+            notionalDec.toString(),
+            executedAt,
+          ]
+        );
+      });
+
+      await AuditService.logEvent({
+        userId: this.userId,
+        eventType: 'WS_FILL_PENDING_COMMISSION',
+        source: 'binance_user_stream_transport',
+        actor: 'binance_ws',
+        metadata: {
+          canonicalFillKey,
+          tradeId,
+          symbol,
+          missingField: msg.n === undefined ? 'n' : !msg.N ? 'N' : 'n_empty',
+        },
+        result: 'DEGRADED',
+      });
+
+      // Trigger immediate REST trade reconciliation to fetch authoritative trade record
+      void ReconciliationWorker.reconcileTrades(this.userId, undefined, symbol);
+      return;
+    }
+
+    const feeDec = ExactDecimal.from(commission);
 
     await db.transaction(async (tx) => {
       if (!localOrder) {
@@ -246,7 +432,7 @@ export class BinanceUserStreamTransport {
             ?, ?, 'AUTHORITATIVE',
             ?, 0, 0,
             ?, ?, ?
-          )`,
+          ) ON CONFLICT (id) DO NOTHING`,
           [
             targetOrderId,
             this.userId,
@@ -269,6 +455,40 @@ export class BinanceUserStreamTransport {
             `idemp_ws_${tradeId}_${this.userId}`,
             executedAt,
             executedAt,
+          ]
+        );
+      } else {
+        await tx.execute(
+          `UPDATE exchange_orders SET
+            status = 'FILLED',
+            exchange_order_id = COALESCE(exchange_order_id, ?),
+            executed_qty = 0.0,
+            executed_qty_exact = ?,
+            avg_price = 0.0,
+            avg_price_exact = ?,
+            cumulative_quote_qty = 0.0,
+            cumulative_quote_exact = ?,
+            executed_notional_exact = ?,
+            fee = 0.0,
+            fee_exact = ?,
+            fee_asset = ?,
+            actual_commission_exact = ?,
+            actual_commission_asset = ?,
+            commission_status = 'AUTHORITATIVE',
+            updated_at = ?
+          WHERE id = ?`,
+          [
+            orderId,
+            qtyDec.toString(),
+            priceDec.toString(),
+            notionalDec.toString(),
+            notionalDec.toString(),
+            feeDec.toString(),
+            commissionAsset,
+            feeDec.toString(),
+            commissionAsset,
+            executedAt,
+            localOrder.id,
           ]
         );
       }

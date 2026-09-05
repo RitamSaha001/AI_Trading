@@ -24,17 +24,26 @@ export class ReconciliationWorker {
   private static isRunning = false;
   private static periodicTimer: NodeJS.Timeout | null = null;
   private static lastSuccessfulRunAt: number = config.NODE_ENV === 'test' ? Date.now() : 0;
+  private static userLastSuccessfulRuns: Map<string, number> = new Map();
 
-  static getLastSuccessfulRunAt(): number {
+  static getLastSuccessfulRunAt(userId?: string): number {
+    if (userId) {
+      return this.userLastSuccessfulRuns.get(userId) || 0;
+    }
     return this.lastSuccessfulRunAt;
   }
 
-  static setLastSuccessfulRunAt(timestamp: number): void {
-    this.lastSuccessfulRunAt = timestamp;
+  static setLastSuccessfulRunAt(timestamp: number, userId?: string): void {
+    if (userId) {
+      this.userLastSuccessfulRuns.set(userId, timestamp);
+    } else {
+      this.lastSuccessfulRunAt = timestamp;
+    }
   }
 
   static resetForTesting(): void {
     this.lastSuccessfulRunAt = 0;
+    this.userLastSuccessfulRuns.clear();
     this.isRunning = false;
     this.stopPeriodicScheduler();
   }
@@ -222,14 +231,102 @@ export class ReconciliationWorker {
         }
       }
 
+      const now = Date.now();
+
       // 4. Reconcile Local Authoritative Account State vs Exchange State
       if (userId) {
+        // Single user reconciliation: balances, open orders, and trades
         const mismatchCount = await this.reconcileBalancesAgainstExchange(userId, runId);
         mismatchesFound += mismatchCount;
 
+        const openOrderMismatches = await this.reconcileOpenOrders(userId, runId);
+        mismatchesFound += openOrderMismatches;
+
         // Trade reconciliation for user's active symbols
-        const tradeMismatches = await this.reconcileTrades(userId, runId);
-        mismatchesFound += tradeMismatches;
+        const symbolRows = await db.query<any>(
+          `SELECT DISTINCT symbol FROM exchange_orders WHERE user_id = ?`,
+          [userId]
+        );
+        const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : ['BTCUSDT'];
+        for (const sym of symbols) {
+          const tradeMismatches = await this.reconcileTrades(userId, runId, sym);
+          mismatchesFound += tradeMismatches;
+        }
+
+        // Update durable exchange_sync_state for this user
+        try {
+          await db.execute(
+            `INSERT INTO exchange_sync_state (
+              account_id, last_sync_at, rest_health, updated_at
+            ) VALUES (?, ?, 'HEALTHY', ?)
+            ON CONFLICT(account_id) DO UPDATE SET
+              last_sync_at = excluded.last_sync_at,
+              rest_health = excluded.rest_health,
+              updated_at = excluded.updated_at`,
+            [`rec_${userId}`, now, now]
+          );
+        } catch (err: any) {
+          logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state for ${userId}: ${err.message}`);
+        }
+        this.userLastSuccessfulRuns.set(userId, now);
+      } else {
+        // Global scheduled run: Enumerate and reconcile EVERY registered user with exchange credentials
+        const registeredUsers = await db.query<any>(
+          `SELECT DISTINCT user_id FROM exchange_accounts`
+        );
+
+        for (const userRow of registeredUsers) {
+          const uId = userRow.user_id;
+          try {
+            const mismatchCount = await this.reconcileBalancesAgainstExchange(uId, runId);
+            mismatchesFound += mismatchCount;
+
+            const openOrderMismatches = await this.reconcileOpenOrders(uId, runId);
+            mismatchesFound += openOrderMismatches;
+
+            const symbolRows = await db.query<any>(
+              `SELECT DISTINCT symbol FROM exchange_orders WHERE user_id = ?`,
+              [uId]
+            );
+            const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : ['BTCUSDT'];
+            for (const sym of symbols) {
+              const tradeMismatches = await this.reconcileTrades(uId, runId, sym);
+              mismatchesFound += tradeMismatches;
+            }
+
+            // Update per-user exchange_sync_state
+            await db.execute(
+              `INSERT INTO exchange_sync_state (
+                account_id, last_sync_at, rest_health, updated_at
+              ) VALUES (?, ?, 'HEALTHY', ?)
+              ON CONFLICT(account_id) DO UPDATE SET
+                last_sync_at = excluded.last_sync_at,
+                rest_health = excluded.rest_health,
+                updated_at = excluded.updated_at`,
+              [`rec_${uId}`, now, now]
+            );
+            this.userLastSuccessfulRuns.set(uId, now);
+          } catch (userErr: any) {
+            logger.error(`[ReconciliationWorker] Error reconciling exchange state for user ${uId}: ${userErr.message}`);
+          }
+        }
+
+        // Also update rec_global for overall system health
+        try {
+          await db.execute(
+            `INSERT INTO exchange_sync_state (
+              account_id, last_sync_at, rest_health, updated_at
+            ) VALUES ('rec_global', ?, 'HEALTHY', ?)
+            ON CONFLICT(account_id) DO UPDATE SET
+              last_sync_at = excluded.last_sync_at,
+              rest_health = excluded.rest_health,
+              updated_at = excluded.updated_at`,
+            [now, now]
+          );
+        } catch (err: any) {
+          logger.warn(`[ReconciliationWorker] Failed to update global exchange_sync_state: ${err.message}`);
+        }
+        this.lastSuccessfulRunAt = now;
       }
 
       const durationMs = Date.now() - startTime;
@@ -239,25 +336,6 @@ export class ReconciliationWorker {
         `UPDATE reconciliation_runs SET status = ?, orders_checked = ?, balances_checked = ?, mismatches_found = ?, duration_ms = ? WHERE id = ?`,
         [status, ordersChecked, balancesChecked, mismatchesFound, durationMs, runId]
       );
-
-      // Update durable exchange_sync_state
-      const targetAccount = userId ? `rec_${userId}` : 'rec_global';
-      const now = Date.now();
-      try {
-        await db.execute(
-          `INSERT INTO exchange_sync_state (
-            account_id, last_sync_at, rest_health, updated_at
-          ) VALUES (?, ?, 'HEALTHY', ?)
-          ON CONFLICT(account_id) DO UPDATE SET
-            last_sync_at = excluded.last_sync_at,
-            rest_health = excluded.rest_health,
-            updated_at = excluded.updated_at`,
-          [targetAccount, now, now]
-        );
-      } catch (err: any) {
-        logger.warn(`[ReconciliationWorker] Failed to update exchange_sync_state: ${err.message}`);
-      }
-      this.lastSuccessfulRunAt = now;
 
       await AuditService.logEvent({
         userId,
@@ -329,7 +407,7 @@ export class ReconciliationWorker {
       const canonicalFillKey = `binance:${userId}:${symbol}:${tradeId}`;
 
       const existingFill = await db.queryOne<any>(
-        `SELECT id FROM exchange_fills WHERE canonical_fill_key = ?`,
+        `SELECT id, commission_status FROM exchange_fills WHERE canonical_fill_key = ?`,
         [canonicalFillKey]
       );
 
@@ -469,6 +547,101 @@ export class ReconciliationWorker {
           notes: `Missing exchange fill ${tradeId} discovered and settled authoritatively.`,
           actionTaken: 'DEGRADED',
           actionStatus: 'APPLIED',
+        });
+      } else if (existingFill.commission_status === 'PENDING') {
+        // Authoritative venue trade record resolves previously pending fill!
+        mismatches++;
+        logger.info(`[ReconciliationWorker] Resolving pending commission for fill: ${canonicalFillKey}`);
+
+        const fillPriceDec = ExactDecimal.from(trade.price || '0');
+        const fillQtyDec = ExactDecimal.from(trade.qty || '0');
+        const fillCommissionDec = ExactDecimal.from(trade.commission || '0');
+        const fillAsset = trade.commissionAsset || 'USDT';
+        const accountingEventId = `settlement:${canonicalFillKey}`;
+
+        // Find or associate local order
+        const localOrder = await db.queryOne<any>(
+          `SELECT id, client_order_id FROM exchange_orders WHERE exchange_order_id = ? OR client_order_id = ? ORDER BY created_at DESC LIMIT 1`,
+          [String(trade.orderId || ''), String(trade.orderId || '')]
+        );
+        const orderId = localOrder?.id || localOrder?.client_order_id || `rec_order_${trade.orderId || Date.now()}`;
+        const quoteAsset = symbol.endsWith('USDT')
+          ? 'USDT'
+          : symbol.endsWith('USDC')
+          ? 'USDC'
+          : symbol.endsWith('FDUSD')
+          ? 'FDUSD'
+          : symbol.endsWith('BTC')
+          ? 'BTC'
+          : (trade.commissionAsset || 'USDT');
+        const baseAsset = symbol.replace(new RegExp(`${quoteAsset}$`), '') || symbol;
+
+        await db.transaction(async (tx) => {
+          await tx.execute(
+            `UPDATE exchange_fills SET
+              commission = 0.0,
+              commission_exact = ?,
+              commission_asset = ?,
+              commission_status = 'AUTHORITATIVE'
+             WHERE id = ?`,
+            [fillCommissionDec.toString(), fillAsset, existingFill.id]
+          );
+
+          if (localOrder) {
+            await tx.execute(
+              `UPDATE exchange_orders SET
+                status = 'FILLED',
+                fee = 0.0,
+                fee_exact = ?,
+                fee_asset = ?,
+                actual_commission_exact = ?,
+                actual_commission_asset = ?,
+                commission_status = 'AUTHORITATIVE',
+                updated_at = ?
+               WHERE id = ?`,
+              [
+                fillCommissionDec.toString(),
+                fillAsset,
+                fillCommissionDec.toString(),
+                fillAsset,
+                Date.now(),
+                localOrder.id,
+              ]
+            );
+          }
+
+          await LedgerService.processFill({
+            userId,
+            accountMode: 'live',
+            orderId,
+            fillId: tradeId,
+            symbol,
+            baseAsset,
+            quoteAsset,
+            side: trade.isBuyer ? 'BUY' : 'SELL',
+            price: fillPriceDec,
+            quantity: fillQtyDec,
+            fee: fillCommissionDec,
+            feeAsset: fillAsset,
+            commissionStatus: 'AUTHORITATIVE',
+            accountingEventId,
+            canonicalFillKey,
+            executedAt: trade.time || Date.now(),
+            tx,
+          });
+        });
+
+        await this.recordMismatch({
+          runId,
+          userId,
+          entityType: 'ORDER',
+          entityId: canonicalFillKey,
+          severity: 'MEDIUM',
+          localState: { commission_status: 'PENDING' },
+          exchangeState: { tradeId, price: trade.price, qty: trade.qty, commission: trade.commission, commissionAsset: trade.commissionAsset },
+          notes: `Pending fill commission for trade ${tradeId} resolved authoritatively from exchange venue.`,
+          actionTaken: 'APPLIED',
+          actionStatus: 'RESOLVED',
         });
       }
     }

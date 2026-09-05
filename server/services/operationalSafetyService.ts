@@ -357,27 +357,27 @@ export class OperationalSafetyGate {
         };
       }
 
-      // Reconciliation Freshness SLA (Reconciliation must have completed within 5 minutes)
+      // Reconciliation Freshness SLA (Reconciliation must have completed within 5 minutes for this user)
       const RECONCILIATION_SLA_MS = 300_000;
       const syncState = await db.queryOne<any>(
-        `SELECT last_sync_at FROM exchange_sync_state WHERE account_id = ? OR account_id = 'rec_global' ORDER BY last_sync_at DESC LIMIT 1`,
+        `SELECT last_sync_at FROM exchange_sync_state WHERE account_id = ? LIMIT 1`,
         [`rec_${params.userId}`]
       );
       const dbLastSyncAt = syncState?.last_sync_at ? Number(syncState.last_sync_at) : 0;
-      const memLastSyncAt = ReconciliationWorker.getLastSuccessfulRunAt();
-      const effectiveLastSyncAt = Math.max(dbLastSyncAt, memLastSyncAt);
+      const userMemSyncAt = ReconciliationWorker.getLastSuccessfulRunAt(params.userId);
+      const effectiveLastSyncAt = Math.max(dbLastSyncAt, userMemSyncAt);
 
       if (effectiveLastSyncAt === 0) {
         return {
           allowed: false,
-          reason: 'Trading blocked: No exchange reconciliation has ever completed for this environment.',
+          reason: 'Trading blocked: No exchange reconciliation has ever completed for this user account.',
           checks,
         };
       }
       if (Date.now() - effectiveLastSyncAt > RECONCILIATION_SLA_MS) {
         return {
           allowed: false,
-          reason: `Trading blocked: Exchange reconciliation is overdue (last run ${Math.round((Date.now() - effectiveLastSyncAt) / 1000)}s ago > 300s SLA).`,
+          reason: `Trading blocked: Exchange reconciliation is overdue for this user account (last run ${Math.round((Date.now() - effectiveLastSyncAt) / 1000)}s ago > 300s SLA).`,
           checks,
         };
       }

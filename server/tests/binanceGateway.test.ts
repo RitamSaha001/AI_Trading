@@ -27,6 +27,12 @@ describe('Binance Execution Gateway & State Machine', () => {
        VALUES (?, ?, 0, 0.40, 0.50, 0.15, ?)`,
       [`lim_${userId}`, userId, Date.now()]
     );
+
+    await BinanceGateway.saveExchangeCredentials(userId, {
+      apiKey: 'mock_sim_gateway_key',
+      apiSecret: 'mock_sim_gateway_secret',
+      environment: 'testnet',
+    });
   });
 
   it('encrypts and decrypts exchange secrets securely at rest with AES-256-GCM', () => {
