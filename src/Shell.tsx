@@ -584,7 +584,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={openAuthModal}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold shadow-2xs transition-all active:scale-95"
-                title="Sign in with Google or Apple for Secure Isolated Account"
+                title="Sign in with Google or Email for Secure Isolated Account"
               >
                 <User className="w-3.5 h-3.5" />
                 <span>Sign In</span>
@@ -796,7 +796,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Google / Apple Enterprise Authentication Modal */}
+      {/* Google / Email Enterprise Authentication Modal */}
       <AuthModal />
 
       {/* Authenticated User Profile & Security Drawer */}

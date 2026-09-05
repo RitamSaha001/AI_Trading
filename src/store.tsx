@@ -214,6 +214,7 @@ type Ctx = {
   loginWithGoogle: (options?: { email?: string; displayName?: string; photoURL?: string; credential?: string; idToken?: string }) => Promise<void>;
   loginWithApple: (options?: { email?: string; displayName?: string; hideEmail?: boolean; identityToken?: string }) => Promise<void>;
   loginWithEmail: (email: string, displayName?: string) => Promise<void>;
+  verifyEmailOtp: (email: string, code: string, displayName?: string) => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
   grievanceTickets: GrievanceTicket[];
@@ -1138,6 +1139,50 @@ export function Provider({ children }: { children: React.ReactNode }) {
         setAuthModalOpen(false);
       } catch (e: any) {
         triggerToast('Sign In Error', e?.message || 'Failed to sign in', 'warn');
+        throw e;
+      }
+    },
+    [triggerToast]
+  );
+
+  const verifyEmailOtp = useCallback(
+    async (email: string, code: string, displayName?: string) => {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanCode = code.trim();
+
+      try {
+        const serverRes = await ApiClient.verifyEmailChallenge(cleanEmail, cleanCode).catch(() => null);
+
+        if (serverRes && !serverRes.ok && serverRes.error) {
+          throw new Error(serverRes.error);
+        }
+
+        let session = await signInWithEmail(cleanEmail, displayName);
+        if (serverRes?.ok && serverRes?.data?.user) {
+          session = {
+            ...session,
+            user: {
+              ...session.user!,
+              uid: serverRes.data.user.id || session.user!.uid,
+              displayName: serverRes.data.user.displayName || displayName || session.user!.displayName,
+              kycTier: serverRes.data.user.kyc_tier || serverRes.data.user.kycTier || session.user!.kycTier,
+            },
+          };
+        }
+
+        setAuthSession(session);
+        const userState = loadState(session.user?.uid);
+        userState.authSession = session;
+        setState(userState);
+        saveState(userState, session.user?.uid);
+        triggerToast(
+          'Identity Verified',
+          `Welcome, ${session.user?.displayName}! Your identity has been verified.`,
+          'success'
+        );
+        setAuthModalOpen(false);
+      } catch (e: any) {
+        triggerToast('Verification Error', e?.message || 'Failed to verify OTP code', 'warn');
         throw e;
       }
     },
@@ -2667,6 +2712,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       loginWithGoogle,
       loginWithApple,
       loginWithEmail,
+      verifyEmailOtp,
       logout,
       updateProfile,
       grievanceTickets: state.grievanceTickets || [],
@@ -2762,6 +2808,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       loginWithGoogle,
       loginWithApple,
       loginWithEmail,
+      verifyEmailOtp,
       logout,
       updateProfile,
       grievanceModalOpen,
