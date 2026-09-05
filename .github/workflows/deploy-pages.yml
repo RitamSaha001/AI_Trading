@@ -42,6 +42,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_GOOGLE_CLIENT_ID: 581000394815-l869n4epd0d4j9rsj5behbo882konj47.apps.googleusercontent.com
 
       - name: Ensure SPA 404 fallback & .nojekyll
         run: |
