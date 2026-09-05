@@ -27,6 +27,8 @@ export interface ServerConfig {
   PHONEPE_CLIENT_SECRET: string;
   PHONEPE_CLIENT_VERSION: string;
   PHONEPE_ENV: 'SANDBOX' | 'PRODUCTION';
+  PHONEPE_CALLBACK_USERNAME: string;
+  PHONEPE_CALLBACK_PASSWORD: string;
   BINANCE_ENV: 'testnet' | 'mainnet';
   BINANCE_API_KEY?: string;
   BINANCE_API_SECRET?: string;
@@ -76,6 +78,8 @@ const DEV_TEST_FALLBACKS = {
   PHONEPE_CLIENT_SECRET: 'ZjNlYjg0ZWUtMDBiMy00ZTBiLTkxOTgtZDBjZjAxMDE3OTVk',
   PHONEPE_CLIENT_VERSION: '1',
   PHONEPE_ENV: 'SANDBOX' as const,
+  PHONEPE_CALLBACK_USERNAME: 'lumen_webhook_user',
+  PHONEPE_CALLBACK_PASSWORD: 'lumen_webhook_password_test_2026',
   BINANCE_ENV: 'testnet' as const,
 };
 
@@ -280,6 +284,8 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     PHONEPE_CLIENT_SECRET: z.string().optional(),
     PHONEPE_CLIENT_VERSION: z.string().default('1'),
     PHONEPE_ENV: z.enum(['SANDBOX', 'PRODUCTION']).default(isProd ? 'PRODUCTION' : 'SANDBOX'),
+    PHONEPE_CALLBACK_USERNAME: z.string().optional(),
+    PHONEPE_CALLBACK_PASSWORD: z.string().optional(),
     BINANCE_ENV: z.enum(['testnet', 'mainnet']).default(isProd ? 'mainnet' : 'testnet'),
     BINANCE_API_KEY: z.string().optional(),
     BINANCE_API_SECRET: z.string().optional(),
@@ -316,6 +322,8 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   const phonepeClientSecret = candidate.PHONEPE_CLIENT_SECRET || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CLIENT_SECRET : '');
   const phonepeClientVersion = candidate.PHONEPE_CLIENT_VERSION || DEV_TEST_FALLBACKS.PHONEPE_CLIENT_VERSION;
   const phonepeEnv = candidate.PHONEPE_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_ENV : 'PRODUCTION');
+  const phonepeCallbackUsername = candidate.PHONEPE_CALLBACK_USERNAME || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CALLBACK_USERNAME : '');
+  const phonepeCallbackPassword = candidate.PHONEPE_CALLBACK_PASSWORD || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CALLBACK_PASSWORD : '');
   const binanceEnv = candidate.BINANCE_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.BINANCE_ENV : 'mainnet');
 
   // Strict Validation: SESSION_SECRET
@@ -453,6 +461,8 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     PHONEPE_CLIENT_SECRET: phonepeClientSecret,
     PHONEPE_CLIENT_VERSION: phonepeClientVersion,
     PHONEPE_ENV: phonepeEnv,
+    PHONEPE_CALLBACK_USERNAME: phonepeCallbackUsername,
+    PHONEPE_CALLBACK_PASSWORD: phonepeCallbackPassword,
     BINANCE_ENV: binanceEnv,
     BINANCE_API_KEY: candidate.BINANCE_API_KEY,
     BINANCE_API_SECRET: candidate.BINANCE_API_SECRET,

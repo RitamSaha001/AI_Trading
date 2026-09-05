@@ -2,7 +2,13 @@ import { getDb, DBClient } from '../db';
 import { config } from '../config';
 import { LedgerService } from './ledgerService';
 import { AuditService } from './auditService';
-import { PaymentProvider, PaymentOrderStatus, SettlementSource, ProviderNetworkTimeoutError } from './payments/types';
+import {
+  PaymentProvider,
+  PaymentOrderStatus,
+  SettlementSource,
+  ProviderNetworkTimeoutError,
+  IdempotencyConflictError,
+} from './payments/types';
 import { PhonePeProductionAdapter } from './payments/phonepeAdapter';
 import { SandboxAdapter } from './payments/sandboxAdapter';
 import crypto from 'node:crypto';
@@ -102,6 +108,17 @@ export class PaymentService {
     );
 
     if (existing && existing.id !== orderId) {
+      if (
+        existing.user_id !== params.userId ||
+        Number(existing.amount_minor) !== params.amountMinor ||
+        existing.currency !== params.currency ||
+        existing.method !== params.method
+      ) {
+        throw new IdempotencyConflictError(
+          `Idempotency key '${params.idempotencyKey}' was already used with conflicting parameters.`
+        );
+      }
+
       return {
         orderId: existing.id,
         providerOrderId: existing.provider_order_id,
@@ -200,25 +217,28 @@ export class PaymentService {
     }
   }
 
-  static async settlePayment(params: {
-    orderId: string;
-    providerPaymentId: string;
-    amountMinor: number;
-    currency: string;
-    settlementSource: SettlementSource;
-    externalSettlementId?: string;
-    utr?: string;
-    cardLast4?: string;
-    cardBrand?: string;
-    upiVpa?: string;
-  }): Promise<{ status: 'SETTLED' | 'DUPLICATE'; paymentId?: string }> {
+  static async settlePayment(
+    params: {
+      orderId: string;
+      providerPaymentId: string;
+      amountMinor: number;
+      currency: string;
+      settlementSource: SettlementSource;
+      externalSettlementId?: string;
+      utr?: string;
+      cardLast4?: string;
+      cardBrand?: string;
+      upiVpa?: string;
+    },
+    client?: DBClient
+  ): Promise<{ status: 'SETTLED' | 'DUPLICATE'; paymentId?: string; balanceAfter?: bigint }> {
     const db = getDb();
     const now = Date.now();
 
-    return db.transaction(async (tx) => {
+    const runner = async (tx: DBClient) => {
       // Use FOR UPDATE if postgres
       let orderQuery = `SELECT * FROM payment_orders WHERE id = ?`;
-      if (db.isPostgres()) {
+      if (tx.isPostgres()) {
         orderQuery += ` FOR UPDATE`;
       }
       const order = await tx.queryOne<any>(orderQuery, [params.orderId]);
@@ -228,7 +248,7 @@ export class PaymentService {
       }
 
       if (order.status === 'SUCCESS') {
-        return { status: 'DUPLICATE' };
+        return { status: 'DUPLICATE' as const };
       }
 
       if (Number(order.amount_minor) !== params.amountMinor || order.currency !== params.currency) {
@@ -299,14 +319,18 @@ export class PaymentService {
         [now, params.orderId]
       );
 
-      const ledgerResult = await LedgerService.creditDeposit({
-        userId: order.user_id,
-        assetOrCurrency: params.currency,
-        amountMinor: params.amountMinor,
-        paymentId: finalPaymentId,
-        description: `Settled ${order.method.toUpperCase()} Deposit`,
-        idempotencyKey: `settl_${params.orderId}`,
-      });
+      // Pass tx to creditDeposit for single atomic database transaction
+      const ledgerResult = await LedgerService.creditDeposit(
+        {
+          userId: order.user_id,
+          assetOrCurrency: params.currency,
+          amountMinor: params.amountMinor,
+          paymentId: finalPaymentId,
+          description: `Settled ${order.method.toUpperCase()} Deposit`,
+          idempotencyKey: `settl_${params.orderId}`,
+        },
+        tx
+      );
 
       await tx.execute(
         `INSERT INTO payment_settlements (
@@ -346,14 +370,20 @@ export class PaymentService {
         result: 'SUCCESS',
       });
 
-      return { status: 'SETTLED', paymentId: finalPaymentId, balanceAfter: ledgerResult.balanceAfter };
-    });
+      return { status: 'SETTLED' as const, paymentId: finalPaymentId, balanceAfter: ledgerResult.balanceAfter };
+    };
+
+    if (client) {
+      return runner(client);
+    }
+    return db.transaction(runner);
   }
 
   static async processWebhook(
     rawPayload: string,
     signature: string,
-    event: WebhookEventPayload
+    event: WebhookEventPayload,
+    headers?: Record<string, string | string[] | undefined>
   ): Promise<{ status: 'PROCESSED' | 'DUPLICATE' | 'IGNORED'; paymentId?: string }> {
     if (!this.verifyWebhookSignature(rawPayload, signature)) {
       throw new Error('Invalid webhook signature');
@@ -366,17 +396,28 @@ export class PaymentService {
     );
 
     if (existingWebhook) {
-      return { status: 'DUPLICATE' };
+      if (existingWebhook.status === 'processed' || existingWebhook.status === 'ignored') {
+        return { status: 'DUPLICATE' };
+      }
     }
 
     const payloadHash = crypto.createHash('sha256').update(rawPayload).digest('hex');
     const now = Date.now();
+    const webhookId = existingWebhook?.id || `wh_${crypto.randomBytes(8).toString('hex')}`;
+    const rawHeadersStr = headers ? JSON.stringify(headers) : null;
 
-    await db.execute(
-      `INSERT INTO payment_webhooks (id, provider, event_id, payload_hash, status, processed_at)
-       VALUES (?, ?, ?, ?, 'processed', ?)`,
-      [`wh_${crypto.randomBytes(8).toString('hex')}`, event.provider, event.eventId, payloadHash, now]
-    );
+    if (existingWebhook) {
+      await db.execute(
+        `UPDATE payment_webhooks SET status = 'processing', error = NULL, processed_at = ? WHERE id = ?`,
+        [now, webhookId]
+      );
+    } else {
+      await db.execute(
+        `INSERT INTO payment_webhooks (id, provider, event_id, payload_hash, status, raw_headers, raw_body, processed_at)
+         VALUES (?, ?, ?, ?, 'processing', ?, ?, ?)`,
+        [webhookId, event.provider, event.eventId, payloadHash, rawHeadersStr, rawPayload, now]
+      );
+    }
 
     if (event.eventType === 'payment.captured') {
       const order = await db.queryOne<any>(
@@ -385,25 +426,45 @@ export class PaymentService {
       );
 
       if (!order) {
-        await db.execute(`UPDATE payment_webhooks SET status = 'ignored', error = 'Order not found' WHERE event_id = ?`, [event.eventId]);
+        await db.execute(
+          `UPDATE payment_webhooks SET status = 'ignored', error = 'Order not found', processed_at = ? WHERE id = ?`,
+          [Date.now(), webhookId]
+        );
         return { status: 'IGNORED' };
       }
 
-      const result = await this.settlePayment({
-        orderId: order.id,
-        providerPaymentId: event.providerPaymentId,
-        amountMinor: event.amountMinor,
-        currency: event.currency,
-        settlementSource: 'WEBHOOK',
-        cardLast4: event.cardLast4,
-        cardBrand: event.cardBrand,
-        upiVpa: event.upiVpa,
-        utr: event.utr,
-      });
+      try {
+        const result = await this.settlePayment({
+          orderId: order.id,
+          providerPaymentId: event.providerPaymentId,
+          amountMinor: event.amountMinor,
+          currency: event.currency,
+          settlementSource: 'WEBHOOK',
+          cardLast4: event.cardLast4,
+          cardBrand: event.cardBrand,
+          upiVpa: event.upiVpa,
+          utr: event.utr,
+        });
 
-      return { status: 'PROCESSED', paymentId: result.paymentId };
+        await db.execute(
+          `UPDATE payment_webhooks SET status = 'processed', error = NULL, processed_at = ? WHERE id = ?`,
+          [Date.now(), webhookId]
+        );
+
+        return { status: 'PROCESSED', paymentId: result.paymentId };
+      } catch (err: any) {
+        await db.execute(
+          `UPDATE payment_webhooks SET status = 'failed_retryable', error = ?, processed_at = ? WHERE id = ?`,
+          [err.message, Date.now(), webhookId]
+        );
+        throw err;
+      }
     }
 
+    await db.execute(
+      `UPDATE payment_webhooks SET status = 'processed', processed_at = ? WHERE id = ?`,
+      [Date.now(), webhookId]
+    );
     return { status: 'PROCESSED' };
   }
 
@@ -530,7 +591,7 @@ export class PaymentService {
   static async processPhonePeWebhook(
     rawBody: string,
     headers: Record<string, string | string[] | undefined>
-  ): Promise<{ status: 'PROCESSED' | 'DUPLICATE' | 'IGNORED' | 'FAILED'; error?: string }> {
+  ): Promise<{ status: 'PROCESSED' | 'DUPLICATE' | 'IGNORED' | 'FAILED'; error?: string; paymentId?: string }> {
     const provider = this.getProvider();
     const verification = await provider.verifyWebhook(rawBody, headers);
 
@@ -552,17 +613,28 @@ export class PaymentService {
     );
 
     if (existingWebhook) {
-      return { status: 'DUPLICATE' };
+      if (existingWebhook.status === 'processed' || existingWebhook.status === 'ignored') {
+        return { status: 'DUPLICATE' };
+      }
     }
 
     const payloadHash = crypto.createHash('sha256').update(rawBody).digest('hex');
     const now = Date.now();
+    const webhookId = existingWebhook?.id || `wh_${crypto.randomBytes(8).toString('hex')}`;
+    const rawHeadersStr = JSON.stringify(headers);
 
-    await db.execute(
-      `INSERT INTO payment_webhooks (id, provider, event_id, payload_hash, status, processed_at)
-       VALUES (?, ?, ?, ?, 'processed', ?)`,
-      [`wh_${crypto.randomBytes(8).toString('hex')}`, 'phonepe', verification.eventId, payloadHash, now]
-    );
+    if (existingWebhook) {
+      await db.execute(
+        `UPDATE payment_webhooks SET status = 'processing', error = NULL, processed_at = ? WHERE id = ?`,
+        [now, webhookId]
+      );
+    } else {
+      await db.execute(
+        `INSERT INTO payment_webhooks (id, provider, event_id, payload_hash, status, raw_headers, raw_body, processed_at)
+         VALUES (?, ?, ?, ?, 'processing', ?, ?, ?)`,
+        [webhookId, 'phonepe', verification.eventId, payloadHash, rawHeadersStr, rawBody, now]
+      );
+    }
 
     if (verification.status === 'captured') {
       const order = await db.queryOne<any>(
@@ -571,19 +643,41 @@ export class PaymentService {
       );
 
       if (!order) {
-        await db.execute(`UPDATE payment_webhooks SET status = 'ignored', error = 'Order not found' WHERE event_id = ?`, [verification.eventId]);
+        await db.execute(
+          `UPDATE payment_webhooks SET status = 'ignored', error = 'Order not found', processed_at = ? WHERE id = ?`,
+          [Date.now(), webhookId]
+        );
         return { status: 'IGNORED' };
       }
 
-      await this.settlePayment({
-        orderId: order.id,
-        providerPaymentId: verification.providerPaymentId || `prov_${Date.now()}`,
-        amountMinor: verification.amountMinor || Number(order.amount_minor),
-        currency: verification.currency || order.currency,
-        settlementSource: 'WEBHOOK',
-      });
+      try {
+        const result = await this.settlePayment({
+          orderId: order.id,
+          providerPaymentId: verification.providerPaymentId || `prov_${Date.now()}`,
+          amountMinor: verification.amountMinor || Number(order.amount_minor),
+          currency: verification.currency || order.currency,
+          settlementSource: 'WEBHOOK',
+        });
+
+        await db.execute(
+          `UPDATE payment_webhooks SET status = 'processed', error = NULL, processed_at = ? WHERE id = ?`,
+          [Date.now(), webhookId]
+        );
+
+        return { status: 'PROCESSED', paymentId: result.paymentId };
+      } catch (err: any) {
+        await db.execute(
+          `UPDATE payment_webhooks SET status = 'failed_retryable', error = ?, processed_at = ? WHERE id = ?`,
+          [err.message, Date.now(), webhookId]
+        );
+        throw err;
+      }
     }
 
+    await db.execute(
+      `UPDATE payment_webhooks SET status = 'processed', processed_at = ? WHERE id = ?`,
+      [Date.now(), webhookId]
+    );
     return { status: 'PROCESSED' };
   }
 
@@ -619,31 +713,23 @@ export class PaymentService {
       throw new Error('Refund amount exceeds refundable amount');
     }
 
+    // 1. Pre-flight check: Verify unreserved balance BEFORE initiating external refund
+    const available = await LedgerService.getAvailableUnreservedBalance(
+      order.user_id,
+      order.currency
+    );
+    if (available < BigInt(params.amountMinor)) {
+      throw new Error('Insufficient unreserved balance for refund debit');
+    }
+
     const refundId = `ref_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
 
-    const { transactionId } = await LedgerService.debitRefund({
-      userId: order.user_id,
-      assetOrCurrency: order.currency,
-      amountMinor: params.amountMinor,
-      refundId,
-      description: params.reason,
-      idempotencyKey: params.idempotencyKey,
-    });
-
-    const provider = this.getProvider();
-    await provider.refund({
-      orderId: order.id,
-      providerOrderId: order.provider_order_id,
-      amountMinor: params.amountMinor,
-      currency: order.currency,
-      reason: params.reason,
-    });
-
+    // 2. Pre-persist refund attempt in INITIATING state
     await db.execute(
       `INSERT INTO payment_refunds (
         id, payment_order_id, amount_minor, currency, status, reason, idempotency_key,
-        ledger_transaction_id, initiated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'SUCCESS', ?, ?, ?, ?, ?, ?)`,
+        initiated_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'INITIATING', ?, ?, ?, ?, ?)`,
       [
         refundId,
         order.id,
@@ -651,43 +737,112 @@ export class PaymentService {
         order.currency,
         params.reason,
         params.idempotencyKey,
-        transactionId,
         params.initiatedBy || order.user_id,
         now,
         now,
       ]
     );
 
-    let nextStatus = order.status;
-    if (refundedSoFar + params.amountMinor === Number(order.amount_minor)) {
-      nextStatus = 'REFUNDED';
-    } else {
-      nextStatus = 'PARTIALLY_REFUNDED';
+    const provider = this.getProvider();
+    let providerResult: any;
+
+    try {
+      providerResult = await provider.refund({
+        providerOrderId: order.provider_order_id,
+        amountMinor: params.amountMinor,
+        reason: params.reason,
+        idempotencyKey: params.idempotencyKey,
+      });
+    } catch (err: any) {
+      const isTimeout = err.name === 'ProviderNetworkTimeoutError' || /timeout|fetch|network/i.test(err.message);
+      const refundStatus = isTimeout ? 'REFUND_UNKNOWN' : 'FAILED';
+
+      await db.execute(
+        `UPDATE payment_refunds SET status = ?, updated_at = ? WHERE id = ?`,
+        [refundStatus, Date.now(), refundId]
+      );
+
+      // Customer balance is NEVER debited on provider error or timeout
+      if (isTimeout) {
+        return { refundId, status: 'REFUND_UNKNOWN' };
+      }
+      throw err;
     }
 
-    // SQLite doesn't error on missing columns but wait, does refunded_amount_minor exist?
-    // Let's check schema. I don't know if it's there, but instructions say: Update payment_orders.refunded_amount_minor and status.
-    await db.execute(
-      `UPDATE payment_orders SET status = ?, refunded_amount_minor = COALESCE(refunded_amount_minor, 0) + ?, updated_at = ? WHERE id = ?`,
-      [nextStatus, params.amountMinor, now, order.id]
-    );
+    if (!providerResult.success && providerResult.status === 'FAILED') {
+      await db.execute(
+        `UPDATE payment_refunds SET status = 'FAILED', updated_at = ? WHERE id = ?`,
+        [Date.now(), refundId]
+      );
+      throw new Error(`Refund failed at provider: ${providerResult.error || 'Unknown provider rejection'}`);
+    }
 
-    await AuditService.logEvent({
-      userId: order.user_id,
-      eventType: 'PAYMENT_REFUNDED',
-      source: 'payment_service',
-      actor: params.initiatedBy,
-      externalId: refundId,
-      metadata: {
-        orderId: order.id,
-        amountMinor: params.amountMinor,
-        currency: order.currency,
-        reason: params.reason,
-      },
-      result: 'SUCCESS',
+    if (providerResult.status === 'PENDING') {
+      await db.execute(
+        `UPDATE payment_refunds SET status = 'PENDING', provider_refund_id = ?, updated_at = ? WHERE id = ?`,
+        [providerResult.refundId, Date.now(), refundId]
+      );
+      // Customer balance remains intact until confirmed
+      return { refundId, status: 'PENDING' };
+    }
+
+    // 3. Provider confirmed SUCCESS: Atomically debit ledger and update refund and order records
+    return db.transaction(async (tx) => {
+      const ledgerResult = await LedgerService.debitRefund(
+        {
+          userId: order.user_id,
+          assetOrCurrency: order.currency,
+          amountMinor: params.amountMinor,
+          refundId,
+          description: params.reason,
+          idempotencyKey: params.idempotencyKey,
+        },
+        tx
+      );
+
+      await tx.execute(
+        `UPDATE payment_refunds SET
+          status = 'SUCCESS',
+          provider_refund_id = ?,
+          ledger_transaction_id = ?,
+          updated_at = ?
+         WHERE id = ?`,
+        [providerResult.refundId, ledgerResult.transactionId, Date.now(), refundId]
+      );
+
+      let nextStatus = order.status;
+      if (refundedSoFar + params.amountMinor === Number(order.amount_minor)) {
+        nextStatus = 'REFUNDED';
+      } else {
+        nextStatus = 'PARTIALLY_REFUNDED';
+      }
+
+      await tx.execute(
+        `UPDATE payment_orders SET
+          status = ?,
+          refunded_amount_minor = COALESCE(refunded_amount_minor, 0) + ?,
+          updated_at = ?
+         WHERE id = ?`,
+        [nextStatus, params.amountMinor, Date.now(), order.id]
+      );
+
+      await AuditService.logEvent({
+        userId: order.user_id,
+        eventType: 'PAYMENT_REFUNDED',
+        source: 'payment_service',
+        actor: params.initiatedBy,
+        externalId: refundId,
+        metadata: {
+          orderId: order.id,
+          amountMinor: params.amountMinor,
+          currency: order.currency,
+          reason: params.reason,
+        },
+        result: 'SUCCESS',
+      });
+
+      return { refundId, status: 'SUCCESS' };
     });
-
-    return { refundId, status: 'SUCCESS' };
   }
 
   static async reconcilePendingPayments(): Promise<{ reconciledCount: number; mismatchCount: number }> {
@@ -715,8 +870,16 @@ export class PaymentService {
             settlementSource: 'RECONCILIATION_SWEEP',
           });
           reconciledCount++;
-        } else if (statusResult.status === 'FAILED' || statusResult.status === 'EXPIRED') {
+        } else if (statusResult.status === 'FAILED') {
           await db.execute(`UPDATE payment_orders SET status = 'FAILED', updated_at = ? WHERE id = ?`, [Date.now(), order.id]);
+        } else if (statusResult.status === 'PENDING') {
+          if (Date.now() >= Number(order.expires_at)) {
+            await db.execute(`UPDATE payment_orders SET status = 'EXPIRED', updated_at = ? WHERE id = ?`, [Date.now(), order.id]);
+          }
+          // If still within expiry, do NOT mark failed; let it remain PENDING
+        } else if (statusResult.status === 'UNKNOWN') {
+          // Ambiguous / network error: keep in current state
+          mismatchCount++;
         }
       } catch (err) {
         mismatchCount++;

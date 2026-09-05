@@ -447,24 +447,26 @@ export class LedgerService {
   /**
    * Credits a deposit directly into the user's sovereign cash ledger account.
    */
-  static async creditDeposit(params: {
-    userId: string;
-    accountMode?: 'live' | 'paper';
-    assetOrCurrency: string;
-    amountMinor: bigint | number;
-    paymentId: string;
-    description: string;
-    idempotencyKey?: string;
-  }): Promise<{ transactionId: string; balanceAfter: bigint }> {
+  static async creditDeposit(
+    params: {
+      userId: string;
+      accountMode?: 'live' | 'paper';
+      assetOrCurrency: string;
+      amountMinor: bigint | number;
+      paymentId: string;
+      description: string;
+      idempotencyKey?: string;
+    },
+    client?: DBClient
+  ): Promise<{ transactionId: string; balanceAfter: bigint }> {
     const amount = BigInt(params.amountMinor);
     if (amount <= 0n) {
       throw new Error('Deposit amount must be strictly positive');
     }
 
     const accountMode = params.accountMode || 'live';
-    const db = getDb();
 
-    return db.transaction(async (tx) => {
+    const runner = async (tx: DBClient) => {
       const clearingAcc = await this.getOrCreateAccount(
         params.userId,
         'settlement_clearing',
@@ -565,7 +567,32 @@ export class LedgerService {
       });
 
       return { transactionId: txId, balanceAfter: newBal };
-    });
+    };
+
+    if (client) {
+      return runner(client);
+    }
+    return getDb().transaction(runner);
+  }
+
+  /**
+   * Safely checks the available unreserved balance for a user in sovereign_cash without debiting.
+   */
+  static async getAvailableUnreservedBalance(
+    userId: string,
+    assetOrCurrency: string,
+    accountMode: 'live' | 'paper' = 'live',
+    client?: DBClient
+  ): Promise<bigint> {
+    const db = client || getDb();
+    const acc = await db.queryOne<LedgerAccountRecord>(
+      `SELECT * FROM ledger_accounts WHERE user_id = ? AND account_type = 'sovereign_cash' AND asset_or_currency = ? AND account_mode = ?`,
+      [userId, assetOrCurrency, accountMode]
+    );
+    if (!acc) return 0n;
+    const bal = BigInt(acc.balance_minor);
+    const res = BigInt(acc.reserved_minor);
+    return bal > res ? bal - res : 0n;
   }
 
   /**
@@ -573,24 +600,26 @@ export class LedgerService {
    * Reverse of creditDeposit: debits sovereign_cash, credits settlement_clearing.
    * Verifies available unreserved balance before proceeding.
    */
-  static async debitRefund(params: {
-    userId: string;
-    accountMode?: 'live' | 'paper';
-    assetOrCurrency: string;
-    amountMinor: bigint | number;
-    refundId: string;
-    description: string;
-    idempotencyKey?: string;
-  }): Promise<{ transactionId: string; balanceAfter: bigint }> {
+  static async debitRefund(
+    params: {
+      userId: string;
+      accountMode?: 'live' | 'paper';
+      assetOrCurrency: string;
+      amountMinor: bigint | number;
+      refundId: string;
+      description: string;
+      idempotencyKey?: string;
+    },
+    client?: DBClient
+  ): Promise<{ transactionId: string; balanceAfter: bigint }> {
     const amount = BigInt(params.amountMinor);
     if (amount <= 0n) {
-      throw new Error('Deposit amount must be strictly positive');
+      throw new Error('Refund amount must be strictly positive');
     }
 
     const accountMode = params.accountMode || 'live';
-    const db = getDb();
 
-    return db.transaction(async (tx) => {
+    const runner = async (tx: DBClient) => {
       const clearingAcc = await this.getOrCreateAccount(
         params.userId,
         'settlement_clearing',
@@ -695,7 +724,12 @@ export class LedgerService {
       });
 
       return { transactionId: txId, balanceAfter: newBal };
-    });
+    };
+
+    if (client) {
+      return runner(client);
+    }
+    return getDb().transaction(runner);
   }
 
   /**

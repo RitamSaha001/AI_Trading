@@ -584,6 +584,9 @@ export function buildServer(): FastifyInstance {
       });
       return { success: true, intent };
     } catch (err: any) {
+      if (err.name === 'IdempotencyConflictError') {
+        return reply.status(409).send({ success: false, error: err.message });
+      }
       return reply.status(400).send({ success: false, error: err.message });
     }
   });
@@ -617,7 +620,7 @@ export function buildServer(): FastifyInstance {
     }
 
     try {
-      const result = await PaymentService.processWebhook(rawPayload, signature, req.body as any);
+      const result = await PaymentService.processWebhook(rawPayload, signature, req.body as any, req.headers as any);
       return { success: true, result };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
@@ -635,23 +638,37 @@ export function buildServer(): FastifyInstance {
     }
   });
 
-  server.post('/api/payments/:orderId/refund', async (req: FastifyRequest, reply: FastifyReply) => {
-    // Auth check
-    const userId = (req as any).userId;
-    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
-    
+  server.post('/api/payments/:orderId/refund', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const userId = req.user!.id;
     const { orderId } = req.params as { orderId: string };
     const { amountMinor, reason, idempotencyKey } = req.body as any;
-    
-    const result = await PaymentService.refundPayment({
-      orderId,
-      amountMinor: Number(amountMinor),
-      reason: reason || 'User requested refund',
-      idempotencyKey: idempotencyKey || `ref_${orderId}_${Date.now()}`,
-      initiatedBy: userId,
-    });
-    
-    return reply.send(result);
+
+    if (!amountMinor || Number(amountMinor) <= 0) {
+      return reply.status(400).send({ success: false, error: 'Positive refund amountMinor required' });
+    }
+
+    const db = getDb();
+    const order = await db.queryOne<any>(`SELECT * FROM payment_orders WHERE id = ?`, [orderId]);
+    if (!order) {
+      return reply.status(404).send({ success: false, error: 'Payment order not found' });
+    }
+    if (order.user_id !== userId) {
+      return reply.status(403).send({ success: false, error: 'Forbidden: Cannot refund order of another user' });
+    }
+
+    try {
+      const result = await PaymentService.refundPayment({
+        orderId,
+        amountMinor: Number(amountMinor),
+        reason: reason || 'User requested refund',
+        idempotencyKey: idempotencyKey || `ref_${orderId}_${Date.now()}`,
+        initiatedBy: userId,
+      });
+
+      return reply.send({ success: true, ...result });
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
   });
 
   // Authoritative Payment Status Polling Endpoint (Phase 4 UX Callback Independence)

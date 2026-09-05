@@ -8,39 +8,50 @@ import {
   PaymentStatusResult,
   RefundParams,
   RefundResult,
-  ProviderNetworkTimeoutError
+  ProviderNetworkTimeoutError,
 } from './types';
-import { StandardCheckoutClient, StandardCheckoutPayRequest, RefundRequest, Env } from '@phonepe-pg/pg-sdk-node';
+import {
+  StandardCheckoutClient,
+  StandardCheckoutPayRequest,
+  RefundRequest,
+  Env,
+} from '@phonepe-pg/pg-sdk-node';
 
 export class PhonePeProductionAdapter implements PaymentProvider {
   name = 'phonepe';
 
-  private merchantId: string;
   private saltKey: string;
   private saltIndex: string;
-  private hostUrl: string;
-  private callbackUrl: string;
+  private callbackUsername: string;
+  private callbackPassword: string;
   private sdkClient: StandardCheckoutClient | null = null;
 
   constructor() {
-    this.merchantId = config.PHONEPE_MERCHANT_ID;
     this.saltKey = config.PHONEPE_SALT_KEY;
     this.saltIndex = config.PHONEPE_SALT_INDEX;
-    this.hostUrl = config.PHONEPE_HOST_URL;
-    this.callbackUrl = config.PHONEPE_CALLBACK_URL;
+    this.callbackUsername = config.PHONEPE_CALLBACK_USERNAME;
+    this.callbackPassword = config.PHONEPE_CALLBACK_PASSWORD;
 
-    try {
-      if (config.PHONEPE_CLIENT_ID && config.PHONEPE_CLIENT_SECRET) {
+    if (config.PHONEPE_CLIENT_ID && config.PHONEPE_CLIENT_SECRET) {
+      try {
         this.sdkClient = StandardCheckoutClient.getInstance(
           config.PHONEPE_CLIENT_ID,
           config.PHONEPE_CLIENT_SECRET,
           Number(config.PHONEPE_CLIENT_VERSION || 1),
           config.PHONEPE_ENV === 'PRODUCTION' ? Env.PRODUCTION : Env.SANDBOX
         );
+      } catch (err: any) {
+        console.error('Failed to initialize PhonePe StandardCheckoutClient:', err.message);
+        this.sdkClient = null;
       }
-    } catch (err: any) {
-      console.warn('PhonePe SDK Client initialization failed. Falling back to legacy REST.', err.message);
     }
+  }
+
+  private getClient(): StandardCheckoutClient {
+    if (!this.sdkClient) {
+      throw new Error('PhonePe StandardCheckoutClient is not initialized. Please verify PhonePe credentials.');
+    }
+    return this.sdkClient;
   }
 
   calculateChecksum(payloadBase64: string, endpoint: string): string {
@@ -58,175 +69,166 @@ export class PhonePeProductionAdapter implements PaymentProvider {
     const amountInPaise = params.amountMinor;
     const redirectUrl = params.redirectUrl || `${config.ALLOWED_ORIGINS.split(',')[0]}/wallet?orderId=${merchantTransactionId}`;
 
-    if (this.sdkClient) {
-      try {
-        const req = new StandardCheckoutPayRequest(
-          merchantTransactionId,
-          amountInPaise,
-          null,
-          'Lumen Wallet Deposit',
-          redirectUrl
-        );
-        const response = await this.sdkClient.pay(req);
-        
-        // Wait, what does the response look like?
-        // We'll map checkoutUrl or throw timeout
-        // According to instructions: "Parse checkoutUrl from the response. On network error: throw ProviderNetworkTimeoutError"
-        
-        // standard SDK response returns checkoutUrl property or something similar, assuming response.redirectUrl or response.instrumentResponse
-        // if response fails at network level, it throws
-        
-        // if response is an object with success, code, message...
-        const checkoutUrl = (response as any).redirectInfo?.url || (response as any).url || (response as any).redirectUrl || (response as any).instrumentResponse?.redirectInfo?.url;
-        
-        return {
-          provider: 'phonepe',
-          providerOrderId: merchantTransactionId,
-          checkoutUrl: checkoutUrl || `${this.hostUrl}/checkout/${merchantTransactionId}`,
-          additionalData: response as any,
-        };
-      } catch (err: any) {
-        if (err.name === 'FetchError' || err.code === 'ETIMEDOUT' || err.message.includes('timeout') || err.message.includes('fetch')) {
-          throw new ProviderNetworkTimeoutError('phonepe', `createOrder:${merchantTransactionId}`);
-        }
-        if (config.NODE_ENV !== 'production') {
-           return this.legacyMockCheckout(merchantTransactionId, amountInPaise);
-        }
-        throw new Error(`PhonePe SDK Payment Creation Failed: ${err.message}`);
-      }
-    }
-
-    // Legacy Fallback
-    const payload = {
-      merchantId: this.merchantId,
-      merchantTransactionId,
-      merchantUserId: params.userId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36),
-      amount: amountInPaise,
-      redirectUrl,
-      redirectMode: 'REDIRECT',
-      callbackUrl: this.callbackUrl,
-      paymentInstrument: params.method === 'upi'
-        ? { type: 'UPI_INTENT', targetApp: 'com.phonepe.app' }
-        : { type: 'PAY_PAGE' },
-    };
-
-    const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const endpoint = '/pg/v1/pay';
-    const xVerify = this.calculateChecksum(base64Payload, endpoint);
+    const client = this.getClient();
 
     try {
-      const response = await fetch(`${this.hostUrl}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-VERIFY': xVerify,
-        },
-        body: JSON.stringify({ request: base64Payload }),
-      });
+      const payRequest = StandardCheckoutPayRequest.builder()
+        .merchantOrderId(merchantTransactionId)
+        .amount(amountInPaise)
+        .redirectUrl(redirectUrl)
+        .message('Lumen Wallet Deposit')
+        .build();
 
-      const json = await response.json() as any;
+      const response = await client.pay(payRequest);
 
-      if (!json.success && json.code !== 'PAYMENT_PENDING') {
-        throw new Error(json.message || `PhonePe PG Error: ${json.code}`);
+      const checkoutUrl = response?.redirectUrl;
+      if (!checkoutUrl) {
+        throw new Error('PhonePe PG did not return a valid checkout URL in pay response.');
       }
-
-      const instrumentResponse = json.data?.instrumentResponse;
-      const checkoutUrl = instrumentResponse?.redirectInfo?.url;
-      const upiIntentUri = instrumentResponse?.intentUrl;
-      const qrPayload = instrumentResponse?.qrData;
 
       return {
         provider: 'phonepe',
-        providerOrderId: merchantTransactionId,
-        checkoutUrl: checkoutUrl || `${this.hostUrl}/checkout/${merchantTransactionId}`,
-        upiIntentUri,
-        qrPayload,
-        additionalData: json.data,
+        providerOrderId: response.orderId || merchantTransactionId,
+        checkoutUrl,
+        additionalData: response as any,
       };
     } catch (err: any) {
-      if (err.name === 'FetchError' || err.code === 'ETIMEDOUT' || err.message.includes('timeout')) {
+      if (
+        err.name === 'FetchError' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ECONNRESET' ||
+        /timeout|fetch|network|econnrefused/i.test(err.message)
+      ) {
         throw new ProviderNetworkTimeoutError('phonepe', `createOrder:${merchantTransactionId}`);
-      }
-      if (config.NODE_ENV !== 'production') {
-        return this.legacyMockCheckout(merchantTransactionId, amountInPaise);
       }
       throw new Error(`PhonePe Payment Creation Failed: ${err.message}`);
     }
-  }
-
-  private legacyMockCheckout(merchantTransactionId: string, amountInPaise: number): PaymentOrderResult {
-    const amountINR = (amountInPaise / 100).toFixed(2);
-    return {
-      provider: 'phonepe',
-      providerOrderId: merchantTransactionId,
-      checkoutUrl: `${this.hostUrl}/mock-checkout?tid=${merchantTransactionId}&amt=${amountINR}`,
-      upiIntentUri: `phonepe://pay?pa=lumen@ybl&pn=LumenSovereign&am=${amountINR}&cu=INR&tr=${merchantTransactionId}`,
-    };
   }
 
   async verifyWebhook(
     rawBody: string,
     headers: Record<string, string | string[] | undefined>
   ): Promise<WebhookVerificationResult> {
+    const rawHeadersObj: Record<string, string> = {};
+    for (const [k, v] of Object.entries(headers)) {
+      if (typeof v === 'string') rawHeadersObj[k] = v;
+      else if (Array.isArray(v)) rawHeadersObj[k] = v.join(', ');
+    }
+
+    const authHeader = (headers['authorization'] || headers['AUTHORIZATION']) as string | undefined;
     const xVerifyHeader = (headers['x-verify'] || headers['X-VERIFY']) as string | undefined;
 
+    // 1. Primary verification: PhonePe SDK v2 callback validation via Authorization header
+    if (authHeader && this.sdkClient) {
+      try {
+        const callbackResponse = this.sdkClient.validateCallback(
+          this.callbackUsername,
+          this.callbackPassword,
+          authHeader,
+          rawBody
+        );
+
+        if (callbackResponse && callbackResponse.payload) {
+          const payload = callbackResponse.payload;
+          const isSuccess = payload.state === 'COMPLETED';
+          const isRefund = payload.state === 'REFUND_COMPLETED' || payload.state === 'REFUND_SUCCESS';
+
+          return {
+            isValid: true,
+            eventId: payload.orderId || `evt_${payload.merchantOrderId || Date.now()}`,
+            providerOrderId: payload.merchantOrderId || payload.orderId,
+            providerPaymentId: payload.orderId,
+            status: isSuccess ? 'captured' : isRefund ? 'refunded' : 'failed',
+            amountMinor: payload.amount,
+            currency: 'INR',
+            rawPayload: callbackResponse as any,
+            rawBody,
+            rawHeaders: rawHeadersObj,
+          };
+        }
+      } catch (sdkErr: any) {
+        // If authorization fails via SDK validateCallback, check if X-VERIFY is provided as fallback
+        if (!xVerifyHeader) {
+          return {
+            isValid: false,
+            error: `PhonePe SDK Callback Validation Failed: ${sdkErr.message}`,
+            rawBody,
+            rawHeaders: rawHeadersObj,
+          };
+        }
+      }
+    }
+
+    // 2. Secondary verification: SHA256 timing-safe checksum verification via X-VERIFY
     if (!xVerifyHeader) {
-      return { isValid: false, error: 'Missing X-VERIFY header from PhonePe', rawBody, rawHeaders: headers as Record<string, string> };
+      return {
+        isValid: false,
+        error: 'Missing X-VERIFY or Authorization header from PhonePe callback',
+        rawBody,
+        rawHeaders: rawHeadersObj,
+      };
     }
 
     let parsedBody: any;
     try {
       parsedBody = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
     } catch {
-      return { isValid: false, error: 'Invalid JSON webhook payload', rawBody, rawHeaders: headers as Record<string, string> };
+      return {
+        isValid: false,
+        error: 'Invalid JSON webhook payload',
+        rawBody,
+        rawHeaders: rawHeadersObj,
+      };
     }
 
     const responseBase64 = parsedBody.response;
     if (!responseBase64) {
-      return { isValid: false, error: 'Missing response field in webhook payload', rawBody, rawHeaders: headers as Record<string, string> };
+      return {
+        isValid: false,
+        error: 'Missing response field in webhook payload',
+        rawBody,
+        rawHeaders: rawHeadersObj,
+      };
     }
 
-    // Official PhonePe Webhook Verification: SHA256(responseBase64 + saltKey) + "###" + saltIndex
     const expectedHash = crypto
       .createHash('sha256')
       .update(`${responseBase64}${this.saltKey}`)
       .digest('hex');
     const expectedXVerify = `${expectedHash}###${this.saltIndex}`;
 
-    // Timing safe comparison
     const sigBuf = Buffer.from(xVerifyHeader);
     const expBuf = Buffer.from(expectedXVerify);
-    let signatureMatched = false;
 
-    if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) {
-      signatureMatched = true;
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return {
+        isValid: false,
+        error: 'Cryptographic signature mismatch on PhonePe webhook',
+        rawBody,
+        rawHeaders: rawHeadersObj,
+      };
     }
 
-    // Additional SDK check if available
-    if (this.sdkClient && typeof (this.sdkClient as any).validateCallback === 'function') {
-      try {
-        const isValid = (this.sdkClient as any).validateCallback(rawBody, xVerifyHeader);
-        if (isValid) signatureMatched = true;
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    if (!signatureMatched) {
-      return { isValid: false, error: 'Cryptographic signature mismatch on PhonePe webhook', rawBody, rawHeaders: headers as Record<string, string> };
-    }
-
-    // Decode base64 payload
     let decoded: any;
     try {
       decoded = JSON.parse(Buffer.from(responseBase64, 'base64').toString('utf8'));
     } catch {
-      return { isValid: false, error: 'Failed to decode base64 PhonePe webhook response', rawBody, rawHeaders: headers as Record<string, string> };
+      return {
+        isValid: false,
+        error: 'Failed to decode base64 PhonePe webhook response',
+        rawBody,
+        rawHeaders: rawHeadersObj,
+      };
     }
 
     const data = decoded.data;
     if (!data) {
-      return { isValid: false, error: 'Decoded webhook missing data object', rawBody, rawHeaders: headers as Record<string, string> };
+      return {
+        isValid: false,
+        error: 'Decoded webhook missing data object',
+        rawBody,
+        rawHeaders: rawHeadersObj,
+      };
     }
 
     const merchantTransactionId = data.merchantTransactionId;
@@ -247,152 +249,91 @@ export class PhonePeProductionAdapter implements PaymentProvider {
       currency: 'INR',
       rawPayload: decoded,
       rawBody,
-      rawHeaders: headers as Record<string, string>,
+      rawHeaders: rawHeadersObj,
     };
   }
 
   async checkStatus(providerOrderId: string, merchantTransactionId: string): Promise<PaymentStatusResult> {
-    if (this.sdkClient) {
-      try {
-        const response = await this.sdkClient.getOrderStatus(merchantTransactionId);
-        // Map response
-        const code = (response as any).code || (response as any).responseCode;
-        const data = (response as any).data || response;
-        
-        let status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'UNKNOWN' = 'UNKNOWN';
-        if (code === 'PAYMENT_SUCCESS' || (response as any).success === true) {
-          status = 'SUCCESS';
-        } else if (code === 'PAYMENT_PENDING' || code === 'PAYMENT_INITIATED') {
-          status = 'PENDING';
-        } else if (code === 'PAYMENT_ERROR' || code === 'PAYMENT_DECLINED' || (response as any).success === false) {
-          status = 'FAILED';
-        }
-
-        return {
-          providerOrderId: merchantTransactionId,
-          status,
-          amountMinor: data?.amount || 0,
-          currency: 'INR',
-          providerPaymentId: data?.transactionId,
-          utr: data?.paymentInstrument?.utr || data?.utr,
-          paymentMethod: data?.paymentInstrument?.type,
-          bankRefNumber: data?.paymentInstrument?.bankTransactionId || data?.bankRefNumber
-        };
-      } catch (err: any) {
-        // On network error return UNKNOWN
-        return {
-          providerOrderId: merchantTransactionId,
-          status: 'UNKNOWN',
-          amountMinor: 0,
-          currency: 'INR'
-        };
-      }
-    }
-
-    // Legacy Fallback
-    const endpoint = `/pg/v1/status/${this.merchantId}/${merchantTransactionId}`;
-    const xVerify = crypto
-      .createHash('sha256')
-      .update(`${endpoint}${this.saltKey}`)
-      .digest('hex') + `###${this.saltIndex}`;
+    const client = this.getClient();
 
     try {
-      const response = await fetch(`${this.hostUrl}${endpoint}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-VERIFY': xVerify,
-          'X-MERCHANT-ID': this.merchantId,
-        },
-      });
+      const response = await client.getOrderStatus(merchantTransactionId);
 
-      const json = await response.json() as any;
-      const isSuccess = json.code === 'PAYMENT_SUCCESS';
-      const isPending = json.code === 'PAYMENT_PENDING';
+      let status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'UNKNOWN' = 'UNKNOWN';
+      if (response.state === 'COMPLETED') {
+        status = 'SUCCESS';
+      } else if (response.state === 'PENDING') {
+        status = 'PENDING';
+      } else if (response.state === 'FAILED') {
+        status = 'FAILED';
+      }
+
+      const latestPayment = response.paymentDetails && response.paymentDetails.length > 0
+        ? response.paymentDetails[response.paymentDetails.length - 1]
+        : undefined;
 
       return {
         providerOrderId: merchantTransactionId,
-        status: isSuccess ? 'SUCCESS' : isPending ? 'PENDING' : 'FAILED',
-        amountMinor: json.data?.amount || 0,
+        status,
+        amountMinor: response.amount || 0,
         currency: 'INR',
-        providerPaymentId: json.data?.transactionId,
-        utr: json.data?.paymentInstrument?.utr,
-        paymentMethod: json.data?.paymentInstrument?.type,
-        bankRefNumber: json.data?.paymentInstrument?.bankTransactionId
+        providerPaymentId: response.orderId,
+        utr: latestPayment?.paymentInstrument?.utr,
+        paymentMethod: latestPayment?.paymentInstrument?.type,
+        bankRefNumber: latestPayment?.paymentInstrument?.bankTransactionId,
       };
     } catch (err: any) {
       return {
         providerOrderId: merchantTransactionId,
         status: 'UNKNOWN',
         amountMinor: 0,
-        currency: 'INR'
+        currency: 'INR',
       };
     }
   }
 
   async refund(params: RefundParams): Promise<RefundResult> {
     const merchantRefundId = `ref_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-
-    if (this.sdkClient) {
-      try {
-        const req = new RefundRequest(merchantRefundId, params.providerOrderId, params.amountMinor);
-        const response = await this.sdkClient.refund(req);
-        
-        const isSuccess = (response as any).success === true || (response as any).code === 'PAYMENT_SUCCESS' || (response as any).code === 'REFUND_PENDING';
-        
-        return {
-          success: isSuccess,
-          refundId: merchantRefundId,
-          status: isSuccess ? 'SUCCESS' : 'FAILED',
-          amountMinor: params.amountMinor,
-          error: (response as any).message,
-        };
-      } catch (err: any) {
-        return {
-          success: false,
-          refundId: merchantRefundId,
-          status: 'FAILED',
-          amountMinor: params.amountMinor,
-          error: err.message,
-        };
-      }
-    }
-
-    // Legacy Fallback
-    const endpoint = '/pg/v1/refund';
-    const payload = {
-      merchantId: this.merchantId,
-      merchantUserId: 'LUMEN_ADMIN',
-      originalTransactionId: params.providerOrderId,
-      merchantTransactionId: merchantRefundId,
-      amount: params.amountMinor,
-      callbackUrl: this.callbackUrl,
-    };
-
-    const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const xVerify = this.calculateChecksum(base64Payload, endpoint);
+    const client = this.getClient();
 
     try {
-      const response = await fetch(`${this.hostUrl}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-VERIFY': xVerify,
-        },
-        body: JSON.stringify({ request: base64Payload }),
-      });
+      const req = RefundRequest.builder()
+        .merchantRefundId(merchantRefundId)
+        .originalMerchantOrderId(params.providerOrderId)
+        .amount(params.amountMinor)
+        .build();
 
-      const json = await response.json() as any;
-      const isSuccess = json.success && (json.code === 'PAYMENT_SUCCESS' || json.code === 'REFUND_PENDING');
+      const response = await client.refund(req);
+
+      let status: 'SUCCESS' | 'PENDING' | 'FAILED' = 'PENDING';
+      let success = true;
+
+      if (response.state === 'COMPLETED') {
+        status = 'SUCCESS';
+        success = true;
+      } else if (response.state === 'PENDING') {
+        status = 'PENDING';
+        success = true;
+      } else {
+        status = 'FAILED';
+        success = false;
+      }
 
       return {
-        success: isSuccess,
-        refundId: merchantRefundId,
-        status: isSuccess ? 'SUCCESS' : 'FAILED',
-        amountMinor: params.amountMinor,
-        error: json.message,
+        success,
+        refundId: response.refundId || merchantRefundId,
+        status,
+        amountMinor: response.amount || params.amountMinor,
       };
     } catch (err: any) {
+      if (
+        err.name === 'FetchError' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ECONNRESET' ||
+        /timeout|fetch|network|econnrefused/i.test(err.message)
+      ) {
+        throw new ProviderNetworkTimeoutError('phonepe', `refund:${merchantRefundId}`);
+      }
       return {
         success: false,
         refundId: merchantRefundId,

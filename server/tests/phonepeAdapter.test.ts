@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { PhonePeProductionAdapter } from '../services/payments/phonepeAdapter';
 import crypto from 'node:crypto';
 
@@ -91,9 +91,46 @@ describe('PhonePe Production Adapter', () => {
       expect(result.isValid).toBe(false);
       expect(result.error).toContain('Missing response');
     });
+
+    it('verifies PhonePe v2 callback using Authorization header and validateCallback', async () => {
+      const { config } = await import('../../server/config');
+      const authHeader = crypto
+        .createHash('sha256')
+        .update(`${config.PHONEPE_CALLBACK_USERNAME}:${config.PHONEPE_CALLBACK_PASSWORD}`)
+        .digest('hex');
+
+      const v2CallbackPayload = {
+        type: 'CHECKOUT_ORDER_COMPLETED',
+        payload: {
+          orderId: 'PO_PHONEPE_V2_999',
+          merchantOrderId: 'ord_v2_callback_001',
+          state: 'COMPLETED',
+          amount: 85000,
+          paymentDetails: [
+            {
+              paymentInstrument: {
+                type: 'UPI',
+                utr: '998877665544',
+              },
+            },
+          ],
+        },
+      };
+
+      const rawBody = JSON.stringify(v2CallbackPayload);
+      const result = await adapter.verifyWebhook(rawBody, { authorization: authHeader });
+
+      expect(result.isValid).toBe(true);
+      expect(result.status).toBe('captured');
+      expect(result.amountMinor).toBe(85000);
+      expect(result.providerOrderId).toBe('ord_v2_callback_001');
+      expect(result.providerPaymentId).toBe('PO_PHONEPE_V2_999');
+      expect(result.rawBody).toBe(rawBody);
+      expect(result.rawHeaders).toBeDefined();
+    });
   });
 
-  describe('Payment Flow', () => {
+  describe('Payment Flow & URL Safety', () => {
     it('rejects non-INR currency', async () => {
       await expect(adapter.createOrder({
         userId: 'usr_test',
@@ -102,6 +139,53 @@ describe('PhonePe Production Adapter', () => {
         currency: 'USD' as any,
         method: 'upi',
       })).rejects.toThrow(/INR/);
+    });
+
+    it('strictly fails when SDK does not return a valid redirectUrl (no fabricated fallback URLs)', async () => {
+      const client = (adapter as any).sdkClient;
+      if (client) {
+        const originalPay = client.pay;
+        client.pay = vi.fn().mockResolvedValueOnce({
+          orderId: 'ord_no_redirect_001',
+          redirectUrl: null, // Missing redirectUrl!
+        });
+
+        try {
+          await expect(
+            adapter.createOrder({
+              userId: 'usr_test_url_001',
+              orderId: 'po_no_url_001',
+              amountMinor: 25000,
+              currency: 'INR',
+              method: 'card',
+            })
+          ).rejects.toThrow(/did not return a valid checkout URL/);
+        } finally {
+          client.pay = originalPay;
+        }
+      }
+    });
+
+    it('throws ProviderNetworkTimeoutError on network timeouts during order creation', async () => {
+      const client = (adapter as any).sdkClient;
+      if (client) {
+        const originalPay = client.pay;
+        client.pay = vi.fn().mockRejectedValueOnce(new Error('fetch failed: connect ETIMEDOUT 10.0.0.1:443'));
+
+        try {
+          await expect(
+            adapter.createOrder({
+              userId: 'usr_test_timeout_001',
+              orderId: 'po_timeout_001',
+              amountMinor: 25000,
+              currency: 'INR',
+              method: 'card',
+            })
+          ).rejects.toThrow(/Provider 'phonepe' network timeout/);
+        } finally {
+          client.pay = originalPay;
+        }
+      }
     });
   });
 });

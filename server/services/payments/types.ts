@@ -8,8 +8,16 @@ export type PaymentOrderStatus =
   | 'CANCELLED'
   | 'UNKNOWN_PROVIDER_STATE'
   | 'REFUND_PENDING'
+  | 'REFUND_UNKNOWN'
   | 'PARTIALLY_REFUNDED'
   | 'REFUNDED';
+
+export class IdempotencyConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'IdempotencyConflictError';
+  }
+}
 
 export interface CreatePaymentIntentParams {
   userId: string;
