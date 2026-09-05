@@ -844,27 +844,41 @@ export function buildServer(): FastifyInstance {
   });
 
   server.get('/api/exchange/upstox/auth-url', { preHandler: requireAuth }, async (req: FastifyRequest) => {
-    const state = (req.query as any)?.state || `state_${Date.now()}`;
-    const authUrl = UpstoxClient.getAuthorizationUrl(state);
-    return { success: true, authUrl };
+    const redirectUri = (req.query as any)?.redirectUri;
+    const { state, authUrl, expiresAt } = await UpstoxClient.generateOAuthState(req.user!.id, redirectUri);
+    return { success: true, authUrl, expiresAt };
   });
 
   server.post('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { code: string; redirectUri?: string };
+    const body = req.body as { code: string; state: string; redirectUri?: string };
     if (!body?.code) {
       return reply.status(400).send({ success: false, error: 'Authorization code is required' });
     }
+    if (!body?.state) {
+      return reply.status(400).send({ success: false, error: 'OAuth state parameter is required for CSRF protection' });
+    }
     try {
       const broker = BrokerRegistry.get('upstox');
-      const audit = await broker.saveCredentials!(req.user!.id, { code: body.code, redirectUri: body.redirectUri });
+      const audit = await broker.saveCredentials!(req.user!.id, {
+        code: body.code,
+        state: body.state,
+        redirectUri: body.redirectUri,
+      });
       return { success: true, audit, message: 'Upstox connected and credentials encrypted at rest.' };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }
   });
 
-  server.get('/api/exchange/upstox/ip-diagnostics', { preHandler: requireAuth }, async () => {
-    const diagnostics = await UpstoxClient.checkOutboundIp();
+  server.get('/api/exchange/upstox/token-health', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const upstox = BrokerRegistry.get('upstox') as any;
+    const health = await upstox.getTokenHealth(req.user!.id);
+    return { success: true, health };
+  });
+
+  server.get('/api/exchange/upstox/ip-diagnostics', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const forceRefresh = Boolean((req.query as any)?.force);
+    const diagnostics = await UpstoxClient.checkOutboundIp(forceRefresh);
     return { success: true, diagnostics };
   });
 

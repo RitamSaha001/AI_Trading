@@ -42,6 +42,11 @@ import {
   UpstoxPlaceOrderPayload,
   UpstoxTradeItem,
 } from './upstoxTypes';
+import {
+  calculateNextUpstoxExpiry,
+  getTokenHealth,
+  UpstoxTokenHealth,
+} from './upstoxExpiry';
 
 export class UpstoxAdapter implements BrokerGateway {
   public readonly id: BrokerId = 'upstox';
@@ -73,7 +78,9 @@ export class UpstoxAdapter implements BrokerGateway {
    */
   async getAccount(userId: string): Promise<BrokerAccount | null> {
     const creds = await this.getCredentials(userId);
-    if (!creds || !creds.accessToken) {
+    const tokenHealth = await this.getTokenHealth(userId);
+
+    if (!creds || !creds.accessToken || tokenHealth.status === 'EXPIRED') {
       return {
         broker: 'upstox',
         userId,
@@ -85,6 +92,8 @@ export class UpstoxAdapter implements BrokerGateway {
         permissions: [],
         isSafe: true,
         securityBadge: 'DISCONNECTED',
+        securityWarning: tokenHealth.warning || (creds ? 'Upstox access token expired. Please re-authenticate.' : undefined),
+        tokenHealth,
         balances: {},
         latencyMs: 0,
         lastSyncAt: 0,
@@ -98,6 +107,8 @@ export class UpstoxAdapter implements BrokerGateway {
       const funds = await this.getFunds(userId);
       const balances = await this.getBalances(userId);
 
+      const securityBadge = tokenHealth.status === 'EXPIRING_SOON' ? 'EXPIRING_SOON' : 'OAUTH2_RESTRICTED_SAFE';
+
       return {
         broker: 'upstox',
         userId,
@@ -109,7 +120,9 @@ export class UpstoxAdapter implements BrokerGateway {
         permissions: profile.products || ['EQUITY'],
         isSafe: true,
         accountReference: profile.user_id,
-        securityBadge: 'OAUTH2_RESTRICTED_SAFE',
+        securityBadge,
+        securityWarning: tokenHealth.warning,
+        tokenHealth,
         balances,
         latencyMs,
         lastSyncAt: Date.now(),
@@ -128,6 +141,12 @@ export class UpstoxAdapter implements BrokerGateway {
           isSafe: true,
           securityBadge: 'AUTH_EXPIRED',
           securityWarning: 'Upstox access token expired. Please re-authenticate.',
+          tokenHealth: {
+            ...tokenHealth,
+            status: 'EXPIRED',
+            reauthRequired: true,
+            warning: 'Upstox access token rejected by exchange. Please re-authenticate.',
+          },
           balances: {},
           latencyMs: 0,
           lastSyncAt: Date.now(),
@@ -223,8 +242,19 @@ export class UpstoxAdapter implements BrokerGateway {
     const db = getDb();
     let accessToken = credentials.accessToken;
 
-    // If OAuth authorization code was supplied, exchange it
+    // If OAuth authorization code was supplied, validate state and exchange it
     if (credentials.code) {
+      if (credentials.state) {
+        const stateRes = await UpstoxClient.validateAndConsumeOAuthState(userId, credentials.state);
+        if (!stateRes.valid) {
+          throw new StandardBrokerError(
+            'AUTHENTICATION_FAILED',
+            `OAuth state validation failed: ${stateRes.reason || 'Invalid state token.'}`,
+            'upstox'
+          );
+        }
+      }
+
       const tokenResp = await UpstoxClient.exchangeAuthorizationCode(
         credentials.code,
         credentials.redirectUri
@@ -244,13 +274,7 @@ export class UpstoxAdapter implements BrokerGateway {
     const profile = await UpstoxClient.getProfile(accessToken.trim());
 
     // Calculate token expiration (Upstox tokens expire daily at 3:30 AM IST)
-    const now = new Date();
-    const expiry = new Date(now);
-    expiry.setHours(22, 0, 0, 0); // 3:30 AM IST is 22:00 UTC previous day
-    if (expiry.getTime() <= now.getTime()) {
-      expiry.setDate(expiry.getDate() + 1);
-    }
-    const tokenExpiresAt = expiry.getTime();
+    const tokenExpiresAt = calculateNextUpstoxExpiry(new Date());
 
     const encryptedToken = this.encryptSecret(accessToken.trim());
     const credId = `cred_upstox_${userId}_${Date.now()}`;
@@ -376,6 +400,20 @@ export class UpstoxAdapter implements BrokerGateway {
     return creds;
   }
 
+  /**
+   * Retrieves real-time token health, remaining validity, and 03:30 AM IST cutoff status.
+   */
+  async getTokenHealth(userId: string): Promise<UpstoxTokenHealth> {
+    const db = getDb();
+    const row = await db.queryOne<any>(
+      `SELECT token_expires_at FROM broker_credentials WHERE user_id = ? AND broker = 'upstox' ORDER BY updated_at DESC LIMIT 1`,
+      [userId]
+    );
+
+    const tokenExpiresAt = row?.token_expires_at ? Number(row.token_expires_at) : null;
+    return getTokenHealth(tokenExpiresAt);
+  }
+
   // ==========================================================================
   // ORDERS & TRADING
   // ==========================================================================
@@ -386,7 +424,7 @@ export class UpstoxAdapter implements BrokerGateway {
   async placeOrder(order: BrokerOrderRequest): Promise<BrokerOrder> {
     const db = getDb();
     const accountMode = order.accountMode || 'live';
-    const clientOrderId = order.idempotencyKey || `lm_upstox_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    const clientOrderId = order.clientOrderId || order.idempotencyKey || `lm_upstox_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
     // 1. Authoritative Instrument Rules Pre-Trade Validation
     const validation = this.instrumentProvider.validateOrder(order);
@@ -432,10 +470,28 @@ export class UpstoxAdapter implements BrokerGateway {
         );
       }
 
-      const ipCheck = await UpstoxClient.checkOutboundIp();
-      if (!ipCheck.matchesRegistered) {
+      // Check daily 03:30 AM IST session health & 5-minute pre-cutoff guard
+      const health = await this.getTokenHealth(order.userId);
+      if (health.status === 'EXPIRED') {
         throw new StandardBrokerError(
-          'ORDER_REJECTED',
+          'AUTHENTICATION_FAILED',
+          'Upstox daily session expired at 03:30 AM IST. Please re-authenticate.',
+          'upstox'
+        );
+      }
+
+      if (health.isWithinCutoffWindow) {
+        throw new StandardBrokerError(
+          'SESSION_EXPIRING',
+          'Upstox daily session expires in less than 5 minutes. Live orders blocked until morning re-authentication.',
+          'upstox'
+        );
+      }
+
+      const ipCheck = await UpstoxClient.checkOutboundIp();
+      if (ipCheck.status === 'FAIL') {
+        throw new StandardBrokerError(
+          'STATIC_IP_MISMATCH',
           `Upstox live order blocked: outbound IP does not match registered static IP. ${ipCheck.error || ''}`,
           'upstox'
         );

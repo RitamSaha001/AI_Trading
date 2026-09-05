@@ -6,7 +6,9 @@
  * provides static-IP diagnostics, and supports pluggable transports for deterministic unit tests.
  */
 
+import crypto from 'crypto';
 import { config } from '../../../config';
+import { getDb } from '../../../db';
 import { StandardBrokerError } from '../brokerGateway';
 import { BrokerErrorCode } from '../brokerTypes';
 import {
@@ -21,6 +23,18 @@ import {
   UpstoxQuoteData,
   UpstoxTradeItem,
 } from './upstoxTypes';
+
+export type UpstoxIpDiagnosticStatus = 'PASS' | 'FAIL' | 'BYPASS_SANDBOX';
+
+export interface UpstoxIpDiagnostic {
+  status: UpstoxIpDiagnosticStatus;
+  outboundIp: string | null;
+  matchesRegistered: boolean;
+  registeredIps: string[];
+  isProduction: boolean;
+  probedAt: number;
+  error?: string;
+}
 
 export type UpstoxTransport = (
   url: string,
@@ -47,23 +61,101 @@ export class UpstoxClient {
   public static resetForTesting(): void {
     this.customTransport = null;
     this.mockOutboundIp = null;
+    this.cachedIpDiagnostic = null;
   }
+
+  private static cachedIpDiagnostic: { result: UpstoxIpDiagnostic; expiresAt: number } | null = null;
 
   /**
    * Generates the OAuth 2.0 authorization dialog URL.
    * Executed strictly server-side; never leaks client secrets.
    */
-  public static getAuthorizationUrl(state?: string): string {
+  public static getAuthorizationUrl(state: string, redirectUri?: string): string {
     const clientId = config.UPSTOX_CLIENT_ID || '';
-    const redirectUri = config.UPSTOX_REDIRECT_URI || '';
+    const rUri = redirectUri || config.UPSTOX_REDIRECT_URI || '';
     const baseUrl = config.UPSTOX_API_BASE_URL.replace(/\/v2\/?$/, '');
     const query = new URLSearchParams({
       response_type: 'code',
       client_id: clientId,
-      redirect_uri: redirectUri,
-      ...(state ? { state } : {}),
+      redirect_uri: rUri,
+      state,
     });
     return `${baseUrl}/v2/login/authorization/dialog?${query.toString()}`;
+  }
+
+  /**
+   * Generates a cryptographically random OAuth state, persists it in broker_oauth_states,
+   * and returns the authorization URL. Never accepts client-selected states.
+   */
+  public static async generateOAuthState(
+    userId: string,
+    redirectUri?: string
+  ): Promise<{ state: string; authUrl: string; expiresAt: number }> {
+    const state = crypto.randomBytes(32).toString('hex');
+    const rUri = redirectUri || config.UPSTOX_REDIRECT_URI || '';
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000; // 10 minutes TTL
+
+    const db = getDb();
+    await db.execute(
+      `INSERT INTO broker_oauth_states (id, user_id, broker, redirect_uri, expires_at, created_at)
+       VALUES (?, ?, 'upstox', ?, ?, ?)`,
+      [state, userId, rUri, expiresAt, now]
+    );
+
+    const authUrl = this.getAuthorizationUrl(state, rUri);
+    return { state, authUrl, expiresAt };
+  }
+
+  /**
+   * Validates and atomically consumes an OAuth state for an authenticated user.
+   * Enforces single-use to prevent replay attacks and rejects expired states.
+   */
+  public static async validateAndConsumeOAuthState(
+    userId: string,
+    state: string
+  ): Promise<{ valid: boolean; redirectUri?: string; reason?: string }> {
+    if (!state || typeof state !== 'string' || !state.trim()) {
+      return { valid: false, reason: 'Missing OAuth state token.' };
+    }
+
+    const db = getDb();
+    const row = await db.queryOne<{
+      id: string;
+      user_id: string;
+      expires_at: number | string;
+      consumed_at: number | string | null;
+      redirect_uri: string | null;
+    }>(
+      `SELECT * FROM broker_oauth_states WHERE id = ? AND user_id = ? AND broker = 'upstox'`,
+      [state.trim(), userId]
+    );
+
+    if (!row) {
+      return { valid: false, reason: 'Invalid or unrecognized OAuth state token.' };
+    }
+
+    if (row.consumed_at) {
+      return { valid: false, reason: 'OAuth state token has already been consumed (replay attempt blocked).' };
+    }
+
+    const now = Date.now();
+    if (Number(row.expires_at) < now) {
+      return { valid: false, reason: 'OAuth state token has expired (exceeded 10-minute validity window).' };
+    }
+
+    // Atomically consume state
+    const res = await db.execute(
+      `UPDATE broker_oauth_states SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL`,
+      [now, state.trim()]
+    );
+
+    const affected = (res as any)?.changes ?? (res as any)?.rowCount ?? 1;
+    if (affected === 0) {
+      return { valid: false, reason: 'Concurrent state consumption conflict.' };
+    }
+
+    return { valid: true, redirectUri: row.redirect_uri || undefined };
   }
 
   /**
@@ -107,54 +199,89 @@ export class UpstoxClient {
   }
 
   /**
-   * Verifies that the outbound traffic originates from the registered static IP.
+   * Probes outbound public IP and evaluates semantic match against registered static IPs.
+   * Returns PASS, FAIL, or BYPASS_SANDBOX with a 60-second in-memory cache.
    */
-  public static async checkOutboundIp(): Promise<{
-    outboundIp: string | null;
-    matchesRegistered: boolean;
-    registeredIps: string[];
-    error?: string;
-  }> {
+  public static async checkOutboundIp(forceRefresh = false): Promise<UpstoxIpDiagnostic> {
+    const now = Date.now();
+    if (!forceRefresh && this.cachedIpDiagnostic && this.cachedIpDiagnostic.expiresAt > now) {
+      return this.cachedIpDiagnostic.result;
+    }
+
     const registered = [
       config.UPSTOX_STATIC_IP,
       config.UPSTOX_SECONDARY_STATIC_IP,
     ].filter(Boolean) as string[];
 
+    const isProduction = config.NODE_ENV === 'production' || Boolean(config.UPSTOX_LIVE_TRADING_ENABLED);
+
     if (this.mockOutboundIp) {
       const matches = registered.length === 0 || registered.includes(this.mockOutboundIp);
-      return {
+      const result: UpstoxIpDiagnostic = {
+        status: matches ? (registered.length > 0 ? 'PASS' : 'BYPASS_SANDBOX') : 'FAIL',
         outboundIp: this.mockOutboundIp,
         matchesRegistered: matches,
         registeredIps: registered,
+        isProduction,
+        probedAt: now,
+        error: !matches
+          ? `Detected outbound egress IP (${this.mockOutboundIp}) does not match registered static IPs [${registered.join(', ')}].`
+          : undefined,
       };
+      return result;
     }
 
-    // If no static IP is configured, pass as unconstrained (dev/sandbox)
+    // If no static IP is configured:
     if (registered.length === 0) {
-      return {
+      const isHardFail = config.NODE_ENV === 'production';
+      const result: UpstoxIpDiagnostic = {
+        status: isHardFail ? 'FAIL' : 'BYPASS_SANDBOX',
         outboundIp: null,
-        matchesRegistered: true,
+        matchesRegistered: !isHardFail,
         registeredIps: [],
+        isProduction,
+        probedAt: now,
+        error: isHardFail ? 'UPSTOX_STATIC_IP must be configured in production.' : undefined,
       };
+      return result;
     }
 
     try {
-      // In production, query an IP reflect check or resolve interface
-      const res = await this.executeRaw('https://api.ipify.org?format=json', 'GET', { Accept: 'application/json' }, undefined, 3000);
-      const outboundIp = res?.ip || null;
+      let outboundIp: string | null = null;
+      try {
+        const res = await this.executeRaw('https://api.ipify.org?format=json', 'GET', { Accept: 'application/json' }, undefined, 3000);
+        outboundIp = res?.ip || null;
+      } catch {
+        const res2 = await this.executeRaw('https://icanhazip.com', 'GET', { Accept: 'text/plain' }, undefined, 3000);
+        outboundIp = typeof res2 === 'string' ? res2.trim() : (res2?.ip || null);
+      }
+
       const matches = Boolean(outboundIp && registered.includes(outboundIp));
-      return {
+      const result: UpstoxIpDiagnostic = {
+        status: matches ? 'PASS' : 'FAIL',
         outboundIp,
         matchesRegistered: matches,
         registeredIps: registered,
+        isProduction,
+        probedAt: now,
+        error: !matches
+          ? `Detected outbound egress IP (${outboundIp || 'unknown'}) does not match registered static IPs [${registered.join(', ')}].`
+          : undefined,
       };
+
+      this.cachedIpDiagnostic = { result, expiresAt: now + 60 * 1000 };
+      return result;
     } catch (err: any) {
-      return {
+      const result: UpstoxIpDiagnostic = {
+        status: 'FAIL',
         outboundIp: null,
         matchesRegistered: false,
         registeredIps: registered,
+        isProduction,
+        probedAt: now,
         error: `Failed to detect outbound IP: ${err.message}`,
       };
+      return result;
     }
   }
 

@@ -586,18 +586,38 @@ export function ExchangeOnboardingDrawer({ open, onClose }: Props) {
                   </span>
                 </div>
 
-                <div className="text-[11px] text-zinc-400 bg-white/5 p-2.5 rounded-xl border border-white/10 space-y-1">
-                  <div className="flex justify-between">
+                <div className="text-[11px] text-zinc-400 bg-white/5 p-2.5 rounded-xl border border-white/10 space-y-2">
+                  <div className="flex justify-between items-center">
                     <span>Static IP Verification:</span>
-                    <span className={ipDiagnostics?.matches ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
-                      {ipDiagnostics?.matches ? '✓ Static IP Verified' : (ipDiagnostics?.outboundIp ? `IP: ${ipDiagnostics.outboundIp}` : 'Not Enforced')}
+                    <span className={ipDiagnostics?.status === 'PASS' ? 'text-emerald-400 font-medium' : (ipDiagnostics?.status === 'BYPASS_SANDBOX' ? 'text-sky-400 font-medium' : 'text-amber-400 font-medium')}>
+                      {ipDiagnostics?.status === 'PASS' ? `✓ Verified (${ipDiagnostics.outboundIp})` : (ipDiagnostics?.status === 'BYPASS_SANDBOX' ? 'ℹ Sandbox (Bypass)' : (ipDiagnostics?.outboundIp ? `Mismatch (${ipDiagnostics.outboundIp})` : 'Not Probed'))}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Session Validity:</span>
-                    <span className="text-zinc-300">Active (Daily IST Expiry)</span>
+                  <div className="flex justify-between items-center">
+                    <span>Daily Session Validity:</span>
+                    <span className={upstoxAccount.tokenHealth?.status === 'EXPIRED' ? 'text-rose-400 font-semibold' : (upstoxAccount.tokenHealth?.status === 'EXPIRING_SOON' ? 'text-amber-400 font-medium' : 'text-zinc-200')}>
+                      {upstoxAccount.tokenHealth?.status === 'EXPIRED' ? 'Expired at 03:30 AM IST' : (upstoxAccount.tokenHealth?.timeRemainingHuman ? `${upstoxAccount.tokenHealth.timeRemainingHuman} remaining` : 'Active (Daily IST Expiry)')}
+                    </span>
                   </div>
                 </div>
+
+                {/* Token Expiring Soon or Expired Warning Banner */}
+                {(upstoxAccount.tokenHealth?.status === 'EXPIRING_SOON' || upstoxAccount.tokenHealth?.status === 'EXPIRED') && (
+                  <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-200 text-xs space-y-2">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      {upstoxAccount.tokenHealth.warning || 'Upstox session expiring soon.'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleStartUpstoxOAuth}
+                      className="w-full py-1.5 px-3 bg-amber-500 hover:bg-amber-600 text-zinc-950 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Re-authenticate with Upstox Now
+                    </button>
+                  </div>
+                )}
 
                 <div className="pt-2 border-t border-white/10 flex items-center justify-between">
                   <button

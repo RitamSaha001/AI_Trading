@@ -13,7 +13,8 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "audit": "tsx scripts/auditCodebase.ts",
-    "benchmark": "tsx scripts/benchmarkLLMs.ts"
+    "benchmark": "tsx scripts/benchmarkLLMs.ts",
+    "verify:upstox-ip": "tsx scripts/verifyUpstoxEgressIp.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

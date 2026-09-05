@@ -203,20 +203,25 @@ export const ApiClient = {
     return apiRequest<{ account: any }>(`/api/exchange/account?broker=${encodeURIComponent(broker)}`);
   },
 
-  async getUpstoxAuthUrl(state?: string) {
-    const q = state ? `?state=${encodeURIComponent(state)}` : '';
-    return apiRequest<{ authUrl: string }>(`/api/exchange/upstox/auth-url${q}`);
+  async getUpstoxAuthUrl(redirectUri?: string) {
+    const q = redirectUri ? `?redirectUri=${encodeURIComponent(redirectUri)}` : '';
+    return apiRequest<{ authUrl: string; expiresAt: number }>(`/api/exchange/upstox/auth-url${q}`);
   },
 
-  async submitUpstoxCallback(code: string, redirectUri?: string) {
+  async submitUpstoxCallback(code: string, state: string, redirectUri?: string) {
     return apiRequest<{ audit: any; message: string }>('/api/exchange/upstox/callback', {
       method: 'POST',
-      body: JSON.stringify({ code, redirectUri }),
+      body: JSON.stringify({ code, state, redirectUri }),
     });
   },
 
-  async getUpstoxIpDiagnostics() {
-    return apiRequest<{ diagnostics: any }>('/api/exchange/upstox/ip-diagnostics');
+  async getUpstoxTokenHealth() {
+    return apiRequest<{ health: any }>('/api/exchange/upstox/token-health');
+  },
+
+  async getUpstoxIpDiagnostics(force: boolean = false) {
+    const q = force ? '?force=true' : '';
+    return apiRequest<{ diagnostics: any }>(`/api/exchange/upstox/ip-diagnostics${q}`);
   },
 
   async getBrokerFunds(broker: string = 'binance') {

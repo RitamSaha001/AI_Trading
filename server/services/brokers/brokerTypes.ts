@@ -47,6 +47,7 @@ export interface BrokerAccount {
   accountReference?: string;
   securityBadge: string;
   securityWarning?: string;
+  tokenHealth?: any;
   balances: Record<string, BrokerBalance>;
   latencyMs: number;
   lastSyncAt: number;
