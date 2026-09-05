@@ -162,6 +162,8 @@ export interface BrokerOrderRequest {
   triggerPrice?: number | string | ExactDecimal;
   disclosedQuantity?: number;
   slice?: boolean;
+  isAmo?: boolean;
+  confirmationId?: string;
   marketQuoteAgeMs?: number;
   idempotencyKey: string;
   clientOrderId?: string;

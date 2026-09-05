@@ -15,10 +15,15 @@ export class BrokerRegistry {
   private static defaultBrokerId: BrokerId = 'binance';
   private static isInitialized = false;
 
-  static {
-    // Automatically register standard production adapters
-    this.register(new BinanceAdapter());
-    this.register(new UpstoxAdapter());
+  private static ensureInitialized(): void {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
+    if (!this.gateways.has('binance')) {
+      this.register(new BinanceAdapter());
+    }
+    if (!this.gateways.has('upstox')) {
+      this.register(new UpstoxAdapter());
+    }
   }
 
   /**
@@ -32,6 +37,7 @@ export class BrokerRegistry {
    * Retrieves a broker gateway by ID, falling back to default if not found.
    */
   static get(brokerId?: BrokerId | string): BrokerGateway {
+    this.ensureInitialized();
     const id = (brokerId as BrokerId) || this.defaultBrokerId;
     const gateway = this.gateways.get(id);
     if (!gateway) {
@@ -49,6 +55,7 @@ export class BrokerRegistry {
    * Checks if a broker gateway is registered.
    */
   static has(brokerId: BrokerId | string): boolean {
+    this.ensureInitialized();
     return this.gateways.has(brokerId);
   }
 
@@ -56,6 +63,7 @@ export class BrokerRegistry {
    * Returns all registered broker gateways.
    */
   static getAll(): BrokerGateway[] {
+    this.ensureInitialized();
     return Array.from(this.gateways.values());
   }
 

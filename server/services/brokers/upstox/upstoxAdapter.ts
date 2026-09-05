@@ -48,6 +48,7 @@ import {
   UpstoxTokenHealth,
 } from './upstoxExpiry';
 import { IndianMarketCalendar } from './indianMarketCalendar';
+import { LiveOrderGateService } from '../../liveOrderGateService';
 
 export class UpstoxAdapter implements BrokerGateway {
   public readonly id: BrokerId = 'upstox';
@@ -470,134 +471,51 @@ export class UpstoxAdapter implements BrokerGateway {
       throw new StandardBrokerError('ORDER_REJECTED', `Unknown instrument: ${order.symbol}`, 'upstox');
     }
 
-    // 2. Live Trading Safety Gate, Token Health, Outbound Static IP & Market Hours Enforcement
-    if (accountMode === 'live') {
-      if (!config.UPSTOX_LIVE_TRADING_ENABLED) {
+    // 2. Paper Simulation Path
+    if (accountMode === 'paper') {
+      const riskResult = await RiskEngine.evaluateTrade({
+        userId: order.userId,
+        broker: 'upstox',
+        assetClass: 'EQUITY',
+        currency: instrument.quoteAsset || 'INR',
+        accountMode: 'paper',
+        symbol: order.symbol,
+        asset: instrument.baseAsset || order.symbol,
+        quoteAsset: instrument.quoteAsset || 'INR',
+        side: order.side,
+        type: order.type,
+        quantity: order.quantity,
+        price: order.price || 0,
+        marketQuoteAgeMs: order.marketQuoteAgeMs || 0,
+        idempotencyKey: clientOrderId,
+      });
+
+      if (!riskResult.approved) {
         throw new StandardBrokerError(
           'ORDER_REJECTED',
-          'UPSTOX_LIVE_TRADING_DISABLED: Upstox live trading is currently disabled by server safety gate (READ_ONLY / PAPER mode only).',
+          `Risk check rejected: ${riskResult.rejectReason || 'Limits exceeded'}`,
           'upstox'
         );
       }
 
-      // Check daily 03:30 AM IST session health & 5-minute pre-cutoff guard
-      const health = await this.getTokenHealth(order.userId);
-      if (health.status === 'EXPIRED') {
-        throw new StandardBrokerError(
-          'AUTHENTICATION_FAILED',
-          'Upstox daily session expired at 03:30 AM IST. Please re-authenticate.',
-          'upstox'
-        );
-      }
-
-      if (health.isWithinCutoffWindow) {
-        throw new StandardBrokerError(
-          'SESSION_EXPIRING',
-          'Upstox daily session expires in less than 5 minutes. Live orders blocked until morning re-authentication.',
-          'upstox'
-        );
-      }
-
-      // Require explicit production credentials for live trading (Finding 6)
-      const creds = await this.getCredentials(order.userId, 'production');
-      if (!creds || !creds.accessToken || (creds.environment !== 'production' && creds.environment !== 'prod')) {
-        throw new StandardBrokerError(
-          'AUTHENTICATION_FAILED',
-          'Live trading requires production Upstox credentials. Connected credentials are for sandbox or missing.',
-          'upstox'
-        );
-      }
-
-      const ipCheck = await UpstoxClient.checkOutboundIp(false, creds.accessToken);
-      if (ipCheck.status === 'FAIL') {
-        throw new StandardBrokerError(
-          'STATIC_IP_MISMATCH',
-          `Upstox live order blocked: outbound IP does not match registered static IP. ${ipCheck.error || ''}`,
-          'upstox'
-        );
-      }
-
-      // Check Indian market trading hours & holidays (Finding 9)
-      const isAmo = (order as any).isAmo || (order as any).amo || order.validity === 'AMO';
-      if (!isAmo && !IndianMarketCalendar.isMarketOpen()) {
-        const nextOpen = IndianMarketCalendar.getNextMarketOpen();
-        const istNext = IndianMarketCalendar.toIST(nextOpen);
-        throw new StandardBrokerError(
-          'MARKET_CLOSED',
-          `Indian markets (NSE/BSE) are currently closed. Next regular market open is ${istNext.dateStr} 09:15 IST.`,
-          'upstox'
-        );
-      }
-    }
-
-    // 3. Risk Engine Evaluation
-    const riskResult = await RiskEngine.evaluateTrade({
-      userId: order.userId,
-      broker: 'upstox',
-      assetClass: 'EQUITY',
-      currency: instrument.quoteAsset || 'INR',
-      accountMode,
-      symbol: order.symbol,
-      asset: instrument.baseAsset || order.symbol,
-      quoteAsset: instrument.quoteAsset || 'INR',
-      side: order.side,
-      type: order.type,
-      quantity: order.quantity,
-      price: order.price || 0,
-      marketQuoteAgeMs: order.marketQuoteAgeMs || 0,
-      idempotencyKey: clientOrderId,
-    });
-
-    if (!riskResult.approved) {
-      throw new StandardBrokerError(
-        'ORDER_REJECTED',
-        `Risk check rejected: ${riskResult.rejectReason || 'Limits exceeded'}`,
-        'upstox'
-      );
-    }
-
-    // 4. Paper Simulation Path
-    if (accountMode === 'paper') {
       return this.executePaperOrder(order, clientOrderId, instrument);
     }
 
-    // 5. Live Mode Execution Pipeline
-    const creds = await this.getCredentials(order.userId, 'production');
-    if (!creds || !creds.accessToken) {
-      throw new StandardBrokerError('AUTHENTICATION_FAILED', 'User has no valid Upstox credentials connected.', 'upstox');
-    }
-
-    const price = order.price || 0;
+    // 3. Live Mode Execution Pipeline: Server-Authoritative 15-Point Live Order Gate
+    const gateResult = await LiveOrderGateService.verifyLiveOrderPreSubmission(order, order.confirmationId);
+    const creds = gateResult.credentials;
+    const price = order.price ? Number(order.price) : (this.instrumentProvider.getEstimatedPrice(order.symbol) || 0);
     const notional = ExactDecimal.from(order.quantity).times(price > 0 ? price : 1);
     const now = Date.now();
 
-    const reservedCashMinor = order.side === 'BUY'
-      ? notional.toMinor(2)
-      : 0n;
-    const reservedQtyMinor = order.side === 'SELL'
-      ? ExactDecimal.from(order.quantity).toMinor(0)
-      : 0n;
-
-    // Ledger Reservation (Cash for BUY, Equity Shares for SELL - Finding 4)
-    if (order.side === 'BUY' && reservedCashMinor > 0n) {
-      await LedgerService.reserveOrderFunds({
-        userId: order.userId,
-        orderId: clientOrderId,
-        accountMode: 'live',
-        accountType: 'trading_allocated',
-        assetOrCurrency: instrument.quoteAsset || 'INR',
-        amountMinor: reservedCashMinor,
-      });
-    } else if (order.side === 'SELL' && reservedQtyMinor > 0n) {
-      await LedgerService.reserveOrderFunds({
-        userId: order.userId,
-        orderId: clientOrderId,
-        accountMode: 'live',
-        accountType: 'equity_holdings',
-        assetOrCurrency: instrument.baseAsset || order.symbol,
-        amountMinor: reservedQtyMinor,
-      });
-    }
+    await AuditService.logEvent({
+      userId: order.userId,
+      eventType: 'ORDER_SUBMISSION_STARTED',
+      source: 'upstox_adapter',
+      actor: 'execution_service',
+      metadata: { clientOrderId, symbol: order.symbol, side: order.side, quantity: order.quantity, notional: notional.toNumber() },
+      result: 'SUCCESS',
+    });
 
     // Insert record into exchange_orders with status SUBMITTING
     const orderRecordId = `ord_upstox_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
@@ -681,6 +599,15 @@ export class UpstoxAdapter implements BrokerGateway {
         [exchangeOrderId, Date.now(), clientOrderId]
       );
 
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'ORDER_SUBMITTED',
+        source: 'upstox_adapter',
+        actor: 'execution_service',
+        metadata: { clientOrderId, exchangeOrderId, symbol: order.symbol, side: order.side, quantity: order.quantity },
+        result: 'SUCCESS',
+      });
+
       return {
         id: clientOrderId,
         clientOrderId,
@@ -710,7 +637,7 @@ export class UpstoxAdapter implements BrokerGateway {
 
         await AuditService.logEvent({
           userId: order.userId,
-          eventType: 'ORDER_SUBMISSION_UNKNOWN',
+          eventType: 'ORDER_UNKNOWN',
           source: 'upstox_adapter',
           actor: 'execution_service',
           metadata: { clientOrderId, error: err.message },
@@ -745,6 +672,15 @@ export class UpstoxAdapter implements BrokerGateway {
         `UPDATE exchange_orders SET status = 'REJECTED', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
         [err.message, Date.now(), clientOrderId]
       );
+
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'ORDER_REJECTED',
+        source: 'upstox_adapter',
+        actor: 'upstox_venue',
+        metadata: { clientOrderId, error: err.message },
+        result: 'BLOCKED',
+      });
 
       throw err;
     }
@@ -1215,7 +1151,7 @@ export class UpstoxAdapter implements BrokerGateway {
     };
   }
 
-  private encryptSecret(plaintext: string): string {
+  public static encryptSecret(plaintext: string): string {
     const key = Buffer.from(config.ENCRYPTION_MASTER_KEY, 'hex');
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -1226,7 +1162,7 @@ export class UpstoxAdapter implements BrokerGateway {
     return `${ivHex}:${tag}:${ciphertext}`;
   }
 
-  private decryptSecret(ciphertext: string): string {
+  public static decryptSecret(ciphertext: string): string {
     const parts = ciphertext.split(':');
     if (parts.length !== 3) {
       throw new Error('Invalid encrypted secret format');
@@ -1239,6 +1175,14 @@ export class UpstoxAdapter implements BrokerGateway {
     let decrypted = decipher.update(rawCipher, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
+  }
+
+  public encryptSecret(plaintext: string): string {
+    return UpstoxAdapter.encryptSecret(plaintext);
+  }
+
+  public decryptSecret(ciphertext: string): string {
+    return UpstoxAdapter.decryptSecret(ciphertext);
   }
 
   public async verifyOutboundIp(): Promise<{

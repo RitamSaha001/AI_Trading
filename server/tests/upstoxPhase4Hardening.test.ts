@@ -5,6 +5,7 @@ import { IndianMarketCalendar } from '../services/brokers/upstox/indianMarketCal
 import { LedgerService } from '../services/ledgerService';
 import { getDb } from '../db';
 import { config } from '../config';
+import { LiveOrderConfirmationService } from '../services/liveOrderConfirmationService';
 
 describe('Upstox Phase 4 Hardening & Execution Safety', () => {
   const adapter = new UpstoxAdapter();
@@ -133,6 +134,17 @@ describe('Upstox Phase 4 Hardening & Execution Safety', () => {
     });
 
     try {
+      const proposal = await LiveOrderConfirmationService.proposeLiveOrder({
+        userId,
+        broker: 'upstox',
+        symbol: 'INFY',
+        side: 'SELL',
+        type: 'LIMIT',
+        quantity: 10,
+        price: 1800,
+        product: 'CNC',
+      });
+
       const sellOrder = await adapter.placeOrder({
         userId,
         symbol: 'INFY',
@@ -141,7 +153,10 @@ describe('Upstox Phase 4 Hardening & Execution Safety', () => {
         quantity: 10,
         price: 1800,
         accountMode: 'live',
-        idempotencyKey: 'idemp_sell_equity',
+        product: 'CNC',
+        confirmationId: proposal.confirmationId,
+        idempotencyKey: proposal.idempotencyKey,
+        clientOrderId: proposal.clientOrderId,
       });
 
       expect(sellOrder.status).toBe('OPEN');

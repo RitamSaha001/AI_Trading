@@ -30,6 +30,38 @@ export interface AuditEventPayload {
 
 export class AuditService {
   /**
+   * Sanitizes objects or values to guarantee no tokens, secrets, or keys are persisted or logged.
+   */
+  static sanitize<T = any>(data: T): T {
+    if (!data || typeof data !== 'object') {
+      return data;
+    }
+    if (Array.isArray(data)) {
+      return data.map((item) => this.sanitize(item)) as unknown as T;
+    }
+    const clean: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.includes('token') ||
+        lowerKey.includes('secret') ||
+        lowerKey.includes('password') ||
+        lowerKey.includes('apikey') ||
+        lowerKey.includes('api_key') ||
+        lowerKey.includes('authorization') ||
+        lowerKey.includes('private_key')
+      ) {
+        clean[key] = '[REDACTED]';
+      } else if (typeof value === 'object' && value !== null) {
+        clean[key] = this.sanitize(value);
+      } else {
+        clean[key] = value;
+      }
+    }
+    return clean as T;
+  }
+
+  /**
    * Records an immutable, append-only institutional audit log entry to the database and structured logger.
    */
   static async logEvent(payload: AuditEventPayload): Promise<string> {
@@ -37,6 +69,10 @@ export class AuditService {
     const eventId = `aud_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
     const timestamp = Date.now();
     const correlationId = payload.correlationId || `corr_${crypto.randomBytes(8).toString('hex')}`;
+
+    const sanitizedBefore = this.sanitize(payload.beforeState);
+    const sanitizedAfter = this.sanitize(payload.afterState);
+    const sanitizedMetadata = this.sanitize(payload.metadata);
 
     // Structured JSON log (never log secrets, API keys, private keys, or passwords)
     logger.info({
@@ -47,7 +83,7 @@ export class AuditService {
       result: payload.result,
       source: payload.source,
       correlationId,
-      metadata: payload.metadata,
+      metadata: sanitizedMetadata,
       error: payload.error,
     }, `AUDIT: [${payload.eventType}] by ${payload.actor} -> ${payload.result}`);
 
@@ -68,10 +104,10 @@ export class AuditService {
           correlationId,
           payload.idempotencyKey || null,
           payload.actor,
-          payload.beforeState ? JSON.stringify(payload.beforeState, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
-          payload.afterState ? JSON.stringify(payload.afterState, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
+          sanitizedBefore ? JSON.stringify(sanitizedBefore, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
+          sanitizedAfter ? JSON.stringify(sanitizedAfter, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
           payload.externalId || null,
-          payload.metadata ? JSON.stringify(payload.metadata, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
+          sanitizedMetadata ? JSON.stringify(sanitizedMetadata, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)) : null,
           payload.result,
           payload.error || null,
         ]

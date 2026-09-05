@@ -11,6 +11,7 @@ import {
 } from '../services/brokers/upstox/upstoxExpiry';
 import { BrokerOrderRequest } from '../services/brokers/brokerTypes';
 import { config } from '../config';
+import { LiveOrderConfirmationService } from '../services/liveOrderConfirmationService';
 
 describe('Upstox Security & Production Hardening Suite', () => {
   const adapter = new UpstoxAdapter();
@@ -235,6 +236,7 @@ describe('Upstox Security & Production Hardening Suite', () => {
       const validIp = '203.0.113.50';
       vi.spyOn(config, 'UPSTOX_STATIC_IP', 'get').mockReturnValue(validIp);
       vi.spyOn(config, 'UPSTOX_LIVE_TRADING_ENABLED', 'get').mockReturnValue(true);
+      IndianMarketCalendar.setMockMarketOpen(true);
       UpstoxClient.setMockOutboundIp(validIp);
 
       await adapter.saveCredentials(testUserId, {
@@ -243,10 +245,21 @@ describe('Upstox Security & Production Hardening Suite', () => {
         environment: 'prod',
       });
 
+      const proposal = await LiveOrderConfirmationService.proposeLiveOrder({
+        userId: testUserId,
+        broker: 'upstox',
+        symbol: 'NSE_EQ|INE002A01018',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: 1,
+        price: 2500.0,
+        product: 'CNC',
+      });
+
       const req: BrokerOrderRequest = {
         userId: testUserId,
-        clientOrderId: `LMN_IP_PASS_${Date.now()}`,
-        idempotencyKey: `idemp_ip_pass_${Date.now()}`,
+        clientOrderId: proposal.clientOrderId,
+        idempotencyKey: proposal.idempotencyKey,
         symbol: 'NSE_EQ|INE002A01018',
         side: 'BUY',
         type: 'LIMIT',
@@ -254,6 +267,8 @@ describe('Upstox Security & Production Hardening Suite', () => {
         price: 2500.0,
         broker: 'upstox',
         accountMode: 'live',
+        product: 'CNC',
+        confirmationId: proposal.confirmationId,
       };
 
       const order = await adapter.placeOrder(req);

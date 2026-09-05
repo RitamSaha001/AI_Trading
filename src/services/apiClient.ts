@@ -158,6 +158,74 @@ export const ApiClient = {
     });
   },
 
+  async proposeLiveOrder(proposal: {
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    type: string;
+    quantity: number;
+    price?: number;
+    triggerPrice?: number;
+    product: string;
+    validity?: string;
+    disclosedQuantity?: number;
+    slice?: boolean;
+    broker?: string;
+  }) {
+    return apiRequest<{ confirmation: any }>('/api/orders/propose', {
+      method: 'POST',
+      body: JSON.stringify(proposal),
+    });
+  },
+
+  async confirmLiveOrder(confirmation: {
+    confirmationId: string;
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    type: string;
+    quantity: number;
+    price?: number;
+    triggerPrice?: number;
+    product: string;
+    validity?: string;
+    disclosedQuantity?: number;
+    slice?: boolean;
+    broker?: string;
+  }) {
+    return apiRequest<{ order: any }>('/api/orders/confirm', {
+      method: 'POST',
+      body: JSON.stringify(confirmation),
+    });
+  },
+
+  async getLiveOrderConfirmation(confirmationId: string) {
+    return apiRequest<{ confirmation: any }>(`/api/orders/confirmation/${encodeURIComponent(confirmationId)}`);
+  },
+
+  async getEmergencyStatus() {
+    return apiRequest<{ status: { state: 'TRADING_NORMAL' | 'TRADING_HALTED' | 'PANIC'; reason: string; updatedAt: number } }>('/api/emergency/status');
+  },
+
+  async triggerPanic(broker: string = 'upstox', reason?: string) {
+    return apiRequest<{ summary: any }>('/api/emergency/panic', {
+      method: 'POST',
+      body: JSON.stringify({ broker, reason }),
+    });
+  },
+
+  async triggerTradingHalt(reason?: string) {
+    return apiRequest<{ status: any }>('/api/emergency/halt', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async resumeTrading(reason?: string) {
+    return apiRequest<{ status: any }>('/api/emergency/resume', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
   async getAuthoritativeAccountingSummary(mode: 'live' | 'paper' = 'live') {
     return apiRequest(`/api/accounting/summary?mode=${mode}`);
   },

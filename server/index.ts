@@ -25,6 +25,8 @@ import { CircuitBreakerService } from './services/circuitBreakerService';
 import { ClockSyncService } from './services/clockSyncService';
 import { RateLimitTracker } from './services/rateLimitTracker';
 import { UserDataStreamManager } from './services/userDataStreamManager';
+import { LiveOrderConfirmationService } from './services/liveOrderConfirmationService';
+import { EmergencyControlService } from './services/emergencyControlService';
 
 let isShuttingDown = false;
 
@@ -967,6 +969,89 @@ export function buildServer(): FastifyInstance {
     }
   });
 
+  server.post('/api/orders/propose', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as any;
+    if (!body?.symbol || !body.quantity || body.quantity <= 0) {
+      return reply.status(400).send({ success: false, error: 'Invalid proposal parameters' });
+    }
+    if (!body.product) {
+      return reply.status(400).send({ success: false, error: 'Explicit product selection is strictly required (CNC/D, MIS/I, MTF).' });
+    }
+    try {
+      const confirmation = await LiveOrderConfirmationService.proposeLiveOrder({
+        userId: req.user!.id,
+        broker: body.broker || 'upstox',
+        symbol: body.symbol,
+        side: body.side,
+        type: body.type || 'LIMIT',
+        quantity: body.quantity,
+        price: body.price,
+        triggerPrice: body.triggerPrice,
+        product: body.product,
+        validity: body.validity,
+        disclosedQuantity: body.disclosedQuantity,
+        slice: body.slice,
+      });
+      return { success: true, confirmation };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message, code: err.code });
+    }
+  });
+
+  server.post('/api/orders/confirm', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as {
+      confirmationId: string;
+      symbol: string;
+      side: 'BUY' | 'SELL';
+      type: string;
+      quantity: number;
+      price?: number;
+      triggerPrice?: number;
+      product: string;
+      validity?: string;
+      disclosedQuantity?: number;
+      slice?: boolean;
+      broker?: string;
+    };
+
+    if (!body?.confirmationId) {
+      return reply.status(400).send({ success: false, error: 'confirmationId is required' });
+    }
+
+    try {
+      const broker = BrokerRegistry.get(body.broker || 'upstox');
+      const order = await broker.placeOrder({
+        userId: req.user!.id,
+        broker: broker.id,
+        symbol: body.symbol,
+        side: body.side,
+        type: body.type,
+        quantity: body.quantity,
+        price: body.price,
+        triggerPrice: body.triggerPrice,
+        product: body.product,
+        validity: body.validity,
+        disclosedQuantity: body.disclosedQuantity,
+        slice: body.slice,
+        confirmationId: body.confirmationId,
+        idempotencyKey: `confirm_${body.confirmationId}`,
+        accountMode: 'live',
+      });
+      return { success: true, order };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message, code: err.code });
+    }
+  });
+
+  server.get('/api/orders/confirmation/:id', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const confirmation = await LiveOrderConfirmationService.getConfirmation(id, req.user!.id);
+    if (!confirmation) {
+      return reply.status(404).send({ success: false, error: 'Confirmation not found' });
+    }
+    return { success: true, confirmation };
+  });
+
   server.post('/api/orders/submit', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as {
       symbol: string;
@@ -981,6 +1066,8 @@ export function buildServer(): FastifyInstance {
       triggerPrice?: number;
       disclosedQuantity?: number;
       slice?: boolean;
+      confirmationId?: string;
+      accountMode?: 'live' | 'paper';
       marketQuoteAgeMs?: number;
       idempotencyKey?: string;
       broker?: string;
@@ -990,8 +1077,20 @@ export function buildServer(): FastifyInstance {
       return reply.status(400).send({ success: false, error: 'Invalid order parameters' });
     }
 
+    const accountMode = body.accountMode || 'live';
+    const brokerId = body.broker || 'binance';
+
+    // Live Upstox orders strictly require two-step confirmation
+    if (accountMode === 'live' && brokerId === 'upstox' && !body.confirmationId) {
+      return reply.status(400).send({
+        success: false,
+        code: 'CONFIRMATION_REQUIRED',
+        error: 'Live orders strictly require two-step human confirmation. Please propose order first via /api/orders/propose.',
+      });
+    }
+
     try {
-      const broker = BrokerRegistry.get(body.broker || 'binance');
+      const broker = BrokerRegistry.get(brokerId);
       const quoteAsset = body.quoteAsset || (broker.id === 'upstox' ? 'INR' : 'USDT');
       const order = await broker.placeOrder({
         userId: req.user!.id,
@@ -1008,11 +1107,61 @@ export function buildServer(): FastifyInstance {
         triggerPrice: body.triggerPrice,
         disclosedQuantity: body.disclosedQuantity,
         slice: body.slice,
+        confirmationId: body.confirmationId,
+        accountMode,
         marketQuoteAgeMs: body.marketQuoteAgeMs || 0,
         idempotencyKey: body.idempotencyKey || `idemp_ord_${Date.now()}`,
       });
 
       return { success: true, order };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message, code: err.code });
+    }
+  });
+
+  server.get('/api/emergency/status', { preHandler: requireAuth }, async () => {
+    const status = await EmergencyControlService.getStatus();
+    return { success: true, status };
+  });
+
+  server.post('/api/emergency/panic', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = (req.body as any) || {};
+    try {
+      const summary = await EmergencyControlService.executePanicSquareOff(
+        req.user!.id,
+        body.broker || 'upstox',
+        body.reason || 'Manual Panic Square-Off from Dashboard',
+        req.user!.id
+      );
+      return { success: true, summary };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.post('/api/emergency/halt', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = (req.body as any) || {};
+    try {
+      const status = await EmergencyControlService.setState(
+        'TRADING_HALTED',
+        body.reason || 'Manual Trading Halt from Terminal',
+        req.user!.id
+      );
+      return { success: true, status };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.post('/api/emergency/resume', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = (req.body as any) || {};
+    try {
+      const status = await EmergencyControlService.setState(
+        'TRADING_NORMAL',
+        body.reason || 'Trading Resumed by Operator',
+        req.user!.id
+      );
+      return { success: true, status };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }

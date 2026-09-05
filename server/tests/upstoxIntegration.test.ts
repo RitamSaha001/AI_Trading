@@ -10,6 +10,7 @@ import { IndianMarketCalendar } from '../services/brokers/upstox/indianMarketCal
 import { InstrumentRulesService } from '../services/instrumentRules';
 import { BrokerOrderRequest } from '../services/brokers/brokerTypes';
 import { StandardBrokerError } from '../services/brokers/brokerGateway';
+import { LiveOrderConfirmationService } from '../services/liveOrderConfirmationService';
 
 function mockResponse(status: number, data: any) {
   return {
@@ -454,6 +455,10 @@ describe('Phase 2: Upstox Broker Gateway Integration Suite', () => {
     it('transitions order to UNKNOWN (never FAILED) on network timeout, retaining reservation', async () => {
       // Enable live trading for this test to reach placeOrder transport call
       config.UPSTOX_LIVE_TRADING_ENABLED = true;
+      IndianMarketCalendar.setMockMarketOpen(true);
+      const staticIp = config.UPSTOX_STATIC_IP || '203.0.113.50';
+      UpstoxClient.setMockOutboundIp(staticIp);
+      vi.spyOn(config, 'UPSTOX_STATIC_IP', 'get').mockReturnValue(staticIp);
 
       // Simulate network timeout on placeOrder
       UpstoxClient.setTransport(async (url) => {
@@ -474,11 +479,22 @@ describe('Phase 2: Upstox Broker Gateway Integration Suite', () => {
         return mockResponse(404, {});
       });
 
-      const clientOrderId = `LMN_UPSTOX_${Date.now()}`;
+      const proposal = await LiveOrderConfirmationService.proposeLiveOrder({
+        userId: testUserId,
+        broker: 'upstox',
+        symbol: 'NSE_EQ|INE002A01018',
+        side: 'BUY',
+        type: 'LIMIT',
+        quantity: 5,
+        price: 2500.0,
+        product: 'CNC',
+      });
+
+      const clientOrderId = proposal.clientOrderId;
       const req: BrokerOrderRequest = {
         userId: testUserId,
         clientOrderId,
-        idempotencyKey: clientOrderId,
+        idempotencyKey: proposal.idempotencyKey,
         symbol: 'NSE_EQ|INE002A01018',
         side: 'BUY',
         type: 'LIMIT',
@@ -486,6 +502,8 @@ describe('Phase 2: Upstox Broker Gateway Integration Suite', () => {
         price: 2500.00,
         broker: 'upstox',
         accountMode: 'live',
+        product: 'CNC',
+        confirmationId: proposal.confirmationId,
       };
 
       const result = await adapter.placeOrder(req);
