@@ -12,6 +12,7 @@ import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { AuthModal } from './components/AuthModal';
 import { UserProfileDrawer } from './components/UserProfileDrawer';
 import { GrievanceModal } from './components/GrievanceModal';
+import { LegalFooter } from './components/LegalFooter';
 import {
   LayoutDashboard,
   BarChart3,
@@ -683,6 +684,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 p-3 sm:p-5 md:p-8 max-w-7xl w-full mx-auto overflow-x-hidden">
           {children}
         </main>
+
+        {/* Legal & Compliance Footer for PhonePe & RBI Underwriting */}
+        <LegalFooter />
       </div>
 
       {/* Mobile Bottom Navigation Bar (Visible only on mobile) */}
