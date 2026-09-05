@@ -11,20 +11,37 @@ import { BrokerId, BrokerInstrument, BrokerOrderRequest } from '../brokerTypes';
 import { InstrumentRulesProvider } from '../../instrumentRules';
 import { ExactDecimal } from '../../precision';
 import { AuthoritativeInstrument, UpstoxInstrumentRegistry } from './upstoxInstrumentRegistry';
+import { UpstoxInstrumentMasterService } from './upstoxInstrumentMasterService';
+import { UpstoxProductMatrix } from './upstoxProductMatrix';
 
 export class UpstoxInstrumentProvider implements InstrumentRulesProvider {
   public readonly broker: BrokerId = 'upstox';
 
   /**
-   * Resolves instrument definition from the authoritative UpstoxInstrumentRegistry.
-   * Returns null if unverified.
+   * Resolves instrument definition from dynamic UpstoxInstrumentMasterService
+   * with fallback to verified UpstoxInstrumentRegistry.
    */
   public getInstrument(symbolOrKey: string): BrokerInstrument | null {
-    const authInst = UpstoxInstrumentRegistry.get(symbolOrKey);
+    const authInst =
+      UpstoxInstrumentMasterService.getInstrument(symbolOrKey) ||
+      UpstoxInstrumentRegistry.get(symbolOrKey);
     if (!authInst) {
       return null;
     }
     return this.mapToBrokerInstrument(authInst);
+  }
+
+  /**
+   * Retrieves estimated or reference base price for symbol.
+   */
+  public getEstimatedPrice(symbolOrKey: string): number {
+    const authInst =
+      UpstoxInstrumentMasterService.getInstrument(symbolOrKey) ||
+      UpstoxInstrumentRegistry.get(symbolOrKey);
+    if (authInst?.basePrice && authInst.basePrice > 0) {
+      return authInst.basePrice;
+    }
+    return 100;
   }
 
   /**
@@ -38,6 +55,15 @@ export class UpstoxInstrumentProvider implements InstrumentRulesProvider {
     const instrument = this.getInstrument(order.symbol);
     if (!instrument) {
       return { isValid: false, error: `Unsupported Upstox instrument: ${order.symbol}. Not found in authoritative registry.` };
+    }
+
+    // Explicit Broker / Product Compatibility Matrix Check (P0-4)
+    if (order.product) {
+      try {
+        UpstoxProductMatrix.validateProduct(instrument.segment, order.product, order.symbol);
+      } catch (err: any) {
+        return { isValid: false, error: err.message };
+      }
     }
 
     if (order.side !== 'BUY' && order.side !== 'SELL') {

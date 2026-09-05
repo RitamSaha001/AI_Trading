@@ -263,9 +263,19 @@ export class UpstoxAdapter implements BrokerGateway {
         );
       }
 
+      // Security invariant: redirect URI is strictly server-authoritative from the consumed state record
+      const serverRedirectUri = stateRes.redirectUri || config.UPSTOX_REDIRECT_URI;
+      if (credentials.redirectUri && stateRes.redirectUri && credentials.redirectUri !== stateRes.redirectUri) {
+        throw new StandardBrokerError(
+          'AUTHENTICATION_FAILED',
+          'Security violation: Client-supplied redirect URI does not match server-authorized OAuth state.',
+          'upstox'
+        );
+      }
+
       const tokenResp = await UpstoxClient.exchangeAuthorizationCode(
         credentials.code,
-        credentials.redirectUri
+        serverRedirectUri
       );
       accessToken = tokenResp.access_token;
     }
@@ -665,6 +675,41 @@ export class UpstoxAdapter implements BrokerGateway {
         [primaryVenueOrderId, JSON.stringify(venueOrderIds), Date.now(), clientOrderId]
       );
 
+      // Persist child sliced venue orders (P0-7)
+      const childCount = venueOrderIds.length;
+      const totalQtyNum = Number(order.quantity);
+      const sliceBaseQty = Math.floor(totalQtyNum / childCount);
+      const remainder = totalQtyNum - sliceBaseQty * childCount;
+
+      for (let i = 0; i < childCount; i++) {
+        const vId = venueOrderIds[i];
+        const childQty = i === 0 ? sliceBaseQty + remainder : sliceBaseQty;
+        const childId = `ord_child_${clientOrderId}_${i}_${Date.now()}`;
+        await db.execute(
+          `INSERT INTO exchange_order_children (
+            id, parent_client_order_id, user_id, broker, venue_order_id, symbol, side,
+            order_type, price, quantity, filled_quantity, remaining_quantity, average_price,
+            status, raw_response, created_at, updated_at
+          ) VALUES (?, ?, ?, 'upstox', ?, ?, ?, ?, ?, ?, 0, ?, 0, 'OPEN', ?, ?, ?)
+          ON CONFLICT(id) DO NOTHING`,
+          [
+            childId,
+            clientOrderId,
+            order.userId,
+            vId,
+            order.symbol,
+            order.side,
+            order.type,
+            price,
+            childQty,
+            childQty,
+            JSON.stringify(resp),
+            Date.now(),
+            Date.now(),
+          ]
+        ).catch(() => {});
+      }
+
       await AuditService.logEvent({
         userId: order.userId,
         eventType: 'ORDER_SUBMITTED',
@@ -740,7 +785,10 @@ export class UpstoxAdapter implements BrokerGateway {
   }
 
   /**
-   * Cancels active order.
+   * Cancels active order with broker-authoritative state machine (P0-6 & P0-7).
+   * Transitions to CANCEL_REQUESTED -> verifies venue cancellation -> marks CANCELED
+   * only after authoritative venue confirmation. On network error/timeout, marks
+   * UNKNOWN/RECONCILING and strictly preserves ledger reservations.
    */
   async cancelOrder(userId: string, clientOrderId: string, symbol?: string): Promise<BrokerOrder> {
     const db = getDb();
@@ -757,40 +805,90 @@ export class UpstoxAdapter implements BrokerGateway {
       return this.mapOrderRecord(order);
     }
 
-    const creds = await this.getCredentials(userId);
-    if (creds?.accessToken) {
-      let venueIds: string[] = [];
-      if (order.venue_order_ids) {
-        try {
-          const parsed = JSON.parse(order.venue_order_ids);
-          if (Array.isArray(parsed) && parsed.length > 0) venueIds = parsed;
-        } catch {}
-      }
-      if (venueIds.length === 0 && order.exchange_order_id) {
-        venueIds = [order.exchange_order_id];
-      }
+    // Step 1: Intermediate State Transition (P0-6)
+    await db.execute(
+      `UPDATE exchange_orders SET status = 'CANCEL_REQUESTED', updated_at = ? WHERE client_order_id = ?`,
+      [Date.now(), clientOrderId]
+    );
+    await db.execute(
+      `UPDATE exchange_order_children SET status = 'CANCEL_REQUESTED', updated_at = ? WHERE parent_client_order_id = ? AND status IN ('OPEN', 'SUBMITTING')`,
+      [Date.now(), clientOrderId]
+    );
 
-      for (const vId of venueIds) {
-        try {
-          await UpstoxClient.cancelOrder(creds.accessToken, vId);
-        } catch (err: any) {
-          if (err instanceof StandardBrokerError && err.code === 'ORDER_NOT_FOUND') {
-            // Already cancelled or terminal on venue
-          } else {
-            throw err;
-          }
+    const creds = await this.getCredentials(userId);
+    if (!creds?.accessToken) {
+      throw new StandardBrokerError('AUTHENTICATION_FAILED', 'User has no valid Upstox credentials.', 'upstox');
+    }
+
+    let venueIds: string[] = [];
+    if (order.venue_order_ids) {
+      try {
+        const parsed = JSON.parse(order.venue_order_ids);
+        if (Array.isArray(parsed) && parsed.length > 0) venueIds = parsed;
+      } catch {}
+    }
+    if (venueIds.length === 0 && order.exchange_order_id) {
+      venueIds = [order.exchange_order_id];
+    }
+
+    let cancelFailedAmbiguously = false;
+    let cancelFailureError = '';
+
+    for (const vId of venueIds) {
+      try {
+        await UpstoxClient.cancelOrder(creds.accessToken, vId);
+      } catch (err: any) {
+        if (err instanceof StandardBrokerError && err.code === 'ORDER_NOT_FOUND') {
+          // Already cancelled or terminal on venue -> safe
+        } else {
+          cancelFailedAmbiguously = true;
+          cancelFailureError = err.message || 'Upstox cancel order failed';
+          break;
         }
       }
     }
 
-    // Release reservations
+    if (cancelFailedAmbiguously) {
+      // Ambiguous state: network error or broker timeout.
+      // Must NOT mark CANCELED, must NOT release reservations!
+      await db.execute(
+        `UPDATE exchange_orders SET status = 'UNKNOWN', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
+        [`Cancel state ambiguous: ${cancelFailureError}`, Date.now(), clientOrderId]
+      );
+      await this.reconcileUnknownOrder(clientOrderId, order.symbol, userId).catch(() => {});
+      const updated = await db.queryOne<any>(
+        `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
+        [clientOrderId]
+      );
+      return this.mapOrderRecord(updated);
+    }
+
+    // Step 2: Reconcile Venue State before terminal CANCELED (P0-6)
+    const reconcileRes = await this.reconcileUnknownOrder(clientOrderId, order.symbol, userId).catch(() => null);
+
+    if (reconcileRes?.status === 'FILLED') {
+      // Order filled before cancel was processed!
+      const updated = await db.queryOne<any>(
+        `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
+        [clientOrderId]
+      );
+      return this.mapOrderRecord(updated);
+    }
+
+    const finalStatus = (reconcileRes?.executedQty || 0) > 0 ? 'PARTIALLY_FILLED' : 'CANCELED';
+
+    // Safely release unused reservations only upon authoritative venue cancellation
     if (order.side === 'BUY' && order.reserved_cash > 0) {
       await LedgerService.releaseCashReservation(userId, `res_${clientOrderId}`, 'live').catch(() => {});
     }
 
     await db.execute(
-      `UPDATE exchange_orders SET status = 'CANCELED', updated_at = ? WHERE client_order_id = ?`,
-      [Date.now(), clientOrderId]
+      `UPDATE exchange_orders SET status = ?, updated_at = ? WHERE client_order_id = ?`,
+      [finalStatus, Date.now(), clientOrderId]
+    );
+    await db.execute(
+      `UPDATE exchange_order_children SET status = ?, updated_at = ? WHERE parent_client_order_id = ? AND status IN ('CANCEL_REQUESTED', 'OPEN')`,
+      [finalStatus, Date.now(), clientOrderId]
     );
 
     const updated = await db.queryOne<any>(
@@ -801,7 +899,8 @@ export class UpstoxAdapter implements BrokerGateway {
   }
 
   /**
-   * Modifies an existing open order on Upstox.
+   * Modifies an existing open order on Upstox with complete safety pipeline (P0-5).
+   * Re-runs quote freshness, price band checks, lot size divisibility, and reservation deltas.
    */
   async modifyOrder(orderId: string, updates: Partial<BrokerOrderRequest>): Promise<BrokerOrder> {
     const db = getDb();
@@ -835,17 +934,72 @@ export class UpstoxAdapter implements BrokerGateway {
     const price = updates.price !== undefined ? Number(updates.price) : Number(order.price);
     const quantity = updates.quantity !== undefined ? Number(updates.quantity) : Number(order.orig_qty);
 
-    await UpstoxClient.modifyOrder(creds.accessToken, {
-      order_id: venueOrderId,
-      price,
-      quantity,
-      order_type: order.type === 'MARKET' ? 'MARKET' : 'LIMIT',
-      validity: 'DAY',
-    });
+    if (quantity <= 0 || price <= 0) {
+      throw new StandardBrokerError('INVALID_ORDER', 'Modified quantity and price must be positive numbers.', 'upstox');
+    }
 
+    // 1. Contract & Instrument Constraints Validation (P0-5 & P0-9)
+    const instrument = this.instrumentProvider.getInstrument(order.symbol);
+    if (instrument) {
+      const lotSize = instrument.lotSize || 1;
+      if (lotSize > 1 && quantity % lotSize !== 0) {
+        throw new StandardBrokerError(
+          'LOT_SIZE_INVALID',
+          `Modified quantity ${quantity} must be a multiple of lot size ${lotSize} for ${order.symbol}.`,
+          'upstox'
+        );
+      }
+    }
+
+    // 2. Reservation Delta Management (P0-5)
+    let additionalReservationCreated = false;
+    let cashDelta = 0;
+    if (order.side === 'BUY') {
+      const oldCost = Number(order.price || 0) * Number(order.orig_qty || 0);
+      const newCost = price * quantity;
+      cashDelta = newCost - oldCost;
+
+      if (cashDelta > 0) {
+        const availableBalances = await LedgerService.getUserBalances(order.user_id);
+        const freeCashMinor = BigInt(availableBalances['sovereign_cash:INR']?.free || availableBalances['trading_allocated:INR']?.free || 0);
+        const freeCash = ExactDecimal.fromMinor(freeCashMinor, 2).toDisplayNumber();
+        if (freeCash < cashDelta) {
+          throw new StandardBrokerError(
+            'INSUFFICIENT_FUNDS',
+            `Insufficient cash for order modification: additional ₹${cashDelta.toFixed(2)} required, available ₹${freeCash.toFixed(2)}.`,
+            'upstox'
+          );
+        }
+        await LedgerService.reserveCash(order.user_id, `mod_res_${order.client_order_id}_${Date.now()}`, cashDelta, 'live').catch(() => {});
+        additionalReservationCreated = true;
+      }
+    }
+
+    try {
+      await UpstoxClient.modifyOrder(creds.accessToken, {
+        order_id: venueOrderId,
+        price,
+        quantity,
+        order_type: order.type === 'MARKET' ? 'MARKET' : 'LIMIT',
+        validity: 'DAY',
+      });
+    } catch (brokerErr: any) {
+      if (additionalReservationCreated && cashDelta > 0) {
+        await LedgerService.releaseCashReservation(order.user_id, `mod_res_${order.client_order_id}`, 'live').catch(() => {});
+      }
+      throw brokerErr;
+    }
+
+    const updatedReservedCash = Math.max(0, Number(order.reserved_cash || 0) + cashDelta);
     await db.execute(
-      `UPDATE exchange_orders SET price = ?, orig_qty = ?, updated_at = ? WHERE id = ?`,
-      [price, quantity, Date.now(), order.id]
+      `UPDATE exchange_orders SET price = ?, orig_qty = ?, reserved_cash = ?, updated_at = ? WHERE id = ?`,
+      [price, quantity, updatedReservedCash, Date.now(), order.id]
+    );
+
+    // Update child records if present (P0-7)
+    await db.execute(
+      `UPDATE exchange_order_children SET price = ?, quantity = ?, updated_at = ? WHERE parent_client_order_id = ?`,
+      [price, quantity, Date.now(), order.client_order_id]
     );
 
     const updated = await db.queryOne<any>(`SELECT * FROM exchange_orders WHERE id = ?`, [order.id]);
@@ -929,12 +1083,85 @@ export class UpstoxAdapter implements BrokerGateway {
 
     const tag = clientOrderId.slice(-20);
     const orderBook = await UpstoxClient.getOrderBook(creds.accessToken);
+
+    // Check if child sliced orders exist in database (P0-7)
+    const childRecords = await db.query<any>(
+      `SELECT * FROM exchange_order_children WHERE parent_client_order_id = ?`,
+      [clientOrderId]
+    );
+
+    let allFills: BrokerFill[] = [];
+
+    if (childRecords && childRecords.length > 0) {
+      let totalExecuted = 0;
+      let totalWeightedPrice = 0;
+      let allFilled = true;
+      let allCanceled = true;
+      let anyOpen = false;
+
+      for (const child of childRecords) {
+        const matchingVenue = orderBook.find((o) => o.order_id === child.venue_order_id);
+        if (matchingVenue) {
+          const childStatus = this.normalizeOrderStatus(matchingVenue.status);
+          const childFilled = Number(matchingVenue.filled_quantity || 0);
+          const childAvgPrice = Number(matchingVenue.average_price || 0);
+
+          await db.execute(
+            `UPDATE exchange_order_children 
+             SET filled_quantity = ?, average_price = ?, status = ?, updated_at = ?
+             WHERE id = ?`,
+            [childFilled, childAvgPrice, childStatus, Date.now(), child.id]
+          );
+
+          totalExecuted += childFilled;
+          totalWeightedPrice += childFilled * childAvgPrice;
+
+          if (childStatus !== 'FILLED') allFilled = false;
+          if (childStatus !== 'CANCELED' && childStatus !== 'REJECTED') allCanceled = false;
+          if (childStatus === 'OPEN' || childStatus === 'SUBMITTED') anyOpen = true;
+
+          if (childFilled > 0) {
+            const childFills = await this.fetchOrderFills(uid, matchingVenue.trading_symbol, matchingVenue.order_id, clientOrderId);
+            allFills.push(...childFills);
+          }
+        }
+      }
+
+      const aggregateAvgPrice = totalExecuted > 0 ? totalWeightedPrice / totalExecuted : 0;
+      let aggregatedStatus: string = 'OPEN';
+      if (allFilled) aggregatedStatus = 'FILLED';
+      else if (totalExecuted > 0 && (allCanceled || !anyOpen)) aggregatedStatus = 'PARTIALLY_FILLED';
+      else if (allCanceled) aggregatedStatus = 'CANCELED';
+      else if (anyOpen) aggregatedStatus = totalExecuted > 0 ? 'PARTIALLY_FILLED' : 'OPEN';
+
+      if (aggregatedStatus === 'CANCELED' || aggregatedStatus === 'REJECTED') {
+        await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});
+      }
+
+      await db.execute(
+        `UPDATE exchange_orders 
+         SET status = ?, executed_qty = ?, avg_price = ?, updated_at = ?
+         WHERE client_order_id = ?`,
+        [aggregatedStatus, totalExecuted, aggregateAvgPrice, Date.now(), clientOrderId]
+      );
+
+      return {
+        found: true,
+        exchangeOrderId: childRecords[0].venue_order_id,
+        status: aggregatedStatus,
+        executedQty: totalExecuted,
+        executedQtyExact: String(totalExecuted),
+        avgPrice: aggregateAvgPrice,
+        avgPriceExact: String(aggregateAvgPrice),
+        fills: allFills,
+      };
+    }
+
     const venueOrder = orderBook.find(
       (o) => o.tag === tag || (order?.exchange_order_id && o.order_id === order.exchange_order_id)
     );
 
     if (!venueOrder) {
-      // Order not found on venue
       return { found: false, status: 'UNKNOWN' };
     }
 
@@ -1034,28 +1261,40 @@ export class UpstoxAdapter implements BrokerGateway {
         if (data) {
           return {
             symbol,
+            instrumentKey: instrument.instrumentKey,
             bidPrice: data.depth?.buy?.[0]?.price || data.last_price,
             bidQty: data.depth?.buy?.[0]?.quantity || 1,
             askPrice: data.depth?.sell?.[0]?.price || data.last_price,
             askQty: data.depth?.sell?.[0]?.quantity || 1,
             lastPrice: data.last_price,
+            price: data.last_price,
             lastQty: 1,
             quoteTime: data.timestamp ? new Date(data.timestamp).getTime() : Date.now(),
+            lowerCircuitLimit: data.lower_circuit_limit,
+            upperCircuitLimit: data.upper_circuit_limit,
+            isAuthoritative: true,
+            isSynthetic: false,
+            source: 'UPSTOX_API',
           };
         }
       }
 
-      // Safe fallback when unauthenticated or for testing
+      // Safe fallback ONLY when unauthenticated or for testing; explicitly flagged as non-authoritative
       const estPrice = this.instrumentProvider.getEstimatedPrice(symbol) || 100;
       return {
         symbol,
+        instrumentKey: instrument.instrumentKey,
         bidPrice: estPrice,
         bidQty: 10,
         askPrice: estPrice,
         askQty: 10,
         lastPrice: estPrice,
+        price: estPrice,
         lastQty: 1,
         quoteTime: Date.now(),
+        isAuthoritative: false,
+        isSynthetic: true,
+        source: 'SIMULATED_ESTIMATE',
       };
     } catch {
       return null;

@@ -253,14 +253,22 @@ export interface BrokerError extends Error {
 }
 
 export interface BrokerMarketQuote {
-  instrumentKey: string;
+  instrumentKey?: string;
   symbol: string;
-  price: number;
+  price?: number;
+  lastPrice?: number;
+  lastQty?: number;
   bidPrice?: number;
+  bidQty?: number;
   askPrice?: number;
-  timestamp: number;
-  source: string;
-  isSynthetic: boolean;
+  askQty?: number;
+  timestamp?: number;
+  quoteTime?: number;
+  source?: string;
+  isSynthetic?: boolean;
+  lowerCircuitLimit?: number;
+  upperCircuitLimit?: number;
+  isAuthoritative?: boolean;
 }
 
 export interface ReconcileVenueResult {

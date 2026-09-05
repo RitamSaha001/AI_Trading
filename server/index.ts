@@ -10,7 +10,7 @@ import sensible from '@fastify/sensible';
 import { config, auditServerSecurityConfig } from './config';
 import { getDb, initDb, closeDb, getMigrationStatus } from './db';
 import { ServerAuthService } from './services/authService';
-import { requireAuth, requireActive, requireKYC, requireAdmin, requireFinanceAdmin, extractSessionToken, verifyOriginOrCsrf, authenticate } from './middleware/authMiddleware';
+import { requireAuth, requireActive, requireKYC, requireAdmin, requireFinanceAdmin, extractSessionToken, verifyOriginOrCsrf, authenticate, authorizeKillSwitch } from './middleware/authMiddleware';
 import { isValidAllowedOrigin } from './utils/originValidator';
 import { z } from 'zod';
 import { AuthRateLimiter } from './middleware/rateLimiter';
@@ -28,6 +28,7 @@ import { AuditService, logger } from './services/auditService';
 import { OperationalSafetyService } from './services/operationalSafetyService';
 import { CircuitBreakerService } from './services/circuitBreakerService';
 import { ClockSyncService } from './services/clockSyncService';
+import { ReadinessService } from './services/readinessService';
 import { RateLimitTracker } from './services/rateLimitTracker';
 import { UserDataStreamManager } from './services/userDataStreamManager';
 import { LiveOrderConfirmationService } from './services/liveOrderConfirmationService';
@@ -166,68 +167,19 @@ export function buildServer(): FastifyInstance {
   server.get('/health/liveness', livenessHandler);
   server.get('/healthz', livenessHandler);
 
-  // Readiness Probes (Database reachable, Postgres strictly verified in prod, schema migrations at latest version)
+  // Multi-Dimensional Readiness Probes (APPLICATION_READY, DB_READY, UPSTOX_AUTH_READY, INSTRUMENTS_READY, QUOTE_SERVICE_READY, STATIC_IP_READY, LIVE_EXECUTION_READY)
   const readinessHandler = async (_req: FastifyRequest, reply: FastifyReply) => {
-    if (isShuttingDown) {
-      return reply.status(503).send({
-        status: 'DOWN',
-        ready: false,
-        issues: ['Server is currently shutting down'],
-        timestamp: Date.now(),
-      });
-    }
-
     try {
-      const db = getDb();
-      // 1. Verify database ping
-      await db.queryOne('SELECT 1 as ping');
-
-      // 2. Verify PostgreSQL mandatory requirement in production
-      if (config.NODE_ENV === 'production' && !db.isPostgres()) {
-        return reply.status(503).send({
-          status: 'DOWN',
-          ready: false,
-          issues: ['Production mode strictly requires a PostgreSQL database instance'],
-          timestamp: Date.now(),
-        });
-      }
-
-      // 3. Verify schema migration version alignment
-      const migStatus = await getMigrationStatus(db);
-      if (!migStatus.isUpToDate) {
-        return reply.status(503).send({
-          status: 'DOWN',
-          ready: false,
-          issues: [`Database schema is not at expected migration version (pending: ${migStatus.pending.join(', ')})`],
-          latestVersion: migStatus.latestVersion,
-          timestamp: Date.now(),
-        });
-      }
-
-      // 4. Compute tiered operational state (HEALTHY -> READY -> BROKER_READY -> LIVE_TRADING_READY)
-      const brokers = BrokerRegistry.getAll();
-      const brokerReady = brokers.length > 0;
-      let operationalState: 'HEALTHY' | 'READY' | 'BROKER_READY' | 'LIVE_TRADING_READY' = brokerReady ? 'BROKER_READY' : 'READY';
-
-      const isLiveAllowed = Boolean(config.UPSTOX_LIVE_TRADING_ENABLED);
-      if (isLiveAllowed && brokerReady) {
-        operationalState = 'LIVE_TRADING_READY';
-      }
-
-      return {
-        status: 'READY',
-        operationalState,
-        ready: true,
-        env: config.NODE_ENV,
-        engine: db.getEngine(),
-        schemaVersion: migStatus.latestVersion,
-        registeredBrokers: brokers.map((b) => b.id),
+      const report = await ReadinessService.evaluateReadiness(isShuttingDown);
+      const statusCode = report.ready ? 200 : 503;
+      return reply.status(statusCode).send({
+        ...report,
+        registeredBrokers: BrokerRegistry.getAll().map((b) => b.id),
         liveTrading: {
-          enabled: isLiveAllowed,
-          safetyGate: isLiveAllowed ? 'DISENGAGED' : 'ENGAGED_SAFE',
+          enabled: Boolean(config.UPSTOX_LIVE_TRADING_ENABLED),
+          safetyGate: config.UPSTOX_LIVE_TRADING_ENABLED ? 'DISENGAGED' : 'ENGAGED_SAFE',
         },
-        timestamp: Date.now(),
-      };
+      });
     } catch (err: any) {
       return reply.status(503).send({
         status: 'DOWN',
@@ -1237,8 +1189,13 @@ export function buildServer(): FastifyInstance {
         `SELECT broker FROM exchange_orders WHERE user_id = ? AND client_order_id = ?`,
         [req.user!.id, body.clientOrderId]
       );
-      const brokerId = existing?.broker || body.broker || 'upstox';
-      const broker = BrokerRegistry.get(brokerId);
+      if (!existing) {
+        return reply.status(404).send({
+          success: false,
+          error: `Order ${body.clientOrderId} not found for cancellation. Cancellation requires an authoritative local canonical record.`,
+        });
+      }
+      const broker = BrokerRegistry.get(existing.broker);
       const order = await broker.cancelOrder(req.user!.id, body.clientOrderId);
       return { success: true, order };
     } catch (err: any) {
@@ -1274,19 +1231,12 @@ export function buildServer(): FastifyInstance {
     if (!body?.scope || !body?.reason) {
       return reply.status(400).send({ success: false, error: 'Scope and reason are required' });
     }
-    const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'FINANCE_ADMIN' || (process.env.ADMIN_EMAIL && req.user?.email === process.env.ADMIN_EMAIL);
-    if (body.scope === 'GLOBAL' || body.scope === 'SYMBOL') {
-      if (!isAdmin) {
-        return reply.status(403).send({ success: false, error: 'Administrative privilege required for GLOBAL or SYMBOL kill-switch operations' });
-      }
-    } else if (body.scope === 'ACCOUNT') {
-      if (!isAdmin && body.target && body.target !== req.user!.id) {
-        return reply.status(403).send({ success: false, error: 'Cannot freeze other user accounts' });
-      }
+    const authCheck = authorizeKillSwitch(req.user, body.scope, body.target, 'freeze');
+    if (!authCheck.authorized) {
+      return reply.status(403).send({ success: false, error: authCheck.error });
     }
-    const target = body.scope === 'ACCOUNT' && !isAdmin ? req.user!.id : (body.target || '*');
-    await OperationalSafetyService.freeze(body.scope, target, body.reason, req.user!.id);
-    return { success: true, message: `Emergency freeze activated for ${body.scope}:${target}` };
+    await OperationalSafetyService.freeze(body.scope, authCheck.resolvedTarget, body.reason, req.user!.id);
+    return { success: true, message: `Emergency freeze activated for ${body.scope}:${authCheck.resolvedTarget}` };
   });
 
   server.post('/api/operational/kill-switch/unfreeze', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1294,19 +1244,12 @@ export function buildServer(): FastifyInstance {
     if (!body?.scope || !body?.reason) {
       return reply.status(400).send({ success: false, error: 'Scope and reason are required' });
     }
-    const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'FINANCE_ADMIN' || (process.env.ADMIN_EMAIL && req.user?.email === process.env.ADMIN_EMAIL);
-    if (body.scope === 'GLOBAL' || body.scope === 'SYMBOL') {
-      if (!isAdmin) {
-        return reply.status(403).send({ success: false, error: 'Administrative privilege strictly required to unfreeze GLOBAL or SYMBOL scopes' });
-      }
-    } else if (body.scope === 'ACCOUNT') {
-      if (!isAdmin && body.target && body.target !== req.user!.id) {
-        return reply.status(403).send({ success: false, error: 'Cannot unfreeze other user accounts' });
-      }
+    const authCheck = authorizeKillSwitch(req.user, body.scope, body.target, 'unfreeze');
+    if (!authCheck.authorized) {
+      return reply.status(403).send({ success: false, error: authCheck.error });
     }
-    const target = body.scope === 'ACCOUNT' && !isAdmin ? req.user!.id : (body.target || '*');
-    await OperationalSafetyService.unfreeze(body.scope, target, body.reason, req.user!.id);
-    return { success: true, message: `Emergency freeze deactivated for ${body.scope}:${target}` };
+    await OperationalSafetyService.unfreeze(body.scope, authCheck.resolvedTarget, body.reason, req.user!.id);
+    return { success: true, message: `Emergency freeze deactivated for ${body.scope}:${authCheck.resolvedTarget}` };
   });
 
   server.post('/api/operational/reconciliation/run', { preHandler: requireAuth }, async (req: FastifyRequest) => {

@@ -580,6 +580,41 @@ export class ReconciliationWorker {
       }
     }
 
+    const userBrokerRow = await db.queryOne<{ broker: string }>(
+      `SELECT broker FROM exchange_orders WHERE user_id = ? AND symbol = ? ORDER BY created_at DESC LIMIT 1`,
+      [userId, symbol]
+    );
+    const orderBrokerRow = !userBrokerRow ? await db.queryOne<{ broker: string }>(
+      `SELECT broker FROM broker_credentials WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      [userId]
+    ) : null;
+    const activeBroker = userBrokerRow?.broker || orderBrokerRow?.broker || 'binance';
+
+    if (!venueTrades && activeBroker === 'upstox') {
+      const upstoxBroker = BrokerRegistry.get('upstox');
+      try {
+        const upstoxTrades = await (upstoxBroker as any).getTrades(userId, symbol);
+        venueTrades = (upstoxTrades || []).map((t: any) => ({
+          id: t.tradeId,
+          orderId: t.orderId,
+          symbol: t.symbol,
+          price: t.price,
+          qty: t.qty,
+          commission: '0',
+          commissionAsset: 'INR',
+          commissionStatus: 'UNRESOLVED',
+          isBuyer: t.side === 'BUY',
+          time: t.time,
+        }));
+      } catch (err: any) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: `Upstox trade fetch failed: ${err.message}`,
+        };
+      }
+    }
+
     if (!venueTrades) {
       const broker = BrokerRegistry.get('binance');
       const creds = await (broker as any).getCredentials?.(userId);
@@ -655,7 +690,7 @@ export class ReconciliationWorker {
 
     for (const trade of venueTrades) {
       const tradeId = String(trade.id);
-      const canonicalFillKey = `binance:${userId}:${symbol}:${tradeId}`;
+      const canonicalFillKey = `${activeBroker}:${userId}:${symbol}:${tradeId}`;
 
       const existingFill = await db.queryOne<any>(
         `SELECT id, commission_status FROM exchange_fills WHERE canonical_fill_key = ?`,
@@ -681,7 +716,9 @@ export class ReconciliationWorker {
           [String(trade.orderId || ''), String(trade.orderId || '')]
         );
         const orderId = localOrder?.id || localOrder?.client_order_id || `rec_order_${trade.orderId || Date.now()}`;
-        const quoteAsset = symbol.endsWith('USDT')
+        const quoteAsset = activeBroker === 'upstox'
+          ? 'INR'
+          : symbol.endsWith('USDT')
           ? 'USDT'
           : symbol.endsWith('USDC')
           ? 'USDC'
@@ -690,7 +727,8 @@ export class ReconciliationWorker {
           : symbol.endsWith('BTC')
           ? 'BTC'
           : (trade.commissionAsset || 'USDT');
-        const baseAsset = symbol.replace(new RegExp(`${quoteAsset}$`), '') || symbol;
+        const baseAsset = activeBroker === 'upstox' ? symbol : (symbol.replace(new RegExp(`${quoteAsset}$`), '') || symbol);
+        const commissionStatus = trade.commissionStatus || (activeBroker === 'upstox' ? 'UNRESOLVED' : 'AUTHORITATIVE');
 
         // Invariant: Never overwrite past ledger history. Post explicit compensating fill and accounting event.
         await db.transaction(async (tx) => {
@@ -713,7 +751,7 @@ export class ReconciliationWorker {
                 0.0, ?,
                 ?, 0.0, ?,
                 0.0, ?, ?,
-                ?, ?, 'AUTHORITATIVE',
+                ?, ?, ?,
                 ?, 0, 0,
                 ?, ?, ?
               ) ON CONFLICT (id) DO NOTHING`,
@@ -735,6 +773,7 @@ export class ReconciliationWorker {
                 fillAsset,
                 fillCommissionDec.toString(),
                 fillAsset,
+                commissionStatus,
                 fillNotionalDec.toString(),
                 `idemp_${orderId}`,
                 trade.time || Date.now(),
@@ -928,6 +967,38 @@ export class ReconciliationWorker {
       }
     }
 
+    const orderBrokerRow = await db.queryOne<{ broker: string }>(
+      `SELECT broker FROM exchange_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+    const credBrokerRow = !orderBrokerRow ? await db.queryOne<{ broker: string }>(
+      `SELECT broker FROM broker_credentials WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      [userId]
+    ) : null;
+    const activeBroker = orderBrokerRow?.broker || credBrokerRow?.broker || 'binance';
+
+    if (!venueOpenOrders && activeBroker === 'upstox') {
+      const upstoxBroker = BrokerRegistry.get('upstox');
+      try {
+        const openOrders = await upstoxBroker.getOpenOrders(userId);
+        venueOpenOrders = (openOrders || []).map((o) => ({
+          orderId: o.exchangeOrderId || o.clientOrderId,
+          clientOrderId: o.clientOrderId,
+          symbol: o.symbol,
+          status: o.status,
+          price: String(o.price),
+          origQty: String(o.origQty),
+          executedQty: String(o.executedQty),
+        }));
+      } catch (err: any) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: `Upstox open orders fetch failed: ${err.message}`,
+        };
+      }
+    }
+
     if (!venueOpenOrders) {
       const broker = BrokerRegistry.get('binance');
       const creds = await (broker as any).getCredentials?.(userId);
@@ -1067,6 +1138,32 @@ export class ReconciliationWorker {
       if (mockState?.balances) {
         exchangeBalances = mockState.balances;
         exchangeLocked = mockState.locked || null;
+      }
+    }
+
+    const db = getDb();
+    const credBrokerRow = await db.queryOne<{ broker: string }>(
+      `SELECT broker FROM broker_credentials WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      [userId]
+    );
+    const activeBroker = credBrokerRow?.broker || 'binance';
+
+    if (!exchangeBalances && activeBroker === 'upstox') {
+      const upstoxBroker = BrokerRegistry.get('upstox');
+      try {
+        const account = await upstoxBroker.getAccount(userId);
+        exchangeBalances = {};
+        exchangeLocked = {};
+        for (const [asset, b] of Object.entries(account.balances || {})) {
+          exchangeBalances[asset] = String(b.free);
+          if (b.locked) exchangeLocked[asset] = String(b.locked);
+        }
+      } catch (err: any) {
+        return {
+          success: false,
+          mismatches: 0,
+          error: `Upstox account balance fetch failed: ${err.message}`,
+        };
       }
     }
 

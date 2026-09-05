@@ -338,15 +338,83 @@ export class LiveOrderGateService {
 
     // 12. Final Pre-Submission Risk Engine Revalidation (Section 8 & 13)
     const upstoxAdapter = new UpstoxAdapter();
-    const liveQuote = await upstoxAdapter.getMarketQuote(order.symbol, order.userId, accessToken).catch(() => null);
-    const quoteTime = liveQuote?.quoteTime || Date.now();
-    const serverQuoteAgeMs = Math.max(0, Date.now() - quoteTime);
+    let liveQuote: any = null;
+    try {
+      liveQuote = await upstoxAdapter.getMarketQuote(order.symbol, order.userId, accessToken);
+    } catch {
+      liveQuote = null;
+    }
 
-    const price = order.price ? Number(order.price) : (liveQuote?.lastPrice || instrumentProvider.getEstimatedPrice(order.symbol) || 0);
+    // Fail-Closed Authoritative Quote Guard (P0-2)
+    if (!liveQuote || !liveQuote.quoteTime || !liveQuote.lastPrice || liveQuote.lastPrice <= 0 || liveQuote.isAuthoritative === false) {
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'ORDER_REJECTED',
+        source: 'live_order_gate_service',
+        actor: 'authoritative_quote_guard',
+        result: 'BLOCKED',
+        metadata: { symbol: order.symbol, reason: 'Authoritative market quote unavailable from broker' },
+      });
+      throw new StandardBrokerError(
+        'LIVE_ORDER_REJECTED_QUOTE_UNAVAILABLE',
+        `Live order rejected: Authoritative broker market quote for ${order.symbol} is unavailable from Upstox. No live order without authoritative broker price.`,
+        brokerId
+      );
+    }
+
+    const serverNow = Date.now();
+    const serverQuoteAgeMs = Math.max(0, serverNow - liveQuote.quoteTime);
+    if (serverQuoteAgeMs > 45_000) {
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'ORDER_REJECTED',
+        source: 'live_order_gate_service',
+        actor: 'quote_freshness_guard',
+        result: 'BLOCKED',
+        metadata: { symbol: order.symbol, quoteAgeMs: serverQuoteAgeMs, maxAllowed: 45000 },
+      });
+      throw new StandardBrokerError(
+        'LIVE_ORDER_REJECTED_STALE_QUOTE',
+        `Live order rejected: Authoritative broker market quote is stale (${Math.round(serverQuoteAgeMs / 1000)}s old > 45s threshold).`,
+        brokerId
+      );
+    }
+
+    // Fail closed on dynamic price bands (circuit limits) (P0-10)
+    if (order.type === 'LIMIT' && order.price) {
+      const limitPrice = Number(order.price);
+      if (liveQuote.lowerCircuitLimit && limitPrice < liveQuote.lowerCircuitLimit) {
+        throw new StandardBrokerError(
+          'CIRCUIT_LIMIT_BREACH',
+          `Limit price ${limitPrice} is below lower circuit limit ${liveQuote.lowerCircuitLimit}.`,
+          brokerId
+        );
+      }
+      if (liveQuote.upperCircuitLimit && limitPrice > liveQuote.upperCircuitLimit) {
+        throw new StandardBrokerError(
+          'CIRCUIT_LIMIT_BREACH',
+          `Limit price ${limitPrice} is above upper circuit limit ${liveQuote.upperCircuitLimit}.`,
+          brokerId
+        );
+      }
+    }
+
+    const price = order.price ? Number(order.price) : liveQuote.lastPrice;
+
+    // Resolve accurate asset class (EQUITY vs FUTURE vs OPTION) (P0-9)
+    let assetClass: 'EQUITY' | 'FUTURE' | 'OPTION' = 'EQUITY';
+    if (instrument.segment === 'NSE_FO' || instrument.segment === 'BSE_FO') {
+      if (instrument.instrumentType === 'OPTIONS' || instrument.instrumentType === 'OPT' || (instrument as any).optionType) {
+        assetClass = 'OPTION';
+      } else {
+        assetClass = 'FUTURE';
+      }
+    }
+
     const riskResult = await RiskEngine.evaluateTrade({
       userId: order.userId,
       broker: 'upstox',
-      assetClass: 'EQUITY',
+      assetClass,
       currency: instrument.quoteAsset || 'INR',
       accountMode: 'live',
       symbol: order.symbol,

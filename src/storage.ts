@@ -425,17 +425,49 @@ export function loadState(userUid?: string): AppState {
   return freshState();
 }
 
+/**
+ * Sanitizes application state prior to browser localStorage persistence.
+ * Strict Invariant: When in live execution mode (accountMode === 'upstox' | 'exchange' or user accountMode === 'live'),
+ * live financial state (cash, positions, orders, exchangeOrders, avgBuyPrice, reserved balances)
+ * MUST NOT be persisted to local browser storage.
+ * Live financial state is strictly broker- and server-authoritative and rehydrated from backend APIs.
+ */
+export function sanitizeStateForPersistence(state: AppState): AppState {
+  const isLive = state.accountMode === 'upstox' || state.accountMode === 'exchange';
+
+  if (!isLive) {
+    return state;
+  }
+
+  return {
+    ...state,
+    cash: 0,
+    reservedCash: 0,
+    initialCash: 0,
+    startingEquity: 0,
+    realizedPnl: 0,
+    totalFees: 0,
+    positions: Object.fromEntries(ASSETS.map((a) => [a, 0])) as Record<Asset, number>,
+    reservedPositions: {},
+    avgBuyPrice: {} as Record<Asset, number>,
+    orders: [],
+    exchangeOrders: [],
+    ledgerHistory: [],
+  };
+}
+
 export function saveState(state: AppState, userUid?: string): void {
   const key = getUserStorageKey(userUid || state.authSession?.user?.uid);
+  const sanitized = sanitizeStateForPersistence(state);
   try {
-    localStorage.setItem(key, JSON.stringify(state));
+    localStorage.setItem(key, JSON.stringify(sanitized));
   } catch (e: any) {
     if (e?.name === 'QuotaExceededError' || e?.code === 22) {
       try {
         const pruned: AppState = {
-          ...state,
-          orders: state.orders.slice(0, 100),
-          notifications: state.notifications.slice(0, 100),
+          ...sanitized,
+          orders: sanitized.orders.slice(0, 100),
+          notifications: sanitized.notifications.slice(0, 100),
         };
         localStorage.setItem(key, JSON.stringify(pruned));
         if (typeof window !== 'undefined') {

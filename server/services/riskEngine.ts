@@ -3,6 +3,7 @@ import { AuditService } from './auditService';
 import { LedgerService } from './ledgerService';
 import { ExactDecimal, getAssetDecimals } from './precision';
 import { UpstoxInstrumentRegistry } from './brokers/upstox/upstoxInstrumentRegistry';
+import { UpstoxInstrumentMasterService } from './brokers/upstox/upstoxInstrumentMasterService';
 
 export interface RiskEvaluationRequest {
   userId: string;
@@ -10,7 +11,7 @@ export interface RiskEvaluationRequest {
   quoteAsset?: string;
   symbol?: string;
   broker?: string;
-  assetClass?: 'CRYPTO' | 'EQUITY';
+  assetClass?: 'CRYPTO' | 'EQUITY' | 'FUTURE' | 'OPTION';
   currency?: string;
   accountMode?: 'live' | 'paper';
   side: 'BUY' | 'SELL';
@@ -28,7 +29,11 @@ export interface RiskDecision {
   notionalUsd: number;
   portfolioEquityUsd: number;
   notional?: number;
+  notionalNative?: number;
+  notionalInr?: number;
   portfolioEquity?: number;
+  portfolioEquityNative?: number;
+  portfolioEquityInr?: number;
   availableCash?: number;
   currency?: string;
   currencySymbol?: string;
@@ -39,12 +44,13 @@ export interface RiskDecision {
 export class ServerRiskEngine {
   /**
    * Evaluates a trade proposal against server-authoritative institutional risk policies.
-   * Multi-asset and multi-currency aware (USD / INR, CRYPTO / EQUITY).
+   * Multi-asset and multi-currency aware (USD / INR, CRYPTO / EQUITY / FUTURE / OPTION).
    */
   static async evaluateTrade(req: RiskEvaluationRequest): Promise<RiskDecision> {
     const db = getDb();
     const isUpstox = req.broker === 'upstox';
-    const assetClass: 'CRYPTO' | 'EQUITY' = req.assetClass || (isUpstox ? 'EQUITY' : 'CRYPTO');
+    const assetClass: 'CRYPTO' | 'EQUITY' | 'FUTURE' | 'OPTION' =
+      req.assetClass || (isUpstox ? 'EQUITY' : 'CRYPTO');
     const quoteAsset = (req.currency || req.quoteAsset || (isUpstox ? 'INR' : 'USDT')).toUpperCase();
     const currencySymbol = quoteAsset === 'INR' ? '₹' : '$';
 
@@ -118,6 +124,96 @@ export class ServerRiskEngine {
     const notionalDec = qtyDec.mul(priceDec);
     const notionalAmount = notionalDec.toDisplayNumber();
     const notionalUsd = notionalAmount; // retained for backward compatibility
+    const notionalNative = notionalAmount;
+    const notionalInr = quoteAsset === 'INR' ? notionalAmount : undefined;
+
+    // Derivative and Equity Contract Constraint Validation (P0-9 & P0-10)
+    if (isUpstox || assetClass === 'EQUITY' || assetClass === 'FUTURE' || assetClass === 'OPTION') {
+      const sym = req.symbol || req.asset || '';
+      const inst =
+        UpstoxInstrumentMasterService.getInstrument(sym, req.accountMode === 'live') ||
+        UpstoxInstrumentRegistry.get(sym);
+
+      if (inst) {
+        const qtyNum = qtyDec.toDisplayNumber();
+        const priceNum = priceDec.toDisplayNumber();
+
+        // Lot size divisibility check (P0-9)
+        const lotSize = inst.lotSize || 1;
+        if (lotSize > 1 && qtyNum % lotSize !== 0) {
+          return {
+            approved: false,
+            rejectReason: `Order quantity ${qtyNum} must be an exact multiple of contract lot size ${lotSize} for ${sym}.`,
+            requiredCashReserve: 0,
+            notionalUsd,
+            portfolioEquityUsd: 0,
+            notional: notionalAmount,
+            notionalNative,
+            notionalInr,
+            portfolioEquity: 0,
+            currency: quoteAsset,
+            currencySymbol,
+            singleOrderPct: 0,
+            projectedConcentrationPct: 0,
+          };
+        }
+
+        // Freeze quantity check
+        if (inst.freezeQuantity && qtyNum > inst.freezeQuantity) {
+          return {
+            approved: false,
+            rejectReason: `Order quantity ${qtyNum} exceeds exchange freeze limit of ${inst.freezeQuantity} for ${sym}. Auto-slicing required.`,
+            requiredCashReserve: 0,
+            notionalUsd,
+            portfolioEquityUsd: 0,
+            notional: notionalAmount,
+            notionalNative,
+            notionalInr,
+            portfolioEquity: 0,
+            currency: quoteAsset,
+            currencySymbol,
+            singleOrderPct: 0,
+            projectedConcentrationPct: 0,
+          };
+        }
+
+        // Dynamic price band / circuit limit check (P0-10)
+        if (inst.lowerCircuitLimit !== undefined && priceNum < inst.lowerCircuitLimit) {
+          return {
+            approved: false,
+            rejectReason: `Order price ${priceNum} breaches lower circuit limit of ${inst.lowerCircuitLimit} for ${sym}.`,
+            requiredCashReserve: 0,
+            notionalUsd,
+            portfolioEquityUsd: 0,
+            notional: notionalAmount,
+            notionalNative,
+            notionalInr,
+            portfolioEquity: 0,
+            currency: quoteAsset,
+            currencySymbol,
+            singleOrderPct: 0,
+            projectedConcentrationPct: 0,
+          };
+        }
+        if (inst.upperCircuitLimit !== undefined && priceNum > inst.upperCircuitLimit) {
+          return {
+            approved: false,
+            rejectReason: `Order price ${priceNum} breaches upper circuit limit of ${inst.upperCircuitLimit} for ${sym}.`,
+            requiredCashReserve: 0,
+            notionalUsd,
+            portfolioEquityUsd: 0,
+            notional: notionalAmount,
+            notionalNative,
+            notionalInr,
+            portfolioEquity: 0,
+            currency: quoteAsset,
+            currencySymbol,
+            singleOrderPct: 0,
+            projectedConcentrationPct: 0,
+          };
+        }
+      }
+    }
 
     const rawAsset = req.asset || (req.symbol ? req.symbol.replace(quoteAsset, '').replace('NSE:', '').replace('BSE:', '') : 'UNKNOWN');
     const asset = rawAsset.trim().toUpperCase();
@@ -352,7 +448,11 @@ export class ServerRiskEngine {
       notionalUsd,
       portfolioEquityUsd,
       notional: notionalAmount,
+      notionalNative,
+      notionalInr,
       portfolioEquity: portfolioEquityAmount,
+      portfolioEquityNative: portfolioEquityAmount,
+      portfolioEquityInr: quoteAsset === 'INR' ? portfolioEquityAmount : undefined,
       availableCash: tradingCashDec.toDisplayNumber(),
       currency: quoteAsset,
       currencySymbol,

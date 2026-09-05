@@ -262,6 +262,9 @@ export interface UpstoxQuoteData {
   volume?: number;
   average_price?: number;
   instrument_token?: string;
+  lower_circuit_limit?: number;
+  upper_circuit_limit?: number;
+  is_authoritative?: boolean;
 }
 
 export const UpstoxQuoteDataSchema = z.object({
@@ -284,6 +287,9 @@ export const UpstoxQuoteDataSchema = z.object({
   volume: z.number().optional(),
   average_price: z.number().optional(),
   instrument_token: z.string().optional(),
+  lower_circuit_limit: z.number().optional(),
+  upper_circuit_limit: z.number().optional(),
+  is_authoritative: z.boolean().optional(),
 });
 
 export interface UpstoxApiErrorDetail {

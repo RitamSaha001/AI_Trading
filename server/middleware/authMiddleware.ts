@@ -243,3 +243,54 @@ export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
     error: 'Administrative or compliance auditor privileges required for this operation.',
   });
 }
+
+/**
+ * Centralized Kill-Switch Authorization Helper.
+ * Evaluates whether an authenticated caller has permission to perform
+ * freeze/unfreeze operations for the specified scope and target.
+ *
+ * Rules:
+ * - GLOBAL and SYMBOL operations strictly require ADMIN or FINANCE_ADMIN role (or configured ADMIN_EMAIL).
+ * - ACCOUNT operations targeting another user strictly require ADMIN or FINANCE_ADMIN.
+ * - Non-admin users can ONLY freeze/unfreeze their own account (target resolves to user.id).
+ */
+export function authorizeKillSwitch(
+  user: AuthenticatedUser | undefined,
+  scope: 'GLOBAL' | 'ACCOUNT' | 'SYMBOL',
+  target?: string,
+  action: 'freeze' | 'unfreeze' = 'freeze'
+): { authorized: boolean; error?: string; resolvedTarget: string } {
+  if (!user) {
+    return { authorized: false, error: 'Authentication required', resolvedTarget: target || '*' };
+  }
+
+  const userRole = user.role || 'TRADER';
+  const configuredAdmin = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+  const userEmail = (user.email || '').toLowerCase().trim();
+  const isAdmin =
+    (configuredAdmin !== '' && userEmail === configuredAdmin) ||
+    userRole === 'ADMIN' ||
+    userRole === 'FINANCE_ADMIN';
+
+  if (scope === 'GLOBAL' || scope === 'SYMBOL') {
+    if (!isAdmin) {
+      const err =
+        action === 'unfreeze'
+          ? 'Administrative privilege strictly required to unfreeze GLOBAL or SYMBOL scopes'
+          : 'Administrative privilege required for GLOBAL or SYMBOL kill-switch operations';
+      return { authorized: false, error: err, resolvedTarget: target || '*' };
+    }
+    return { authorized: true, resolvedTarget: target || '*' };
+  }
+
+  if (scope === 'ACCOUNT') {
+    if (!isAdmin && target && target !== user.id) {
+      const err = action === 'unfreeze' ? 'Cannot unfreeze other user accounts' : 'Cannot freeze other user accounts';
+      return { authorized: false, error: err, resolvedTarget: target };
+    }
+    const resolvedTarget = !isAdmin ? user.id : (target || user.id);
+    return { authorized: true, resolvedTarget };
+  }
+
+  return { authorized: false, error: `Invalid scope: ${scope}`, resolvedTarget: target || '*' };
+}

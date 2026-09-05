@@ -31,8 +31,20 @@ export async function deriveUserUid(provider: AuthProvider, email: string): Prom
 
 /**
  * Creates a client-side HMAC-SHA256 signed session token (JWT structure).
+ * Strict invariant: In production environments, client-side session minting is strictly disabled.
+ * Authentication must be performed via server-side OAuth / passkey endpoints.
  */
 export async function createSessionToken(user: UserProfile, expTimestamp: number): Promise<string> {
+  const isProd =
+    (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.PROD)) ||
+    (typeof globalThis !== 'undefined' && (globalThis as any)?.process?.env?.NODE_ENV === 'production');
+
+  if (isProd) {
+    throw new Error(
+      'Client-side session minting is strictly disabled in production. Authentication must be verified via server-side OAuth / passkey endpoints.'
+    );
+  }
+
   const header = { alg: 'HS256', typ: 'JWT' };
   const payload = {
     uid: user.uid,
