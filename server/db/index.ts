@@ -1,5 +1,8 @@
 import { config, isProd } from '../config';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { DatabaseSync } from 'node:sqlite';
+import pg from 'pg';
+const { Pool } = pg;
 import { runMigrations, runMigrationsSync, getMigrationStatus, MigrationStatus } from './migrator';
 
 // Unified Database Interface
@@ -28,8 +31,6 @@ export class SQLiteClient implements DBClient {
   public db: any;
 
   constructor(dbPath: string) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { DatabaseSync } = require('node:sqlite');
     this.db = new DatabaseSync(dbPath);
     this.db.exec('PRAGMA foreign_keys = ON;');
   }
@@ -159,9 +160,6 @@ export class PostgresClient implements DBClient {
   private advisoryClients = new Map<string, any>();
 
   constructor(connectionString: string) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Pool } = require('pg');
-
     const maxPoolSize = Number(process.env.DB_POOL_MAX || process.env.PGPOOL_MAX || 20);
 
     this.pool = new Pool({
@@ -200,9 +198,11 @@ export class PostgresClient implements DBClient {
   private normalizeSql(sql: string): string {
     let index = 1;
     let normalized = sql.replace(/\?/g, () => `$${index++}`);
-    // PostgreSQL requires boolean defaults to be boolean literals (FALSE/TRUE), not integers (0/1)
+    // PostgreSQL requires boolean defaults and comparisons to use boolean literals (FALSE/TRUE), not integers (0/1)
     normalized = normalized.replace(/\bBOOLEAN\b(\s+NOT\s+NULL)?\s+DEFAULT\s+0\b/gi, 'BOOLEAN$1 DEFAULT FALSE');
     normalized = normalized.replace(/\bBOOLEAN\b(\s+NOT\s+NULL)?\s+DEFAULT\s+1\b/gi, 'BOOLEAN$1 DEFAULT TRUE');
+    normalized = normalized.replace(/\b(is_[a-z0-9_]+|can_[a-z0-9_]+|has_[a-z0-9_]+)\s*=\s*1\b/gi, '$1 = TRUE');
+    normalized = normalized.replace(/\b(is_[a-z0-9_]+|can_[a-z0-9_]+|has_[a-z0-9_]+)\s*=\s*0\b/gi, '$1 = FALSE');
     return normalized;
   }
 

@@ -131,7 +131,7 @@ export function buildServer(): FastifyInstance {
   // Global In-Flight Request Guard & CSRF / Origin Verification
   server.addHook('preHandler', async (req: FastifyRequest, reply: FastifyReply) => {
     // Health probes are always permitted
-    if (req.url.startsWith('/health') || req.url === '/healthz' || req.url === '/ready') {
+    if (req.url.startsWith('/health') || req.url === '/healthz' || req.url === '/ready' || req.url === '/api/health') {
       return;
     }
     if (isShuttingDown) {
@@ -214,6 +214,7 @@ export function buildServer(): FastifyInstance {
   server.get('/health/readiness', readinessHandler);
   server.get('/ready', readinessHandler);
   server.get('/health', readinessHandler);
+  server.get('/api/health', readinessHandler);
 
   // ==========================================================================
   // AUTHENTICATION ROUTES (Phase 2 & Phase 3)
