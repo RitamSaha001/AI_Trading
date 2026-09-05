@@ -137,10 +137,11 @@ export function LegalFooter() {
                   Operations &amp; Security
                 </h4>
                 <div className="text-[11px] text-zinc-500 space-y-1">
-                  <p className="font-medium text-zinc-800">Lumen Technologies</p>
-                  <p>Salt Lake Sector V, Kolkata, India</p>
-                  <p className="text-zinc-400">Founder: Ritam Saha</p>
-                  <p className="text-indigo-600 font-mono">support@lumen.io</p>
+                  <p className="font-medium text-zinc-800">Ritam Saha (Sole Proprietor)</p>
+                  <p>Lumen AI Trading Technologies</p>
+                  <p className="text-zinc-400">Sector V, Salt Lake, Kolkata 700091</p>
+                  <p className="text-zinc-600 font-mono">+91 74393 12052</p>
+                  <p className="text-indigo-600 font-mono">saharitam171@gmail.com</p>
                 </div>
               </div>
             </div>
@@ -153,7 +154,7 @@ export function LegalFooter() {
               Statutory Risk Disclosure &amp; Compliance Statement:
             </p>
             <p>
-              Trading in cryptocurrencies and decentralized digital assets involves significant market risk and high volatility. Past performance of AI quantitative models, mathematical indicators, or simulated backtests is not indicative of future results. Lumen provides execution infrastructure and analytics tools; we do not provide personalized financial, legal, or investment advisory services. Deposits and refunds are cleared via PhonePe Payment Gateway adhering to RBI and NPCI standards. Unallocated wallet balances can be refunded within 7 days (5–7 business days settlement window).
+              Lumen provides automated algorithmic execution software, quantitative risk indicators, and platform subscription services. Lumen is a technology provider and does not provide personalized investment, tax, or legal advisory services. Payments, platform access fees, and software subscriptions are processed securely via PhonePe Payment Gateway adhering to RBI and PCI-DSS Level 1 security standards. Unused platform credits are refundable on request within 7 days (5–7 business days settlement turnaround to original source).
             </p>
           </div>
 

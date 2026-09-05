@@ -32,11 +32,11 @@ export interface CreateGrievanceRequest {
 }
 
 export const NODAL_OFFICER_INFO = {
-  name: 'Arjun Sen',
-  designation: 'Principal Nodal Grievance Officer',
-  email: 'grievance.nodal@lumentrading.in',
-  phone: '+91 80 4567 8900',
-  address: 'Lumen Quant Compliance, BKC Financial Tower, Bandra East, Mumbai, Maharashtra 400051',
+  name: 'Ritam Saha',
+  designation: 'Proprietor & Principal Nodal Grievance Officer',
+  email: 'saharitam171@gmail.com',
+  phone: '+91 74393 12052',
+  address: 'Infinity Benchmark Tower, Plot G-1, Block EP & GP, Sector V, Salt Lake City, Kolkata, West Bengal 700091, India',
   workingHours: 'Mon - Fri: 09:30 AM - 06:30 PM IST',
   npcPortal: 'https://www.npci.org.in/what-we-do/upi/dispute-redressal-mechanism',
   rbiOmbudsmanPortal: 'https://cms.rbi.org.in/',
@@ -147,7 +147,7 @@ export function escalateTicket(ticket: GrievanceTicket, reason: string): Grievan
   const nextLevel = Math.min(3, ticket.escalationLevel + 1) as 1 | 2 | 3;
   const officer =
     nextLevel === 2
-      ? `Arjun Sen (${NODAL_OFFICER_INFO.designation})`
+      ? `${NODAL_OFFICER_INFO.name} (${NODAL_OFFICER_INFO.designation})`
       : 'National Banking Ombudsman (RBI / NPCI Escalation)';
 
   return {
