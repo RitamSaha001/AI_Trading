@@ -17,6 +17,11 @@ import { OrderRecoveryService } from './services/orderRecoveryService';
 import crypto from 'node:crypto';
 import { SymbolRulesService } from './services/symbolRules';
 import { AuditService, logger } from './services/auditService';
+import { OperationalSafetyService } from './services/operationalSafetyService';
+import { CircuitBreakerService } from './services/circuitBreakerService';
+import { ClockSyncService } from './services/clockSyncService';
+import { RateLimitTracker } from './services/rateLimitTracker';
+import { UserDataStreamManager } from './services/userDataStreamManager';
 
 let isShuttingDown = false;
 
@@ -37,6 +42,8 @@ export async function shutdownServer(server?: FastifyInstance): Promise<void> {
   try {
     ReconciliationWorker.stop();
     OrderRecoveryService.stop();
+    ClockSyncService.stop();
+    UserDataStreamManager.stop();
   } catch (err: any) {
     logger.warn('Error stopping background workers:', err.message);
   }
@@ -774,6 +781,38 @@ export function buildServer(): FastifyInstance {
     return { success: true, events };
   });
 
+  // ==========================================================================
+  // OPERATIONAL SAFETY & MONITORING
+  // ==========================================================================
+
+  server.get('/api/operational/health', async (req: FastifyRequest) => {
+    const report = await OperationalSafetyService.getHealthReport((req as any).user?.id);
+    return { success: true, report };
+  });
+
+  server.post('/api/operational/kill-switch/freeze', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as { scope: 'GLOBAL' | 'ACCOUNT' | 'SYMBOL'; target?: string; reason: string };
+    if (!body?.scope || !body?.reason) {
+      return reply.status(400).send({ success: false, error: 'Scope and reason are required' });
+    }
+    await OperationalSafetyService.freeze(body.scope, body.target || '*', body.reason, req.user!.id);
+    return { success: true, message: `Emergency freeze activated for ${body.scope}:${body.target || '*'}` };
+  });
+
+  server.post('/api/operational/kill-switch/unfreeze', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as { scope: 'GLOBAL' | 'ACCOUNT' | 'SYMBOL'; target?: string; reason: string };
+    if (!body?.scope || !body?.reason) {
+      return reply.status(400).send({ success: false, error: 'Scope and reason are required' });
+    }
+    await OperationalSafetyService.unfreeze(body.scope, body.target || '*', body.reason, req.user!.id);
+    return { success: true, message: `Emergency freeze deactivated for ${body.scope}:${body.target || '*'}` };
+  });
+
+  server.post('/api/operational/reconciliation/run', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const result = await ReconciliationWorker.runReconciliation(req.user!.id);
+    return { success: true, result };
+  });
+
   return server;
 }
 
@@ -810,6 +849,13 @@ if (isMain || process.env.START_SERVER === 'true') {
         }
         console.warn(`[ExchangeRules] Non-production startup: exchangeInfo refresh skipped or failed: ${err.message}`);
       });
+
+      console.log(`[ClockSync] Synchronizing server clock with Binance exchange venue...`);
+      await ClockSyncService.synchronize().catch((err: any) => {
+        console.warn(`[ClockSync] Initial clock sync warning: ${err.message}`);
+      });
+      ClockSyncService.startPeriodicSync();
+      UserDataStreamManager.startKeepAliveLoop();
 
       const server = buildServer();
 

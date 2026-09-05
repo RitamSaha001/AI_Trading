@@ -336,7 +336,7 @@ export class LedgerService {
           params.referenceType,
           params.referenceId,
           params.idempotencyKey || null,
-          params.description,
+          params.description || 'Internal allocation transfer',
           now,
         ]
       );
@@ -367,7 +367,7 @@ export class LedgerService {
           params.referenceType,
           params.referenceId,
           params.idempotencyKey || null,
-          params.description,
+          params.description || 'Internal allocation transfer',
           now,
         ]
       );
@@ -541,7 +541,7 @@ export class LedgerService {
           params.assetOrCurrency,
           params.paymentId,
           params.idempotencyKey || null,
-          params.description,
+          params.description || 'Deposit credited',
           now,
         ]
       );

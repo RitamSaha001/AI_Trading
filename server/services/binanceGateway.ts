@@ -6,6 +6,10 @@ import { LedgerService } from './ledgerService';
 import { ExactDecimal, fromCashMinor, fromAssetMinor } from './precision';
 import { SymbolRulesService, ValidatedOrderParams } from './symbolRules';
 import { OrderStateMachine } from './orderStateMachine';
+import { ClockSyncService } from './clockSyncService';
+import { RateLimitTracker } from './rateLimitTracker';
+import { OperationalSafetyGate } from './operationalSafetyService';
+import { UserDataStreamManager } from './userDataStreamManager';
 import crypto from 'node:crypto';
 
 export interface BinanceCredentials {
@@ -562,39 +566,7 @@ export class BinanceGateway {
    * The client receives only the listenKey — never the API secret.
    */
   static async createListenKey(userId: string): Promise<string | null> {
-    const creds = await this.getCredentials(userId);
-    if (!creds) return null;
-
-    if (
-      process.env.NODE_ENV === 'test' ||
-      config.NODE_ENV === 'test' ||
-      creds.apiKey.startsWith('test_') ||
-      creds.apiKey.startsWith('mock_') ||
-      creds.apiKey.startsWith('binance_test_')
-    ) {
-      return `test_listen_key_${userId.slice(0, 8)}`;
-    }
-
-    const baseUrl =
-      creds.environment === 'testnet' ? 'https://testnet.binance.vision' : 'https://api.binance.com';
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    try {
-      const res = await fetch(`${baseUrl}/api/v3/userDataStream`, {
-        method: 'POST',
-        headers: { 'X-MBX-APIKEY': creds.apiKey },
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`Failed to acquire listenKey: ${res.statusText}`);
-      const data = (await res.json()) as { listenKey: string };
-      return data.listenKey;
-    } catch (err: any) {
-      clearTimeout(timer);
-      console.warn('[BinanceGateway] Failed to create listenKey:', err.message);
-      return null;
-    }
+    return UserDataStreamManager.acquireListenKey(userId);
   }
 
   /**
@@ -716,6 +688,93 @@ export class BinanceGateway {
       accountMode,
       rule,
     });
+
+    // 2b. Operational Safety Gate Validation
+    const isLiveExecution = (input.accountMode || 'live') === 'live';
+    const safetyCheck = await OperationalSafetyGate.verifyOrderSubmission({
+      userId: input.userId,
+      symbol: input.symbol,
+      quoteAsset: input.quoteAsset,
+      side: input.side,
+      type: input.type,
+      quantity: normalized.quantityStr,
+      price: normalized.priceStr,
+      isLive: isLiveExecution,
+    });
+
+    if (!safetyCheck.allowed) {
+      OrderStateMachine.validateTransition('CREATED', 'REJECTED', clientOrderId);
+      const now = Date.now();
+      const rejectedOrder: OrderStateRecord = {
+        id: clientOrderId,
+        userId: input.userId,
+        clientOrderId,
+        symbol: input.symbol,
+        side: input.side,
+        type: input.type,
+        status: 'REJECTED',
+        origQty: normalized.quantity.toDisplayNumber(), // PRECISION_BOUNDARY: legacy number compatibility
+        origQtyExact: normalized.quantityStr,
+        executedQty: 0,
+        executedQtyExact: '0',
+        price: normalized.price.toDisplayNumber(), // PRECISION_BOUNDARY: legacy number compatibility
+        priceExact: normalized.priceStr,
+        avgPrice: 0,
+        avgPriceExact: '0',
+        cumulativeQuoteQty: 0,
+        cumulativeQuoteExact: '0',
+        quoteAsset: input.quoteAsset,
+        notional: normalized.notional.toDisplayNumber(), // PRECISION_BOUNDARY: legacy number compatibility
+        notionalExact: normalized.notionalStr,
+        fee: 0,
+        feeExact: '0',
+        reservedCash: 0,
+        reservedCashMinor: 0n,
+        reservedQty: 0,
+        reservedQtyMinor: 0n,
+        rejectReason: safetyCheck.reason,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, user_id, client_order_id, symbol, side, type, status, orig_qty,
+          orig_qty_exact, price, price_exact, quote_asset, notional, notional_exact,
+          idempotency_key, reject_reason, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'REJECTED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          rejectedOrder.id,
+          rejectedOrder.userId,
+          rejectedOrder.clientOrderId,
+          rejectedOrder.symbol,
+          rejectedOrder.side,
+          rejectedOrder.type,
+          rejectedOrder.origQty,
+          normalized.quantityStr,
+          rejectedOrder.price,
+          normalized.priceStr,
+          rejectedOrder.quoteAsset,
+          rejectedOrder.notional,
+          normalized.notionalStr,
+          input.idempotencyKey,
+          rejectedOrder.rejectReason,
+          now,
+          now,
+        ]
+      );
+
+      await AuditService.logEvent({
+        userId: input.userId,
+        eventType: 'ORDER_SUBMISSION_BLOCKED_BY_SAFETY_GATE',
+        source: 'operational_safety_gate',
+        actor: 'safety_gate',
+        metadata: { clientOrderId, reason: safetyCheck.reason, checks: safetyCheck.checks },
+        result: 'BLOCKED',
+      });
+
+      return rejectedOrder;
+    }
 
     OrderStateMachine.validateTransition('CREATED', 'RESERVING', clientOrderId);
 
@@ -1594,7 +1653,7 @@ export class BinanceGateway {
 
     const baseUrl =
       creds.environment === 'testnet' ? 'https://testnet.binance.vision' : 'https://api.binance.com';
-    const timestamp = Date.now();
+    const timestamp = ClockSyncService.getExchangeTime();
     const query = new URLSearchParams({
       symbol: input.symbol,
       side: input.side,
@@ -1639,14 +1698,34 @@ export class BinanceGateway {
     });
     clearTimeout(timer);
 
+    RateLimitTracker.recordResponse(res.headers, res.status);
+
     if (!res.ok) {
-      const errorJson = await res.json().catch(() => ({}));
+      const errorJson = (await res.json().catch(() => ({}))) as any;
+      if (errorJson?.code === -1021) {
+        void ClockSyncService.handleTimestampError(baseUrl);
+      }
       throw new Error(`Binance API Error ${res.status}: ${errorJson.msg || res.statusText}`);
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as any;
+
+    // Rule 21: Post-Order External Response Verification
+    if (!data.orderId) {
+      throw new Error('Malformed Binance order response: missing orderId');
+    }
+    if (data.symbol && data.symbol !== input.symbol) {
+      throw new Error(`Binance response symbol mismatch: expected ${input.symbol}, got ${data.symbol}`);
+    }
+    if (data.clientOrderId && data.clientOrderId !== clientOrderId) {
+      throw new Error(`Binance response clientOrderId mismatch: expected ${clientOrderId}, got ${data.clientOrderId}`);
+    }
+
     // Preserve Binance response as exact strings — no Number conversion
     const executedQtyStr = String(data.executedQty || '0');
+    if (ExactDecimal.from(executedQtyStr).lt(ExactDecimal.zero())) {
+      throw new Error(`Binance response invalid negative executedQty: ${executedQtyStr}`);
+    }
     const avgPriceStr = String(data.price || data.avgPrice || '0');
 
     // Parse individual fill reports for actual commission data
@@ -1729,13 +1808,15 @@ export class BinanceGateway {
         : 'https://testnet.binance.vision';
 
       try {
-        const timestamp = Date.now();
+        const timestamp = ClockSyncService.getExchangeTime();
         const queryString = `symbol=${symbol}&origClientOrderId=${clientOrderId}&timestamp=${timestamp}&recvWindow=5000`;
         const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
 
         const response = await fetch(`${baseUrl}/api/v3/order?${queryString}&signature=${signature}`, {
           headers: { 'X-MBX-APIKEY': creds.apiKey },
         });
+
+        RateLimitTracker.recordResponse(response.headers, response.status);
 
         if (response.ok) {
           const data = (await response.json()) as any;
@@ -2013,7 +2094,7 @@ export class BinanceGateway {
     if (creds && config.NODE_ENV !== 'test' && !creds.apiKey.startsWith('mock_')) {
       const baseUrl =
         creds.environment === 'mainnet' ? 'https://api.binance.com' : 'https://testnet.binance.vision';
-      const timestamp = Date.now();
+      const timestamp = ClockSyncService.getExchangeTime();
       const query = new URLSearchParams({
         symbol: order.symbol,
         origClientOrderId: clientOrderId,
@@ -2028,6 +2109,8 @@ export class BinanceGateway {
           method: 'DELETE',
           headers: { 'X-MBX-APIKEY': creds.apiKey },
         });
+
+        RateLimitTracker.recordResponse(res.headers, res.status);
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));

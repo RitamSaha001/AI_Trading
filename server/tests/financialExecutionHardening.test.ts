@@ -24,6 +24,8 @@ describe('Production-Critical Financial Execution Hardening Suite (43 Scenarios)
     await db.execute(`DELETE FROM account_limits WHERE user_id = ?`, [userId]);
     await db.execute(`DELETE FROM reconciliation_mismatches WHERE user_id = ?`, [userId]);
     await db.execute(`DELETE FROM audit_events WHERE user_id = ?`, [userId]);
+    await db.execute(`DELETE FROM operational_kill_switches WHERE target = ?`, [userId]);
+    await db.execute(`DELETE FROM circuit_breakers WHERE scope_id = ?`, [userId]);
     await db.execute(`DELETE FROM users WHERE id = ?`, [userId]);
 
     await db.execute(
