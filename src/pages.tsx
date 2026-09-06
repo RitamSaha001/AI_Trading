@@ -116,6 +116,7 @@ export function Dashboard() {
     executeActionProposal,
     order,
     openChat,
+    openUpstoxDrawer,
   } = useLumen();
 
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -265,26 +266,59 @@ export function Dashboard() {
           </div>
         </GlassCard>
 
-        {/* Algorithmic Execution Engine */}
+        {/* Algorithmic Execution Engine / Autonomous Pilot */}
         <GlassCard className="flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-500">Algorithmic Engine</span>
-              <Zap className="w-4 h-4 text-amber-500" />
+          {state.accountMode === 'upstox' ? (
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-zinc-500">Autonomous Pilot (NSE)</span>
+                <Zap className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 mt-1 flex items-center gap-2">
+                {state.autonomousPilot?.enabled ? (
+                  <span className="text-emerald-600">Active Sentinel</span>
+                ) : (
+                  <span className="text-zinc-600">Standby</span>
+                )}
+                <span className="text-xs font-normal text-zinc-400">
+                  ({Object.keys(state.autonomousPilot?.activeFleet || {}).length} symbols)
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 mt-2">
+                Strict SEBI Personal Algo Mode: Autonomous signal execution, dynamic position sizing, and volatility stops.
+              </p>
             </div>
-            <div className="text-3xl font-bold font-mono tracking-tight text-zinc-950 mt-1">
-              {state.strategies.filter((s) => s.enabled).length}{' '}
-              <span className="text-sm font-normal text-zinc-400">/ {state.strategies.length} active</span>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-zinc-500">Algorithmic Engine</span>
+                <Zap className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-3xl font-bold font-mono tracking-tight text-zinc-950 mt-1">
+                {state.strategies.filter((s) => s.enabled).length}{' '}
+                <span className="text-sm font-normal text-zinc-400">/ {state.strategies.length} active</span>
+              </div>
+              <p className="text-xs text-zinc-500 mt-2">
+                Momentum Crossover, Mean Reversion &amp; DCA automation monitoring live ticks.
+              </p>
             </div>
-            <p className="text-xs text-zinc-500 mt-2">
-              Momentum Crossover, Mean Reversion &amp; DCA automation monitoring live ticks.
-            </p>
-          </div>
+          )}
           <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center justify-between text-xs">
-            <span className="text-emerald-600 font-medium">● Auto-trading online</span>
-            <button type="button" onClick={() => go('/strategies')} className="text-indigo-600 hover:underline font-medium">
-              Manage Rules →
-            </button>
+            {state.accountMode === 'upstox' ? (
+              <>
+                <span className="text-emerald-600 font-medium">● Upstox Live Gateway</span>
+                <a href="#autonomous-pilot" className="text-indigo-600 hover:underline font-medium">
+                  Pilot Controls ↓
+                </a>
+              </>
+            ) : (
+              <>
+                <span className="text-emerald-600 font-medium">● Auto-trading online</span>
+                <button type="button" onClick={() => go('/strategies')} className="text-indigo-600 hover:underline font-medium">
+                  Manage Rules →
+                </button>
+              </>
+            )}
           </div>
         </GlassCard>
       </div>
@@ -561,17 +595,31 @@ export function Dashboard() {
           <span className="text-[11px] text-zinc-500">Market &amp; limit execution with stop-loss</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => go('/strategies')}
-          className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
-        >
-          <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <Sliders className="w-4 h-4" />
-          </div>
-          <strong className="text-xs font-bold text-zinc-900 block">Algorithmic Suite</strong>
-          <span className="text-[11px] text-zinc-500">Configure trend following &amp; DCA rules</span>
-        </button>
+        {state.accountMode === 'upstox' ? (
+          <button
+            type="button"
+            onClick={() => openUpstoxDrawer()}
+            className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
+          >
+            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <Sliders className="w-4 h-4" />
+            </div>
+            <strong className="text-xs font-bold text-zinc-900 block">Upstox Terminal</strong>
+            <span className="text-[11px] text-zinc-500">Live order status, margins &amp; API telemetry</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => go('/strategies')}
+            className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
+          >
+            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+              <Sliders className="w-4 h-4" />
+            </div>
+            <strong className="text-xs font-bold text-zinc-900 block">Algorithmic Suite</strong>
+            <span className="text-[11px] text-zinc-500">Configure trend following &amp; DCA rules</span>
+          </button>
+        )}
 
         <button
           type="button"

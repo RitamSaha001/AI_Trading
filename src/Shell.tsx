@@ -170,10 +170,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (accountMode === 'upstox' && route === '/strategies') {
+      go('/');
+    }
+  }, [accountMode, route]);
+
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
 
-  const nav = [
+  const baseNav = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/markets', label: 'Markets', icon: BarChart3 },
     { path: '/portfolio', label: 'Portfolio', icon: Briefcase },
@@ -182,6 +188,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { path: '/alerts', label: 'Alerts', icon: Bell },
     { path: '/wallet', label: 'Wallet', icon: Wallet },
   ] as const;
+
+  const nav = accountMode === 'upstox'
+    ? baseNav.filter((item) => item.path !== '/strategies')
+    : baseNav;
 
   const mobileBottomNav = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -548,7 +558,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* Content Area */}
         <main className="flex-1 p-3 sm:p-5 md:p-8 max-w-7xl w-full mx-auto overflow-x-hidden">
-          {children}
+          {accountMode === 'upstox' && route === '/strategies' ? null : children}
         </main>
 
         {/* Institutional Statutory & Compliance Footer */}

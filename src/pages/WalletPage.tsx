@@ -27,6 +27,7 @@ import {
   Smartphone,
   LifeBuoy,
   FileText,
+  ChevronRight,
 } from 'lucide-react';
 import { WalletCurrency, Asset, ASSETS } from '../types';
 import {
@@ -36,6 +37,7 @@ import {
   TransactionFilterCategory,
 } from '../domain/walletLedger';
 import { convertCurrency, PAPER_SIMULATION_FX_RATES_TO_USD, get24hVolume } from '../domain/wallet';
+import { moneyINR } from '../trading';
 import { WalletCardPaymentModal } from '../components/WalletCardPaymentModal';
 import { WalletUPIPaymentModal } from '../components/WalletUPIPaymentModal';
 import { WalletAllocateModal } from '../components/WalletAllocateModal';
@@ -54,6 +56,8 @@ export function WalletPage() {
     openGrievanceModal,
     accountMode,
     authSession,
+    upstoxAccount,
+    openUpstoxDrawer,
   } = useLumen();
 
   // Modals state
@@ -64,12 +68,11 @@ export function WalletPage() {
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [guideModalOpen, setGuideModalOpen] = useState(false);
 
-  // Currency view toggle (INR vs USD)
+  // Currency view toggle (INR vs USD for paper mode)
   const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'INR'>('INR');
 
   // Ledger state
-  const [filterCategory, setFilterCategory] =
-    useState<TransactionFilterCategory>('all');
+  const [filterCategory, setFilterCategory] = useState<TransactionFilterCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
 
@@ -78,17 +81,14 @@ export function WalletPage() {
   const [allocAmountINR, setAllocAmountINR] = useState('25000');
   const [isAllocatingMargin, setIsAllocatingMargin] = useState(false);
 
-  const totalSovereignNetWorthUSD =
-    nativeWallet.balanceUSD + nativeWallet.allocatedToTradingUSD;
+  const totalSovereignNetWorthUSD = nativeWallet.balanceUSD + nativeWallet.allocatedToTradingUSD;
 
-  // PAPER MODE ONLY: Using simulation FX rate. Live mode uses backend conversion.
+  // Paper FX simulation
   const simulationRateINR = 1 / PAPER_SIMULATION_FX_RATES_TO_USD['INR'];
-  const displayRate = displayCurrency === 'INR' ? simulationRateINR : 1;
-  const currencySymbol = displayCurrency === 'INR' ? '₹' : '$';
 
   const formatDisplayValue = (valUSD: number) => {
     if (displayCurrency === 'INR') {
-      return `₹${(valUSD * simulationRateINR).toLocaleString('en-US', {
+      return `₹${(valUSD * simulationRateINR).toLocaleString('en-IN', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`;
@@ -117,10 +117,7 @@ export function WalletPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute(
-      'download',
-      `lumen_wallet_ledger_${new Date().toISOString().slice(0, 10)}.csv`
-    );
+    link.setAttribute('download', `lumen_wallet_ledger_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -141,6 +138,9 @@ export function WalletPage() {
         totalDepositedUSD: nativeWallet.totalDepositedUSD,
         totalWithdrawnUSD: nativeWallet.totalWithdrawnUSD,
         deskCashUSD: state.cash,
+        upstoxAvailableCash: upstoxAccount?.funds?.availableCash,
+        upstoxUsedMargin: upstoxAccount?.funds?.usedMargin,
+        upstoxTotalEquity: upstoxAccount?.funds?.totalEquity,
       },
       transactions: nativeWallet.transactions,
       grievanceTickets: state.grievanceTickets || [],
@@ -167,266 +167,258 @@ export function WalletPage() {
   };
 
   const deposit24h = get24hVolume(nativeWallet.transactions, 'deposit');
-  const withdraw24h = get24hVolume(nativeWallet.transactions, 'withdrawal');
+
+  const isUpstox = accountMode === 'upstox';
+  const upstoxCash = upstoxAccount?.funds?.availableCash ?? state.cash;
+  const upstoxTotalEquity = upstoxAccount?.funds?.totalEquity ?? state.cash;
+  const upstoxUsedMargin = upstoxAccount?.funds?.usedMargin ?? 0;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-in fade-in duration-200">
       
-      {/* Top Banner & Treasury Net Worth Header */}
-      <div className="relative p-6 sm:p-8 rounded-[32px] bg-gradient-to-tr from-slate-900 via-indigo-950 to-slate-900 text-white shadow-2xl overflow-hidden border border-white/10">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-80 h-80 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
-
-        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-indigo-300 shadow-inner">
-                <Wallet className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                    Funds, Margin &amp; Capital Treasury
-                  </h1>
-                  <span className="text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    SEBI Demat &amp; Trading
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 font-medium">
-                  Institutional treasury with instant UPI &amp; Net Banking deposit rails, Demat margin allocation, and SEBI compliance ledger.
-                </p>
-              </div>
-            </div>
-
-            {/* Total Valuation */}
-            <div className="pt-2">
-              <div className="text-xs uppercase font-bold tracking-wider text-zinc-400">
-                Total Demat &amp; Sovereign Treasury Balance
-              </div>
-              <div className="text-3xl sm:text-4xl font-black tracking-tight text-white font-mono mt-0.5">
-                {formatDisplayValue(totalSovereignNetWorthUSD)}
-              </div>
-            </div>
+      {/* Minimalist Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-black/[0.06] pb-5">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-950">
+              Wallet &amp; Capital Treasury
+            </h1>
+            {isUpstox ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Upstox Live Desk
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Paper Sandbox
+              </span>
+            )}
           </div>
+          <p className="text-xs text-zinc-500 mt-1">
+            {isUpstox
+              ? 'Authoritative Demat margin, instant UPI/NetBanking funding rails, and SEBI compliance ledger.'
+              : 'Simulated multi-currency treasury desk with cryptographic SHA-256 audit receipts.'}
+          </p>
+        </div>
 
-          {/* Currency Toggle & Quick Guide Launcher */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Currency switch */}
-            <div className="flex items-center p-1 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15">
-              <button
-                type="button"
-                onClick={() => setDisplayCurrency('USD')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                  displayCurrency === 'USD'
-                    ? 'bg-white text-zinc-900 shadow-md'
-                    : 'text-white/70 hover:text-white'
-                }`}
-              >
-                USD ($)
-              </button>
+        {/* Action Toolbar */}
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          {!isUpstox && (
+            <div className="flex items-center p-0.5 bg-zinc-100 rounded-xl border border-black/[0.05]">
               <button
                 type="button"
                 onClick={() => setDisplayCurrency('INR')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   displayCurrency === 'INR'
-                    ? 'bg-white text-zinc-900 shadow-md'
-                    : 'text-white/70 hover:text-white'
+                    ? 'bg-white text-zinc-950 shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                INR (₹)
+                ₹ INR
+              </button>
+              <button
+                type="button"
+                onClick={() => setDisplayCurrency('USD')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  displayCurrency === 'USD'
+                    ? 'bg-white text-zinc-950 shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                $ USD
               </button>
             </div>
+          )}
 
+          {isUpstox && !upstoxAccount?.connected && (
             <button
               type="button"
-              onClick={() => setGuideModalOpen(true)}
-              className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-2"
+              onClick={openUpstoxDrawer}
+              className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 text-xs font-semibold transition-all"
             >
-              <BookOpen className="w-4 h-4 text-indigo-300" />
-              <span>Wallet Guide & Tour</span>
+              Connect Upstox Demat
             </button>
-          </div>
-        </div>
+          )}
 
-        {/* 4 Telemetry Metrics Cards */}
-        <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-white/10">
-          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-            <div className="text-[11px] text-zinc-400 font-medium">Liquid Wallet Cash</div>
-            <div className="text-lg font-black text-white font-mono mt-0.5">
-              {formatDisplayValue(nativeWallet.balanceUSD)}
-            </div>
-            <div className="text-[10px] text-emerald-400 font-semibold mt-1 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              <span>Ready to spend / allocate</span>
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-            <div className="text-[11px] text-zinc-400 font-medium">Allocated to Trading</div>
-            <div className="text-lg font-black text-indigo-300 font-mono mt-0.5">
-              {formatDisplayValue(nativeWallet.allocatedToTradingUSD)}
-            </div>
-            <div className="text-[10px] text-zinc-400 font-semibold mt-1">
-              Trading Desk Cash: ${state.cash.toFixed(2)}
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-            <div className="text-[11px] text-zinc-400 font-medium">Lifetime Inflows</div>
-            <div className="text-lg font-black text-white font-mono mt-0.5">
-              ${nativeWallet.totalDepositedUSD.toFixed(2)}
-            </div>
-            <div className="text-[10px] text-zinc-400 font-semibold mt-1">
-              Withdrawn: ${nativeWallet.totalWithdrawnUSD.toFixed(2)}
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-            <div className="text-[11px] text-zinc-400 font-medium">Security Sentinel</div>
-            <div className="text-lg font-black text-emerald-300 font-mono mt-0.5">
-              AES-GCM-256
-            </div>
-            <div className="text-[10px] text-zinc-400 font-semibold mt-1">
-              Limit: ${nativeWallet.security.dailyDepositLimitUSD.toLocaleString()} / day
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Upstox Demat Gateway & Margin Desk Bar */}
-      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-zinc-900 via-indigo-950 to-zinc-900 text-white border border-indigo-500/30 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner shrink-0">
-            <Zap className="w-5 h-5 text-amber-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm font-bold text-white">Upstox Demat Gateway</h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono uppercase">
-                {accountMode === 'upstox' ? 'Live Upstox Desk (NSE/BSE)' : 'Simulated Paper Desk'}
-              </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                <ShieldCheck className="w-2.5 h-2.5" />
-                IP: 87.76.191.49
-              </span>
-            </div>
-            <p className="text-xs text-zinc-400 font-mono mt-0.5">
-              Authoritative SEBI Broker Gateway • CNC Delivery (1x) &amp; MIS Intraday (Up to 5x Margin)
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-          <div className="text-right hidden sm:block">
-            <div className="text-[10px] text-zinc-400 uppercase font-semibold">Trading Desk Cash</div>
-            <div className="text-sm font-extrabold text-white font-mono">
-              {formatDisplayValue(state.cash)}
-            </div>
-          </div>
           <button
             type="button"
-            onClick={() => {
-              setAllocateMode('allocate');
-              setAllocateModalOpen(true);
-            }}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-2"
+            onClick={() => setGuideModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 border border-black/[0.08] text-zinc-700 text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5"
           >
-            <ArrowLeftRight className="w-3.5 h-3.5" />
-            <span>Deploy Margin to Desk</span>
+            <BookOpen className="w-3.5 h-3.5 text-zinc-500" />
+            <span>Guide</span>
           </button>
         </div>
       </div>
 
-      {/* Main Action Command Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button
-          type="button"
-          onClick={() => setCardModalOpen(true)}
-          className="p-4 rounded-3xl bg-white/90 hover:bg-white border border-zinc-200/80 shadow-sm hover:shadow-md transition-all text-left group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 group-hover:scale-105 transition-transform mb-3">
-            <CreditCard className="w-5 h-5" />
+      {/* Hero Balance Card (Minimalist, High Legibility) */}
+      <div className="p-6 sm:p-7 rounded-3xl bg-white border border-black/[0.07] shadow-xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          
+          {/* Main Balance Typography */}
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              {isUpstox ? 'Available Demat Trading Balance' : 'Sovereign Treasury Valuation'}
+            </span>
+            <div className="text-3xl sm:text-4xl font-bold font-mono tracking-tight text-zinc-950">
+              {isUpstox ? moneyINR(upstoxCash) : formatDisplayValue(totalSovereignNetWorthUSD)}
+            </div>
+            <div className="flex items-center gap-3 text-xs text-zinc-500 pt-1 flex-wrap font-medium">
+              {isUpstox ? (
+                <>
+                  <span>Total Equity: <strong className="text-zinc-900 font-mono">{moneyINR(upstoxTotalEquity)}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span>Used Margin: <strong className="text-zinc-900 font-mono">{moneyINR(upstoxUsedMargin)}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span className="text-emerald-700 font-medium">SEBI Peak Margin Active</span>
+                </>
+              ) : (
+                <>
+                  <span>Liquid Cash: <strong className="text-zinc-900 font-mono">{formatDisplayValue(nativeWallet.balanceUSD)}</strong></span>
+                  <span className="text-zinc-300">•</span>
+                  <span>Desk Allocation: <strong className="text-zinc-900 font-mono">{formatDisplayValue(nativeWallet.allocatedToTradingUSD)}</strong></span>
+                  {deposit24h > 0 && (
+                    <>
+                      <span className="text-zinc-300">•</span>
+                      <span className="text-emerald-600">+${deposit24h.toFixed(2)} 24h</span>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
-          <div className="text-sm font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors">
-            Deposit via Card
-          </div>
-          <div className="text-[11px] text-zinc-500 font-medium mt-0.5">
-            Visa, Mastercard, RuPay
-          </div>
-        </button>
 
-        <button
-          type="button"
-          onClick={() => setUpiModalOpen(true)}
-          className="p-4 rounded-3xl bg-white/90 hover:bg-white border border-zinc-200/80 shadow-sm hover:shadow-md transition-all text-left group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 group-hover:scale-105 transition-transform mb-3">
-            <QrCode className="w-5 h-5" />
-          </div>
-          <div className="text-sm font-bold text-zinc-900 group-hover:text-emerald-600 transition-colors">
-            Deposit via UPI
-          </div>
-          <div className="text-[11px] text-zinc-500 font-medium mt-0.5">
-            Instant QR, BHIM UPI, GPay, Net Banking
-          </div>
-        </button>
+          {/* Clean Primary Actions Row */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setUpiModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-semibold shadow-2xs transition-all active:scale-95 flex items-center gap-2"
+            >
+              <QrCode className="w-4 h-4 text-emerald-400" />
+              <span>Instant UPI</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setAllocateMode('allocate');
-            setAllocateModalOpen(true);
-          }}
-          className="p-4 rounded-3xl bg-white/90 hover:bg-white border border-zinc-200/80 shadow-sm hover:shadow-md transition-all text-left group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 group-hover:scale-105 transition-transform mb-3">
-            <ArrowLeftRight className="w-5 h-5" />
-          </div>
-          <div className="text-sm font-bold text-zinc-900 group-hover:text-amber-600 transition-colors">
-            Allocate to Trading
-          </div>
-          <div className="text-[11px] text-zinc-500 font-medium mt-0.5">
-            Deploy or recall desk cash
-          </div>
-        </button>
+            <button
+              type="button"
+              onClick={() => setCardModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-50 border border-black/[0.1] text-zinc-800 text-xs font-semibold shadow-2xs transition-all active:scale-95 flex items-center gap-2"
+            >
+              <CreditCard className="w-4 h-4 text-zinc-500" />
+              <span>Card</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setWithdrawModalOpen(true)}
-          className="p-4 rounded-3xl bg-white/90 hover:bg-white border border-zinc-200/80 shadow-sm hover:shadow-md transition-all text-left group"
-        >
-          <div className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 group-hover:scale-105 transition-transform mb-3">
-            <ArrowUpFromLine className="w-5 h-5" />
+            <button
+              type="button"
+              onClick={() => {
+                setAllocateMode('allocate');
+                setAllocateModalOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-50 border border-black/[0.1] text-zinc-800 text-xs font-semibold shadow-2xs transition-all active:scale-95 flex items-center gap-2"
+            >
+              <ArrowLeftRight className="w-4 h-4 text-indigo-600" />
+              <span>Deploy Margin</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setWithdrawModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-50 border border-black/[0.1] text-zinc-800 text-xs font-semibold shadow-2xs transition-all active:scale-95 flex items-center gap-2"
+            >
+              <ArrowUpFromLine className="w-4 h-4 text-zinc-500" />
+              <span>Withdraw</span>
+            </button>
+
+            {!isUpstox && (
+              <button
+                type="button"
+                onClick={handleQuickDemoFund}
+                className="px-3 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-semibold transition-all active:scale-95 flex items-center gap-1.5"
+                title="Credit $1,000 virtual sandbox funding"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                <span>+ $1K Test</span>
+              </button>
+            )}
+
+            {isUpstox && (
+              <button
+                type="button"
+                onClick={() => openGrievanceModal()}
+                className="px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 text-xs font-semibold transition-all active:scale-95 flex items-center gap-1.5"
+                title="Statutory SEBI Grievance Desk"
+              >
+                <LifeBuoy className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Grievance</span>
+              </button>
+            )}
           </div>
-          <div className="text-sm font-bold text-zinc-900 group-hover:text-slate-900 transition-colors">
-            Withdraw Funds
-          </div>
-          <div className="text-[11px] text-zinc-500 font-medium mt-0.5">
-            Transfer to Bank, Card, UPI
-          </div>
-        </button>
+        </div>
       </div>
 
-      {/* Upstox Margin Allocation & Saved Payment Methods Grid */}
+      {/* 3 Minimalist Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-black/[0.06] shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-zinc-500">Liquid Purchasing Power</span>
+            <Wallet className="w-4 h-4 text-zinc-400" />
+          </div>
+          <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-zinc-950 mt-1">
+            {isUpstox ? moneyINR(upstoxCash) : formatDisplayValue(nativeWallet.balanceUSD)}
+          </div>
+          <div className="text-[11px] text-emerald-600 font-medium mt-1.5 flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            <span>Instant settlement • No lockup</span>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-black/[0.06] shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-zinc-500">
+              {isUpstox ? 'Active Upstox Margin' : 'Desk Allocated Funds'}
+            </span>
+            <ArrowLeftRight className="w-4 h-4 text-indigo-500" />
+          </div>
+          <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-zinc-950 mt-1">
+            {isUpstox ? moneyINR(upstoxUsedMargin) : formatDisplayValue(nativeWallet.allocatedToTradingUSD)}
+          </div>
+          <div className="text-[11px] text-zinc-500 font-medium mt-1.5">
+            {isUpstox ? 'MIS Intraday & F&O leverage' : `Desk cash: $${state.cash.toFixed(2)}`}
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-black/[0.06] shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-zinc-500">Security &amp; Encryption</span>
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-zinc-950 mt-1">
+            AES-GCM-256
+          </div>
+          <div className="text-[11px] text-zinc-500 font-medium mt-1.5">
+            {isUpstox ? 'Static IP (87.76.191.49) • SEBI Demat' : `Daily limit: $${nativeWallet.security.dailyDepositLimitUSD.toLocaleString()}`}
+          </div>
+        </div>
+      </div>
+
+      {/* Margin Allocation & Saved Vault (2 Columns) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Upstox Margin Allocation Terminal */}
-        <div className="lg:col-span-2 p-6 rounded-[28px] bg-white/90 backdrop-blur-xl border border-zinc-200/80 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="font-bold text-zinc-900 text-sm">Upstox Margin &amp; Segment Allocation</h3>
-                <p className="text-xs text-zinc-500">
-                  Allocate Demat treasury funds into active intraday, delivery, or F&amp;O margin
-                </p>
-              </div>
+        {/* Upstox Margin Allocation Terminal (2 cols) */}
+        <div className="lg:col-span-2 p-5 sm:p-6 rounded-3xl bg-white border border-black/[0.06] shadow-2xs space-y-4">
+          <div className="flex items-center justify-between border-b border-black/[0.05] pb-3.5">
+            <div>
+              <h3 className="font-bold text-zinc-950 text-sm">
+                Upstox Margin &amp; Segment Allocation
+              </h3>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Allocate Demat funds across cash delivery, intraday leverage, or F&amp;O derivatives.
+              </p>
             </div>
-            <div className="text-xs font-semibold text-zinc-500">
-              Treasury Liquid: <strong className="text-zinc-900 font-mono">{formatDisplayValue(nativeWallet.balanceUSD)}</strong>
-            </div>
+            <span className="text-[11px] font-semibold text-zinc-400 font-mono hidden sm:inline">
+              CNC 1x • MIS 5x
+            </span>
           </div>
 
           <form
@@ -447,9 +439,9 @@ export function WalletPage() {
             }}
             className="space-y-4"
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-zinc-600">Allocation Amount (INR ₹)</label>
+                <label className="text-xs font-semibold text-zinc-600">Allocation Amount (₹ INR)</label>
                 <input
                   type="number"
                   step="100"
@@ -457,55 +449,55 @@ export function WalletPage() {
                   value={allocAmountINR}
                   onChange={(e) => setAllocAmountINR(e.target.value)}
                   placeholder="25000"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 text-sm font-semibold font-mono outline-none transition-colors"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-zinc-600">Target Trading Segment</label>
+                <label className="text-xs font-semibold text-zinc-600">Trading Segment</label>
                 <select
                   value={allocSegment}
                   onChange={(e) => setAllocSegment(e.target.value as any)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold outline-none bg-white"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 text-xs sm:text-sm font-medium outline-none bg-white transition-colors"
                 >
-                  <option value="EQUITY_INTRADAY">NSE/BSE Equity Intraday (MIS - 5x Leverage)</option>
-                  <option value="EQUITY_DELIVERY">NSE/BSE Cash Delivery (CNC - 1x Cash)</option>
-                  <option value="FNO_DERIVATIVES">NSE F&amp;O Derivatives (Index &amp; Stock Options/Futures)</option>
+                  <option value="EQUITY_INTRADAY">Equity Intraday (MIS - 5x Leverage)</option>
+                  <option value="EQUITY_DELIVERY">Cash Delivery (CNC - 1x Cash)</option>
+                  <option value="FNO_DERIVATIVES">F&amp;O Derivatives (Options/Futures)</option>
                 </select>
               </div>
             </div>
 
-            {/* Margin Leverage & Effective Buying Power Preview */}
-            <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-600 flex items-center justify-between">
-              <div>
-                <span className="text-zinc-500">Effective Buying Power: </span>
-                <strong className="text-zinc-900 font-mono font-bold">
+            {/* Buying Power Calculation Strip */}
+            <div className="p-3.5 rounded-xl bg-zinc-50 border border-black/[0.05] flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 font-medium">Effective Buying Power:</span>
+                <strong className="text-zinc-950 font-mono font-bold text-sm">
                   ₹{((parseFloat(allocAmountINR) || 0) * (allocSegment === 'EQUITY_INTRADAY' ? 5 : 1)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </strong>
                 {allocSegment === 'EQUITY_INTRADAY' && (
-                  <span className="ml-1.5 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[10px]">
-                    5x MIS Margin
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700">
+                    5x MIS
                   </span>
                 )}
               </div>
-              <div className="text-[11px] text-zinc-400">
-                SEBI Peak Margin Compliant | 0% Brokerage on Equity Delivery
-              </div>
+              <span className="text-[11px] text-zinc-400 hidden sm:inline">
+                SEBI Peak Margin Compliant
+              </span>
             </div>
 
             <button
               type="submit"
               disabled={isAllocatingMargin || (parseFloat(allocAmountINR) || 0) <= 0}
-              className="w-full py-3 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-semibold text-xs shadow-2xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98"
             >
               {isAllocatingMargin ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   <span>Deploying Margin...</span>
                 </>
               ) : (
                 <>
-                  <Zap className="w-4 h-4 text-amber-400" />
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
                   <span>
                     Deploy ₹{(parseFloat(allocAmountINR) || 0).toLocaleString('en-IN')} Margin to Upstox Desk
                   </span>
@@ -515,15 +507,15 @@ export function WalletPage() {
           </form>
         </div>
 
-        {/* Saved Tokenized Payment Methods Vault */}
-        <div className="p-6 rounded-[28px] bg-white/90 backdrop-blur-xl border border-zinc-200/80 shadow-sm space-y-4 flex flex-col justify-between">
+        {/* Saved Tokenized Payment Methods Vault (1 col) */}
+        <div className="p-5 sm:p-6 rounded-3xl bg-white border border-black/[0.06] shadow-2xs space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-black/[0.05] pb-3">
               <div className="flex items-center gap-2 font-bold text-zinc-900 text-sm">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Saved Payment Vault</span>
+                <span>Payment Vault</span>
               </div>
-              <span className="text-[10px] font-bold text-zinc-400">
+              <span className="text-[11px] font-semibold text-zinc-400 font-mono">
                 {nativeWallet.savedPaymentMethods.length} Methods
               </span>
             </div>
@@ -532,29 +524,29 @@ export function WalletPage() {
               Encrypted credentials stored safely on device via Web Crypto AES-GCM.
             </p>
 
-            <div className="space-y-2 max-h-[220px] overflow-y-auto">
+            <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
               {nativeWallet.savedPaymentMethods.length === 0 ? (
-                <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200/60 text-center text-xs text-zinc-400 space-y-2">
-                  <CreditCard className="w-6 h-6 mx-auto text-zinc-300" />
-                  <div>No saved cards or VPAs yet.</div>
+                <div className="p-5 rounded-2xl border border-dashed border-zinc-200 text-center text-xs text-zinc-400 space-y-1.5">
+                  <CreditCard className="w-5 h-5 mx-auto text-zinc-300" />
+                  <div className="font-medium text-zinc-500">No saved methods</div>
                   <div className="text-[10px] text-zinc-400">
-                    Enable &quot;Save safely in local device vault&quot; during deposit.
+                    Enable &quot;Save safely in local vault&quot; on your next deposit.
                   </div>
                 </div>
               ) : (
                 nativeWallet.savedPaymentMethods.map((m) => (
                   <div
                     key={m.id}
-                    className="p-3 rounded-2xl bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-200/80 flex items-center justify-between text-xs transition-colors"
+                    className="p-3 rounded-xl bg-zinc-50 hover:bg-zinc-100/80 border border-black/[0.04] flex items-center justify-between text-xs transition-colors"
                   >
                     <div className="flex items-center gap-2.5">
                       {m.type === 'card' ? (
-                        <CreditCard className="w-4 h-4 text-indigo-600" />
+                        <CreditCard className="w-4 h-4 text-zinc-600" />
                       ) : (
                         <Smartphone className="w-4 h-4 text-emerald-600" />
                       )}
                       <div>
-                        <div className="font-bold text-zinc-900">{m.label}</div>
+                        <div className="font-semibold text-zinc-900">{m.label}</div>
                         <div className="text-[10px] text-zinc-400">
                           Added {new Date(m.createdAt).toLocaleDateString()}
                         </div>
@@ -564,7 +556,7 @@ export function WalletPage() {
                       type="button"
                       onClick={() => deletePaymentMethod(m.id)}
                       className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                      title="Delete saved method"
+                      title="Remove method"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -574,53 +566,33 @@ export function WalletPage() {
             </div>
           </div>
 
-          {/* Conditional Demo Sandbox Funding or Grievance Redressal */}
-          <div className="pt-3 border-t border-zinc-100">
-            {accountMode === 'paper' ? (
-              <button
-                type="button"
-                onClick={handleQuickDemoFund}
-                className="w-full py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition-all flex items-center justify-center gap-2"
-                title="Credit $1,000 virtual simulated test balance to paper wallet"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>+ $1,000 Sandbox Test Deposit (Virtual)</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => openGrievanceModal()}
-                className="w-full py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/80 text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-2xs"
-                title="Open official statutory grievance and transaction dispute desk"
-              >
-                <LifeBuoy className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Grievance Desk &amp; Dispute Resolution</span>
-              </button>
-            )}
+          <div className="pt-3 border-t border-black/[0.05] text-[11px] text-zinc-400 flex items-center gap-1.5">
+            <Lock className="w-3 h-3 text-zinc-400" />
+            <span>Zero server-side plaintext storage.</span>
           </div>
         </div>
       </div>
 
-      {/* Double-Entry Cryptographic Ledger Table */}
-      <div className="p-6 rounded-[28px] bg-white/90 backdrop-blur-xl border border-zinc-200/80 shadow-sm space-y-4">
+      {/* Cryptographic Audit Ledger Table */}
+      <div className="p-5 sm:p-6 rounded-3xl bg-white border border-black/[0.06] shadow-2xs space-y-4">
         
         {/* Ledger Header & Search Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-bold text-zinc-900 text-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-black/[0.05] pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-zinc-950 text-sm">
                 Cryptographic Audit Ledger
               </h3>
-              <p className="text-xs text-zinc-500">
-                Immutable double-entry transaction record with SHA-256 receipts
-              </p>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 font-mono">
+                SHA-256 Receipts
+              </span>
             </div>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Tamper-evident financial record of all deposits, withdrawals, and allocations.
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Search */}
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-2.5" />
@@ -629,7 +601,7 @@ export function WalletPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search transactions..."
-                className="pl-8 pr-3 py-1.5 rounded-xl border border-zinc-200 text-xs font-medium outline-none focus:border-indigo-500 w-44 sm:w-56"
+                className="pl-8 pr-3 py-1.5 rounded-xl border border-zinc-200 text-xs font-medium outline-none focus:border-zinc-900 w-44 sm:w-52 transition-colors"
               />
             </div>
 
@@ -638,10 +610,10 @@ export function WalletPage() {
               type="button"
               onClick={handleDownloadCsv}
               disabled={nativeWallet.transactions.length === 0}
-              className="px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-xs font-bold text-zinc-700 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-xs font-semibold text-zinc-700 transition-colors flex items-center gap-1.5 disabled:opacity-40"
               title="Export RFC 4180 CSV spreadsheet"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3.5 h-3.5 text-zinc-500" />
               <span>CSV</span>
             </button>
 
@@ -650,11 +622,11 @@ export function WalletPage() {
               type="button"
               onClick={handleDownloadAuditJson}
               disabled={nativeWallet.transactions.length === 0}
-              className="px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-xs font-bold text-zinc-700 transition-colors flex items-center gap-1.5 disabled:opacity-40"
-              title="Export tamper-evident JSON audit ledger"
+              className="px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-xs font-semibold text-zinc-700 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+              title="Export tamper-evident JSON audit statement"
             >
               <FileText className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Audit JSON</span>
+              <span>JSON</span>
             </button>
           </div>
         </div>
@@ -671,10 +643,10 @@ export function WalletPage() {
               key={cat.id}
               type="button"
               onClick={() => setFilterCategory(cat.id as any)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                 filterCategory === cat.id
-                  ? 'bg-zinc-900 text-white shadow-sm'
-                  : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600'
+                  ? 'bg-zinc-950 text-white shadow-2xs'
+                  : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600'
               }`}
             >
               {cat.label}
@@ -685,84 +657,78 @@ export function WalletPage() {
         {/* Transactions Table */}
         <div className="overflow-x-auto">
           {filteredTxs.length === 0 ? (
-            <div className="p-12 text-center text-xs text-zinc-400 space-y-3">
-              <Wallet className="w-10 h-10 mx-auto text-zinc-300" />
-              <div>No transactions found matching the selected filter.</div>
+            <div className="py-12 text-center text-xs text-zinc-400 space-y-3">
+              <Wallet className="w-8 h-8 mx-auto text-zinc-300" />
+              <div className="text-zinc-500 font-medium">No transactions found matching your criteria.</div>
               <button
                 type="button"
-                onClick={() => setCardModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm transition-all"
+                onClick={() => setUpiModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-semibold text-xs shadow-2xs transition-all"
               >
-                + Make First Deposit
+                + Fund Wallet
               </button>
             </div>
           ) : (
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-zinc-200/80 text-[11px] uppercase font-bold text-zinc-400">
-                  <th className="py-3 px-3">Date & Time</th>
-                  <th className="py-3 px-3">Type</th>
-                  <th className="py-3 px-3">Amount</th>
-                  <th className="py-3 px-3">USD Equivalent</th>
-                  <th className="py-3 px-3">Method / Details</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3 text-right">Receipt Hash (SHA-256)</th>
-                  <th className="py-3 px-3 text-right">Redressal</th>
+                <tr className="border-b border-black/[0.06] text-[11px] uppercase font-semibold text-zinc-400">
+                  <th className="py-2.5 px-3">Date &amp; Time</th>
+                  <th className="py-2.5 px-3">Type</th>
+                  <th className="py-2.5 px-3">Amount</th>
+                  <th className="py-2.5 px-3">USD Val</th>
+                  <th className="py-2.5 px-3">Description</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">SHA-256 Receipt</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-black/[0.04]">
                 {filteredTxs.map((tx) => {
                   const isDeposit = tx.type === 'deposit';
                   const isWithdrawal = tx.type === 'withdrawal';
                   const isAlloc = tx.type === 'allocate_to_trading';
                   const isRecall = tx.type === 'recall_from_trading';
-                  const isSwap = tx.type === 'swap_crypto';
 
                   return (
-                    <tr key={tx.id} className="hover:bg-zinc-50/70 transition-colors">
+                    <tr key={tx.id} className="hover:bg-zinc-50/80 transition-colors">
                       <td className="py-3 px-3 whitespace-nowrap text-zinc-500 font-mono text-[11px]">
                         {new Date(tx.timestamp).toLocaleString()}
                       </td>
 
                       <td className="py-3 px-3 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-semibold text-[10px] ${
                             isDeposit
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
                               : isWithdrawal
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
                               : isAlloc
-                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                              : isRecall
-                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                              : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                              : 'bg-zinc-100 text-zinc-700 border border-zinc-200/60'
                           }`}
                         >
-                          {isDeposit && <CreditCard className="w-3 h-3" />}
-                          {isWithdrawal && <ArrowUpFromLine className="w-3 h-3" />}
-                          {isAlloc && <ArrowLeftRight className="w-3 h-3" />}
-                          {isRecall && <RefreshCw className="w-3 h-3" />}
-                          {isSwap && <Zap className="w-3 h-3" />}
                           <span className="capitalize">{tx.type.replace(/_/g, ' ')}</span>
                         </span>
                       </td>
 
-                      <td className="py-3 px-3 font-mono font-bold text-zinc-900 whitespace-nowrap">
-                        {isDeposit || isRecall ? '+' : '-'}
-                        {formatCurrencyAmount(tx.amount, tx.currency)}
+                      <td className="py-3 px-3 font-mono font-semibold text-zinc-950 whitespace-nowrap">
+                        <span className={isDeposit || isRecall ? 'text-emerald-700' : 'text-zinc-900'}>
+                          {isDeposit || isRecall ? '+' : '-'}
+                          {formatCurrencyAmount(tx.amount, tx.currency)}
+                        </span>
                       </td>
 
-                      <td className="py-3 px-3 font-mono text-zinc-600 whitespace-nowrap">
+                      <td className="py-3 px-3 font-mono text-zinc-500 whitespace-nowrap">
                         ${tx.amountUSD.toFixed(2)}
                       </td>
 
-                      <td className="py-3 px-3 text-zinc-700 max-w-xs truncate">
+                      <td className="py-3 px-3 text-zinc-600 max-w-xs truncate font-medium">
                         {tx.description}
                       </td>
 
                       <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 text-emerald-600 font-bold text-[11px]">
-                          <CheckCircle2 className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold text-[11px]">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Settled</span>
                         </span>
                       </td>
@@ -771,14 +737,14 @@ export function WalletPage() {
                         <button
                           type="button"
                           onClick={() => handleCopyHash(tx.txHash)}
-                          className="font-mono text-[11px] text-zinc-400 hover:text-zinc-700 hover:underline inline-flex items-center gap-1"
+                          className="font-mono text-[11px] text-zinc-400 hover:text-zinc-700 inline-flex items-center gap-1 transition-colors"
                           title="Click to copy SHA-256 hash"
                         >
                           <span>{tx.txHash.slice(0, 10)}...</span>
                           {copiedHash === tx.txHash ? (
                             <Check className="w-3 h-3 text-emerald-600" />
                           ) : (
-                            <Copy className="w-3 h-3 text-zinc-300" />
+                            <Copy className="w-3 h-3 text-zinc-300 hover:text-zinc-500" />
                           )}
                         </button>
                       </td>
@@ -790,8 +756,6 @@ export function WalletPage() {
                             openGrievanceModal({
                               category: isDeposit
                                 ? 'upi_deposit_pending'
-                                : isSwap
-                                ? 'general_inquiry'
                                 : isWithdrawal
                                 ? 'general_inquiry'
                                 : 'unauthorized_activity',
@@ -801,14 +765,13 @@ export function WalletPage() {
                               relatedUtr: tx.paymentDetails?.referenceNumber || '',
                               relatedTxHash: tx.txHash,
                               amountUSD: tx.amountUSD,
-                              amountINR: tx.currency === 'INR' ? tx.amount : tx.amountUSD * (1 / PAPER_SIMULATION_FX_RATES_TO_USD['INR']),
+                              amountINR: tx.currency === 'INR' ? tx.amount : tx.amountUSD * simulationRateINR,
                             })
                           }
-                          className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-[11px] border border-indigo-200/60 inline-flex items-center gap-1 transition-colors shadow-2xs active:scale-95"
-                          title="Raise formal dispute or grievance ticket for this transaction"
+                          className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 font-semibold text-[11px] transition-colors"
+                          title="Raise formal dispute or grievance ticket"
                         >
-                          <LifeBuoy className="w-3 h-3 text-indigo-500" />
-                          <span>Dispute</span>
+                          Dispute
                         </button>
                       </td>
                     </tr>
