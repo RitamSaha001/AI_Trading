@@ -39,6 +39,9 @@ import {
   estimateOrnsteinUhlenbeck,
   estimateGarchVolatility,
   runKalmanFilter,
+  calculateTTMSqueeze,
+  calculateHalfKellyFraction,
+  getAssetSector,
   QuantDialogueEngine,
 } from './quantEngine';
 
@@ -105,7 +108,7 @@ export function queryNexusDeterministicQuant(
 
   if (isAgenticTask) {
     const danger = senseMarketDanger(state, markets);
-    const alphaComp = compareTokensAlpha(['BTC', 'ETH', 'SOL', 'AVAX'] as Asset[], markets);
+    const alphaComp = compareTokensAlpha(['RELIANCE', 'TCS', 'HDFCBANK', 'INFY'] as Asset[], markets);
     const rebalancePlan = calculateAgenticAllocation(state, markets, 'risk_parity');
     const topAlpha = alphaComp.topAlphaAsset;
     const topAlphaPrice = markets[topAlpha]?.price;
@@ -618,14 +621,11 @@ Review and authorize the emergency capital defense reallocation below to secure 
     };
   }
 
-  // C3. Perpetual Swaps, Funding Rates & Delta-Neutral Basis
+  // C3a. Perpetual Swaps, Funding Rates & Crypto Basis Microstructure
   if (
     q.includes('funding') ||
     q.includes('perp') ||
-    q.includes('cash-and-carry') ||
-    q.includes('basis yield') ||
-    q.includes('basis trade') ||
-    q.includes('open interest')
+    (q.includes('swap') && q.includes('rate'))
   ) {
     const btcSpotStr = markets.BTC?.price ? `$${markets.BTC.price.toLocaleString()}` : '[Feed Unavailable]';
     const reply = `### Perpetual Swaps & Funding Rate Microstructure
@@ -662,7 +662,49 @@ When funding rates exceed $+0.08\\%$ ($>87\\%$ APR), funding fatigue typically i
     };
   }
 
-  // C4. Market Making, MEV & Sandwich Attack Microstructure
+  // C3b. NSE Equities & Futures Cash-and-Carry Basis Microstructure
+  if (
+    q.includes('cash-and-carry') ||
+    q.includes('basis yield') ||
+    q.includes('basis trade') ||
+    q.includes('open interest') ||
+    q.includes('futures basis') ||
+    (q.includes('futures') && q.includes('basis')) ||
+    q.includes('cost of carry')
+  ) {
+    const spotStr = markets.RELIANCE?.price ? `₹${markets.RELIANCE.price.toLocaleString('en-IN')}` : `₹${money(spotVal)}`;
+    const reply = `### NSE Equities & Futures Cash-and-Carry Basis Microstructure
+
+In Indian derivatives markets, National Stock Exchange (NSE) stock and index futures trade with an annualized cost-of-carry spread relative to underlying cash spot:
+
+- **Spot Benchmark (RELIANCE)**: ${spotStr}
+- **Current Near-Month Futures Premium**: $+0.58\\%$ ($+6.96\\%$ annualized basis)
+- **Market Bias**: \`Contango Premium (Constructive Carry)\`
+
+#### 1. Theoretical Cost-of-Carry Formulation
+$$F_t = S_t \\cdot e^{(r - q) \\cdot (T - t)}$$
+$$\\text{Annualized Basis Yield} = \\frac{F_t - S_t}{S_t} \\cdot \\frac{365}{D_{\\text{expiry}}}$$
+Where $r = 6.50\\%$ (RBI risk-free repo rate), $q$ is the continuous dividend yield, and $D_{\\text{expiry}}$ is calendar days to monthly expiry.
+
+#### 2. Institutional Cash-and-Carry Arbitrage
+Quantitative prop desks harvest risk-free alpha through delta-neutral cash-and-carry convergence:
+1. Buy spot shares in cash delivery (CNC): $\\Delta_{\\text{spot}} = +1.0$
+2. Sell matching quantity in monthly stock futures: $\\Delta_{\\text{fut}} = -1.0$
+$$\\Delta_{\\text{net}} = +1.0 - 1.0 = 0 \\quad (\\text{Zero directional equity market risk})$$
+
+On expiry Thursday, futures settle strictly to spot VWAP ($F_T = S_T$), locking in the $7.0\\%$ annualized risk-free carry without taking directional market exposure.
+
+#### 3. Capital Defense & Margin Invariants
+Holding intraday (MIS) or carry positions requires maintaining a **15% liquid cash reserve** to insulate against mark-to-market (MTM) margin calls during sudden index volatility spikes.`;
+
+    return {
+      reply,
+      actionProposal: null,
+      engine: ENGINE_LABEL,
+    };
+  }
+
+  // C4a. Market Making, MEV & Sandwich Attack Microstructure
   if (
     q.includes('mev') ||
     q.includes('sandwich') ||
@@ -709,6 +751,47 @@ Where $\\sigma$ is the asset price volatility and $V_t$ is pool TVL. High volati
     };
   }
 
+  // C4b. High-Frequency Market Microstructure: OFI & Kyle's Lambda (NSE Equities)
+  if (
+    q.includes('microstructure') ||
+    q.includes('order flow') ||
+    q.includes('ofi') ||
+    q.includes('kyle') ||
+    q.includes('amihud') ||
+    q.includes('slippage') ||
+    (q.includes('market maker') && q.includes('impact'))
+  ) {
+    const spotStr = markets.RELIANCE?.price ? `₹${markets.RELIANCE.price.toLocaleString('en-IN')}` : `₹${money(spotVal)}`;
+    const reply = `### High-Frequency Market Microstructure: OFI & Kyle's Lambda
+
+Evaluating top-of-book order flow dynamics and liquidity resilience for Indian Equities on the National Stock Exchange (NSE):
+
+- **Benchmark Spot (RELIANCE)**: ${spotStr}
+- **Authoritative Tick Size**: ₹0.05
+- **Toxic Flow Metric**: Order Flow Imbalance (OFI) & Kyle's Lambda ($\\lambda$)
+
+#### 1. Kyle's Lambda ($\\lambda$) Price Impact Regression
+$$\\Delta P_t = \\lambda \\cdot Q_t + \\epsilon_t, \\quad \\lambda = \\frac{\\text{Cov}(\\Delta P, Q)}{\\text{Var}(Q)}$$
+Where $Q_t$ represents signed net order volume. A lower $\\lambda$ indicates deep institutional liquidity where large block trades execute with minimal market impact.
+
+#### 2. Order Flow Imbalance (OFI)
+$$\\text{OFI}_t = \\Delta L_{1,t}^{\\text{bid}} - \\Delta L_{1,t}^{\\text{ask}}$$
+Tracking queue size variations at best bid ($L_1^B$) and best ask ($L_1^A$) provides sub-second lead signals on pending price increments:
+- **Positive OFI ($>0$)**: Aggressive institutional bid absorption. High probability of upward tick progression.
+- **Negative OFI ($<0$)**: Aggressive ask pressure. Pre-empts downward slippage.
+
+#### 3. Almgren-Chriss Optimal Execution
+To liquidate or accumulate large positions without moving the market, order dispatch follows the hyperbolic trajectory:
+$$n_j = \\frac{2 \\sinh(\\kappa \\tau / 2)}{\\sinh(\\kappa T)} \\cosh\\left(\\kappa(T - (j - 1/2)\\tau)\\right) X$$
+Balancing instantaneous market impact against timing risk.`;
+
+    return {
+      reply,
+      actionProposal: null,
+      engine: ENGINE_LABEL,
+    };
+  }
+
   // C5. Options Skew, Volatility Surface & Greeks
   if (
     q.includes('skew') ||
@@ -719,20 +802,21 @@ Where $\\sigma$ is the asset price volatility and $V_t$ is pool TVL. High volati
     q.includes('greeks') ||
     q.includes('put-call')
   ) {
-    const btcSpotStr = markets.BTC?.price ? `$${markets.BTC.price.toLocaleString()}` : '[Feed Unavailable]';
+    const spotStr = markets.RELIANCE?.price ? `₹${markets.RELIANCE.price.toLocaleString('en-IN')}` : `₹${money(spotVal)}`;
     const reply = `### Options Volatility Surface & Institutional Skew Analysis
 
-In derivatives markets, options pricing surfaces reveal forward-looking risk premia and institutional downside hedging demand that cannot be seen on spot charts:
+In Indian derivatives markets, Nifty 50 and stock options volatility surfaces reveal institutional hedging posture and tail-risk pricing:
 
-- **Underlying Index Spot**: ${btcSpotStr}
-- **30-Day Realized Volatility**: $\\sigma_{\\text{real}} \\approx ${(primaryInd.vol * Math.sqrt(365) * 100).toFixed(1)}\\%$
-- **Market Skew Regime**: \`Elevated Tail-Risk Hedging\`
+- **Underlying Benchmark Spot**: ${spotStr}
+- **Annualized Realized Volatility**: $\\sigma_{\\text{real}} \\approx ${(primaryInd.vol * Math.sqrt(252) * 100).toFixed(1)}\\%$
+- **India VIX Benchmark**: $\\approx 13.5$ (Constructive / Low-Stress Regime)
 
 #### 1. The Volatility Smile & 25-Delta Skew
-The Black-Scholes model assumes log-normal returns with constant volatility $\\sigma$. However, real market pricing exhibits fat tails (kurtosis) and negative asymmetry (skew):
+The Black-Scholes model assumes constant log-normal volatility $\\sigma$. In live NSE options trading, implied volatility exhibits structural skew:
 $$\\text{25-Delta Put-Call Skew} = \\text{IV}_{\\text{25\\% Put}} - \\text{IV}_{\\text{25\\% Call}}$$
 
-- **Steep Positive Skew ($>+5\\%$)**: Put options command a massive premium over calls. Institutions are paying up aggressively for out-of-the-money crash protection.
+- **Steep Positive Skew ($>+4\\%$)**: OTM Puts trade at elevated IV. Institutions are paying high premia for downside tail-risk insurance.
+- **Flat / Negative Skew**: Call skew dominates, signaling strong speculative upward momentum.
 - **Flat or Negative Skew ($<0\\%$)**: Call options trade at a premium, signaling retail FOMO and upside speculative leverage.
 
 #### 2. Analytical Black-Scholes Pricing & Key Greeks
@@ -926,11 +1010,11 @@ In high-volatility sideways markets, concentrated v3 ranges maximize fee velocit
     };
   }
 
-  // C10. Macroeconomics, Global M2 & Bitcoin Halving
+  // C10a. Macroeconomics, Global M2 & Bitcoin Halving
   if (
     q.includes('halving') ||
     (q.includes('m2') && q.includes('liquidity')) ||
-    (q.includes('macro') && (q.includes('cycle') || q.includes('bitcoin') || q.includes('btc') || q.includes('rate')))
+    (q.includes('macro') && (q.includes('cycle') || q.includes('bitcoin') || q.includes('btc')))
   ) {
     const btcP = markets.BTC?.price;
     const btcSpotStr = btcP ? `$${btcP.toLocaleString()}` : '[Feed Unavailable]';
@@ -960,6 +1044,46 @@ When net ETF inflows average $\\$200\\text{M}+/\\text{day}$, demand outstrips st
 
 #### 4. Institutional Risk Posture
 Quantitative risk models mandate holding at least **15% liquid USD cash buffer** to harvest asymmetric mispricings during liquidity-driven flash drawdowns.`;
+
+    return {
+      reply,
+      actionProposal: null,
+      engine: ENGINE_LABEL,
+    };
+  }
+
+  // C10b. Macroeconomics, RBI Monetary Policy & Institutional Liquidity
+  if (
+    q.includes('rbi') ||
+    q.includes('repo') ||
+    q.includes('g-sec') ||
+    q.includes('fii') ||
+    q.includes('dii') ||
+    q.includes('inflation') ||
+    (q.includes('macro') && (q.includes('india') || q.includes('nifty') || q.includes('rate') || q.includes('economic')))
+  ) {
+    const spotStr = markets.RELIANCE?.price ? `₹${markets.RELIANCE.price.toLocaleString('en-IN')}` : `₹${money(spotVal)}`;
+    const reply = `### Indian Macroeconomic Cycle & Institutional Liquidity Dynamics
+
+Indian equity valuations sit at the intersection of domestic capital formation, RBI policy transmission, and foreign institutional liquidity:
+
+- **Benchmark Equity Spot (RELIANCE)**: ${spotStr}
+- **RBI Repo Rate**: $6.50\\%$ (Neutral / Calibrated Policy Stance)
+- **India VIX Benchmark**: $\\approx 13.5$ (Low-Stress Environment)
+- **Nifty 50 Forward P/E**: $\\approx 22.4\\times$ (Fair Value Zone)
+
+#### 1. RBI Monetary Policy Transmission & Yield Curve
+$$R_{\\text{repo}} = 6.50\\%, \\quad \\text{10-Year G-Sec Yield} \\approx 6.95\\%$$
+The equity risk premium (ERP) over sovereign debt:
+$$\\text{ERP} = \\frac{1}{\\text{P/E}_{\\text{Nifty}}} - Y_{\\text{G-Sec}} = \\frac{1}{22.4} - 0.0695 \\approx -2.48\\%$$
+Narrowing yield spreads suggest equity upside is driven primarily by corporate earnings growth rather than monetary multiple expansion.
+
+#### 2. Institutional Net Liquidity Absorption (FII / DII)
+$$\\Delta \\text{Net Institutional Flow} = \\text{Net DII Inflows} + \\text{Net FII Inflows}$$
+Domestic mutual fund SIP inflows ($\approx ₹21,000\\text{ Cr/month}$) provide permanent structural liquidity absorption, insulating Indian markets from sudden foreign capital flight.
+
+#### 3. Capital Defense Invariants
+Quantitative risk sentinels enforce maintaining a **15% liquid cash reserve** to exploit asymmetric mean-reversion pullbacks during macro RBI rate decisions and budget sessions.`;
 
     return {
       reply,
@@ -1046,6 +1170,10 @@ Authorize this Smart Value-Weighted DCA plan below to initiate disciplined progr
   // C13. Portfolio Rebalancing & Kelly Criterion
   if (
     !q.includes('dca') &&
+    !q.includes('squeeze') &&
+    !q.includes('ttm') &&
+    !q.includes('half-kelly') &&
+    !q.includes('keltner') &&
     (q.includes('rebalance') ||
       q.includes('kelly') ||
       q.includes('parity') ||
@@ -1079,7 +1207,7 @@ Authorize in the Safety Gate to execute the sell orders first, freeing up liquid
     };
   }
 
-  // C14. Token Comparison & Alpha Radar
+  // C14. Multi-Asset Alpha Radar (Indian Bluechip Fleet)
   if (
     q.includes('compare') ||
     q.includes('versus') ||
@@ -1088,19 +1216,21 @@ Authorize in the Safety Gate to execute the sell orders first, freeing up liquid
     q.includes('alpha') ||
     q.includes('relative')
   ) {
-    const targets = mentionedAssets.length >= 2 ? mentionedAssets.slice(0, 4) : (['BTC', 'ETH', 'SOL', 'AVAX'] as Asset[]);
+    const targets = mentionedAssets.length >= 2
+      ? mentionedAssets.slice(0, 4)
+      : (['RELIANCE', 'TCS', 'HDFCBANK', 'INFY'] as Asset[]);
     const comp = compareTokensAlpha(targets, markets);
 
-    const reply = `### Multi-Asset Alpha Radar & Risk-Adjusted Comparison
+    const reply = `### Multi-Asset Alpha Radar & Institutional Comparison (NSE Fleet)
 
-Cross-sectional statistical evaluation across target assets:
+Cross-sectional statistical evaluation across target Indian bluechips:
 
-| Asset | Price | 24h Change | RSI (14) | Ann. Vol | Sharpe ($R_f=4\\%$) | Beta (BTC) | Regime |
+| Asset | Price | 24h Change | RSI (14) | Ann. Vol | Sharpe ($R_f=6.5\\%$) | Beta (Nifty) | Regime |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-${comp.tokens.map((t) => `| **${t.asset}** | ${money(t.price)} | ${t.change24h >= 0 ? '+' : ''}${t.change24h}% | ${t.rsi} | ${t.volAnnualizedPct}% | ${t.sharpeEstimate} | ${t.betaToBtc} | \`${t.regime}\` |`).join('\n')}
+${comp.tokens.map((t) => `| **${t.asset}** | ₹${money(t.price)} | ${t.change24h >= 0 ? '+' : ''}${t.change24h}% | ${t.rsi} | ${t.volAnnualizedPct}% | ${t.sharpeEstimate} | ${t.betaToBtc} | \`${t.regime}\` |`).join('\n')}
 
 #### Mathematical Formulations
-$$\\text{Sharpe Ratio} = \\frac{\\mathbb{E}[R_i] - R_f}{\\sigma_i \\cdot \\sqrt{365}}, \\quad \\beta_i = \\frac{\\text{Cov}(R_i, R_{\\text{BTC}})}{\\text{Var}(R_{\\text{BTC}})}$$
+$$\\text{Sharpe Ratio} = \\frac{\\mathbb{E}[R_i] - R_f}{\\sigma_i \\cdot \\sqrt{252}}, \\quad \\beta_i = \\frac{\\text{Cov}(R_i, R_{\\text{Nifty}})}{\\text{Var}(R_{\\text{Nifty}})}$$
 
 **Nexus Verdict**: ${comp.verdict}`;
 
@@ -1207,6 +1337,50 @@ Deploy this algorithmic bot via the Safety Gate to activate autonomous tick eval
           params: bot.params,
         },
       },
+      engine: ENGINE_LABEL,
+    };
+  }
+
+  // C15b. TTM Volatility Squeeze & Half-Kelly Position Sizing
+  if (
+    q.includes('squeeze') ||
+    q.includes('ttm') ||
+    q.includes('keltner') ||
+    q.includes('compression') ||
+    q.includes('half-kelly') ||
+    q.includes('kelly sizing') ||
+    q.includes('optimal sizing')
+  ) {
+    const targetAsset = primaryAsset;
+    const hist = primaryMarket?.history || [];
+    const squeezeRes = calculateTTMSqueeze(hist);
+    const kellyRes = calculateHalfKellyFraction(0.62, 2.4);
+
+    const reply = `### TTM Volatility Squeeze & Half-Kelly Sizing Architecture for \`${targetAsset}\`
+
+Evaluating non-linear volatility compression and optimal fractional capital budgeting:
+
+- **Target Stock**: \`${targetAsset}\` (Spot: ₹${money(spotVal)})
+- **TTM Squeeze Status**: \`${squeezeRes.squeezeState}\` (${squeezeRes.squeezeState === 'SQUEEZE_ON' ? 'Compression Alert — Stored Energy Building' : squeezeRes.squeezeState === 'SQUEEZE_OFF' ? 'Explosive Momentum Breakout Firing' : 'Expansion Mode'})
+- **Momentum Direction**: \`${squeezeRes.momentumDirection}\` (Histogram: ${squeezeRes.momentum >= 0 ? '+' : ''}${squeezeRes.momentum.toFixed(2)})
+- **Bollinger Bandwidth**: ${(squeezeRes.bandwidth * 100).toFixed(2)}\\% (Upper: ₹${squeezeRes.bbUpper}, Lower: ₹${squeezeRes.bbLower})
+- **Keltner Channel**: Upper: ₹${squeezeRes.kcUpper}, Lower: ₹${squeezeRes.kcLower}
+
+#### 1. The TTM Volatility Squeeze Mathematical Formulation
+Bollinger Bands contract completely inside Keltner Channels:
+$$\\text{Upper}_{\\text{BB}} < \\text{Upper}_{\\text{KC}} \\quad \\text{and} \\quad \\text{Lower}_{\\text{BB}} > \\text{Lower}_{\\text{KC}}$$
+$$\\text{BB} = \\text{SMA}_{20} \\pm 2.0\\sigma, \\quad \\text{KC} = \\text{SMA}_{20} \\pm 1.5\\text{ATR}_{14}$$
+When the squeeze releases, accumulated energy fires into a high-velocity directional trend with asymmetric risk-to-reward.
+
+#### 2. Half-Kelly Criterion for Drawdown-Dampened Sizing
+$$f^* = \\frac{p \\cdot b - q}{b} = \\frac{0.62 \\cdot 2.4 - 0.38}{2.4} \\approx ${kellyRes.fullKelly}$$
+$$f^*_{\\text{half}} = f^* \\times 0.5 = ${kellyRes.halfKelly} \\quad (\\text{Recommended Multiplier: } ${kellyRes.recommendedSizeMultiplier}\\times)$$
+
+Using Half-Kelly captures $75\\%$ of maximal wealth growth while reducing maximum portfolio drawdown by over $50\\%$.`;
+
+    return {
+      reply,
+      actionProposal: null,
       engine: ENGINE_LABEL,
     };
   }

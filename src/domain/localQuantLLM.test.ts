@@ -216,4 +216,36 @@ describe('LocalQuantLLM High-Benchmark Fallback Engine', () => {
     expect(res3.reply).toContain('Stress-Test');
     expect(res4.reply).toContain('Humor');
   });
+
+  it('evaluates NSE equities and futures cash-and-carry basis arbitrage', () => {
+    const res = queryLocalQuantLLM('Explain NSE cash-and-carry basis trade and cost of carry', mockState, mockMarkets);
+    expect(res.reply).toContain('NSE Equities & Futures Cash-and-Carry Basis Microstructure');
+    expect(res.reply).toContain('Annualized Basis Yield');
+    expect(res.reply).toContain('RBI risk-free repo rate');
+    expect(res.reply).toContain('Delta');
+  });
+
+  it('evaluates TTM Volatility Squeeze and Half-Kelly position sizing', () => {
+    const res = queryLocalQuantLLM('What is the TTM squeeze status and optimal Half-Kelly sizing for RELIANCE?', mockState, mockMarkets);
+    expect(res.reply).toContain('TTM Volatility Squeeze & Half-Kelly Sizing Architecture');
+    expect(res.reply).toContain('Keltner Channel');
+    expect(res.reply).toContain('Half-Kelly');
+    expect(res.reply).toContain('f^*');
+  });
+
+  it('analyzes Indian macroeconomic cycle, RBI repo rate, and FII/DII liquidity', () => {
+    const res = queryLocalQuantLLM('How does RBI repo rate and FII DII institutional liquidity impact Nifty?', mockState, mockMarkets);
+    expect(res.reply).toContain('Indian Macroeconomic Cycle & Institutional Liquidity Dynamics');
+    expect(res.reply).toContain('RBI Repo Rate');
+    expect(res.reply).toContain('G-Sec Yield');
+    expect(res.reply).toContain('FII');
+  });
+
+  it('evaluates high-frequency order flow imbalance (OFI) and Kyle lambda', () => {
+    const res = queryLocalQuantLLM('Explain order flow imbalance OFI and Kyle lambda price impact on NSE', mockState, mockMarkets);
+    expect(res.reply).toContain('High-Frequency Market Microstructure: OFI & Kyle\'s Lambda');
+    expect(res.reply).toContain('Kyle\'s Lambda');
+    expect(res.reply).toContain('Order Flow Imbalance');
+  });
 });
+

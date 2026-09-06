@@ -612,12 +612,20 @@ export interface AssetFleetStatus {
   entryPrice?: number;
   stopLossPrice?: number;
   takeProfitPrice?: number;
+  takeProfit2Price?: number;
+  takeProfit3Price?: number;
   trailingStopPrice?: number;
   unrealizedPnl?: number;
   unrealizedPnlPct?: number;
   unitsHeld?: number;
   lastActionAt?: number;
   lastActionDetail?: string;
+  sector?: string;
+  squeezeStatus?: 'SQUEEZE_ON' | 'SQUEEZE_OFF' | 'NO_SQUEEZE';
+  trancheStage?: number;
+  kellyFraction?: number;
+  vwap?: number;
+  volumeSurgeRatio?: number;
 }
 
 export interface PilotRateLimitStatus {
@@ -633,7 +641,18 @@ export interface PilotActionLog {
   id: string;
   timestamp: number;
   asset: Asset;
-  action: 'BUY_ENTRY' | 'TAKE_PROFIT' | 'STOP_LOSS' | 'TRAILING_RATCHET' | 'THROTTLED' | 'SKIPPED';
+  action:
+    | 'BUY_ENTRY'
+    | 'TAKE_PROFIT'
+    | 'STOP_LOSS'
+    | 'TRAILING_RATCHET'
+    | 'THROTTLED'
+    | 'SKIPPED'
+    | 'PROFIT_HARVEST_T1'
+    | 'PROFIT_HARVEST_T2'
+    | 'CHANDELIER_EXIT'
+    | 'SECTOR_CAP_DEFENSE'
+    | 'STAGNATION_EXIT';
   strategy: string;
   detail: string;
   price: number;

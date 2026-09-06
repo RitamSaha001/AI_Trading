@@ -532,12 +532,15 @@ export function AutonomousQuantPilot() {
                             {asset.slice(0, 3)}
                           </div>
                           <div>
-                            <div className="font-bold text-zinc-950 flex items-center gap-1">
+                            <div className="font-bold text-zinc-950 flex items-center gap-1.5">
                               {asset}
+                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                {fleetItem?.sector || 'Equities'}
+                              </span>
                               <span className="text-[10px] text-zinc-400 font-normal">NSE</span>
                             </div>
-                            <div className="text-[10px] text-zinc-500 truncate max-w-[130px]">
-                              {meta?.name || asset}
+                            <div className="text-[10px] text-zinc-500 truncate max-w-[140px] flex items-center gap-1">
+                              <span>{meta?.name || asset}</span>
                             </div>
                           </div>
                         </div>
@@ -560,6 +563,18 @@ export function AutonomousQuantPilot() {
                         <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-md border ${getStrategyBadge(strat)}`}>
                           {strat}
                         </span>
+                        {fleetItem?.squeezeStatus === 'SQUEEZE_ON' && (
+                          <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Squeeze Alert
+                          </div>
+                        )}
+                        {fleetItem?.squeezeStatus === 'SQUEEZE_OFF' && (
+                          <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping" />
+                            Breakout Firing
+                          </div>
+                        )}
                       </td>
 
                       {/* Regime / Hurst */}
@@ -577,7 +592,7 @@ export function AutonomousQuantPilot() {
                         {getLifecycleBadge(fleetItem?.state)}
                       </td>
 
-                      {/* Stop-Loss & Target Brackets */}
+                      {/* Stop-Loss & Multi-Tier Target Brackets */}
                       <td className="py-3 px-3 font-mono text-[11px]">
                         {unitsHeld > 0 && fleetItem?.stopLossPrice ? (
                           <div className="space-y-0.5">
@@ -588,11 +603,19 @@ export function AutonomousQuantPilot() {
                               )}
                             </div>
                             <div className="text-emerald-600 font-medium">
-                              TP: {moneyINR(fleetItem.takeProfitPrice || price * 1.05)}
+                              {(fleetItem?.trancheStage || 0) >= 2 ? (
+                                <span>T3 Chandelier: {moneyINR(fleetItem.takeProfit3Price || price * 1.08)}</span>
+                              ) : (fleetItem?.trancheStage || 0) === 1 ? (
+                                <span>T2 Core: {moneyINR(fleetItem.takeProfit2Price || fleetItem.takeProfitPrice || price * 1.05)}</span>
+                              ) : (
+                                <span>T1 Scalp: {moneyINR(fleetItem.takeProfitPrice || price * 1.03)}</span>
+                              )}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-zinc-400 text-[10px]">&mdash;</span>
+                          <div className="text-zinc-400 text-[10px] space-y-0.5">
+                            <div>Half-Kelly: <span className="font-semibold text-zinc-600">{(fleetItem?.kellyFraction || 1.0).toFixed(2)}x</span></div>
+                          </div>
                         )}
                       </td>
 
@@ -811,9 +834,14 @@ export function AutonomousQuantPilot() {
                 let badgeStyle = 'bg-zinc-100 text-zinc-700';
                 if (log.action === 'BUY_ENTRY') badgeStyle = 'bg-emerald-100 text-emerald-800 font-bold';
                 if (log.action === 'TAKE_PROFIT') badgeStyle = 'bg-indigo-100 text-indigo-800 font-bold';
+                if (log.action === 'PROFIT_HARVEST_T1') badgeStyle = 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
+                if (log.action === 'PROFIT_HARVEST_T2') badgeStyle = 'bg-teal-100 text-teal-800 font-bold border border-teal-300';
+                if (log.action === 'CHANDELIER_EXIT') badgeStyle = 'bg-purple-100 text-purple-800 font-bold border border-purple-300';
                 if (log.action === 'STOP_LOSS') badgeStyle = 'bg-rose-100 text-rose-800 font-bold';
                 if (log.action === 'TRAILING_RATCHET') badgeStyle = 'bg-teal-100 text-teal-800 font-bold';
                 if (log.action === 'THROTTLED') badgeStyle = 'bg-amber-100 text-amber-800 font-bold';
+                if (log.action === 'SECTOR_CAP_DEFENSE') badgeStyle = 'bg-amber-100 text-amber-900 font-bold border border-amber-300';
+                if (log.action === 'STAGNATION_EXIT') badgeStyle = 'bg-zinc-200 text-zinc-800 font-bold';
 
                 return (
                   <div

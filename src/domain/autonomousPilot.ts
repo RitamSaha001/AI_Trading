@@ -11,6 +11,11 @@ import {
 import { portfolioValue, META, isIndianAsset, formatCurrency } from './portfolio';
 import { indicators } from './indicators';
 import { calculatePortfolioRisk } from './risk';
+import {
+  calculateHalfKellyFraction,
+  calculateTTMSqueeze,
+  getAssetSector,
+} from './quantEngine';
 
 export interface PilotProfileConfig {
   profile: AutonomousPilotProfile;
@@ -229,14 +234,19 @@ export function evaluateMarketOpportunity(
     return null;
   }
 
-  // 4. Position Sizing: Strict Capital-at-Risk Budgeting
+  // 4. Position Sizing: Strict Capital-at-Risk Budgeting with Half-Kelly Multiplier
   const pv = portfolioValue(state, { [asset]: market } as any);
   const currentCash = state.accountMode === 'upstox' && state.upstoxAccount?.funds
     ? state.upstoxAccount.funds.availableCash
     : state.cash;
 
   const totalBase = Math.max(1000, pv > 0 ? pv : currentCash);
-  const maxAllowedRiskMonetary = totalBase * (profile.maxRiskPerTradePct / 100);
+  const baseAllowedRiskMonetary = totalBase * (profile.maxRiskPerTradePct / 100);
+
+  // Dynamic Half-Kelly fraction based on profile and R:R
+  const estWinRate = profileKey === 'conservative' ? 0.65 : profileKey === 'balanced' ? 0.58 : 0.54;
+  const kellyRes = calculateHalfKellyFraction(estWinRate, calculatedRR, 1.25, 0.4);
+  const maxAllowedRiskMonetary = baseAllowedRiskMonetary * kellyRes.recommendedSizeMultiplier;
 
   // Units = Allowed Risk / Risk Per Unit
   let units = maxAllowedRiskMonetary / riskPerUnit;
