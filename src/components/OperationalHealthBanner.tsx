@@ -254,7 +254,7 @@ export const OperationalHealthBanner: React.FC<{ accountMode?: string }> = ({ ac
             {/* Rate Limit Weight */}
             <div className="flex items-center justify-between">
               <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5" /> Binance Request Weight (1m)
+                <Activity className="w-3.5 h-3.5" /> Upstox Rate Limit Weight (1m)
               </span>
               <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">
                 {data?.rateLimit?.usedWeight1m ?? 0} / 1,200

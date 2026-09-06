@@ -227,8 +227,8 @@ export function GrievanceModal() {
                     className="w-full px-3 py-2 rounded-xl border border-zinc-200 text-xs font-semibold outline-none focus:border-indigo-500 bg-white"
                   >
                     <option value="upi_deposit_pending">UPI Deposit Deducted but Not Credited</option>
-                    <option value="dex_swap_revert">DEX Swap Reverted / Slippage Loss</option>
-                    <option value="binance_execution_error">Binance Exchange Order / Margin Error</option>
+                    <option value="desk_reconciliation">Desk Allocation / Margin Reconciliation</option>
+                    <option value="upstox_execution_error">Upstox Broker Order / Margin Error</option>
                     <option value="card_double_charge">Card Payment / Gateway Double Charge</option>
                     <option value="unauthorized_activity">Unauthorized Account / API Activity</option>
                     <option value="general_inquiry">General Financial / Regulatory Inquiry</option>

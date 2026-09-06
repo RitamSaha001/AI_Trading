@@ -403,7 +403,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
   );
   const [loading, setLoading] = useState(true);
   const [marketError, setMarketError] = useState('');
-  const [currentDataSource, setCurrentDataSource] = useState<DataSource>('Binance WebSocket (Live)');
+  const [currentDataSource, setCurrentDataSource] = useState<DataSource>('Upstox WebSocket (Live)');
   const [ai, setAi] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
@@ -1504,7 +1504,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
     try {
       const data = await fetchAll(stateRef.current.timeframe, stateRef.current.selectedAsset);
       setMarkets(data);
-      const firstSource = Object.values(data)[0]?.source || 'Binance REST';
+      const firstSource = Object.values(data)[0]?.source || 'Upstox REST (Live)';
       setCurrentDataSource(firstSource);
       setMarketError('');
     } catch {
@@ -1544,7 +1544,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
                 volume24h: upd.volume,
                 change24h: upd.changePct,
                 history: newHist,
-                source: 'Binance WebSocket (Live)',
+                source: 'Upstox WebSocket (Live)',
                 isSynthetic: false,
                 lastUpdated: now,
               };

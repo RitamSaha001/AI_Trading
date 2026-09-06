@@ -9,7 +9,7 @@ interface Props {
 }
 
 export const DataSourceBadge: React.FC<Props> = ({
-  source = 'Binance WebSocket (Live)',
+  source = 'Upstox WebSocket (Live)',
   isSynthetic = false,
   lastUpdated,
   isReconnecting = false,

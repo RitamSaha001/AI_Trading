@@ -321,8 +321,12 @@ export function scanAllMarkets(
     }
   }
 
-  // Sort descending by composite score, then by Risk:Reward ratio
-  opps.sort((a, b) => b.compositeScore - a.compositeScore || b.riskRewardRatio - a.riskRewardRatio);
+  // Prioritize Indian assets (NSE/BSE), then sort descending by composite score and Risk:Reward ratio
+  opps.sort((a, b) => {
+    const aInd = isIndianAsset(a.asset) ? 1 : 0;
+    const bInd = isIndianAsset(b.asset) ? 1 : 0;
+    return bInd - aInd || b.compositeScore - a.compositeScore || b.riskRewardRatio - a.riskRewardRatio;
+  });
 
   return opps.slice(0, 5); // Return top 5 premier setups
 }

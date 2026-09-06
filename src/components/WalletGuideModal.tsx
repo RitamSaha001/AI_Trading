@@ -21,7 +21,7 @@ interface WalletGuideModalProps {
 
 export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'cards' | 'upi' | 'allocation' | 'security' | 'web3'
+    'overview' | 'cards' | 'upi' | 'allocation' | 'security' | 'upstox'
   >('overview');
 
   if (!isOpen) return null;
@@ -62,19 +62,20 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
             { id: 'overview', label: '1. Architecture', icon: Wallet },
             { id: 'cards', label: '2. Cards & 3DS', icon: CreditCard },
             { id: 'upi', label: '3. UPI & QR', icon: QrCode },
-            { id: 'allocation', label: '4. Trading & Swap', icon: ArrowLeftRight },
+            { id: 'allocation', label: '4. Trading Margin', icon: ArrowLeftRight },
             { id: 'security', label: '5. Privacy Vault', icon: ShieldCheck },
-            { id: 'web3', label: '6. Web3 & DEX', icon: Zap },
+            { id: 'upstox', label: '6. Upstox Gateway', icon: Zap },
           ].map((t) => {
             const Icon = t.icon;
             return (
               <button
                 key={t.id}
+                type="button"
                 onClick={() => setActiveTab(t.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                   activeTab === t.id
-                    ? 'bg-white text-zinc-900 shadow-sm border border-black/[0.06]'
-                    : 'text-zinc-500 hover:text-zinc-800'
+                    ? 'bg-white text-zinc-950 shadow-sm border border-black/[0.06]'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.02]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -84,8 +85,8 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
           })}
         </div>
 
-        {/* Tab Content */}
-        <div className="p-6 overflow-y-auto space-y-4 text-xs text-zinc-600 leading-relaxed">
+        {/* Content Body */}
+        <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-zinc-600">
           {activeTab === 'overview' && (
             <div className="space-y-4 animate-in fade-in duration-150">
               <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-100 text-zinc-800 space-y-1.5">
@@ -94,7 +95,7 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
                   <span>Sovereign Treasury Segregation</span>
                 </div>
                 <p>
-                  The Lumen Sovereign Wallet is completely independent from external exchanges like Binance. It operates on client-side state with an immutable cryptographic ledger, giving you full self-custodial control over your deposited fiat capital.
+                  The Lumen Demat & Treasury Desk is completely segregated from unverified brokers. It operates on client-side state with an immutable double-entry ledger, giving you full control over your deposited capital.
                 </p>
               </div>
 
@@ -156,7 +157,7 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
                     <span>Dynamic Vector QR</span>
                   </div>
                   <p className="text-[11px] text-zinc-500">
-                    Scan the real-time generated SVG QR code with Google Pay, PhonePe, Paytm, or BHIM. Includes 5-minute security countdown.
+                    Scan the real-time generated SVG QR code with Google Pay, BHIM UPI, Paytm, or any banking app. Includes 5-minute security countdown.
                   </p>
                 </div>
                 <div className="p-3.5 rounded-xl border border-zinc-200 bg-white shadow-sm space-y-1">
@@ -177,7 +178,7 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
               <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-100 text-zinc-800 space-y-1.5">
                 <div className="flex items-center gap-2 font-bold text-indigo-900 text-sm">
                   <ArrowLeftRight className="w-4 h-4 text-indigo-600" />
-                  <span>Capital Deployment & Direct Spot Swaps</span>
+                  <span>Capital Deployment &amp; Margin Allocation</span>
                 </div>
                 <p>
                   Once money is in your Sovereign Wallet, you can put it to work immediately without friction.
@@ -198,9 +199,9 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
                   </p>
                 </div>
                 <div className="p-3 rounded-xl bg-white border border-zinc-200 space-y-1">
-                  <div className="font-bold text-zinc-900">3. Direct Spot Crypto Swap</div>
+                  <div className="font-bold text-zinc-900">3. Segment Margin Allocation</div>
                   <p className="text-[11px] text-zinc-600">
-                    Execute 1-click spot buys of BTC, ETH, SOL, or AVAX directly from wallet cash at live mark-to-market prices.
+                    Allocate liquidity across Cash Delivery (CNC - 1x Cash) or Intraday (MIS - up to 5x margin) with automated SEBI peak margin risk checks.
                   </p>
                 </div>
               </div>
@@ -212,7 +213,7 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
               <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-1.5">
                 <div className="flex items-center gap-2 font-bold text-emerald-400 text-sm">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Privacy-by-Design & Cryptographic Ledger</span>
+                  <span>Privacy-by-Design &amp; Cryptographic Ledger</span>
                 </div>
                 <p className="text-zinc-300 text-xs">
                   Your financial privacy is cryptographically protected directly on your hardware.
@@ -233,15 +234,15 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
             </div>
           )}
 
-          {activeTab === 'web3' && (
+          {activeTab === 'upstox' && (
             <div className="space-y-4 animate-in fade-in duration-150">
               <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white space-y-1.5 shadow-md">
                 <div className="flex items-center gap-2 font-bold text-indigo-300 text-sm">
                   <Zap className="w-4 h-4 text-amber-400" />
-                  <span>Web3 Self-Custody Desk (Polygon & Arbitrum EVM)</span>
+                  <span>Upstox Live Gateway (NSE/BSE Indian Equities &amp; F&amp;O)</span>
                 </div>
                 <p className="text-zinc-300 text-xs">
-                  Trade on-chain decentralized liquidity pools without depositing capital to Binance or any centralized intermediary.
+                  Direct SEBI-regulated market connectivity with sub-second execution, Demat ledger reconciliation, and static IP whitelist protection.
                 </p>
               </div>
 
@@ -249,30 +250,30 @@ export function WalletGuideModal({ isOpen, onClose }: WalletGuideModalProps) {
                 <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
                   <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    Pure Client-Side Key Derivation
+                    Static Server Egress IP Whitelisting
                   </div>
                   <p className="text-[11px] text-zinc-600 mt-1">
-                    Your 12-word BIP-39 mnemonic seed phrase and secp256k1 private keys are computed directly in your browser using the Web Crypto API. They are encrypted using AES-256-GCM and PBKDF2 (100,000 rounds) and never transmitted to any server.
+                    All orders routed to the Upstox API egress through static production IP <code>87.76.191.49</code>. Whitelist this IP in your Upstox Developer Console to ensure seamless authenticated connectivity.
                   </p>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
                   <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
                     <QrCode className="w-4 h-4 text-indigo-600" />
-                    Indian UPI Direct Bridging
+                    Instant UPI &amp; NetBanking Settlement
                   </div>
                   <p className="text-[11px] text-zinc-600 mt-1">
-                    Deposit INR with 0% fee using any UPI app (GPay, PhonePe, Paytm, BHIM, CRED) or 12-digit UTR validation. The funds are instantly verified and can be deployed directly to your self-custodial wallet on Polygon or Arbitrum.
+                    Fund your Demat trading desk in real time via BHIM UPI, Google Pay, NetBanking, or 12-digit bank UTR receipts with automated background reconciliation.
                   </p>
                 </div>
 
                 <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200">
                   <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
                     <ArrowLeftRight className="w-4 h-4 text-purple-600" />
-                    DEX Spot Swaps with Gas & Slippage Safety Gate
+                    Automated Pre-Trade Safety Gate
                   </div>
                   <p className="text-[11px] text-zinc-600 mt-1">
-                    Spot trades execute against Uniswap V3 / DEX liquidity pools with a minimal 0.10% pool fee, bounded slippage protection (default 50 bps), preflight gas reserve verification, and auditable transaction receipts with block explorer links.
+                    Before hitting the exchange venue, every order passes through tick size validation (₹0.05), freeze quantity limits, and circuit limit price bands to prevent exchange rejection.
                   </p>
                 </div>
               </div>

@@ -46,11 +46,11 @@ export function LegalFooter() {
                 </span>
               </div>
               <p className="text-xs text-zinc-500 leading-relaxed">
-                Autonomous algorithmic trading cockpit with double-entry sovereign ledger accounting, deep volatility sensors, and PhonePe-secured payment on-ramps.
+                Autonomous algorithmic trading cockpit with double-entry sovereign ledger accounting, deep volatility sensors, and institutional Upstox broker connectivity.
               </p>
               <div className="flex items-center gap-2 pt-1 text-[11px] text-zinc-500 font-mono">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>PCI-DSS Level 1 &bull; 100% Non-Custodial &bull; RBI Adherent</span>
+                <span>PCI-DSS Level 1 &bull; 100% Non-Custodial &bull; RBI &amp; SEBI Adherent</span>
               </div>
             </div>
 
@@ -154,7 +154,7 @@ export function LegalFooter() {
               Statutory Risk Disclosure &amp; Compliance Statement:
             </p>
             <p>
-              Lumen provides automated algorithmic execution software, quantitative risk indicators, and platform subscription services. Lumen is a technology provider and does not provide personalized investment, tax, or legal advisory services. Payments, platform access fees, and software subscriptions are processed securely via PhonePe Payment Gateway adhering to RBI and PCI-DSS Level 1 security standards. Unused platform credits are refundable on request within 7 days (5–7 business days settlement turnaround to original source).
+              Lumen provides automated algorithmic execution software, quantitative risk indicators, and platform subscription services. Lumen is a technology provider and does not provide personalized investment, tax, or legal advisory services. Payments, platform access fees, and software subscriptions are processed securely adhering to RBI, SEBI, and PCI-DSS Level 1 security standards. Unused platform credits are refundable on request within 7 days (5–7 business days settlement turnaround to original source).
             </p>
           </div>
 

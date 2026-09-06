@@ -31,8 +31,6 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
     setSettings,
     accountMode,
     setAccountMode,
-    exchangeAccount,
-    openExchangeDrawer,
     upstoxAccount,
     openUpstoxDrawer,
     setLossPreventionMode,
@@ -81,9 +79,9 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
 
   const handleDeployStarterBot = () => {
     addStrategy({
-      asset: 'BTC',
+      asset: 'RELIANCE',
       kind: 'titan_quantum',
-      name: 'Bitcoin Titan Quantum Apex Sentinel (Starter)',
+      name: 'RELIANCE Titan Quantum Apex Sentinel (Starter)',
       enabled: true,
       maxAllocation: 0.25,
       cooldownSec: 120,
@@ -106,7 +104,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
     setStarterBotDeployed(true);
     triggerToast(
       'Starter Bot Deployed',
-      'Bitcoin Titan Quantum Apex Sentinel armed with Zero-Loss capital defense.',
+      'RELIANCE Titan Quantum Apex Sentinel armed with Zero-Loss capital defense.',
       'success'
     );
   };
@@ -500,7 +498,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                     <Zap className="w-5 h-5 text-amber-400" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-zinc-950">Titan Quantum Apex Sentinel (BTC)</h4>
+                    <h4 className="text-xs font-bold text-zinc-950">Titan Quantum Apex Sentinel (RELIANCE)</h4>
                     <p className="text-[11px] text-zinc-600 mt-0.5">
                       Flagship bot with dynamic ATR profit brackets, 2-stage scale-out, and Zero-Loss armor.
                     </p>
@@ -529,7 +527,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="p-2.5 rounded-xl bg-black/[0.02] border border-black/[0.04] flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Desk: <strong>{accountMode === 'upstox' ? 'Upstox (NSE)' : accountMode === 'exchange' ? 'Binance' : 'Simulated Paper'}</strong></span>
+                    <span>Desk: <strong>{accountMode === 'upstox' ? 'Upstox (NSE)' : 'Simulated Paper'}</strong></span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-black/[0.02] border border-black/[0.04] flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />

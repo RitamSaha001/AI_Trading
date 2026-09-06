@@ -46,13 +46,10 @@ export function WalletPage() {
   const {
     nativeWallet,
     state,
-    markets,
-    swapWalletCrypto,
     deletePaymentMethod,
     depositToWallet,
+    allocateWalletToTrading,
     triggerToast,
-    web3Account,
-    openWeb3Drawer,
     setAccountMode,
     openGrievanceModal,
     accountMode,
@@ -67,8 +64,8 @@ export function WalletPage() {
   const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
   const [guideModalOpen, setGuideModalOpen] = useState(false);
 
-  // Currency view toggle (USD vs INR)
-  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'INR'>('USD');
+  // Currency view toggle (INR vs USD)
+  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'INR'>('INR');
 
   // Ledger state
   const [filterCategory, setFilterCategory] =
@@ -76,10 +73,10 @@ export function WalletPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
 
-  // Instant Spot Swap state
-  const [swapAsset, setSwapAsset] = useState<Asset>('BTC');
-  const [swapAmountUSD, setSwapAmountUSD] = useState('500');
-  const [isSwapping, setIsSwapping] = useState(false);
+  // Upstox Demat Margin Allocation state
+  const [allocSegment, setAllocSegment] = useState<'EQUITY_DELIVERY' | 'EQUITY_INTRADAY' | 'FNO_DERIVATIVES'>('EQUITY_INTRADAY');
+  const [allocAmountINR, setAllocAmountINR] = useState('25000');
+  const [isAllocatingMargin, setIsAllocatingMargin] = useState(false);
 
   const totalSovereignNetWorthUSD =
     nativeWallet.balanceUSD + nativeWallet.allocatedToTradingUSD;
@@ -169,25 +166,6 @@ export function WalletPage() {
     );
   };
 
-  const handleExecuteSwap = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const num = parseFloat(swapAmountUSD) || 0;
-    if (num <= 0) return;
-
-    setIsSwapping(true);
-    try {
-      await swapWalletCrypto(swapAsset, num);
-    } catch {
-      // toast handled in store
-    } finally {
-      setIsSwapping(false);
-    }
-  };
-
-  const swapPrice = markets[swapAsset]?.price || 0;
-  const swapUnits =
-    swapPrice > 0 ? ((parseFloat(swapAmountUSD) || 0) * 0.999) / swapPrice : 0;
-
   const deposit24h = get24hVolume(nativeWallet.transactions, 'deposit');
   const withdraw24h = get24hVolume(nativeWallet.transactions, 'withdrawal');
 
@@ -208,14 +186,14 @@ export function WalletPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                    Sovereign Fiat & Web3 Wallet
+                    Funds, Margin &amp; Capital Treasury
                   </h1>
                   <span className="text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Self-Custodial
+                    SEBI Demat &amp; Trading
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 font-medium">
-                  Independent client-side treasury segregated from Binance
+                  Institutional treasury with instant UPI &amp; Net Banking deposit rails, Demat margin allocation, and SEBI compliance ledger.
                 </p>
               </div>
             </div>
@@ -223,7 +201,7 @@ export function WalletPage() {
             {/* Total Valuation */}
             <div className="pt-2">
               <div className="text-xs uppercase font-bold tracking-wider text-zinc-400">
-                Total Sovereign Treasury Balance
+                Total Demat &amp; Sovereign Treasury Balance
               </div>
               <div className="text-3xl sm:text-4xl font-black tracking-tight text-white font-mono mt-0.5">
                 {formatDisplayValue(totalSovereignNetWorthUSD)}
@@ -315,52 +293,46 @@ export function WalletPage() {
         </div>
       </div>
 
-      {/* Web3 Self-Custody Desk Bar */}
+      {/* Upstox Demat Gateway & Margin Desk Bar */}
       <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-zinc-900 via-indigo-950 to-zinc-900 text-white border border-indigo-500/30 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner shrink-0">
             <Zap className="w-5 h-5 text-amber-400" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-white">Web3 Self-Custody Desk</h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono uppercase">
-                {web3Account?.network || 'Polygon'}
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-white">Upstox Demat Gateway</h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono uppercase">
+                {accountMode === 'upstox' ? 'Live Upstox Desk (NSE/BSE)' : 'Simulated Paper Desk'}
               </span>
-              {web3Account?.isUnlocked ? (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Unlocked
-                </span>
-              ) : web3Account?.address ? (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  <Lock className="w-2.5 h-2.5" />
-                  Locked
-                </span>
-              ) : null}
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                <ShieldCheck className="w-2.5 h-2.5" />
+                IP: 87.76.191.49
+              </span>
             </div>
             <p className="text-xs text-zinc-400 font-mono mt-0.5">
-              {web3Account?.address
-                ? `${web3Account.address.slice(0, 10)}...${web3Account.address.slice(-8)}`
-                : '100% Client-Side Pure EVM Wallet • Zero Centralized Custody'}
+              Authoritative SEBI Broker Gateway • CNC Delivery (1x) &amp; MIS Intraday (Up to 5x Margin)
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
           <div className="text-right hidden sm:block">
-            <div className="text-[10px] text-zinc-400 uppercase font-semibold">On-Chain Value</div>
+            <div className="text-[10px] text-zinc-400 uppercase font-semibold">Trading Desk Cash</div>
             <div className="text-sm font-extrabold text-white font-mono">
-              ${(web3Account?.totalValueUsd || 0).toFixed(2)} USD
+              {formatDisplayValue(state.cash)}
             </div>
           </div>
           <button
             type="button"
-            onClick={openWeb3Drawer}
+            onClick={() => {
+              setAllocateMode('allocate');
+              setAllocateModalOpen(true);
+            }}
             className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-2"
           >
-            <Wallet className="w-3.5 h-3.5" />
-            <span>{web3Account?.address ? 'Manage Web3 Vault' : 'Setup Web3 Wallet'}</span>
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            <span>Deploy Margin to Desk</span>
           </button>
         </div>
       </div>
@@ -395,7 +367,7 @@ export function WalletPage() {
             Deposit via UPI
           </div>
           <div className="text-[11px] text-zinc-500 font-medium mt-0.5">
-            Instant QR, GPay, PhonePe
+            Instant QR, BHIM UPI, GPay, Net Banking
           </div>
         </button>
 
@@ -430,15 +402,15 @@ export function WalletPage() {
             Withdraw Funds
           </div>
           <div className="text-[11px] text-zinc-500 font-medium mt-0.5">
-            Transfer to Card, UPI, Bank
+            Transfer to Bank, Card, UPI
           </div>
         </button>
       </div>
 
-      {/* Instant Spot Swap Terminal & Saved Payment Methods Grid */}
+      {/* Upstox Margin Allocation & Saved Payment Methods Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Direct Crypto Spot Swap Card */}
+        {/* Upstox Margin Allocation Terminal */}
         <div className="lg:col-span-2 p-6 rounded-[28px] bg-white/90 backdrop-blur-xl border border-zinc-200/80 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -446,77 +418,96 @@ export function WalletPage() {
                 <Zap className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="font-bold text-zinc-900 text-sm">Direct Spot Crypto Swap</h3>
+                <h3 className="font-bold text-zinc-900 text-sm">Upstox Margin &amp; Segment Allocation</h3>
                 <p className="text-xs text-zinc-500">
-                  Buy crypto directly using Sovereign Wallet liquid funds
+                  Allocate Demat treasury funds into active intraday, delivery, or F&amp;O margin
                 </p>
               </div>
             </div>
             <div className="text-xs font-semibold text-zinc-500">
-              Avail: <strong className="text-zinc-900 font-mono">${nativeWallet.balanceUSD.toFixed(2)}</strong>
+              Treasury Liquid: <strong className="text-zinc-900 font-mono">{formatDisplayValue(nativeWallet.balanceUSD)}</strong>
             </div>
           </div>
 
-          <form onSubmit={handleExecuteSwap} className="space-y-4">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const amt = parseFloat(allocAmountINR) || 0;
+              if (amt <= 0) return;
+              setIsAllocatingMargin(true);
+              try {
+                const amtUSD = amt * PAPER_SIMULATION_FX_RATES_TO_USD['INR'];
+                await allocateWalletToTrading(amtUSD);
+                triggerToast('Margin Deployed', `Allocated ₹${amt.toLocaleString('en-IN')} to ${allocSegment.replace(/_/g, ' ')}`, 'success');
+              } catch {
+                // handled in store
+              } finally {
+                setIsAllocatingMargin(false);
+              }
+            }}
+            className="space-y-4"
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-zinc-600">Spend from Wallet (USD)</label>
+                <label className="text-xs font-semibold text-zinc-600">Allocation Amount (INR ₹)</label>
                 <input
                   type="number"
-                  step="any"
-                  min="1"
-                  max={nativeWallet.balanceUSD}
-                  value={swapAmountUSD}
-                  onChange={(e) => setSwapAmountUSD(e.target.value)}
-                  placeholder="500"
+                  step="100"
+                  min="100"
+                  value={allocAmountINR}
+                  onChange={(e) => setAllocAmountINR(e.target.value)}
+                  placeholder="25000"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold outline-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-zinc-600">Select Target Asset</label>
+                <label className="text-xs font-semibold text-zinc-600">Target Trading Segment</label>
                 <select
-                  value={swapAsset}
-                  onChange={(e) => setSwapAsset(e.target.value as Asset)}
+                  value={allocSegment}
+                  onChange={(e) => setAllocSegment(e.target.value as any)}
                   className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold outline-none bg-white"
                 >
-                  {['BTC', 'ETH', 'SOL', 'AVAX', 'BNB', 'SUI', 'LINK', 'NEAR'].map((a) => (
-                    <option key={a} value={a}>
-                      {a} — ${markets[a as Asset]?.price?.toFixed(2) || '0.00'}
-                    </option>
-                  ))}
+                  <option value="EQUITY_INTRADAY">NSE/BSE Equity Intraday (MIS - 5x Leverage)</option>
+                  <option value="EQUITY_DELIVERY">NSE/BSE Cash Delivery (CNC - 1x Cash)</option>
+                  <option value="FNO_DERIVATIVES">NSE F&amp;O Derivatives (Index &amp; Stock Options/Futures)</option>
                 </select>
               </div>
             </div>
 
-            {/* Estimated Output Preview */}
+            {/* Margin Leverage & Effective Buying Power Preview */}
             <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-600 flex items-center justify-between">
               <div>
-                <span className="text-zinc-500">You Receive: </span>
+                <span className="text-zinc-500">Effective Buying Power: </span>
                 <strong className="text-zinc-900 font-mono font-bold">
-                  ≈ {swapUnits.toFixed(6)} {swapAsset}
+                  ₹{((parseFloat(allocAmountINR) || 0) * (allocSegment === 'EQUITY_INTRADAY' ? 5 : 1)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </strong>
+                {allocSegment === 'EQUITY_INTRADAY' && (
+                  <span className="ml-1.5 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[10px]">
+                    5x MIS Margin
+                  </span>
+                )}
               </div>
               <div className="text-[11px] text-zinc-400">
-                Rate: ${swapPrice.toFixed(2)} | Fee: 0.10%
+                SEBI Peak Margin Compliant | 0% Brokerage on Equity Delivery
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={isSwapping || (parseFloat(swapAmountUSD) || 0) <= 0 || (parseFloat(swapAmountUSD) || 0) > nativeWallet.balanceUSD}
+              disabled={isAllocatingMargin || (parseFloat(allocAmountINR) || 0) <= 0}
               className="w-full py-3 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {isSwapping ? (
+              {isAllocatingMargin ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Executing Spot Swap...</span>
+                  <span>Deploying Margin...</span>
                 </>
               ) : (
                 <>
                   <Zap className="w-4 h-4 text-amber-400" />
                   <span>
-                    Execute Direct Swap of ${swapAmountUSD} → {swapAsset}
+                    Deploy ₹{(parseFloat(allocAmountINR) || 0).toLocaleString('en-IN')} Margin to Upstox Desk
                   </span>
                 </>
               )}
@@ -675,7 +666,6 @@ export function WalletPage() {
             { id: 'deposits', label: 'Deposits' },
             { id: 'withdrawals', label: 'Withdrawals' },
             { id: 'allocations', label: 'Desk Allocations' },
-            { id: 'swaps', label: 'Spot Swaps' },
           ].map((cat) => (
             <button
               key={cat.id}
@@ -801,7 +791,7 @@ export function WalletPage() {
                               category: isDeposit
                                 ? 'upi_deposit_pending'
                                 : isSwap
-                                ? 'dex_swap_revert'
+                                ? 'general_inquiry'
                                 : isWithdrawal
                                 ? 'general_inquiry'
                                 : 'unauthorized_activity',

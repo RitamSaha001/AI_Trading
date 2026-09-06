@@ -115,8 +115,16 @@ export function validateAIProposal(
         ? (state.web3Account?.balances?.['USDT'] || 0) + (state.web3Account?.balances?.['USDC'] || 0)
         : getAvailableCash(state);
 
+      const allAssets = Array.from(
+        new Set([
+          ...ASSETS,
+          ...Object.keys(state.positions || {}),
+          ...Object.keys(state.exchangeAccount?.balances || {}),
+          ...steps.map((st) => st.asset),
+        ])
+      ) as Asset[];
       const runningHoldings: Record<string, number> = {};
-      for (const a of ASSETS) {
+      for (const a of allAssets) {
         runningHoldings[a] = isExch
           ? (state.exchangeAccount?.balances[a]?.free || 0)
           : isW3
@@ -125,7 +133,7 @@ export function validateAIProposal(
       }
 
       for (const s of steps) {
-        if (!ASSETS.includes(s.asset)) {
+        if (!ASSETS.includes(s.asset) && !(markets as Record<string, any>)[s.asset]) {
           errors.push(`Unknown asset in rebalance step: ${s.asset}`);
         }
         if (s.action !== 'buy' && s.action !== 'sell') {
@@ -183,8 +191,8 @@ export function validateAIProposal(
 
   // 1c. Strategy Deployment Validation
   if (proposal.type === 'deploy_strategy') {
-    if (!ASSETS.includes(proposal.asset)) {
-      errors.push(`Unknown cryptocurrency asset for strategy deployment: ${proposal.asset}`);
+    if (!ASSETS.includes(proposal.asset) && !(markets as Record<string, any>)[proposal.asset]) {
+      errors.push(`Unknown asset for strategy deployment: ${proposal.asset}`);
     }
     const maxAlloc = proposal.strategyParams?.maxAllocation ?? 0.25;
     if (maxAlloc > 0.50) {
@@ -215,7 +223,7 @@ export function validateAIProposal(
 
   // 1e. Smart DCA Validation
   if (proposal.type === 'smart_dca') {
-    if (!ASSETS.includes(proposal.asset)) {
+    if (!ASSETS.includes(proposal.asset) && !(markets as Record<string, any>)[proposal.asset]) {
       errors.push(`Unknown asset for Smart DCA plan: ${proposal.asset}`);
     }
     const baseAmount = proposal.dcaPlan?.baseAmountUsd ?? 100;
@@ -239,8 +247,8 @@ export function validateAIProposal(
     return { valid: true, errors: [], warnings };
   }
 
-  if (!ASSETS.includes(proposal.asset)) {
-    return { valid: false, errors: [`Unknown or unsupported cryptocurrency asset: ${proposal.asset}`], warnings: [] };
+  if (!ASSETS.includes(proposal.asset) && !(markets as Record<string, any>)[proposal.asset]) {
+    return { valid: false, errors: [`Unknown or unsupported trading asset: ${proposal.asset}`], warnings: [] };
   }
 
   const asset: Asset = proposal.asset;

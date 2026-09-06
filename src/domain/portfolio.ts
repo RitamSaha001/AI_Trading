@@ -194,7 +194,9 @@ export function portfolioValue(
       (sum, coin) => sum + (balances[coin]?.free || 0) + (balances[coin]?.locked || 0),
       0
     );
-    const cryptoVal = ASSETS.reduce((sum, a) => {
+    const balanceKeys = Array.from(new Set([...ASSETS, ...Object.keys(balances)])) as Asset[];
+    const cryptoVal = balanceKeys.reduce((sum, a) => {
+      if (STABLECOINS.includes(a as any)) return sum;
       const b = balances[a];
       const units = (b?.free || 0) + (b?.locked || 0);
       const price = markets[a]?.price || 0;
@@ -210,7 +212,8 @@ export function portfolioValue(
     const nativeVal = (w3.nativeBalance || 0) * nativePrice;
     const positions = (state.web3Positions || {}) as Partial<Record<Asset, number>>;
     const balances = (w3.balances || {}) as Record<string, number>;
-    const cryptoVal = ASSETS.reduce((sum, a) => {
+    const w3Keys = Array.from(new Set([...ASSETS, ...Object.keys(positions), ...Object.keys(balances)])) as Asset[];
+    const cryptoVal = w3Keys.reduce((sum, a) => {
       const isCashLike = (a as string) === 'USDT' || (a as string) === 'USDC' || (a as string) === w3.nativeSymbol;
       const units = (positions[a] || 0) + (!isCashLike ? (balances[a] || 0) : 0);
       const price = markets[a]?.price || 0;
@@ -220,7 +223,8 @@ export function portfolioValue(
   }
 
   const cash = Number.isFinite(state.cash) ? state.cash : 0;
-  const positionsVal = ASSETS.reduce((sum, a) => {
+  const posKeys = Array.from(new Set([...ASSETS, ...Object.keys(state.positions || {})])) as Asset[];
+  const positionsVal = posKeys.reduce((sum, a) => {
     const units = state.positions?.[a] || 0;
     const price = markets[a]?.price || 0;
     return sum + (units > 0 && price > 0 ? units * price : 0);
@@ -320,7 +324,8 @@ export function totalPortfolioPnl(
   const realized = Number.isFinite(state.realizedPnl) ? state.realizedPnl : 0;
 
   let unrealized = 0;
-  for (const a of ASSETS) {
+  const pnlKeys = Array.from(new Set([...ASSETS, ...Object.keys(state.positions || {})])) as Asset[];
+  for (const a of pnlKeys) {
     const pnl = positionPnl(state, markets, a);
     unrealized += pnl.amount;
   }
@@ -432,5 +437,8 @@ export function getAvailablePosition(
 export function createPositionsRecord(init: Partial<Record<Asset, number>> = {}): Record<Asset, number> {
   const rec: Record<string, number> = {};
   for (const a of ASSETS) rec[a] = init[a] ?? 0;
+  for (const [k, v] of Object.entries(init)) {
+    if (rec[k] === undefined) rec[k] = v ?? 0;
+  }
   return rec as Record<Asset, number>;
 }

@@ -5,6 +5,8 @@ export const INDIAN_ASSETS = [
 ] as const;
 export type IndianAsset = typeof INDIAN_ASSETS[number];
 
+export const UPSTOX_ASSETS = INDIAN_ASSETS;
+
 export const ASSETS = [
   ...INDIAN_ASSETS,
   'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA', 'AVAX', 'SUI', 'SHIB',
@@ -28,12 +30,11 @@ export type Timeframe = '1H' | '1D' | '1W' | '1M' | '1Y';
 
 export type DataSource =
   | 'Upstox REST (Live)'
+  | 'Upstox WebSocket (Live)'
   | 'Upstox Heuristic Simulation'
-  | 'Binance WebSocket (Live)'
-  | 'Binance REST'
-  | 'Coinbase REST'
   | 'Simulated Heuristic'
-  | 'Synthetic Heuristic Simulation';
+  | 'Synthetic Heuristic Simulation'
+  | (string & {});
 
 export type Candle = {
   time: number;
@@ -44,7 +45,17 @@ export type Candle = {
   volume: number;
 };
 
-export type MarketCategory = 'All' | 'Indian Equities' | 'Nifty 50' | 'Layer 1' | 'DeFi' | 'AI & Compute' | 'Meme' | 'Infra' | 'Gaming';
+export type MarketCategory =
+  | 'All'
+  | 'Indian Equities'
+  | 'Nifty 50'
+  | 'Banking'
+  | 'IT'
+  | 'Energy'
+  | 'Auto'
+  | 'Pharma'
+  | 'FMCG'
+  | (string & {});
 
 export type Market = {
   asset: Asset;
@@ -93,8 +104,8 @@ export type Order = {
   zeroLossLocked?: boolean;
   product?: 'CNC' | 'MIS' | 'MTF' | string;
   validity?: 'DAY' | 'IOC' | string;
-  broker?: 'upstox' | 'binance' | string;
-  accountMode?: 'paper' | 'upstox' | 'exchange' | 'web3';
+  broker?: 'upstox' | (string & {});
+  accountMode?: 'paper' | 'upstox' | (string & {});
 };
 
 export type AlertRule = {
@@ -219,7 +230,7 @@ export type ExecutionReceipt = {
 };
 
 export type StressTestScenario = {
-  scenarioId: 'btc_flash_crash_20' | 'macro_rate_shock' | 'high_beta_liquidation' | 'crypto_winter_cascade';
+  scenarioId: 'btc_flash_crash_20' | 'macro_rate_shock' | 'high_beta_liquidation' | 'crypto_winter_cascade' | (string & {});
   title: string;
   description: string;
   simulatedDrawdownPct: number;
@@ -330,7 +341,7 @@ export type AISafetyValidation = {
   };
 };
 
-export type AccountMode = 'paper' | 'upstox' | 'exchange' | 'web3';
+export type AccountMode = 'paper' | 'upstox' | (string & {});
 
 export type UpstoxTokenHealthInfo = {
   status: 'HEALTHY' | 'EXPIRING_SOON' | 'EXPIRED' | 'UNCONFIGURED';
@@ -635,6 +646,8 @@ export type GrievanceCategory =
   | 'upi_deposit_pending'
   | 'dex_swap_revert'
   | 'binance_execution_error'
+  | 'upstox_execution_error'
+  | 'desk_reconciliation'
   | 'card_double_charge'
   | 'unauthorized_activity'
   | 'general_inquiry';

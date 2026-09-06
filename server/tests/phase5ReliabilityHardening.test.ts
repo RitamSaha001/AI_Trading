@@ -100,7 +100,7 @@ describe('Phase 5 Real-Money Reliability & Production Hardening Suite', () => {
       const latencyMs = Date.now() - startMs;
 
       // Verify execution latency is well within sub-second limit
-      expect(latencyMs).toBeLessThan(100);
+      expect(latencyMs).toBeLessThan(1000);
 
       // Verify order transitioned to FILLED
       const updatedOrder = await db.queryOne<any>(

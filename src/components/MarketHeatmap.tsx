@@ -211,7 +211,7 @@ export function MarketHeatmap({
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
-                Real-time visual map of price velocity across monitored cryptocurrency assets.
+                Real-time visual map of price velocity across monitored NSE &amp; BSE equities.
               </p>
             </div>
           </div>
@@ -377,10 +377,10 @@ export function MarketHeatmap({
           let minHeight = 'min-h-[148px]';
 
           if (layout === 'weighted') {
-            if (asset === 'BTC' || asset === 'ETH') {
+            if (asset === 'RELIANCE' || asset === 'TCS') {
               colSpan = 'col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-6';
               minHeight = 'min-h-[170px]';
-            } else if (asset === 'SOL' || asset === 'XRP') {
+            } else if (asset === 'HDFCBANK' || asset === 'INFY') {
               colSpan = 'col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-3';
               minHeight = 'min-h-[155px]';
             } else {

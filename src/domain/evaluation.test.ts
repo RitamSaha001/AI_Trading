@@ -49,7 +49,7 @@ const mockState: AppState = {
   strategies: [],
   notifications: [],
   timeframe: '1D',
-  selectedAsset: 'BTC',
+  selectedAsset: 'RELIANCE',
   settings: {
     geminiApiKey: '',
     geminiModel: 'gemini-3.8-flash',
@@ -67,6 +67,10 @@ const mockMarkets = Object.fromEntries(
     if (a === 'ETH') p = 3000;
     if (a === 'SOL') p = 150;
     if (a === 'AVAX') p = 30;
+    if (a === 'RELIANCE') p = 2800;
+    if (a === 'TCS') p = 4000;
+    if (a === 'INFY') p = 1800;
+    if (a === 'HDFCBANK') p = 1600;
     return [a, createMockMarket(a, p, 1.5)];
   })
 ) as Record<Asset, Market>;

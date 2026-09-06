@@ -181,9 +181,9 @@ export function ComplianceModal({ isOpen, onClose, initialTab = 'about' }: Compl
                   <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
                     3
                   </div>
-                  <h4 className="font-semibold text-zinc-900 text-sm">Secured PhonePe Checkout</h4>
+                  <h4 className="font-semibold text-zinc-900 text-sm">Secured Payment Gateway</h4>
                   <p className="text-xs text-zinc-500">
-                    Seamless INR on-ramp powered by PhonePe Standard Checkout v2, supporting UPI, RuPay, Visa, Mastercard, and NetBanking with PCI-DSS Level 1 compliance.
+                    Seamless INR on-ramp supporting UPI (BHIM, GPay, Paytm), RuPay, Visa, Mastercard, and NetBanking with PCI-DSS Level 1 compliance.
                   </p>
                 </div>
                 <div className="p-4 rounded-xl border border-zinc-100 bg-white shadow-xs space-y-1.5">
@@ -192,7 +192,7 @@ export function ComplianceModal({ isOpen, onClose, initialTab = 'about' }: Compl
                   </div>
                   <h4 className="font-semibold text-zinc-900 text-sm">Algorithmic Execution Tools</h4>
                   <p className="text-xs text-zinc-500">
-                    Connect private exchange API credentials (such as Binance) with client-side encrypted tokens for high-speed algorithmic execution and order management.
+                    Connect private broker API credentials (such as Upstox) with client-side encrypted tokens for high-speed algorithmic execution and order management.
                   </p>
                 </div>
               </div>
@@ -283,7 +283,7 @@ export function ComplianceModal({ isOpen, onClose, initialTab = 'about' }: Compl
                   Refund &amp; Cancellation Policy
                 </div>
                 <p className="text-emerald-800 text-xs">
-                  Transparent, automated, and strictly compliant with RBI guidelines and PhonePe merchant underwriting standards.
+                  Transparent, automated, and strictly compliant with RBI guidelines and PCI-DSS merchant underwriting standards.
                 </p>
               </div>
 
@@ -291,7 +291,7 @@ export function ComplianceModal({ isOpen, onClose, initialTab = 'about' }: Compl
                 <div>
                   <h4 className="font-bold text-zinc-900 text-sm mb-1">1. Deposit &amp; Platform Credit Cancellation (7-Day Window)</h4>
                   <p className="text-xs leading-relaxed text-zinc-600">
-                    Users may request a full cancellation and refund of any unutilized software credits or unallocated wallet balances deposited via PhonePe within <strong>7 calendar days</strong> of the transaction date. If you have not utilized the platform credits for active algorithmic model subscriptions or strategy runs, your capital is 100% refundable upon request.
+                    Users may request a full cancellation and refund of any unutilized software credits or unallocated wallet balances deposited via Payment Gateway within <strong>7 calendar days</strong> of the transaction date. If you have not utilized the platform credits for active algorithmic model subscriptions or strategy runs, your capital is 100% refundable upon request.
                   </p>
                 </div>
 
@@ -305,21 +305,21 @@ export function ComplianceModal({ isOpen, onClose, initialTab = 'about' }: Compl
                 <div>
                   <h4 className="font-bold text-zinc-900 text-sm mb-1">3. Automated Reversal for Ambiguous or Timed-Out Payments</h4>
                   <p className="text-xs leading-relaxed text-zinc-600">
-                    If an amount is debited from your bank account via PhonePe / UPI but does not immediately reflect in your Lumen platform balance due to an intermittent network timeout, our automated background reconciliation engine polls the payment gateway every 5 minutes. If final successful settlement cannot be confirmed within 24 hours, an automated refund reversal is triggered back to your bank account within 3 to 5 business days.
+                    If an amount is debited from your bank account via UPI or NetBanking but does not immediately reflect in your Lumen platform balance due to an intermittent network timeout, our automated background reconciliation engine polls the payment gateway every 5 minutes. If final successful settlement cannot be confirmed within 24 hours, an automated refund reversal is triggered back to your bank account within 3 to 5 business days.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-bold text-zinc-900 text-sm mb-1">4. Exclusions &amp; Market Dynamics</h4>
                   <p className="text-xs leading-relaxed text-zinc-600">
-                    Lumen provides software analytics and automated order routing tools. Actual market trading gains or losses incurred on external exchanges (such as Binance) resulting from user-authorized strategy executions are determined entirely by independent market price movements. Realized trading losses on external exchanges are non-refundable, as Lumen does not hold custody of exchange capital or guarantee investment returns.
+                    Lumen provides software analytics and automated order routing tools. Actual market trading gains or losses incurred on external brokers (such as Upstox) resulting from user-authorized strategy executions are determined entirely by independent market price movements. Realized trading losses on external venues are non-refundable, as Lumen does not hold custody of broker capital or guarantee investment returns.
                   </p>
                 </div>
 
                 <div>
                   <h4 className="font-bold text-zinc-900 text-sm mb-1">5. How to Initiate a Refund or Cancellation</h4>
                   <p className="text-xs leading-relaxed text-zinc-600">
-                    To request a refund or cancel a platform tier, navigate to <strong>Wallet &rarr; Recent Transactions</strong> and select <strong>Request Refund</strong>, or email us at <code>saharitam171@gmail.com</code> with your Order ID, Transaction Reference, or PhonePe UTR.
+                    To request a refund or cancel a platform tier, navigate to <strong>Wallet &rarr; Recent Transactions</strong> and select <strong>Request Refund</strong>, or email us at <code>saharitam171@gmail.com</code> with your Order ID, Transaction Reference, or Bank UTR.
                   </p>
                 </div>
               </div>
@@ -342,13 +342,13 @@ export function ComplianceModal({ isOpen, onClose, initialTab = 'about' }: Compl
                   <strong>3. User Eligibility:</strong> You represent and warrant that you are at least 18 years of age, legally competent to enter into binding contracts, and comply with all applicable local financial, tax, and foreign exchange laws.
                 </p>
                 <p>
-                  <strong>4. API Key Stewardship:</strong> When you connect third-party broker or exchange API credentials (e.g. Binance), you retain full authority and ownership of those accounts. Lumen encrypts all stored API secrets using AES-256-GCM. You are solely responsible for setting appropriate IP whitelisting, permission bounds (such as disabling withdrawal permissions on third-party keys), and monitoring trade executions.
+                  <strong>4. API Key Stewardship:</strong> When you connect third-party broker API credentials (e.g. Upstox), you retain full authority and ownership of those accounts. Lumen encrypts all stored API secrets using AES-256-GCM. You are solely responsible for setting appropriate IP whitelisting, permission bounds, and monitoring trade executions.
                 </p>
                 <p>
-                  <strong>5. Payments, Subscriptions &amp; Credits:</strong> All fees for software licenses, platform access tiers, and computational credits are billed in Indian Rupees (INR) or USD equivalent. All payment transactions are securely cleared via PhonePe Payment Gateway adhering to PCI-DSS Level 1 specifications.
+                  <strong>5. Payments, Subscriptions &amp; Credits:</strong> All fees for software licenses, platform access tiers, and computational credits are billed in Indian Rupees (INR). All payment transactions are securely cleared via PCI-DSS Level 1 compliant payment gateways adhering to Reserve Bank of India specifications.
                 </p>
                 <p>
-                  <strong>6. Market Volatility &amp; Assumption of Risk:</strong> Trading in financial and digital assets carries inherent financial risk, including potential total loss of capital. Algorithmic and mathematical indicators may not predict future market outcomes. You assume total responsibility for all executions conducted through your accounts.
+                  <strong>6. Market Volatility &amp; Assumption of Risk:</strong> Trading in financial equities and derivatives carries inherent financial risk, including potential total loss of capital. Algorithmic and mathematical indicators may not predict future market outcomes. You assume total responsibility for all executions conducted through your accounts.
                 </p>
                 <p>
                   <strong>7. Governing Law &amp; Jurisdiction:</strong> These Terms shall be governed by, construed, and enforced in accordance with the laws of the Republic of India. Any legal action, suit, or proceeding arising under or related to these Terms shall be subject to the exclusive jurisdiction of the competent courts located in Kolkata, West Bengal, India.
@@ -369,27 +369,27 @@ export function ComplianceModal({ isOpen, onClose, initialTab = 'about' }: Compl
                   <strong>1. Data Controller / Data Fiduciary:</strong> Ritam Saha, operating Lumen AI Trading Technologies with operational base at Infinity Benchmark Tower, Sector V, Salt Lake City, Kolkata, West Bengal 700091, acts as the Data Fiduciary responsible for personal data processed on this platform.
                 </p>
                 <p>
-                  <strong>2. Zero Cardholder Data Retention:</strong> Lumen never stores, captures, logs, or transmits raw credit card numbers, debit card numbers (PAN), CVV security codes, card expiration dates, or bank netbanking passwords. All payment transactions are executed via encrypted redirects or iframe components managed directly by PhonePe Private Limited, a PCI-DSS Level 1 certified payment aggregator authorized by the Reserve Bank of India (RBI).
+                  <strong>2. Zero Cardholder Data Retention:</strong> Lumen never stores, captures, logs, or transmits raw credit card numbers, debit card numbers (PAN), CVV security codes, card expiration dates, or bank netbanking passwords. All payment transactions are executed via encrypted redirects managed directly by PCI-DSS Level 1 certified payment aggregators authorized by the Reserve Bank of India (RBI).
                 </p>
                 <p>
                   <strong>3. Personal Data Collected &amp; Purpose:</strong>
                   <br />
                   &bull; <em>Identity &amp; Authentication:</em> Your email address and authenticated profile name collected via Google OAuth 2.0 or transactional passwordless verification via Resend Technologies.
                   <br />
-                  &bull; <em>Financial Ledger &amp; Billing Records:</em> Platform credit balances, transaction reference numbers, PhonePe order IDs, and payment timestamps required for double-entry ledger balancing and tax compliance.
+                  &bull; <em>Financial Ledger &amp; Billing Records:</em> Platform credit balances, transaction reference numbers, gateway payment IDs, and payment timestamps required for double-entry ledger balancing and tax compliance.
                   <br />
-                  &bull; <em>Encrypted API Credentials:</em> Exchange API keys provided by you for automated order execution, which are encrypted at rest using AES-256-GCM.
+                  &bull; <em>Encrypted API Credentials:</em> Broker API keys provided by you for automated order execution, which are encrypted at rest using AES-256-GCM.
                 </p>
                 <p>
                   <strong>4. Authorized Third-Party Service Processors:</strong> We partner solely with trusted infrastructure providers essential for operating the platform:
                   <br />
-                  &bull; <strong>PhonePe Private Limited:</strong> Payment gateway aggregation and statutory settlement.
+                  &bull; <strong>RBI Authorized Payment Aggregator:</strong> Payment gateway aggregation and statutory settlement.
                   <br />
                   &bull; <strong>Google LLC:</strong> Identity authentication via Google Sign-In.
                   <br />
                   &bull; <strong>Resend Inc.:</strong> Transactional email delivery for one-time verification challenges.
                   <br />
-                  &bull; <strong>Binance Holdings Ltd. (or chosen exchange):</strong> Execution endpoints for user-authorized trading orders.
+                  &bull; <strong>Upstox (RKSV Securities India Pvt. Ltd.):</strong> Authoritative execution gateway for user-authorized trading orders.
                   <br />
                   We never sell, rent, monetize, or disclose your personal information to third-party marketing firms or data brokers.
                 </p>
@@ -418,7 +418,7 @@ export function ComplianceModal({ isOpen, onClose, initialTab = 'about' }: Compl
         <div className="flex items-center justify-between px-6 py-4 bg-zinc-50/80 border-t border-zinc-100">
           <div className="flex items-center gap-2 text-[11px] text-zinc-500">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Secured with PhonePe Standard Checkout v2 &bull; PCI-DSS Level 1</span>
+            <span>Secured with PCI-DSS Level 1 &bull; 256-Bit SSL Encryption</span>
           </div>
           <button
             type="button"

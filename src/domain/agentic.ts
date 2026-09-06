@@ -135,7 +135,7 @@ export function senseMarketDanger(
       const currentQty = state.positions[a] || 0;
       const m = markets[a];
       if (currentQty > 0 && m && m.price > 0) {
-        const isHighBeta = ['SOL', 'DOGE', 'AVAX', 'PEPE'].includes(a);
+        const isHighBeta = ['TATAMOTORS', 'BAJFINANCE', 'MARUTI', 'BHARTIARTL'].includes(a);
         const sellFraction = isHighBeta ? Math.min(0.75, deRiskRatio * 1.3) : deRiskRatio;
         const sellQty = +(currentQty * sellFraction).toFixed(4);
         if (sellQty > 0 && sellQty * m.price > 25) {
@@ -413,40 +413,40 @@ export function simulatePortfolioStressTest(
 
   let shockTitle = '';
   let shockDesc = '';
-  let btcDrop = -0.20;
-  let ethDrop = -0.25;
-  let altDrop = -0.35;
-  let memeDrop = -0.45;
+  let heavyDrop = -0.10;
+  let itDrop = -0.12;
+  let broadDrop = -0.15;
+  let betaDrop = -0.20;
 
   if (scenarioId === 'macro_rate_shock') {
-    shockTitle = 'Macro Rate Hike & Liquidity Shock';
-    shockDesc = 'Central bank surprise +50bps rate hike drains market liquidity across risk assets.';
-    btcDrop = -0.12;
-    ethDrop = -0.16;
-    altDrop = -0.24;
-    memeDrop = -0.32;
+    shockTitle = 'RBI / Global Rate Hike & Liquidity Shock';
+    shockDesc = 'Central bank surprise +50bps rate hike drains market liquidity across Indian equities.';
+    heavyDrop = -0.06;
+    itDrop = -0.08;
+    broadDrop = -0.12;
+    betaDrop = -0.18;
   } else if (scenarioId === 'high_beta_liquidation') {
-    shockTitle = 'Altcoin Flash Liquidation Cascade';
-    shockDesc = 'Derivatives leverage unwind triggering stop runs across high-beta and meme tokens.';
-    btcDrop = -0.08;
-    ethDrop = -0.14;
-    altDrop = -0.38;
-    memeDrop = -0.50;
-  } else if (scenarioId === 'crypto_winter_cascade') {
-    shockTitle = 'Crypto Winter Maximum Drawdown';
-    shockDesc = 'Prolonged multi-month bear market capitulation across all digital asset sectors.';
-    btcDrop = -0.45;
-    ethDrop = -0.55;
-    altDrop = -0.68;
-    memeDrop = -0.80;
+    shockTitle = 'Mid-Cap / F&O Expiry Liquidation Cascade';
+    shockDesc = 'Monthly derivatives expiry volatility triggering stop runs across high-beta momentum equities.';
+    heavyDrop = -0.05;
+    itDrop = -0.08;
+    broadDrop = -0.15;
+    betaDrop = -0.22;
+  } else if (scenarioId === 'crypto_winter_cascade' || scenarioId === 'market_correction_cascade') {
+    shockTitle = 'NSE & Market Multi-Month Correction Drawdown';
+    shockDesc = 'Prolonged market correction capitulation across monitored sectors.';
+    heavyDrop = -0.45;
+    itDrop = -0.55;
+    broadDrop = -0.68;
+    betaDrop = -0.80;
   } else {
-    // btc_flash_crash_20 (default)
-    shockTitle = 'Bitcoin Flash Crash (-20%)';
-    shockDesc = 'Sudden liquidation wick where Bitcoin drops 20% in 12 hours, dragging the market down.';
-    btcDrop = -0.20;
-    ethDrop = -0.25;
-    altDrop = -0.35;
-    memeDrop = -0.42;
+    // nse_flash_crash_10 (default)
+    shockTitle = 'Nifty 50 Flash Correction (-10%)';
+    shockDesc = 'Sudden benchmark index intraday selloff dragging broader equities down.';
+    heavyDrop = -0.08;
+    itDrop = -0.10;
+    broadDrop = -0.14;
+    betaDrop = -0.18;
   }
 
   let totalSimulatedLoss = 0;
@@ -458,12 +458,12 @@ export function simulatePortfolioStressTest(
     const holdingVal = units * price;
 
     if (holdingVal > 0) {
-      const cat = META[a]?.category || 'Layer 1';
-      let assetShockPct = altDrop;
-      if (a === 'BTC') assetShockPct = btcDrop;
-      else if (a === 'ETH') assetShockPct = ethDrop;
-      else if (cat === 'Meme') assetShockPct = memeDrop;
-      else if (cat === 'DeFi' || cat === 'Gaming') assetShockPct = altDrop * 1.1;
+      const cat = META[a]?.category || 'Indian Equities';
+      let assetShockPct = broadDrop;
+      if (a === 'RELIANCE' || a === 'TCS' || a === 'BTC') assetShockPct = heavyDrop;
+      else if (a === 'ETH' || cat === 'IT') assetShockPct = itDrop;
+      else if (cat === 'Banking') assetShockPct = broadDrop * 1.1;
+      else if (cat === 'Auto' || cat === 'Energy' || cat === 'Meme') assetShockPct = betaDrop;
 
       const loss = holdingVal * Math.abs(assetShockPct);
       totalSimulatedLoss += loss;

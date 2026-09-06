@@ -6,8 +6,6 @@ import { ChatDrawer } from './ChatDrawer';
 import { DataSourceBadge } from './components/DataSourceBadge';
 import { OperationalHealthBanner } from './components/OperationalHealthBanner';
 import { AISafetyModal } from './components/AISafetyModal';
-import { ExchangeOnboardingDrawer } from './components/ExchangeOnboardingDrawer';
-import { Web3WalletDrawer } from './components/Web3WalletDrawer';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { AuthModal } from './components/AuthModal';
 import { UserProfileDrawer } from './components/UserProfileDrawer';
@@ -39,7 +37,7 @@ import {
   LifeBuoy,
   Lock,
 } from 'lucide-react';
-import { money, portfolioValue, totalPortfolioPnl } from './trading';
+import { money, moneyINR, portfolioValue, totalPortfolioPnl } from './trading';
 import { senseMarketDanger } from './domain/agentic';
 
 export type Route = '/' | '/markets' | '/portfolio' | '/orders' | '/strategies' | '/alerts' | '/wallet' | '/settings';
@@ -105,14 +103,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
     closeChat,
     accountMode,
     setAccountMode,
-    exchangeAccount,
-    exchangeDrawerOpen,
-    openExchangeDrawer,
-    closeExchangeDrawer,
-    web3Account,
-    web3DrawerOpen,
-    openWeb3Drawer,
-    closeWeb3Drawer,
     nativeWallet,
     authSession,
     user,
@@ -292,18 +282,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="mt-auto space-y-3 pt-4 border-t border-black/[0.05]">
           <div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/90 to-white/50 border border-black/[0.06] backdrop-blur-md shadow-xs">
             <div className="flex items-center justify-between text-[11px] text-zinc-500 mb-1">
-              <span>Paper Valuation</span>
+              <span>{accountMode === 'upstox' ? 'Upstox Valuation' : 'Simulated Valuation'}</span>
               <span className={`font-semibold ${pnl.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {pnl.amount >= 0 ? '+' : ''}
                 {pnl.pct.toFixed(2)}%
               </span>
             </div>
             <div className="text-lg font-bold text-zinc-950 font-mono tracking-tight">
-              {money(pv)}
+              {moneyINR(pv)}
             </div>
             <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-1">
-              <span>Cash: {money(state.cash)}</span>
-              <span className="text-[10px] font-semibold text-indigo-600">Active</span>
+              <span>Cash: {moneyINR(state.cash)}</span>
+              <span className="text-[10px] font-semibold text-indigo-600">{accountMode === 'upstox' ? 'NSE Live' : 'Sandbox'}</span>
             </div>
           </div>
 
@@ -442,7 +432,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            {/* Sovereign Wallet Quick Pill */}
+            {/* Funds & Margin Quick Pill */}
             <button
               type="button"
               onClick={() => go('/wallet')}
@@ -451,11 +441,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
                   : 'bg-indigo-50/80 hover:bg-indigo-100 border-indigo-200/80 text-indigo-900'
               }`}
-              title="Open Sovereign Fiat & Web3 Wallet"
+              title="Open Funds & Margin Ledger"
             >
               <Wallet className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Wallet:</span>
-              <span className="font-mono font-bold">${nativeWallet.balanceUSD.toFixed(2)}</span>
+              <span className="hidden sm:inline">Funds:</span>
+              <span className="font-mono font-bold">
+                {accountMode === 'upstox' && upstoxAccount?.funds
+                  ? moneyINR(upstoxAccount.funds.availableCash)
+                  : moneyINR(state.cash)}
+              </span>
             </button>
 
             {/* Quick Start Visual Guide Trigger */}
@@ -664,14 +658,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           </div>
-        ) : accountMode === 'paper' ? (
+        ) : (
           <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 backdrop-blur-xs">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold">
                 🎓
               </span>
               <span>
-                <strong>SIMULATED PAPER TRADING MODE</strong> — $50,000 virtual practice capital active. Zero real money at risk.
+                <strong>SIMULATED PAPER TRADING DESK</strong> — ₹5,00,000 virtual practice capital active. Zero financial risk.
               </span>
             </div>
             <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -690,24 +684,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           </div>
-        ) : (
-          <div className="bg-emerald-950 text-emerald-100 border-b border-emerald-800/80 px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span>
-                <strong>LIVE REAL CAPITAL DESK ACTIVE</strong> ({accountMode === 'exchange' ? 'Binance Live Exchange' : 'Self-Custodial Web3 / UPI'}) — Real capital deployed. Circuit breakers active.
-              </span>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setAccountMode('paper')}
-                className="text-[11px] font-medium bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-lg transition-colors"
-              >
-                Return to Paper Mode
-              </button>
-            </div>
-          </div>
         )}
 
         {/* Content Area */}
@@ -715,7 +691,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* Legal & Compliance Footer for PhonePe & RBI Underwriting */}
+        {/* Institutional Statutory & Compliance Footer */}
         <LegalFooter />
       </div>
 
@@ -793,11 +769,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {/* Upstox Terminal Drawer */}
       <UpstoxTerminalDrawer open={upstoxDrawerOpen} onClose={closeUpstoxDrawer} />
 
-      {/* Binance Exchange Onboarding Drawer */}
-      <ExchangeOnboardingDrawer open={exchangeDrawerOpen} onClose={closeExchangeDrawer} />
-
-      {/* Web3 Self-Custodial Desk Drawer */}
-      <Web3WalletDrawer open={web3DrawerOpen} onClose={closeWeb3Drawer} onOpenUPI={() => go('/wallet')} />
 
       {/* AI Safety Authorization Gate Modal */}
       {pendingAIProposal && pendingAIValidation && (

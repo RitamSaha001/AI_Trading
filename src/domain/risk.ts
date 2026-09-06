@@ -45,8 +45,9 @@ export function calculatePortfolioRisk(
   }
 
   // 1. Asset weights
+  const allRiskAssets = Array.from(new Set([...ASSETS, ...Object.keys(state.positions || {})])) as Asset[];
   const assetWeights = Object.fromEntries(
-    ASSETS.map((a) => [a, positionValue(state, markets, a) / totalVal])
+    allRiskAssets.map((a) => [a, positionValue(state, markets, a) / totalVal])
   ) as Record<Asset, number>;
 
   // 2. Liquid cash ratio & exposure
@@ -59,8 +60,8 @@ export function calculatePortfolioRisk(
   let maxWeight = 0;
   let hhi = 0; // Herfindahl-Hirschman index: sum of squared weights
 
-  for (const a of ASSETS) {
-    const w = assetWeights[a];
+  for (const a of allRiskAssets) {
+    const w = assetWeights[a] || 0;
     hhi += w * w;
     if (w > maxWeight) {
       maxWeight = w;
@@ -72,8 +73,8 @@ export function calculatePortfolioRisk(
 
   // 4. Weighted portfolio asset volatility
   let weightedVol = 0;
-  for (const a of ASSETS) {
-    const w = assetWeights[a];
+  for (const a of allRiskAssets) {
+    const w = assetWeights[a] || 0;
     if (w > 0) {
       const hist = markets[a]?.history || [];
       const assetVol = stdev(returns(hist.slice(-20)));

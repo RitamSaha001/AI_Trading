@@ -85,7 +85,7 @@ export function AutonomousQuantPilot() {
               </span>
             </div>
             <p className="text-xs text-zinc-500">
-              Zero cloud latency &bull; Zero external API dependencies &bull; Capital protection &amp; anti-loss guardian
+              Upstox NSE/BSE Equities &bull; Zero external cloud latency &bull; Dynamic ATR profit brackets &amp; Stop-Loss protection
             </p>
           </div>
         </div>
@@ -258,7 +258,7 @@ export function AutonomousQuantPilot() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
             {opportunities.map((opp) => {
               const isIndian = isIndianAsset(opp.asset);
-              const currSym = isIndian ? '₹' : '$';
+              const currSym = '₹';
               const assetMeta = META[opp.asset];
 
               return (
@@ -281,7 +281,7 @@ export function AutonomousQuantPilot() {
                             {assetMeta?.name || opp.asset}
                           </span>
                           <span className="text-[10px] font-semibold text-zinc-500">
-                            ({opp.asset}{isIndian ? ' • NSE' : ''})
+                            ({opp.asset} • NSE)
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
@@ -353,21 +353,21 @@ export function AutonomousQuantPilot() {
                     <div className="p-2 rounded-xl bg-black/[0.02]">
                       <span className="text-[10px] text-zinc-400 block">Entry Spot</span>
                       <span className="font-bold font-mono text-zinc-950">
-                        {currSym}{opp.entryPrice.toLocaleString()}
+                        {currSym}{opp.entryPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
 
                     <div className="p-2 rounded-xl bg-rose-50/50 border border-rose-100/60">
                       <span className="text-[10px] text-rose-600 block font-medium">Stop-Loss (Capped)</span>
                       <span className="font-bold font-mono text-rose-700">
-                        {currSym}{opp.stopLossPrice.toLocaleString()}
+                        {currSym}{opp.stopLossPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
 
                     <div className="p-2 rounded-xl bg-emerald-50/50 border border-emerald-100/60">
                       <span className="text-[10px] text-emerald-600 block font-medium">Target Profit</span>
                       <span className="font-bold font-mono text-emerald-700">
-                        {currSym}{opp.takeProfitPrice.toLocaleString()}
+                        {currSym}{opp.takeProfitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -375,13 +375,13 @@ export function AutonomousQuantPilot() {
                   {/* Risk Budget Summary */}
                   <div className="flex items-center justify-between text-[11px] text-zinc-500 px-1 pt-1">
                     <span>
-                      Size: <strong className="text-zinc-800">{opp.recommendedUnits} units</strong>
+                      Size: <strong className="text-zinc-800">{opp.recommendedUnits} {isIndian ? 'shares' : 'units'}</strong>
                     </span>
                     <span>
-                      Max Loss: <strong className="text-rose-600">{currSym}{opp.projectedLoss.toLocaleString()}</strong>
+                      Max Loss: <strong className="text-rose-600">{currSym}{opp.projectedLoss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                     </span>
                     <span>
-                      Target Gain: <strong className="text-emerald-600">+{currSym}{opp.projectedGain.toLocaleString()}</strong>
+                      Target Gain: <strong className="text-emerald-600">+{currSym}{opp.projectedGain.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                     </span>
                   </div>
                 </div>

@@ -128,8 +128,8 @@ export function Dashboard() {
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <PageHeader
-        title="NSE / BSE & Global Markets Dashboard"
-        subtitle="Live Indian equities streams, Upstox execution gateway, quantitative risk controls, and automated algorithmic trading."
+        title="Upstox Indian Equities &amp; Derivatives Cockpit"
+        subtitle="Live NSE/BSE streaming quotes, Upstox execution gateway, real-time risk controls, and automated algorithmic trading."
         action={
           <div className="flex items-center gap-2">
             <button
@@ -195,9 +195,11 @@ export function Dashboard() {
         {/* Total Net Worth */}
         <GlassCard className="flex flex-col justify-between">
           <div>
-            <span className="text-xs font-medium text-zinc-500">Total Paper Portfolio</span>
+            <span className="text-xs font-medium text-zinc-500">
+              {state.accountMode === 'upstox' ? 'Upstox Portfolio Valuation' : 'Simulated Paper Valuation'}
+            </span>
             <div className="text-3xl font-bold font-mono tracking-tight text-zinc-950 mt-1">
-              {money(pv)}
+              {moneyINR(pv)}
             </div>
             <div className="flex items-center gap-2 mt-2">
               <span
@@ -207,13 +209,13 @@ export function Dashboard() {
               >
                 {pnl.amount >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
                 {pnl.amount >= 0 ? '+' : ''}
-                {pnl.pct.toFixed(2)}% ({money(pnl.amount)})
+                {pnl.pct.toFixed(2)}% ({moneyINR(pnl.amount)})
               </span>
               <span className="text-[11px] text-zinc-400">All-time P&amp;L</span>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center justify-between text-xs text-zinc-500">
-            <span>Liquid Cash: {money(state.cash)}</span>
+            <span>Liquid Cash: {moneyINR(state.cash)}</span>
             <span className="font-medium text-zinc-800">
               {((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}% Liquid
             </span>
@@ -643,7 +645,7 @@ export function Dashboard() {
 
           <button
             type="button"
-            onClick={() => openChat('Run a portfolio stress test simulating a 20% Bitcoin flash crash and tell me my projected loss and survivability rating.')}
+            onClick={() => openChat('Run an Indian portfolio stress test simulating a 10% Nifty 50 selloff and sector rotation, and tell me my projected loss and survivability rating.')}
             className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
           >
             <div className="flex items-center gap-2 mb-2">
@@ -704,14 +706,14 @@ export function Markets() {
     accountMode,
   } = useLumen();
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<string>(accountMode === 'upstox' ? 'Indian Equities' : 'All');
+  const [category, setCategory] = useState<string>('All');
   const [sortKey, setSortKey] = useState<'change' | 'price' | 'volume' | 'name'>('change');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [pageSize, setPageSize] = useState<number>(36);
 
-  const categories = ['All', 'Indian Equities', 'Watchlist', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming'];
+  const categories = ['All', 'Banking', 'IT', 'Energy', 'Auto', 'Pharma', 'FMCG', 'Watchlist'];
 
-  const filtered = ASSETS.filter((a) => {
+  const filtered = INDIAN_ASSETS.filter((a) => {
     const m = markets[a];
     const meta = META[a];
     const q = query.toLowerCase().trim();
@@ -739,15 +741,15 @@ export function Markets() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
-        title="Institutional Markets"
-        subtitle={`Live quotes streamed across ${INDIAN_ASSETS.length} NSE/BSE Indian equities and global benchmark markets with sub-second recalculation.`}
+        title="NSE / BSE Equities &amp; F&amp;O Markets"
+        subtitle={`Live quotes streamed across ${INDIAN_ASSETS.length} NSE/BSE Indian equities and F&O underlyings with sub-second Upstox market feed updates.`}
         action={
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() =>
                 openChat(
-                  `Compare ${state.selectedAsset}, BTC, and ETH head-to-head on Alpha Radar, analyzing Sharpe ratios, volatility, and momentum score.`
+                  `Compare ${state.selectedAsset}, RELIANCE, and HDFCBANK head-to-head on Alpha Radar, analyzing Sharpe ratios, volatility, and momentum score.`
                 )
               }
               className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl shadow-xs transition-all"
@@ -776,10 +778,10 @@ export function Markets() {
         {categories.map((cat) => {
           const isActive = category === cat;
           const count = cat === 'All' 
-            ? ASSETS.length 
+            ? INDIAN_ASSETS.length 
             : cat === 'Watchlist' 
-            ? state.watchlist.length 
-            : ASSETS.filter((a) => META[a]?.category === cat).length;
+            ? state.watchlist.filter((w) => isIndianAsset(w)).length 
+            : INDIAN_ASSETS.filter((a) => META[a]?.category === cat).length;
 
           return (
             <button
@@ -809,7 +811,7 @@ export function Markets() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search across ${ASSETS.length} assets by symbol or name...`}
+            placeholder={`Search across ${INDIAN_ASSETS.length} NSE/BSE equities by symbol or name...`}
             className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 transition-all"
           />
         </div>
@@ -1218,9 +1220,6 @@ export function Portfolio() {
     markets,
     openChat,
     accountMode,
-    exchangeAccount,
-    openExchangeDrawer,
-    syncExchangeBalances,
     upstoxAccount,
     openUpstoxDrawer,
     syncUpstoxAccount,
@@ -1230,21 +1229,23 @@ export function Portfolio() {
   const riskProfile = calculatePortfolioRisk(state, markets);
   const danger = senseMarketDanger(state, markets);
 
-  const activeHoldings = ASSETS.filter((a) => (state.positions[a] || 0) > 0);
+  const activeHoldings = Object.keys(state.positions).filter(
+    (a) => (state.positions[a as Asset] || 0) > 0
+  ) as Asset[];
   const [onlyActive, setOnlyActive] = useState(true);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
-        title="Portfolio Analytics"
-        subtitle="Live balance distribution, cost-basis calculations, fees, and mark-to-market valuations."
+        title="Portfolio Analytics &amp; Capital Ledger"
+        subtitle="Live Demat balance distribution, cost-basis calculations, F&amp;O margins, and mark-to-market valuations."
         action={
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() =>
                 openChat(
-                  'Run a portfolio stress test simulating a 20% Bitcoin flash crash and tell me my projected loss and survivability rating.'
+                  'Run an Indian portfolio stress test simulating a 10% Nifty 50 selloff and sector rotation, and tell me my projected loss and survivability rating.'
                 )
               }
               className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl shadow-xs transition-all"
@@ -1352,88 +1353,6 @@ export function Portfolio() {
               <span className="text-[11px] text-zinc-400 font-medium block">Static Egress IP</span>
               <span className="text-xs font-mono font-semibold mt-1.5 block text-indigo-300">
                 {upstoxAccount?.ipDiagnostics?.outboundIp || '87.76.191.49'} (Verified)
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Live Exchange Verified Wallet Card (When in Exchange Mode) */}
-      {accountMode === 'exchange' && (
-        <div className="p-6 rounded-[28px] bg-zinc-900 text-white shadow-xl space-y-4 border border-zinc-800 animate-in fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
-                <Coins className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-white tracking-tight">
-                    Binance {exchangeAccount?.environment?.toUpperCase() || 'TESTNET'} Wallet
-                  </h3>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    🟢 Live Synced
-                  </span>
-                  {exchangeAccount?.latencyMs !== undefined && (
-                    <span className="text-[10px] font-mono text-zinc-400">
-                      {exchangeAccount.latencyMs}ms ping
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  {exchangeAccount?.securityBadge || 'Client-Side Encrypted Execution Bridge'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => syncExchangeBalances()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all"
-                title="Refresh Balances"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Refresh</span>
-              </button>
-              <button
-                type="button"
-                onClick={openExchangeDrawer}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all"
-              >
-                <span>Manage Keys</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Balance Metrics Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-              <span className="text-[11px] text-zinc-400 font-medium block">Total Liquid Stablecoins</span>
-              <span className="text-lg font-bold font-mono text-emerald-400 mt-1 block">
-                ${(['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const)
-                  .reduce((sum, c) => sum + (exchangeAccount?.balances?.[c]?.free || 0), 0)
-                  .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-              <span className="text-[11px] text-zinc-400 font-medium block">Stablecoins In Orders</span>
-              <span className="text-lg font-bold font-mono text-amber-400 mt-1 block">
-                ${(['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const)
-                  .reduce((sum, c) => sum + (exchangeAccount?.balances?.[c]?.locked || 0), 0)
-                  .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-              <span className="text-[11px] text-zinc-400 font-medium block">Active Tokens</span>
-              <span className="text-lg font-bold font-mono text-white mt-1 block">
-                {Object.keys(exchangeAccount?.balances || {}).filter((k) => !['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'].includes(k)).length} Assets
-              </span>
-            </div>
-            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
-              <span className="text-[11px] text-zinc-400 font-medium block">Withdrawal Safety</span>
-              <span className={`text-xs font-semibold mt-1.5 block ${exchangeAccount?.canWithdraw ? 'text-rose-400' : 'text-emerald-400'}`}>
-                {exchangeAccount?.canWithdraw ? '🚨 DANGEROUS: ENABLED' : '🛡️ DISABLED (Safe)'}
               </span>
             </div>
           </div>
@@ -1619,16 +1538,16 @@ export function Portfolio() {
                   .reduce((sum, o) => sum + (o.reservedCash || o.amount * o.price), 0);
                 return (
                   <span className="text-sm font-bold text-zinc-900 font-mono">
-                    {pendingOrders.length} {pendingOrders.length === 1 ? 'Order' : 'Orders'} ({money(reservedCash)})
+                    {pendingOrders.length} {pendingOrders.length === 1 ? 'Order' : 'Orders'} ({moneyINR(reservedCash)})
                   </span>
                 );
               })()}
             </div>
             <span className="text-[10px] text-zinc-400 mt-0.5 block">
-              {accountMode === 'exchange'
-                ? exchangeAccount?.lastSyncAt
-                  ? `Last sync: ${new Date(exchangeAccount.lastSyncAt).toLocaleTimeString()}`
-                  : 'Exchange connected'
+              {accountMode === 'upstox'
+                ? upstoxAccount?.tokenHealth?.status === 'HEALTHY'
+                  ? 'Upstox Demat margin verified'
+                  : 'Upstox live connected'
                 : 'Simulated desk balance verified'}
             </span>
           </div>
@@ -1639,7 +1558,7 @@ export function Portfolio() {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
         <GlassCard>
           <span className="text-xs font-medium text-zinc-500">Net Portfolio Value</span>
-          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{money(pv)}</div>
+          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{moneyINR(pv)}</div>
           <span
             className={`text-xs font-semibold mt-1 inline-block ${
               pnl.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'
@@ -1658,16 +1577,16 @@ export function Portfolio() {
             }`}
           >
             {state.realizedPnl >= 0 ? '+' : ''}
-            {money(state.realizedPnl)}
+            {moneyINR(state.realizedPnl)}
           </div>
           <span className="text-xs text-zinc-500 mt-1 inline-block">
-            Fees Paid: {money(state.totalFees || 0)}
+            Fees Paid: {moneyINR(state.totalFees || 0)}
           </span>
         </GlassCard>
 
         <GlassCard>
           <span className="text-xs font-medium text-zinc-500">Liquid Cash</span>
-          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{money(state.cash)}</div>
+          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{moneyINR(state.cash)}</div>
           <span className="text-xs text-zinc-500 mt-1 inline-block">
             {((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}% of total capital
           </span>
@@ -1703,7 +1622,7 @@ export function Portfolio() {
           <div
             className="h-full bg-zinc-300"
             style={{ width: `${(state.cash / Math.max(pv, 1)) * 100}%` }}
-            title={`Cash: ${money(state.cash)}`}
+            title={`Cash: ${moneyINR(state.cash)}`}
           />
           {activeHoldings.map((a) => {
             const val = (state.positions[a] || 0) * (markets[a]?.price || 0);
@@ -1716,7 +1635,7 @@ export function Portfolio() {
                   width: `${pct}%`,
                   backgroundColor: META[a]?.iconColor || '#4f46e5',
                 }}
-                title={`${a}: ${pct.toFixed(1)}% (${money(val)})`}
+                title={`${a}: ${pct.toFixed(1)}% (${moneyINR(val)})`}
               />
             );
           })}
@@ -1775,7 +1694,7 @@ export function Portfolio() {
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                All ({ASSETS.length})
+                All ({INDIAN_ASSETS.length})
               </button>
             </div>
             <button
@@ -1803,7 +1722,7 @@ export function Portfolio() {
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.04]">
-              {(onlyActive ? activeHoldings : ASSETS).map((a) => {
+              {(onlyActive ? activeHoldings : INDIAN_ASSETS).map((a) => {
                 const qty = state.positions[a] || 0;
                 const m = markets[a];
                 const val = qty * (m?.price || 0);
@@ -1831,13 +1750,13 @@ export function Portfolio() {
                       {formatQty(qty, a)}
                     </td>
                     <td className="px-6 py-4 font-mono text-zinc-500">
-                      {qty > 0 && avgCost ? (isIndianAsset(a) ? moneyINR(avgCost) : money(avgCost)) : '—'}
+                      {qty > 0 && avgCost ? moneyINR(avgCost) : '—'}
                     </td>
                     <td className="px-6 py-4 font-mono text-zinc-600">
-                      {m ? (isIndianAsset(a) ? moneyINR(m.price) : money(m.price)) : '—'}
+                      {m ? moneyINR(m.price) : '—'}
                     </td>
                     <td className="px-6 py-4 font-mono font-semibold text-zinc-900">
-                      {isIndianAsset(a) ? moneyINR(val) : money(val)}
+                      {moneyINR(val)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -1855,7 +1774,7 @@ export function Portfolio() {
                           }`}
                         >
                           {pnlInfo.amount >= 0 ? '+' : ''}
-                          {isIndianAsset(a) ? moneyINR(pnlInfo.amount) : money(pnlInfo.amount)} ({pnlInfo.pct.toFixed(2)}%)
+                          {moneyINR(pnlInfo.amount)} ({pnlInfo.pct.toFixed(2)}%)
                         </span>
                       ) : (
                         <span className="text-zinc-400">—</span>
@@ -1907,7 +1826,6 @@ export function Orders() {
     order,
     cancelPendingOrder,
     accountMode,
-    exchangeAccount,
     upstoxAccount,
     openUpstoxDrawer,
     triggerToast,
@@ -1926,7 +1844,7 @@ export function Orders() {
 
   const currentDeskMode = accountMode || 'paper';
   const isIndian = isIndianAsset(selectedAsset) || currentDeskMode === 'upstox';
-  const formatMoney = (val: number) => (isIndian ? moneyINR(val) : money(val));
+  const formatMoney = (val: number) => moneyINR(val);
 
   const m = markets[selectedAsset];
 
@@ -1948,12 +1866,10 @@ export function Orders() {
       const price = m?.price || 100;
       const ind = m ? indicators(m.history) : null;
       const atr = ind?.atr || price * 0.02;
-      const sl = isIndian ? Math.round((price - atr * 1.5) * 20) / 20 : +(price - atr * 1.5).toFixed(2);
-      const tp = isIndian ? Math.round((price + atr * 3.5) * 20) / 20 : +(price + atr * 3.5).toFixed(2);
+      const sl = Math.round((price - atr * 1.5) * 20) / 20;
+      const tp = Math.round((price + atr * 3.5) * 20) / 20;
       const riskPerUnit = Math.max(0.01, price - sl);
-      const units = isIndian
-        ? Math.max(1, Math.floor((Math.max(1000, state.cash) * 0.01) / riskPerUnit))
-        : +((Math.max(1000, state.cash) * 0.01) / riskPerUnit).toFixed(4);
+      const units = Math.max(1, Math.floor((Math.max(1000, state.cash) * 0.01) / riskPerUnit));
       setSide('buy');
       setOrderType('limit');
       setLimitPriceStr(price.toFixed(2));
@@ -1973,16 +1889,10 @@ export function Orders() {
   const estTotal = numAmount * estPrice;
   const estFee = estTotal * 0.0008;
 
-  const exchangeAvailableCash = (['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const).reduce(
-    (sum, c) => sum + (exchangeAccount?.balances?.[c]?.free || 0),
-    0
-  );
   const upstoxAvailableCash = upstoxAccount?.funds?.availableCash || 0;
   const availableCash =
     currentDeskMode === 'upstox'
       ? (upstoxAvailableCash > 0 ? upstoxAvailableCash : state.cash)
-      : currentDeskMode === 'exchange'
-      ? exchangeAvailableCash
       : state.cash;
 
   const upstoxHoldingQty = Number(
@@ -1991,13 +1901,10 @@ export function Orders() {
   const availableHolding =
     currentDeskMode === 'upstox'
       ? (upstoxHoldingQty > 0 ? upstoxHoldingQty : currentHolding)
-      : currentDeskMode === 'exchange'
-      ? (exchangeAccount?.balances?.[selectedAsset]?.free || 0)
       : currentHolding;
 
   // NSE Equities strictly require tick size multiple of 0.05
   const isTickSizeValid =
-    !isIndian ||
     orderType !== 'limit' ||
     !limitPriceStr ||
     Math.abs(Math.round(Number(limitPriceStr) * 20) / 20 - Number(limitPriceStr)) < 1e-4;
@@ -2013,12 +1920,10 @@ export function Orders() {
     if (side === 'buy') {
       const budget = (availableCash * pct) / 100;
       const qty = budget / (estPrice * 1.001);
-      const dec = META[selectedAsset]?.decimals || (isIndian ? 0 : 4);
-      setAmountStr(qty > 0 ? (isIndian ? Math.floor(qty).toString() : qty.toFixed(dec)) : '0');
+      setAmountStr(qty > 0 ? Math.floor(qty).toString() : '0');
     } else {
       const qty = (availableHolding * pct) / 100;
-      const dec = META[selectedAsset]?.decimals || (isIndian ? 0 : 4);
-      setAmountStr(isIndian ? Math.floor(qty).toString() : qty.toFixed(dec));
+      setAmountStr(Math.floor(qty).toString());
     }
   };
 
@@ -2064,16 +1969,12 @@ export function Orders() {
         title={
           accountMode === 'upstox'
             ? 'NSE / BSE Indian Equities Execution Terminal'
-            : accountMode === 'exchange'
-            ? 'Binance Spot Execution Terminal'
             : 'Simulated Paper Trading Terminal'
         }
         subtitle={
           accountMode === 'upstox'
             ? 'Authoritative Upstox gateway for National Stock Exchange & Bombay Stock Exchange with ₹ clearing, CNC/MIS products, and 0.05 tick size.'
-            : accountMode === 'exchange'
-            ? `Live order dispatch to Binance ${exchangeAccount?.environment?.toUpperCase() || 'TESTNET'} with client-side cryptographic HMAC-SHA256 signing.`
-            : 'Deterministic paper execution engine modeling realistic liquidity slippage, Indian & global markets, and taker fees.'
+            : 'Deterministic paper execution engine modeling realistic liquidity slippage, Indian equity markets, and SEBI-aligned fees.'
         }
       />
 
@@ -2091,14 +1992,9 @@ export function Orders() {
                 />
                 Upstox (NSE/BSE) • {upstoxAccount?.environment === 'production' ? 'Live Gateway' : 'Sandbox Gateway'}
               </span>
-            ) : accountMode === 'exchange' ? (
-              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 font-semibold flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Binance {exchangeAccount?.environment === 'mainnet' ? 'Mainnet' : 'Testnet'}
-              </span>
             ) : (
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-500/10 text-zinc-700 font-semibold">
-                Simulated Desk
+                Simulated Paper Desk
               </span>
             )}
           </div>
@@ -2152,7 +2048,7 @@ export function Orders() {
 
             {/* Asset Selector */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-700">Contract / Asset ({ASSETS.length} available)</label>
+              <label className="text-xs font-semibold text-zinc-700">Contract / Equity ({INDIAN_ASSETS.length} available)</label>
               <select
                 value={selectedAsset}
                 onChange={(e) => {
@@ -2162,14 +2058,14 @@ export function Orders() {
                 }}
                 className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 font-medium"
               >
-                {['Indian Equities', 'Nifty 50', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming', 'Other'].map((cat) => {
-                  const list = ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
+                {['Banking', 'IT', 'Energy', 'Auto', 'Pharma', 'FMCG'].map((cat) => {
+                  const list = INDIAN_ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
                   if (!list.length) return null;
                   return (
-                    <optgroup key={cat} label={`── ${cat} (${list.length}) ──`}>
+                    <optgroup key={cat} label={`── ${cat} Sector (${list.length}) ──`}>
                       {list.map((x) => (
                         <option key={x} value={x}>
-                          {x} — {META[x]?.name} ({isIndianAsset(x) ? moneyINR(markets[x]?.price || 0) : money(markets[x]?.price || 0)})
+                          {x} — {META[x]?.name} ({moneyINR(markets[x]?.price || 0)})
                         </option>
                       ))}
                     </optgroup>
@@ -2612,9 +2508,9 @@ export function Strategies() {
   const [showDeployModal, setShowDeployModal] = useState(false);
 
   // New Strategy Form State
-  const [newAsset, setNewAsset] = useState<Asset>('BTC');
+  const [newAsset, setNewAsset] = useState<Asset>('RELIANCE');
   const [newKind, setNewKind] = useState<StrategyKind>('titan_quantum');
-  const [newName, setNewName] = useState('Bitcoin Titan Quantum Apex Sentinel');
+  const [newName, setNewName] = useState('RELIANCE Titan Quantum Apex Sentinel');
   const [newAlloc, setNewAlloc] = useState(25);
   const [newCooldown, setNewCooldown] = useState(120);
   const [newTp, setNewTp] = useState(6.0);
@@ -3075,12 +2971,12 @@ export function Strategies() {
                         </span>
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold ${
-                            accountMode === 'exchange'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            accountMode === 'upstox'
+                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                               : 'bg-zinc-100 text-zinc-600'
                           }`}
                         >
-                          {accountMode === 'exchange' ? '🟢 Live Binance Target' : '📊 Paper Sim Target'}
+                          {accountMode === 'upstox' ? '🟢 Upstox Live Target' : '📊 Paper Sim Target'}
                         </span>
                         {s.zeroLossMode !== false && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 flex items-center gap-1">
@@ -3096,7 +2992,7 @@ export function Strategies() {
                         )}
                         {m && (
                           <span className="text-xs font-mono font-bold text-zinc-900 ml-auto">
-                            {money(currentPrice)}
+                            {moneyINR(currentPrice)}
                           </span>
                         )}
                       </div>
@@ -3470,14 +3366,14 @@ export function Strategies() {
                     }}
                     className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl outline-none font-medium"
                   >
-                    {['Indian Equities', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming', 'Other'].map((cat) => {
-                      const list = ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
+                    {['Banking', 'IT', 'Energy', 'Auto', 'Pharma', 'FMCG'].map((cat) => {
+                      const list = INDIAN_ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
                       if (!list.length) return null;
                       return (
-                        <optgroup key={cat} label={`── ${cat} (${list.length}) ──`}>
+                        <optgroup key={cat} label={`── ${cat} Sector (${list.length}) ──`}>
                           {list.map((a) => (
                             <option key={a} value={a}>
-                              {a} — {META[a]?.name} ({isIndianAsset(a) ? moneyINR(markets[a]?.price || 0) : money(markets[a]?.price || 0)})
+                              {a} — {META[a]?.name} ({moneyINR(markets[a]?.price || 0)})
                             </option>
                           ))}
                         </optgroup>
@@ -3611,9 +3507,9 @@ export function Strategies() {
 // ----------------------------------------------------
 export function Alerts() {
   const { state, markets, addAlert, toggleAlert, removeAlert } = useLumen();
-  const [asset, setAsset] = useState<Asset>('BTC');
+  const [asset, setAsset] = useState<Asset>('RELIANCE');
   const [type, setType] = useState<'above' | 'below' | 'changeUp' | 'changeDown'>('above');
-  const [valueStr, setValueStr] = useState('72000');
+  const [valueStr, setValueStr] = useState('3100');
 
   const currentPrice = markets[asset]?.price || 0;
 
@@ -3635,7 +3531,7 @@ export function Alerts() {
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
         title="Price Threshold Alerts"
-        subtitle="Continuous monitoring with sound alerts, banners, and proximity indicators."
+        subtitle="Continuous NSE/BSE monitoring with sound alerts, banners, and proximity indicators."
       />
 
       {/* Creator Form */}
@@ -3654,14 +3550,14 @@ export function Alerts() {
               }}
               className="w-full px-3 py-2 text-xs bg-white border border-black/[0.08] rounded-xl outline-none font-medium"
             >
-              {['Indian Equities', 'Layer 1', 'DeFi', 'AI & Compute', 'Meme', 'Infra', 'Gaming', 'Other'].map((cat) => {
-                const list = ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
+              {['Banking', 'IT', 'Energy', 'Auto', 'Pharma', 'FMCG'].map((cat) => {
+                const list = INDIAN_ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
                 if (!list.length) return null;
                 return (
-                  <optgroup key={cat} label={`── ${cat} (${list.length}) ──`}>
+                  <optgroup key={cat} label={`── ${cat} Sector (${list.length}) ──`}>
                     {list.map((x) => (
                       <option key={x} value={x}>
-                        {x} — {META[x]?.name} ({isIndianAsset(x) ? moneyINR(markets[x]?.price || 0) : money(markets[x]?.price || 0)})
+                        {x} — {META[x]?.name} ({moneyINR(markets[x]?.price || 0)})
                       </option>
                     ))}
                   </optgroup>
@@ -3677,15 +3573,15 @@ export function Alerts() {
               onChange={(e) => setType(e.target.value as any)}
               className="w-full px-3 py-2 text-xs bg-white border border-black/[0.08] rounded-xl outline-none font-medium"
             >
-              <option value="above">Price Rises Above (₹ / $)</option>
-              <option value="below">Price Drops Below (₹ / $)</option>
+              <option value="above">Price Rises Above (₹)</option>
+              <option value="below">Price Drops Below (₹)</option>
               <option value="changeUp">24h Gain Exceeds (%)</option>
               <option value="changeDown">24h Loss Exceeds (%)</option>
             </select>
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-zinc-700">Threshold Value</label>
+            <label className="text-xs font-semibold text-zinc-700">Threshold Value (₹)</label>
             <input
               type="number"
               step="any"
@@ -3712,9 +3608,9 @@ export function Alerts() {
           { asset: 'TCS' as Asset, type: 'above' as const, value: 4200, label: 'TCS > ₹4,200' },
           { asset: 'INFY' as Asset, type: 'above' as const, value: 1900, label: 'INFY > ₹1,900' },
           { asset: 'HDFCBANK' as Asset, type: 'above' as const, value: 1700, label: 'HDFCBANK > ₹1,700' },
-          { asset: 'BTC' as Asset, type: 'above' as const, value: 100000, label: 'BTC > $100k' },
-          { asset: 'ETH' as Asset, type: 'above' as const, value: 4000, label: 'ETH > $4k' },
-          { asset: 'SOL' as Asset, type: 'above' as const, value: 250, label: 'SOL > $250' },
+          { asset: 'ICICIBANK' as Asset, type: 'above' as const, value: 1300, label: 'ICICIBANK > ₹1,300' },
+          { asset: 'SBIN' as Asset, type: 'above' as const, value: 850, label: 'SBIN > ₹850' },
+          { asset: 'BHARTIARTL' as Asset, type: 'above' as const, value: 1800, label: 'BHARTIARTL > ₹1,800' },
         ].map((preset) => (
           <button
             key={preset.label}
@@ -3833,8 +3729,6 @@ export function SettingsPage() {
     reset,
     accountMode,
     setAccountMode,
-    exchangeAccount,
-    openExchangeDrawer,
     upstoxAccount,
     openUpstoxDrawer,
     setLossPreventionMode,
@@ -3863,7 +3757,7 @@ export function SettingsPage() {
   const [wsEnabled, setWsEnabled] = useState(state.settings.enableWebSocket ?? true);
   const [lossMode, setLossMode] = useState<'strict' | 'balanced' | 'aggressive'>(state.lossPreventionMode || 'balanced');
   const [slippageBps, setSlippageBps] = useState(state.settings.maxSlippageBps || 50);
-  const [resetBalance, setResetBalance] = useState(50000);
+  const [resetBalance, setResetBalance] = useState(500000);
   const [resetMode, setResetMode] = useState<'clean' | 'seeded'>('clean');
   const [wizardOpen, setWizardOpen] = useState(false);
 
@@ -3991,19 +3885,19 @@ export function SettingsPage() {
         </div>
       </GlassCard>
 
-      {/* 3. Execution Desks & Exchange Security Vault */}
+      {/* 3. Execution Desks & Gateway Vault */}
       <GlassCard className="space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-black/[0.04]">
           <div className="flex items-center gap-2">
-            <Coins className="w-4 h-4 text-emerald-600" />
+            <Coins className="w-4 h-4 text-indigo-600" />
             <h3 className="text-sm font-bold text-zinc-900">Execution Desks &amp; Gateway Vault</h3>
           </div>
           <span className="text-[10px] font-mono text-zinc-400">
-            Active: <strong>{accountMode === 'upstox' ? 'Upstox (NSE/BSE)' : accountMode === 'exchange' ? 'Binance Spot' : 'Paper Sandbox'}</strong>
+            Active: <strong>{accountMode === 'upstox' ? 'Upstox (NSE/BSE Live Desk)' : 'Paper Sandbox'}</strong>
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div
             onClick={() => setAccountMode('paper')}
             className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
@@ -4016,7 +3910,7 @@ export function SettingsPage() {
               <strong className="text-xs font-bold text-zinc-900">Simulated Paper Desk</strong>
               {accountMode === 'paper' && <span className="text-[10px] font-bold text-indigo-600">Selected</span>}
             </div>
-            <p className="text-[11px] text-zinc-500 mt-1">Virtual capital sandbox with live matching simulation.</p>
+            <p className="text-[11px] text-zinc-500 mt-1">Virtual capital sandbox with realistic slippage & NSE matching simulation.</p>
           </div>
 
           <div
@@ -4036,7 +3930,7 @@ export function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <span className="text-sm">🇮🇳</span>
-                <strong className="text-xs font-bold text-zinc-900">Upstox (NSE/BSE)</strong>
+                <strong className="text-xs font-bold text-zinc-900">Upstox (NSE/BSE Live Desk)</strong>
               </div>
               {accountMode === 'upstox' ? (
                 <span className="text-[10px] font-bold text-indigo-600">Selected</span>
@@ -4050,45 +3944,23 @@ export function SettingsPage() {
                 : 'Connect Upstox Demat account via OAuth 2.0.'}
             </p>
           </div>
-
-          <div
-            onClick={() => {
-              setAccountMode('exchange');
-              if (!exchangeAccount?.connected) openExchangeDrawer();
-            }}
-            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-              accountMode === 'exchange'
-                ? 'bg-emerald-50/20 border-emerald-600 ring-1 ring-emerald-600'
-                : 'bg-white border-black/[0.08] hover:border-black/20'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <strong className="text-xs font-bold text-zinc-900">Binance Spot Bridge</strong>
-              {accountMode === 'exchange' && <span className="text-[10px] font-bold text-emerald-600">Selected</span>}
-            </div>
-            <p className="text-[11px] text-zinc-500 mt-1">
-              {exchangeAccount?.connected
-                ? `Connected to ${exchangeAccount.environment.toUpperCase()} (${exchangeAccount.latencyMs ?? 0}ms ping)`
-                : 'Connect API Key via Client-Side AES-GCM Vault.'}
-            </p>
-          </div>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <Lock className="w-3.5 h-3.5 text-zinc-500" />
             <span className="text-zinc-700 font-medium">
-              {exchangeAccount?.connected
-                ? `Vault Active: Safe Spot Only (${exchangeAccount.canWithdraw ? 'Warning: Withdrawals on' : 'Withdrawals blocked'})`
-                : 'Vault Locked: No keys loaded in browser memory.'}
+              {upstoxAccount?.connected
+                ? `Upstox Gateway Active: Static Egress IP ${upstoxAccount?.ipDiagnostics?.outboundIp || '87.76.191.49'} verified • Daily cycle renews at 03:30 AM IST`
+                : 'Upstox Gateway Ready: Connect API Key & Secret via OAuth 2.0 flow.'}
             </span>
           </div>
           <button
             type="button"
-            onClick={openExchangeDrawer}
+            onClick={openUpstoxDrawer}
             className="text-xs font-bold text-indigo-600 hover:underline"
           >
-            {exchangeAccount?.connected ? 'Manage Keys ⚙️' : 'Configure Exchange Keys →'}
+            {upstoxAccount?.connected ? 'Terminal Controls ⚙️' : 'Connect Upstox →'}
           </button>
         </div>
       </GlassCard>
@@ -4185,8 +4057,8 @@ export function SettingsPage() {
 
           <div className="p-3.5 rounded-2xl bg-black/[0.02] border border-black/[0.05] flex items-center justify-between">
             <div>
-              <h4 className="text-xs font-bold text-zinc-800">Binance WebSocket Feed</h4>
-              <p className="text-[11px] text-zinc-500">Live sub-second quotes</p>
+              <h4 className="text-xs font-bold text-zinc-800">Upstox Streaming Market Feed</h4>
+              <p className="text-[11px] text-zinc-500">Live NSE/BSE sub-second ticks</p>
             </div>
             <button
               type="button"
@@ -4237,12 +4109,12 @@ export function SettingsPage() {
             }`}
           >
             <div className="text-xs font-bold text-zinc-900">Seeded Portfolio</div>
-            <div className="text-[10px] text-zinc-500 mt-0.5">Starter BTC/ETH/SOL allocations</div>
+            <div className="text-[10px] text-zinc-500 mt-0.5">Starter RELIANCE / TCS / HDFCBANK allocations</div>
           </button>
         </div>
 
         <div className="flex items-center gap-2 pt-1">
-          {[25000, 50000, 100000].map((amt) => (
+          {[100000, 500000, 1000000].map((amt) => (
             <button
               key={amt}
               type="button"
@@ -4253,13 +4125,13 @@ export function SettingsPage() {
                   : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
               }`}
             >
-              ${amt.toLocaleString()}
+              ₹{amt.toLocaleString('en-IN')}
             </button>
           ))}
           <button
             type="button"
             onClick={() => {
-              if (confirm(`Reset paper simulation in ${resetMode} mode with $${resetBalance.toLocaleString()}?`)) {
+              if (confirm(`Reset paper simulation in ${resetMode} mode with ₹${resetBalance.toLocaleString('en-IN')}?`)) {
                 reset(resetBalance, resetMode);
               }
             }}

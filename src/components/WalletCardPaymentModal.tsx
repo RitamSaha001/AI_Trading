@@ -273,7 +273,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
             <div className="text-center py-6 space-y-4">
               <div className="w-16 h-16 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin mx-auto"></div>
               <h3 className="font-bold text-lg">Checking Payment Status...</h3>
-              <p className="text-sm text-zinc-500">Please wait while we verify your payment with PhonePe.</p>
+              <p className="text-sm text-zinc-500">Please wait while we verify your payment with the gateway.</p>
             </div>
           )}
 
@@ -386,7 +386,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="text-[11px]">
-                    Secured by PhonePe. You will be redirected to a PCI-DSS Level 1 certified checkout page.
+                    Secured Payment Gateway. You will be redirected to a PCI-DSS Level 1 certified checkout page.
                   </span>
                 </div>
               )}
@@ -499,7 +499,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                 ) : (
                   <>
                     <Lock className="w-4 h-4" />
-                    <span>{accountMode === 'exchange' ? 'Pay Securely via PhonePe' : 'Proceed to 3DS Verification'}</span>
+                    <span>{accountMode === 'exchange' ? 'Pay Securely via Payment Gateway' : 'Proceed to 3DS Verification'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}

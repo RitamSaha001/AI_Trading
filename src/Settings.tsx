@@ -245,8 +245,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 <Radio className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="text-xs font-semibold text-zinc-800">Real-Time WebSocket Stream</h4>
-                <p className="text-[11px] text-zinc-500">Live sub-second Binance miniTicker stream updates</p>
+                <h4 className="text-xs font-semibold text-zinc-800">Real-Time Market Stream</h4>
+                <p className="text-[11px] text-zinc-500">Live sub-second Upstox market feed updates</p>
               </div>
             </div>
             <button
@@ -324,12 +324,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 }`}
               >
                 <div className="text-xs font-semibold text-zinc-900">Seeded Portfolio</div>
-                <div className="text-[10px] text-zinc-500 mt-0.5">Starter BTC/ETH/SOL allocations</div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">Starter Indian bluechips (RELIANCE, TCS, HDFCBANK) allocations</div>
               </button>
             </div>
 
             <div className="flex items-center gap-2 pt-1">
-              {[25000, 50000, 100000].map((amt) => (
+              {[100000, 500000, 1000000].map((amt) => (
                 <button
                   key={amt}
                   type="button"
@@ -340,13 +340,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                       : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
                   }`}
                 >
-                  ${amt.toLocaleString()}
+                  ₹{amt.toLocaleString('en-IN')}
                 </button>
               ))}
               <button
                 type="button"
                 onClick={() => {
-                  if (confirm(`Reset paper simulation in ${resetMode} mode with $${resetBalance.toLocaleString()}?`)) {
+                  if (confirm(`Reset paper simulation in ${resetMode} mode with ₹${resetBalance.toLocaleString('en-IN')}?`)) {
                     reset(resetBalance, resetMode);
                     onClose();
                   }

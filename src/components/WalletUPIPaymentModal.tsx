@@ -302,7 +302,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
-                GPay, PhonePe, Paytm, BHIM, CRED & 12-Digit UTR
+                GPay, BHIM UPI, Paytm, CRED &amp; 12-Digit UTR
               </p>
             </div>
           </div>
@@ -489,7 +489,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                         ) : (
                           <>
                             <QrCode className="w-4 h-4" />
-                            <span>Pay securely via PhonePe</span>
+                            <span>Pay securely via UPI Gateway</span>
                           </>
                         )}
                       </button>
@@ -553,7 +553,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                     ) : (
                       <>
                         <Smartphone className="w-4 h-4" />
-                        <span>{accountMode === 'exchange' ? 'Proceed with PhonePe' : `Send Collect Request to ${vpa || 'App'}`}</span>
+                        <span>{accountMode === 'exchange' ? 'Proceed with UPI Gateway' : `Send Collect Request to ${vpa || 'App'}`}</span>
                       </>
                     )}
                   </button>
@@ -584,7 +584,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                       className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm font-mono font-bold tracking-wider outline-none"
                     />
                     <p className="text-[10px] text-zinc-400">
-                      Found in SMS or transaction details of Google Pay, PhonePe, Paytm, or HDFC/SBI/ICICI app.
+                      Found in SMS or transaction details of Google Pay, BHIM, Paytm, or HDFC/SBI/ICICI app.
                     </p>
                     {accountMode === 'exchange' && (
                       <div className="mt-2 space-y-1">

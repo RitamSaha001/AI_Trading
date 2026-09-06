@@ -57,6 +57,9 @@ const mockMarkets = Object.fromEntries(
     if (a === 'BTC') p = 60000;
     if (a === 'ETH') p = 3000;
     if (a === 'SOL') p = 150;
+    if (a === 'RELIANCE') p = 2800;
+    if (a === 'TCS') p = 4000;
+    if (a === 'INFY') p = 1800;
     return [a, createMockMarket(a, p, 2.5)];
   })
 ) as Record<any, Market>;
