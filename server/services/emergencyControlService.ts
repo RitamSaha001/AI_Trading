@@ -52,9 +52,15 @@ export interface PanicSquareOffSummary {
 }
 
 export class EmergencyControlService {
+  private static activeLiquidations: Set<string> = new Set();
+
   /**
    * Retrieves the current durable emergency system state.
    */
+  public static async getState(): Promise<EmergencySystemStatus> {
+    return this.getStatus();
+  }
+
   public static async getStatus(): Promise<EmergencySystemStatus> {
     const db = getDb();
     const row = await db.queryOne<any>(
@@ -177,21 +183,29 @@ export class EmergencyControlService {
     reason: string = 'Emergency Panic Square-Off Triggered',
     initiatedBy: string = 'human_operator'
   ): Promise<PanicSquareOffSummary> {
-    const db = getDb();
-    const runId = `panic_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-    const startedAt = Date.now();
+    if (this.activeLiquidations.has(userId)) {
+      const msg = `Panic square-off already in progress for user ${userId}. Duplicate concurrent execution blocked.`;
+      logger.warn(`[PanicSquareOff] ${msg}`);
+      throw new StandardBrokerError('CONCURRENT_LIQUIDATION', msg, brokerId);
+    }
+    this.activeLiquidations.add(userId);
 
-    // 1. Immediately transition durable system state to PANIC (blocks all new live orders)
-    await this.setState('PANIC', reason, initiatedBy, { runId, userId, brokerId });
+    try {
+      const db = getDb();
+      const runId = `panic_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      const startedAt = Date.now();
 
-    // Record initial run record
-    await db.execute(
-      `INSERT INTO panic_squareoff_runs (
-        id, user_id, broker, status, cancelled_orders_count,
-        positions_evaluated_count, close_orders_submitted_count, started_at
-      ) VALUES (?, ?, ?, 'IN_PROGRESS', 0, 0, 0, ?)`,
-      [runId, userId, brokerId, startedAt]
-    );
+      // 1. Immediately transition durable system state to PANIC (blocks all new live orders)
+      await this.setState('PANIC', reason, initiatedBy, { runId, userId, brokerId });
+
+      // Record initial run record
+      await db.execute(
+        `INSERT INTO panic_squareoff_runs (
+          id, user_id, broker, status, cancelled_orders_count,
+          positions_evaluated_count, close_orders_submitted_count, started_at
+        ) VALUES (?, ?, ?, 'IN_PROGRESS', 0, 0, 0, ?)`,
+        [runId, userId, brokerId, startedAt]
+      );
 
     const errors: string[] = [];
     let cancelledOrdersCount = 0;
@@ -431,19 +445,23 @@ export class EmergencyControlService {
       ]
     );
 
-    return {
-      runId,
-      userId,
-      broker: brokerId,
-      status: finalStatus,
-      cancelledOrdersCount,
-      positionsEvaluatedCount,
-      closeOrdersSubmittedCount,
-      skippedPositionsCount,
-      errors,
-      reconciliation,
-      startedAt,
-      completedAt,
-    };
+      return {
+        runId,
+        userId,
+        broker: brokerId,
+        status: finalStatus,
+        cancelledOrdersCount,
+        positionsEvaluatedCount,
+        closeOrdersSubmittedCount,
+        skippedPositionsCount,
+        errors,
+        reconciliation,
+        startedAt,
+        completedAt,
+      };
+    } finally {
+      this.activeLiquidations.delete(userId);
+    }
   }
 }
+

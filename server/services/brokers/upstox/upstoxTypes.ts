@@ -163,7 +163,17 @@ export interface UpstoxPlaceOrderPayload {
   trigger_price?: number;
   is_amo?: boolean;
   slice?: boolean;
+  algoName?: string;
 }
+
+export interface UpstoxAuthorizedFeedResponse {
+  authorized_redirect_uri: string;
+}
+
+export const UpstoxAuthorizedFeedResponseSchema = z.object({
+  authorized_redirect_uri: z.string(),
+});
+
 
 export interface UpstoxModifyOrderPayload {
   order_id: string;

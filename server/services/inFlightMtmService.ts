@@ -24,6 +24,7 @@ export interface MtmEvaluationResult {
   marginHealthRatio: number;
   isMarginCallWarning: boolean;
   isStopOutTriggered: boolean;
+  isRiskDegraded?: boolean;
   reason?: string;
 }
 
@@ -57,14 +58,41 @@ export class InFlightMtmService {
     );
     const maxDailyLoss = Number(limits?.max_daily_loss_usd || 50000);
 
-    // 3. Fetch live positions from broker
+    // 3. Fetch authoritative funds and margins from broker
+    let brokerFunds: any = null;
+    try {
+      if (broker.getFunds) {
+        brokerFunds = await broker.getFunds(userId);
+      }
+    } catch (err: any) {
+      logger.warn(`[InFlightMtmService] Could not fetch broker funds for user ${userId}: ${err.message}`);
+    }
+
+    // 4. Fetch live positions from broker
     let positions: any[] = [];
     try {
       if (broker.getPositions) {
         positions = await broker.getPositions(userId);
       }
     } catch (err: any) {
-      logger.warn(`[InFlightMtmService] Failed to fetch positions for user ${userId}: ${err.message}`);
+      logger.error(`[InFlightMtmService] Failed to fetch positions for user ${userId}: ${err.message}. Entering RISK_GUARD_DEGRADED.`);
+      
+      void AuditService.logEvent({
+        userId,
+        eventType: 'RISK_DATA_UNAVAILABLE',
+        source: 'in_flight_mtm_service',
+        actor: 'mtm_daemon',
+        result: 'DEGRADED',
+        metadata: { error: err.message, broker: brokerId },
+      });
+
+      // Fail-closed invariant: halt new trading orders when risk state cannot be verified
+      await EmergencyControlService.setState(
+        'TRADING_HALTED',
+        `Live risk evaluation degraded: unable to query broker positions for ${userId} (${err.message})`,
+        'in_flight_mtm_service'
+      ).catch(() => {});
+
       return {
         userId,
         broker: brokerId,
@@ -72,9 +100,11 @@ export class InFlightMtmService {
         unrealizedPnl: 0,
         realizedPnl: 0,
         maintenanceMarginRequired: 0,
-        marginHealthRatio: 1.0,
-        isMarginCallWarning: false,
+        marginHealthRatio: 0,
+        isMarginCallWarning: true,
         isStopOutTriggered: false,
+        isRiskDegraded: true,
+        reason: `Broker position data unavailable: ${err.message}`,
       };
     }
 
@@ -113,7 +143,11 @@ export class InFlightMtmService {
 
     const unPnlNum = totalUnrealizedPnl.toNumber();
     const rePnlNum = totalRealizedPnl.toNumber();
-    const maintMarginNum = totalMaintenanceMargin.toNumber();
+    // Use authoritative broker used_margin if reported and greater than local calculation
+    const calculatedMaint = totalMaintenanceMargin.toNumber();
+    const brokerMaint = brokerFunds?.usedMargin ? Number(brokerFunds.usedMargin) : 0;
+    const maintMarginNum = Math.max(calculatedMaint, brokerMaint);
+
     const nav = cashBalance + unPnlNum + rePnlNum;
 
     // Margin Health Ratio: NAV / Maintenance Margin
@@ -145,9 +179,11 @@ export class InFlightMtmService {
       marginHealthRatio,
       isMarginCallWarning,
       isStopOutTriggered,
+      isRiskDegraded: false,
       reason,
     };
   }
+
 
   /**
    * Executes a single evaluation pass across all active live users.

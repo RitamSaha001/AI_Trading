@@ -616,3 +616,14 @@ CREATE TABLE IF NOT EXISTS panic_squareoff_runs (
   completed_at BIGINT
 );
 CREATE INDEX IF NOT EXISTS idx_panic_squareoff_user ON panic_squareoff_runs(user_id);
+
+-- Persistent Order-to-Trade Ratio (OTR) Event Tracking
+CREATE TABLE IF NOT EXISTS otr_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  event_type TEXT NOT NULL, -- 'PLACE' | 'MODIFY' | 'CANCEL' | 'FILL'
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_otr_events_user_symbol_time ON otr_events(user_id, symbol, created_at);
+

@@ -16,6 +16,8 @@ import { BrokerErrorCode } from '../brokerTypes';
 import { UpstoxInstrumentRegistry } from './upstoxInstrumentRegistry';
 import {
   UpstoxApiResponse,
+  UpstoxAuthorizedFeedResponse,
+  UpstoxAuthorizedFeedResponseSchema,
   UpstoxFundsData,
   UpstoxFundsSchema,
   UpstoxHoldingData,
@@ -614,20 +616,50 @@ export class UpstoxClient {
   }
 
   /**
+   * Authorizes and retrieves a one-time WebSocket URI for the portfolio stream feed (/feed/portfolio-stream-feed/authorize).
+   */
+  public static async getAuthorizedFeedUri(accessToken: string): Promise<string> {
+    const res = await this.request<UpstoxAuthorizedFeedResponse>(
+      '/feed/portfolio-stream-feed/authorize?update_types=order,position,holding',
+      'GET',
+      accessToken
+    );
+    const parsed = UpstoxAuthorizedFeedResponseSchema.safeParse(res.data);
+    if (!parsed.success || !parsed.data.authorized_redirect_uri) {
+      throw new StandardBrokerError(
+        'MALFORMED_RESPONSE',
+        `Upstox portfolio stream authorize response invalid: ${parsed.error?.message || 'Missing authorized_redirect_uri'}`,
+        'upstox'
+      );
+    }
+    return parsed.data.authorized_redirect_uri;
+  }
+
+  /**
    * Places an order with Upstox via recommended v3 HFT endpoint (/order/place).
    * Supports auto-slicing via `slice` flag, returning single or multi-slice order_ids.
+   * Injects SEBI exchange-approved X-Algo-Name header when algoName is supplied or configured.
    */
   public static async placeOrder(
     accessToken: string,
-    payload: UpstoxPlaceOrderPayload
+    payload: UpstoxPlaceOrderPayload,
+    algoName?: string
   ): Promise<UpstoxPlaceOrderResponse> {
     await UpstoxRateLimiter.throttleOrder();
     const hftBase = this.getHftBaseUrl();
+    const extraHeaders: Record<string, string> = {};
+    const effectiveAlgo = algoName || payload.algoName || (config as any).UPSTOX_ALGO_NAME;
+    if (effectiveAlgo) {
+      extraHeaders['X-Algo-Name'] = String(effectiveAlgo).trim();
+    }
+
     const res = await this.request<any>(
       `${hftBase}/order/place`,
       'POST',
       accessToken,
-      payload
+      payload,
+      6000,
+      extraHeaders
     );
 
     const parsed = UpstoxPlaceOrderResponseSchema.safeParse(res.data);
@@ -835,7 +867,8 @@ export class UpstoxClient {
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     accessToken: string,
     bodyPayload?: any,
-    timeoutMs: number = 6000
+    timeoutMs: number = 6000,
+    extraHeaders?: Record<string, string>
   ): Promise<UpstoxApiResponse<T>> {
     if (!accessToken || !accessToken.trim()) {
       throw new StandardBrokerError(
@@ -854,6 +887,7 @@ export class UpstoxClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken.trim()}`,
       Accept: 'application/json',
+      ...(extraHeaders || {}),
     };
 
     let bodyString: string | undefined;

@@ -19,6 +19,7 @@ import { OrderStateMachine } from '../../orderStateMachine';
 import { OrderFillsService } from '../../orderFillsService';
 import { OrderRecoveryService } from '../../orderRecoveryService';
 import { UpstoxInstrumentMasterService } from './upstoxInstrumentMasterService';
+import { UpstoxClient } from './upstoxClient';
 import { config } from '../../../config';
 
 export type UpstoxStreamHealth = 'HEALTHY' | 'DEGRADED' | 'DISCONNECTED';
@@ -108,7 +109,7 @@ export class UpstoxUserStreamTransport {
     return `${baseHost}/v2/feed/portfolio-stream-feed`;
   }
 
-  public connect(): void {
+  public async connect(): Promise<void> {
     if (this.isClosed) return;
 
     // In test mode without mock transport or with mock tokens, avoid external socket calls
@@ -119,15 +120,11 @@ export class UpstoxUserStreamTransport {
     }
 
     try {
-      const url = this.getWsUrl();
-      logger.info(`[UpstoxUserStreamTransport] Connecting WebSocket for user ${this.userId}...`);
+      logger.info(`[UpstoxUserStreamTransport] Requesting authorized WebSocket redirect URI for user ${this.userId}...`);
+      const authorizedUri = await UpstoxClient.getAuthorizedFeedUri(this.accessToken);
+      logger.info(`[UpstoxUserStreamTransport] Connecting authorized WebSocket for user ${this.userId}...`);
       
-      // Native WebSocket connection with bearer token in subprotocol or authorization headers
-      this.ws = new WebSocket(url, {
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-        },
-      } as any);
+      this.ws = new WebSocket(authorizedUri);
 
       this.ws.onopen = () => {
         logger.info(`[UpstoxUserStreamTransport] WebSocket connected successfully for ${this.userId}`);
@@ -136,7 +133,7 @@ export class UpstoxUserStreamTransport {
         this.reconnectAttempts = 0;
 
         if (wasReconnecting) {
-          // Trigger gap recovery sweep to synchronize any fills missed during disconnect
+          // Reconnect recovery: trigger recovery sweep against venue order book to synchronize any missed fills
           void OrderRecoveryService.runRecoverySweep().catch((err) => {
             logger.warn(`[UpstoxUserStreamTransport] Reconnect recovery sweep notice: ${err.message}`);
           });
@@ -164,6 +161,18 @@ export class UpstoxUserStreamTransport {
       };
     } catch (err: any) {
       logger.error(`[UpstoxUserStreamTransport] Failed to initialize WebSocket for ${this.userId}: ${err.message}`);
+      if (err.code === 'AUTHENTICATION_FAILED' || err.message?.includes('AUTHENTICATION_FAILED')) {
+        this.streamHealth = 'DISCONNECTED';
+        void AuditService.logEvent({
+          userId: this.userId,
+          eventType: 'UPSTOX_AUTH_REQUIRED',
+          source: 'upstox_user_stream_transport',
+          actor: 'system',
+          result: 'DEGRADED',
+          metadata: { reason: 'WebSocket authorization failed with Upstox API' },
+        });
+        return;
+      }
       this.scheduleReconnect();
     }
   }
@@ -249,6 +258,9 @@ export class UpstoxUserStreamTransport {
 
   /**
    * Authoritatively updates local order state and ledger settlements based on live venue execution event.
+   * INVARIANT: Entire execution report (order lock, fill delta insertion, ledger settlement,
+   * status transition, and reservation adjustment) runs inside a single ACID database transaction.
+   * If ledger or fill settlement fails, the entire operation is rolled back.
    */
   public async handleOrderUpdate(data: any): Promise<void> {
     const db = getDb();
@@ -258,192 +270,192 @@ export class UpstoxUserStreamTransport {
     const filledQty = Number(data.filled_quantity || data.quantity_filled || 0);
     const avgPrice = Number(data.average_price || data.price || 0);
     const rawSymbol = String(data.trading_symbol || data.symbol || '');
+    const eventTime = data.exchange_timestamp
+      ? new Date(data.exchange_timestamp).getTime()
+      : data.order_timestamp
+        ? new Date(data.order_timestamp).getTime()
+        : Date.now();
 
-    // Locate internal exchange_orders record by clientOrderId, venueOrderId, or child records
-    let orderRow = await db.queryOne<any>(
-      `SELECT * FROM exchange_orders WHERE client_order_id = ? OR exchange_order_id = ?`,
-      [clientOrderId, venueOrderId]
-    );
+    try {
+      await db.transaction(async (tx) => {
+        // 1. Locate internal exchange_orders record under row-level lock (FOR UPDATE on Postgres)
+        const selectSql = tx.isPostgres?.()
+          ? `SELECT * FROM exchange_orders WHERE client_order_id = ? OR exchange_order_id = ? FOR UPDATE`
+          : `SELECT * FROM exchange_orders WHERE client_order_id = ? OR exchange_order_id = ?`;
 
-    if (!orderRow && venueOrderId) {
-      // Check exchange_order_children for sliced child orders
-      const childRow = await db.queryOne<any>(
-        `SELECT parent_client_order_id FROM exchange_order_children WHERE venue_order_id = ?`,
-        [venueOrderId]
-      );
-      if (childRow?.parent_client_order_id) {
-        orderRow = await db.queryOne<any>(
-          `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
-          [childRow.parent_client_order_id]
-        );
-      }
-    }
+        let orderRow = await tx.queryOne<any>(selectSql, [clientOrderId, venueOrderId]);
 
-    if (!orderRow) {
-      logger.warn(`[UpstoxUserStreamTransport] No local order matched for venue order ${venueOrderId} / tag ${clientOrderId}`);
-      return;
-    }
-
-    const internalOrderId = orderRow.id;
-    const resolvedSymbol = orderRow.symbol || rawSymbol;
-    const instrument = UpstoxInstrumentMasterService.getInstrument(resolvedSymbol);
-    const baseAsset = instrument?.baseAsset || resolvedSymbol;
-    const quoteAsset = instrument?.quoteAsset || 'INR';
-
-    // 1. Terminal FILLED event
-    if (status === 'complete' || status === 'filled') {
-      if (filledQty > 0 && avgPrice > 0) {
-        const canonicalFillKey = `fill_ws_${venueOrderId || clientOrderId}_${filledQty}_${avgPrice}`;
-        await OrderFillsService.recordFill(db, {
-          orderIdentifier: internalOrderId,
-          exchangeTradeId: String(data.exchange_order_id || venueOrderId || clientOrderId),
-          canonicalFillKey,
-          symbol: resolvedSymbol,
-          price: avgPrice,
-          qty: filledQty,
-          commission: Number(data.commission || 0),
-          commissionAsset: quoteAsset,
-          quoteQty: filledQty * avgPrice,
-          broker: 'upstox',
-        });
-
-        // Settle ledger balances
-        const eventTime = data.exchange_timestamp
-          ? new Date(data.exchange_timestamp).getTime()
-          : Date.now();
-
-        await LedgerService.processFill({
-          userId: orderRow.user_id,
-          orderId: orderRow.client_order_id,
-          fillId: String(data.exchange_order_id || venueOrderId || clientOrderId),
-          symbol: resolvedSymbol,
-          baseAsset,
-          quoteAsset,
-          side: orderRow.side,
-          price: avgPrice,
-          quantity: filledQty,
-          fee: Number(data.commission || 0),
-          feeAsset: quoteAsset,
-          accountMode: 'live',
-          holdingsAccountType: 'equity_holdings',
-          canonicalFillKey,
-          executedAt: eventTime,
-        }).catch((err: any) => {
-          logger.error(`[UpstoxUserStreamTransport] Ledger settlement error: ${err.message}`);
-        });
-      }
-
-      // Transition order status to FILLED
-      await OrderStateMachine.transitionOrder(
-        internalOrderId,
-        'FILLED',
-        {
-          actor: 'upstox_ws',
-          reason: 'Venue execution report complete',
-          metadata: { venueOrderId, filledQty, avgPrice },
-          extraFields: {
-            executed_qty: filledQty,
-            avg_price: avgPrice,
-            exchange_order_id: venueOrderId,
-          },
+        if (!orderRow && venueOrderId) {
+          // Check exchange_order_children for sliced child orders
+          const childRow = await tx.queryOne<any>(
+            `SELECT parent_client_order_id FROM exchange_order_children WHERE venue_order_id = ?`,
+            [venueOrderId]
+          );
+          if (childRow?.parent_client_order_id) {
+            orderRow = await tx.queryOne<any>(
+              tx.isPostgres?.()
+                ? `SELECT * FROM exchange_orders WHERE client_order_id = ? FOR UPDATE`
+                : `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
+              [childRow.parent_client_order_id]
+            );
+          }
         }
-      ).catch((err: any) => {
-        logger.warn(`[UpstoxUserStreamTransport] State transition warning: ${err.message}`);
-      });
 
+        if (!orderRow) {
+          logger.warn(`[UpstoxUserStreamTransport] No local order matched for venue order ${venueOrderId} / tag ${clientOrderId}`);
+          return;
+        }
+
+        const internalOrderId = orderRow.id;
+        const resolvedSymbol = orderRow.symbol || rawSymbol;
+        const instrument = UpstoxInstrumentMasterService.getInstrument(resolvedSymbol);
+        const baseAsset = instrument?.baseAsset || resolvedSymbol;
+        const quoteAsset = instrument?.quoteAsset || 'INR';
+
+        // 2. Handling Execution Fills (Complete or Partial)
+        const isComplete = status === 'complete' || status === 'filled';
+        const isPartial = status === 'partially filled' || (filledQty > 0 && !isComplete);
+
+        if (isComplete || isPartial || filledQty > 0) {
+          const executedSoFar = Number(orderRow.executed_qty || 0);
+          const fillDelta = filledQty - executedSoFar;
+
+          if (fillDelta > 0 && avgPrice > 0) {
+            const canonicalFillKey = `fill_ws_${venueOrderId || clientOrderId}_${filledQty}_${avgPrice}_${eventTime}`;
+            const tradeId = String(
+              data.trade_id ||
+              data.fill_id ||
+              `${venueOrderId || clientOrderId}_fill_${filledQty}`
+            );
+
+            // A. Record fill delta in exchange_fills within transaction
+            await OrderFillsService.recordFill(tx, {
+              orderIdentifier: internalOrderId,
+              exchangeTradeId: tradeId,
+              canonicalFillKey,
+              symbol: resolvedSymbol,
+              price: avgPrice,
+              qty: fillDelta,
+              commission: Number(data.commission || 0),
+              commissionAsset: quoteAsset,
+              quoteQty: fillDelta * avgPrice,
+              broker: 'upstox',
+            });
+
+            // B. Settle ledger balances atomically within transaction
+            await LedgerService.processFill({
+              userId: orderRow.user_id,
+              orderId: orderRow.client_order_id,
+              fillId: tradeId,
+              symbol: resolvedSymbol,
+              baseAsset,
+              quoteAsset,
+              side: orderRow.side,
+              price: avgPrice,
+              quantity: fillDelta,
+              fee: Number(data.commission || 0),
+              feeAsset: quoteAsset,
+              accountMode: 'live',
+              holdingsAccountType: 'equity_holdings',
+              canonicalFillKey,
+              executedAt: eventTime,
+              tx,
+            });
+          }
+
+          // Determine target status
+          const isTerminalFilled = isComplete || filledQty >= Number(orderRow.orig_qty);
+          const targetStatus = isTerminalFilled ? 'FILLED' : 'PARTIALLY_FILLED';
+
+          // C. Transition order state atomically within transaction
+          await OrderStateMachine.transitionOrder(
+            internalOrderId,
+            targetStatus,
+            {
+              actor: 'upstox_ws',
+              reason: isTerminalFilled ? 'Venue execution report complete' : 'Venue partial execution report',
+              metadata: { venueOrderId, filledQty, fillDelta, avgPrice },
+              extraFields: {
+                executed_qty: Math.max(executedSoFar, filledQty),
+                avg_price: avgPrice,
+                exchange_order_id: venueOrderId,
+              },
+              tx,
+            }
+          );
+
+          void AuditService.logEvent({
+            userId: orderRow.user_id,
+            eventType: isTerminalFilled ? 'WS_ORDER_FILLED' : 'WS_ORDER_PARTIALLY_FILLED',
+            source: 'upstox_user_stream_transport',
+            actor: 'upstox_ws',
+            result: 'SUCCESS',
+            metadata: { clientOrderId: orderRow.client_order_id, venueOrderId, filledQty, fillDelta, avgPrice },
+          });
+          return;
+        }
+
+        // 3. CANCELED event
+        if (status === 'cancelled' || status === 'canceled') {
+          await OrderStateMachine.transitionOrder(
+            internalOrderId,
+            'CANCELED',
+            {
+              actor: 'upstox_ws',
+              reason: 'Venue order cancelled report',
+              metadata: { venueOrderId },
+              releaseReservationOnTerminal: true,
+              tx,
+            }
+          );
+          return;
+        }
+
+        // 4. REJECTED event
+        if (status === 'rejected') {
+          await OrderStateMachine.transitionOrder(
+            internalOrderId,
+            'REJECTED',
+            {
+              actor: 'upstox_ws',
+              reason: data.status_message || 'Venue order rejected report',
+              metadata: { venueOrderId },
+              releaseReservationOnTerminal: true,
+              tx,
+            }
+          );
+          return;
+        }
+
+        // 5. OPEN / TRIGGER PENDING
+        if (status === 'open' || status === 'trigger pending') {
+          if (orderRow.status === 'SUBMITTING') {
+            await OrderStateMachine.transitionOrder(
+              internalOrderId,
+              'OPEN',
+              {
+                actor: 'upstox_ws',
+                reason: 'Venue accepted open order',
+                metadata: { venueOrderId },
+                tx,
+              }
+            );
+          }
+        }
+      });
+    } catch (err: any) {
+      logger.error(`[UpstoxUserStreamTransport] Atomic settlement failed for venue order ${venueOrderId}: ${err.message}. Triggering recovery.`);
       void AuditService.logEvent({
-        userId: orderRow.user_id,
-        eventType: 'WS_ORDER_FILLED',
+        userId: this.userId,
+        eventType: 'WS_SETTLEMENT_FAILED',
         source: 'upstox_user_stream_transport',
         actor: 'upstox_ws',
-        result: 'SUCCESS',
-        metadata: { clientOrderId: orderRow.client_order_id, venueOrderId, filledQty, avgPrice },
+        result: 'FAILED',
+        metadata: { venueOrderId, clientOrderId, error: err.message },
       });
-      return;
-    }
-
-    // 2. PARTIALLY_FILLED event
-    if (status === 'partially filled' || (filledQty > 0 && filledQty < Number(orderRow.orig_qty))) {
-      const canonicalFillKey = `fill_ws_${venueOrderId || clientOrderId}_${filledQty}_${avgPrice}`;
-      await OrderFillsService.recordFill(db, {
-        orderIdentifier: internalOrderId,
-        exchangeTradeId: String(data.exchange_order_id || venueOrderId || clientOrderId),
-        canonicalFillKey,
-        symbol: resolvedSymbol,
-        price: avgPrice,
-        qty: filledQty,
-        commission: Number(data.commission || 0),
-        commissionAsset: quoteAsset,
-        quoteQty: filledQty * avgPrice,
-        broker: 'upstox',
-      });
-
-      await OrderStateMachine.transitionOrder(
-        internalOrderId,
-        'PARTIALLY_FILLED',
-        {
-          actor: 'upstox_ws',
-          reason: 'Venue partial execution report',
-          metadata: { venueOrderId, filledQty, avgPrice },
-          extraFields: {
-            executed_qty: filledQty,
-            avg_price: avgPrice,
-            exchange_order_id: venueOrderId,
-          },
-        }
-      ).catch((err: any) => {
-        logger.warn(`[UpstoxUserStreamTransport] State transition warning: ${err.message}`);
-      });
-      return;
-    }
-
-    // 3. CANCELED event
-    if (status === 'cancelled' || status === 'canceled') {
-      await OrderStateMachine.transitionOrder(
-        internalOrderId,
-        'CANCELED',
-        {
-          actor: 'upstox_ws',
-          reason: 'Venue order cancelled report',
-          metadata: { venueOrderId },
-        }
-      ).catch((err: any) => {
-        logger.warn(`[UpstoxUserStreamTransport] State transition warning: ${err.message}`);
-      });
-      return;
-    }
-
-    // 4. REJECTED event
-    if (status === 'rejected') {
-      await OrderStateMachine.transitionOrder(
-        internalOrderId,
-        'REJECTED',
-        {
-          actor: 'upstox_ws',
-          reason: data.status_message || 'Venue order rejected report',
-          metadata: { venueOrderId },
-        }
-      ).catch((err: any) => {
-        logger.warn(`[UpstoxUserStreamTransport] State transition warning: ${err.message}`);
-      });
-      return;
-    }
-
-    // 5. OPEN / TRIGGER PENDING
-    if (status === 'open' || status === 'trigger pending') {
-      if (orderRow.status === 'SUBMITTING') {
-        await OrderStateMachine.transitionOrder(
-          internalOrderId,
-          'OPEN',
-          {
-            actor: 'upstox_ws',
-            reason: 'Venue accepted open order',
-            metadata: { venueOrderId },
-          }
-        ).catch((err: any) => {
-          logger.warn(`[UpstoxUserStreamTransport] State transition warning: ${err.message}`);
-        });
-      }
+      // Schedule immediate recovery sweep to reconcile venue vs local state
+      void OrderRecoveryService.runRecoverySweep().catch(() => {});
     }
   }
 }
+

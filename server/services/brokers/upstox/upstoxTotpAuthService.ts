@@ -109,17 +109,59 @@ export class UpstoxTotpAuthService {
   }
 
   /**
+   * Evaluates token health for a single user and enforces fail-closed state in database if renewal is required.
+   */
+  public static async verifyAndEnforceTokenHealth(userId: string): Promise<boolean> {
+    const db = getDb();
+    const health = await this.checkTokenHealth(userId);
+    if (health.requiresRenewal) {
+      const warningMsg = `Upstox session expired for user ${userId}. Interactive OAuth login required before 09:15 AM market open.`;
+      logger.warn(`[UpstoxTotpAuthService] ${warningMsg}`);
+
+      // Fail-closed: ensure trading is disabled until operator logs in
+      await db.execute(
+        `UPDATE broker_credentials SET can_trade = 0, updated_at = ? WHERE user_id = ? AND broker = 'upstox'`,
+        [Date.now(), userId]
+      );
+
+      await AuditService.logEvent({
+        userId,
+        eventType: 'UPSTOX_AUTH_REQUIRED',
+        source: 'upstox_totp_auth_service',
+        actor: 'system',
+        result: 'DEGRADED',
+        metadata: { reason: health.reason, deadline: '09:15 IST' },
+      });
+
+      return false;
+    }
+
+    await AuditService.logEvent({
+      userId,
+      eventType: 'UPSTOX_SESSION_HEALTHY',
+      source: 'upstox_totp_auth_service',
+      actor: 'system',
+      result: 'SUCCESS',
+      metadata: { expiresAt: new Date(health.expiresAt).toISOString() },
+    });
+
+    return true;
+  }
+
+  /**
    * Executes automated daily morning session warm-up and re-authentication check.
+   * INVARIANT: Never artificially extends local database expiry timestamps without
+   * authentic OAuth authorization and verification against Upstox venue.
    */
   public static async executeDailySessionWarmup(): Promise<{
     usersChecked: number;
-    renewedCount: number;
+    activeCount: number;
     failedCount: number;
     warnings: string[];
   }> {
     const db = getDb();
     const warnings: string[] = [];
-    let renewedCount = 0;
+    let activeCount = 0;
     let failedCount = 0;
 
     const upstoxUsers = await db.query<{ user_id: string }>(
@@ -127,63 +169,18 @@ export class UpstoxTotpAuthService {
     );
 
     for (const { user_id } of upstoxUsers) {
-      const health = await this.checkTokenHealth(user_id);
-      if (health.requiresRenewal) {
-        // Attempt headless renewal if configured
-        const totpSecret = (config as any).UPSTOX_TOTP_SECRET;
-        const pin = (config as any).UPSTOX_PIN;
-
-        if (totpSecret && pin) {
-          try {
-            const totpCode = this.generateTotp(totpSecret);
-            logger.info(`[UpstoxTotpAuthService] Generated TOTP code for headless renewal of user ${user_id}`);
-            
-            // In headless environments, perform token renewal
-            // When token is renewed, update token_expires_at to next 03:30 AM IST boundary
-            const nextExpiry = calculateNextUpstoxExpiry();
-            await db.execute(
-              `UPDATE broker_credentials 
-               SET token_expires_at = ?, updated_at = ? 
-               WHERE user_id = ? AND broker = 'upstox'`,
-              [nextExpiry, Date.now(), user_id]
-            );
-
-            renewedCount++;
-            await AuditService.logEvent({
-              userId: user_id,
-              eventType: 'HEADLESS_AUTH_RENEWED',
-              source: 'upstox_totp_auth_service',
-              actor: 'system',
-              result: 'SUCCESS',
-              metadata: { nextExpiry: new Date(nextExpiry).toISOString() },
-            });
-          } catch (err: any) {
-            failedCount++;
-            const msg = `Headless renewal failed for user ${user_id}: ${err.message}`;
-            logger.error(`[UpstoxTotpAuthService] ${msg}`);
-            warnings.push(msg);
-          }
-        } else {
-          failedCount++;
-          const warningMsg = `Upstox session expired for user ${user_id}. Manual 2FA login required before 09:15 AM market open.`;
-          warnings.push(warningMsg);
-          logger.warn(`[UpstoxTotpAuthService] ${warningMsg}`);
-
-          await AuditService.logEvent({
-            userId: user_id,
-            eventType: 'UPSTOX_AUTH_REQUIRED',
-            source: 'upstox_totp_auth_service',
-            actor: 'system',
-            result: 'DEGRADED',
-            metadata: { reason: health.reason, deadline: '09:15 IST' },
-          });
-        }
+      const isHealthy = await this.verifyAndEnforceTokenHealth(user_id);
+      if (!isHealthy) {
+        failedCount++;
+        warnings.push(`Upstox session expired for user ${user_id}. Interactive OAuth login required.`);
+      } else {
+        activeCount++;
       }
     }
 
     return {
       usersChecked: upstoxUsers.length,
-      renewedCount,
+      activeCount,
       failedCount,
       warnings,
     };

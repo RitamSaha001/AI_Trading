@@ -6,6 +6,8 @@
  * Formats and injects pre-trade SEBI strategy identifiers into broker order payloads.
  */
 
+import crypto from 'node:crypto';
+import { getDb } from '../db';
 import { StandardBrokerError } from './brokers/brokerGateway';
 import { logger, AuditService } from './auditService';
 
@@ -36,14 +38,15 @@ export class OtrLimiterService {
   }
 
   /**
-   * Records an order event in the rolling window.
+   * Records an order event in the rolling window both in-memory and in durable database storage.
    */
   public static recordEvent(
     userId: string,
     symbol: string,
     type: 'PLACE' | 'MODIFY' | 'CANCEL' | 'FILL'
   ): void {
-    const key = `${userId}:${symbol.toUpperCase()}`;
+    const sym = symbol.toUpperCase();
+    const key = `${userId}:${sym}`;
     const now = Date.now();
     const list = this.events.get(key) || [];
 
@@ -53,6 +56,17 @@ export class OtrLimiterService {
     active.push({ type, timestamp: now });
 
     this.events.set(key, active);
+
+    // Durably record in otr_events table across server restarts and cluster nodes
+    try {
+      const eventId = `otr_${now}_${crypto.randomBytes(4).toString('hex')}`;
+      void getDb().execute(
+        `INSERT INTO otr_events (id, user_id, symbol, event_type, created_at) VALUES (?, ?, ?, ?, ?)`,
+        [eventId, userId, sym, type, now]
+      ).catch(() => {});
+    } catch {
+      // Ignore if DB not yet initialized
+    }
   }
 
   /**
@@ -90,6 +104,48 @@ export class OtrLimiterService {
   }
 
   /**
+   * Computes authoritative OTR stats directly from durable database storage.
+   */
+  public static async getDurableStats(userId: string, symbol: string): Promise<OtrStats> {
+    try {
+      const db = getDb();
+      const cutoff = Date.now() - this.WINDOW_MS;
+      const rows = await db.query<{ event_type: string; count: number }>(
+        `SELECT event_type, COUNT(*) as count FROM otr_events 
+         WHERE user_id = ? AND symbol = ? AND created_at >= ? 
+         GROUP BY event_type`,
+        [userId, symbol.toUpperCase(), cutoff]
+      );
+
+      let placed = 0;
+      let modified = 0;
+      let cancelled = 0;
+      let filled = 0;
+
+      for (const r of rows) {
+        const cnt = Number(r.count || 0);
+        if (r.event_type === 'PLACE') placed = cnt;
+        else if (r.event_type === 'MODIFY') modified = cnt;
+        else if (r.event_type === 'CANCEL') cancelled = cnt;
+        else if (r.event_type === 'FILL') filled = cnt;
+      }
+
+      const nonExecutionCount = modified + cancelled;
+      const ratio = filled > 0 ? nonExecutionCount / filled : nonExecutionCount;
+
+      return {
+        ordersPlaced: placed,
+        ordersModified: modified,
+        ordersCancelled: cancelled,
+        ordersFilled: filled,
+        ratio,
+      };
+    } catch {
+      return this.getStats(userId, symbol);
+    }
+  }
+
+  /**
    * Asserts that a proposed modification or cancellation does not breach safe OTR limits.
    * Throws a StandardBrokerError if throttled.
    */
@@ -116,11 +172,13 @@ export class OtrLimiterService {
 
   /**
    * Generates a sanitized SEBI algorithmic strategy tag.
-   * Upstox limits tags to 30 alphanumeric characters.
+   * Upstox limits tags to 30 characters (or up to 40 characters for extended tags).
    */
-  public static formatStrategyTag(rawStrategyId?: string): string {
+  public static formatStrategyTag(rawStrategyId?: string, clientOrderId?: string, maxLen: number = 30): string {
     const cleanId = (rawStrategyId || 'quant_core').replace(/[^a-zA-Z0-9_]/g, '');
-    const tag = `algo_${cleanId}`;
-    return tag.slice(0, 30);
+    const cleanClient = clientOrderId ? `_${clientOrderId.replace(/[^a-zA-Z0-9_]/g, '')}` : '';
+    const tag = `algo_${cleanId}${cleanClient}`;
+    return tag.slice(0, Math.min(maxLen, 40));
   }
 }
+
