@@ -177,11 +177,11 @@ export function AutonomousQuantPilot() {
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className={`text-xs font-bold ${isSelected ? 'text-indigo-950' : 'text-zinc-800'}`}>
-                  {pKey === 'conservative' && '🛡️ '}
-                  {pKey === 'balanced' && '⚖️ '}
-                  {pKey === 'momentum' && '🚀 '}
-                  {cfg.name}
+                <span className={`text-xs font-bold flex items-center gap-1.5 ${isSelected ? 'text-indigo-950' : 'text-zinc-800'}`}>
+                  {pKey === 'conservative' && <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />}
+                  {pKey === 'balanced' && <Scale className="w-3.5 h-3.5 text-emerald-600" />}
+                  {pKey === 'momentum' && <TrendingUp className="w-3.5 h-3.5 text-blue-600" />}
+                  <span>{cfg.name}</span>
                 </span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-black/[0.04] text-zinc-600 font-semibold">
                   Min {cfg.minRiskReward}:1 R:R

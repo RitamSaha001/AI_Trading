@@ -168,11 +168,11 @@ export const OperationalHealthBanner: React.FC<{ accountMode?: string }> = ({ ac
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border shadow-2xs transition-all cursor-pointer hover:opacity-90 ${badgeColor}`}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-medium border shadow-2xs transition-all cursor-pointer hover:opacity-90 ${badgeColor}`}
         title="Authoritative Exchange Operational Health & Safety Controls"
       >
         <span className={`w-2 h-2 rounded-full ${dotColor} ${isDegraded ? 'animate-pulse' : ''}`} />
-        <span className="font-semibold">OPS: {state}</span>
+        <span className="font-semibold">{isHealthy ? 'NSE Live' : state}</span>
         {isOpen ? <ChevronUp className="w-3 h-3 opacity-60" /> : <ChevronDown className="w-3 h-3 opacity-60" />}
       </button>
 

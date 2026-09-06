@@ -57,26 +57,26 @@ export function formatDecisionMarkdown(decision: TradingDecision): string {
 
   // 1. Executive Take / Decision Header
   const actionBadge = decision.action === 'BUY'
-    ? '🟢 **DIRECTIVE: PROPOSED BUY ORDER**'
+    ? '**DIRECTIVE: PROPOSED BUY ORDER**'
     : decision.action === 'SELL'
-    ? '🔴 **DIRECTIVE: PROPOSED TRIM / LIQUIDATION**'
+    ? '**DIRECTIVE: PROPOSED TRIM / LIQUIDATION**'
     : decision.action === 'REBALANCE'
-    ? '⚖️ **DIRECTIVE: PORTFOLIO REBALANCE**'
+    ? '**DIRECTIVE: PORTFOLIO REBALANCE**'
     : decision.action === 'DEFEND'
-    ? '🛡️ **DIRECTIVE: EMERGENCY CAPITAL DEFENSE**'
+    ? '**DIRECTIVE: EMERGENCY CAPITAL DEFENSE**'
     : decision.action === 'DEPLOY_BOT'
-    ? '🤖 **DIRECTIVE: ALGORITHMIC STRATEGY DEPLOYMENT**'
+    ? '**DIRECTIVE: ALGORITHMIC STRATEGY DEPLOYMENT**'
     : decision.action === 'SMART_DCA'
-    ? '💎 **DIRECTIVE: VALUE-WEIGHTED SMART DCA**'
+    ? '**DIRECTIVE: VALUE-WEIGHTED SMART DCA**'
     : decision.action === 'STRESS_TEST'
-    ? '🌪️ **DIRECTIVE: SCENARIO STRESS TEST**'
+    ? '**DIRECTIVE: SCENARIO STRESS TEST**'
     : decision.action === 'TOKEN_COMPARE'
-    ? '📊 **DIRECTIVE: CROSS-ASSET ALPHA COMPARISON**'
+    ? '**DIRECTIVE: CROSS-ASSET ALPHA COMPARISON**'
     : decision.action === 'ALERT'
-    ? '🔔 **DIRECTIVE: VOLATILITY / PRICE SENTINEL ALERT**'
+    ? '**DIRECTIVE: VOLATILITY / PRICE SENTINEL ALERT**'
     : decision.action === 'HOLD'
-    ? '⏸️ **DIRECTIVE: MAINTAIN DISCIPLINED HOLD**'
-    : '🔍 **DIRECTIVE: MARKET AUDIT & OBSERVATION**';
+    ? '**DIRECTIVE: MAINTAIN DISCIPLINED HOLD**'
+    : '**DIRECTIVE: MARKET AUDIT & OBSERVATION**';
 
   parts.push(`### ${actionBadge}`);
   parts.push(`**Executive Summary**: ${decision.thesis}`);
@@ -89,7 +89,7 @@ export function formatDecisionMarkdown(decision: TradingDecision): string {
 
   // 2. Quantitative Evidence Snapshot
   if (decision.evidence && decision.evidence.length > 0) {
-    parts.push('#### 📊 Quantitative Telemetry & Grounding');
+    parts.push('#### Quantitative Telemetry & Grounding');
     for (const ev of decision.evidence) {
       parts.push(`* ${ev}`);
     }
@@ -97,7 +97,7 @@ export function formatDecisionMarkdown(decision: TradingDecision): string {
 
   // 3. Trade Sizing & Risk Parameters (if an execution is proposed)
   if (decision.asset && (decision.action === 'BUY' || decision.action === 'SELL') && decision.quantity) {
-    parts.push('#### 🎯 Risk-Budgeted Execution Parameters');
+    parts.push('#### Risk-Budgeted Execution Parameters');
     parts.push('| Parameter | Value | Formula / Constraint |');
     parts.push('| :--- | :--- | :--- |');
     parts.push(`| **Asset** | \`${decision.asset}\` | Spot Paper Execution |`);
@@ -113,7 +113,7 @@ export function formatDecisionMarkdown(decision: TradingDecision): string {
 
   // 4. Portfolio Impact & Capital Preservation
   if (decision.portfolioRiskImpact) {
-    parts.push('#### 🛡️ Portfolio Risk Contribution');
+    parts.push('#### Portfolio Risk Contribution');
     parts.push(decision.portfolioRiskImpact);
   }
 
@@ -128,7 +128,7 @@ export function formatDecisionMarkdown(decision: TradingDecision): string {
 
   // 6. Assumptions & Limitations
   if (decision.assumptions && decision.assumptions.length > 0) {
-    parts.push('#### 🔬 Underlying Assumptions');
+    parts.push('#### Underlying Assumptions');
     for (const asm of decision.assumptions) {
       parts.push(`* ${asm}`);
     }
@@ -136,19 +136,19 @@ export function formatDecisionMarkdown(decision: TradingDecision): string {
 
   // 7. Challenger Counterargument
   if (decision.counterArgument) {
-    parts.push('#### ⚖️ Counterargument & Falsification Conditions');
+    parts.push('#### Counterargument & Falsification Conditions');
     parts.push(`> **Challenger Desk Review**: ${decision.counterArgument}`);
   }
 
   // 7b. Invalidation & What Would Change View
   if (decision.invalidation) {
-    parts.push('#### 🔄 What Would Invalidate / Change My View');
+    parts.push('#### What Would Invalidate / Change My View');
     parts.push(`* ${decision.invalidation}`);
   }
 
   // 8. Alternatives Considered
   if (decision.alternatives && decision.alternatives.length > 0) {
-    parts.push('#### 🔀 Alternative Strategic Paths');
+    parts.push('#### Alternative Strategic Paths');
     for (const alt of decision.alternatives) {
       parts.push(`* ${alt}`);
     }
@@ -156,9 +156,9 @@ export function formatDecisionMarkdown(decision: TradingDecision): string {
 
   // 9. Warnings & Safety Guard
   if (decision.warnings && decision.warnings.length > 0) {
-    parts.push('#### ⚠️ Operational Warnings');
+    parts.push('#### Operational Warnings');
     for (const w of decision.warnings) {
-      parts.push(`* ⚠️ ${w}`);
+      parts.push(`* ${w}`);
     }
   }
 

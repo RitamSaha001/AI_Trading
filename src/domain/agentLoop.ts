@@ -190,7 +190,7 @@ export async function runAgentLoop(params: {
       if (safety.valid) {
         actionProposal = parsedDecision.proposedAction;
       } else {
-        cleanText += `\n\n> ⚠️ **Execution Gate Block**: Proposed action disabled: ${safety.errors.join('; ')}`;
+        cleanText += `\n\n> **Execution Gate Block**: Proposed action disabled: ${safety.errors.join('; ')}`;
       }
     } else if (parsedDecision.action === 'BUY' || parsedDecision.action === 'SELL') {
       const side = parsedDecision.action === 'BUY' ? 'buy' : 'sell';
@@ -199,7 +199,7 @@ export async function runAgentLoop(params: {
       const validity = MarketDataValidityGuard.validate(m, targetAsset, policy, { requireExecutionGrade: true });
 
       if (!validity.canExecute || !m || !m.price || m.price <= 0) {
-        cleanText += `\n\n> ⚠️ **Execution Gate Block**: Order proposal disabled due to missing or invalid market feed: ${validity.errors.join('; ') || 'Data unavailable'}`;
+        cleanText += `\n\n> **Execution Gate Block**: Order proposal disabled due to missing or invalid market feed: ${validity.errors.join('; ') || 'Data unavailable'}`;
       } else {
         const spot = m.price;
         const pv = portfolioValue(state, markets);
@@ -224,7 +224,7 @@ export async function runAgentLoop(params: {
         }
 
         if (amount <= 0) {
-          cleanText += `\n\n> ⚠️ **Execution Gate Block**: Order quantity is 0 under risk budget and capital constraints.`;
+          cleanText += `\n\n> **Execution Gate Block**: Order quantity is 0 under risk budget and capital constraints.`;
         } else {
           const proposalCandidate: AIActionProposal = {
             type: 'order',
@@ -242,7 +242,7 @@ export async function runAgentLoop(params: {
             actionProposal = proposalCandidate;
           } else {
             const issues = [...validity.errors, ...safety.errors];
-            cleanText += `\n\n> ⚠️ **Execution Gate Block**: Order proposal disabled due to safety bounds: ${issues.join('; ')}`;
+            cleanText += `\n\n> **Execution Gate Block**: Order proposal disabled due to safety bounds: ${issues.join('; ')}`;
           }
         }
       }
@@ -263,7 +263,7 @@ export async function runAgentLoop(params: {
       if (safety.valid) {
         actionProposal = candidate;
       } else {
-        cleanText += `\n\n> ⚠️ **Execution Gate Block**: Rebalance proposal disabled: ${safety.errors.join('; ')}`;
+        cleanText += `\n\n> **Execution Gate Block**: Rebalance proposal disabled: ${safety.errors.join('; ')}`;
       }
     } else if (parsedDecision.action === 'DEFEND') {
       const danger = senseMarketDanger(state, markets);
@@ -281,7 +281,7 @@ export async function runAgentLoop(params: {
       if (safety.valid) {
         actionProposal = candidate;
       } else {
-        cleanText += `\n\n> ⚠️ **Execution Gate Block**: Defense proposal disabled: ${safety.errors.join('; ')}`;
+        cleanText += `\n\n> **Execution Gate Block**: Defense proposal disabled: ${safety.errors.join('; ')}`;
       }
     } else if (parsedDecision.action === 'DEPLOY_BOT') {
       const synthesized = synthesizeStrategyBot(targetAsset, 'vwap_trend', state, markets);
@@ -306,7 +306,7 @@ export async function runAgentLoop(params: {
       if (safety.valid) {
         actionProposal = candidate;
       } else {
-        cleanText += `\n\n> ⚠️ **Execution Gate Block**: Strategy bot deployment disabled: ${safety.errors.join('; ')}`;
+        cleanText += `\n\n> **Execution Gate Block**: Strategy bot deployment disabled: ${safety.errors.join('; ')}`;
       }
     } else if (parsedDecision.action === 'SMART_DCA') {
       const dcaPlan = generateSmartDCAPlan(targetAsset, 200, state, markets);
@@ -323,7 +323,7 @@ export async function runAgentLoop(params: {
       if (safety.valid) {
         actionProposal = candidate;
       } else {
-        cleanText += `\n\n> ⚠️ **Execution Gate Block**: DCA plan proposal disabled: ${safety.errors.join('; ')}`;
+        cleanText += `\n\n> **Execution Gate Block**: DCA plan proposal disabled: ${safety.errors.join('; ')}`;
       }
     } else if (parsedDecision.action === 'STRESS_TEST') {
       const simulated = simulatePortfolioStressTest(state, markets, 'btc_flash_crash_20');

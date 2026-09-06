@@ -244,7 +244,7 @@ export function WalletCardPaymentModal({ isOpen, onClose }: WalletCardPaymentMod
                     ? 'bg-amber-50 text-amber-700 border border-amber-200'
                     : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                 }`}>
-                  {accountMode === 'paper' ? '🧪 Sandbox Mode — Demo Cards Only' : 'Live Capital Gate'}
+                  {accountMode === 'paper' ? 'Sandbox Mode — Demo Cards Only' : 'Live Capital Gate'}
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 font-medium">

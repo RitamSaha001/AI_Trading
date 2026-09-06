@@ -624,12 +624,12 @@ export function Provider({ children }: { children: React.ReactNode }) {
       'Desk Switched',
       `Active Trading Desk: ${
         mode === 'upstox'
-          ? '🇮🇳 Upstox (NSE / BSE Desk)'
+          ? 'Upstox (NSE / BSE Desk)'
           : mode === 'web3'
-          ? '⚡ Web3 / UPI Desk'
+          ? 'Web3 / UPI Desk'
           : mode === 'exchange'
-          ? '🟢 Live Exchange'
-          : '📊 Simulated Paper Desk'
+          ? 'Live Exchange'
+          : 'Simulated Paper Desk'
       }.`,
       'info'
     );

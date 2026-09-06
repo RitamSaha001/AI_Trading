@@ -88,7 +88,9 @@ export function UserProfileDrawer() {
                     <h2 className="text-base font-extrabold text-zinc-900">{user.displayName}</h2>
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   </div>
-                  <p className="text-xs text-zinc-500 font-mono">{user.email}</p>
+                  <p className="text-xs text-zinc-500 font-mono">
+                    {user.email && user.email !== user.displayName ? user.email : 'Primary Demat Account'}
+                  </p>
                 </div>
               </div>
 

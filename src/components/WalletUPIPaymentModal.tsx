@@ -298,7 +298,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                     ? 'bg-amber-50 text-amber-700 border border-amber-200'
                     : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                 }`}>
-                  {accountMode === 'paper' ? '🧪 Sandbox Mode — Simulated UPI' : 'Live Mode'}
+                  {accountMode === 'paper' ? 'Sandbox Mode — Simulated UPI' : 'Live Mode'}
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 font-medium">
@@ -589,7 +589,7 @@ export function WalletUPIPaymentModal({ isOpen, onClose }: WalletUPIPaymentModal
                     {accountMode === 'exchange' && (
                       <div className="mt-2 space-y-1">
                         <p className="text-[10px] text-amber-600 font-medium">
-                          ⚠️ Manual Bank Transfer: Your wallet will NOT be credited immediately.
+                          Manual Bank Transfer: Your wallet will NOT be credited immediately.
                         </p>
                         <p className="text-[10px] text-amber-600 font-medium">
                           Funds will be credited after bank statement reconciliation (1-3 business days).

@@ -148,20 +148,20 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
   const quickPrompts = isIndian
     ? [
-        { label: '🛡️ Sentinel Danger Audit', prompt: 'Sense market danger across my Indian equities portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
-        { label: '🎯 High-Probability NSE Setups', prompt: 'Scan top NSE Indian equities for asymmetric setups with at least 2.5:1 reward-to-risk ratio.' },
-        { label: `🤖 Synthesize Bot (${state.selectedAsset})`, prompt: `Synthesize an institutional VWAP momentum strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets and deploy it.` },
-        { label: `📈 Smart DCA (${state.selectedAsset})`, prompt: `Create a Smart Value-Weighted DCA plan for ${state.selectedAsset} with dip buying multipliers.` },
-        { label: '⚖️ Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization across Indian equities.' },
-        { label: '🔬 Compare RELIANCE vs TCS vs INFY', prompt: 'Compare RELIANCE, TCS, and INFY head-to-head on Alpha Radar, analyzing Sharpe ratios and momentum.' },
+        { label: 'Sentinel Danger Audit', prompt: 'Sense market danger across my Indian equities portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
+        { label: 'High-Probability NSE Setups', prompt: 'Scan top NSE Indian equities for asymmetric setups with at least 2.5:1 reward-to-risk ratio.' },
+        { label: `Synthesize Bot (${state.selectedAsset})`, prompt: `Synthesize an institutional VWAP momentum strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets and deploy it.` },
+        { label: `Smart DCA (${state.selectedAsset})`, prompt: `Create a Smart Value-Weighted DCA plan for ${state.selectedAsset} with dip buying multipliers.` },
+        { label: 'Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization across Indian equities.' },
+        { label: 'Compare RELIANCE vs TCS vs INFY', prompt: 'Compare RELIANCE, TCS, and INFY head-to-head on Alpha Radar, analyzing Sharpe ratios and momentum.' },
       ]
     : [
-        { label: '🛡️ Sentinel Danger Audit', prompt: 'Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
-        { label: '🌪️ Stress Test (-20% BTC)', prompt: 'Run a portfolio stress test simulating a 20% Bitcoin flash crash.' },
-        { label: '🤖 Synthesize Strategy Bot', prompt: `Synthesize an institutional strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets.` },
-        { label: '📈 Smart DCA Plan', prompt: `Create a Smart Value-Weighted DCA plan for ${state.selectedAsset}.` },
-        { label: '⚖️ Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization.' },
-        { label: '🔬 Compare BTC vs ETH vs SOL', prompt: 'Compare BTC, ETH, and SOL head-to-head on Alpha Radar.' },
+        { label: 'Sentinel Danger Audit', prompt: 'Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
+        { label: 'Stress Test (-20% BTC)', prompt: 'Run a portfolio stress test simulating a 20% Bitcoin flash crash.' },
+        { label: 'Synthesize Strategy Bot', prompt: `Synthesize an institutional strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets.` },
+        { label: 'Smart DCA Plan', prompt: `Create a Smart Value-Weighted DCA plan for ${state.selectedAsset}.` },
+        { label: 'Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization.' },
+        { label: 'Compare BTC vs ETH vs SOL', prompt: 'Compare BTC, ETH, and SOL head-to-head on Alpha Radar.' },
       ];
 
   return (
@@ -275,9 +275,9 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                           <span className="font-sans text-[11.5px]">{m.telemetry.aiMode}</span>
                         </div>
                         <div className="flex items-center gap-2 text-zinc-500 text-[10px]">
-                          <span>⚡ {m.telemetry.dataFreshnessSec}s freshness</span>
+                          <span>{m.telemetry.dataFreshnessSec}s freshness</span>
                           <span>•</span>
-                          <span>🎯 {m.telemetry.dataQualityScore}% data quality</span>
+                          <span>{m.telemetry.dataQualityScore}% data quality</span>
                         </div>
                       </div>
 
@@ -346,7 +346,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
                       {receipt.stateDiff && (
                         <div className="p-2.5 rounded-xl bg-white border border-emerald-200/80 text-[11px] font-mono font-medium text-emerald-900 flex items-start gap-2 shadow-2xs">
-                          <span className="text-emerald-700 font-bold whitespace-nowrap">⚡ State-Diff:</span>
+                          <span className="text-emerald-700 font-bold whitespace-nowrap">State-Diff:</span>
                           <span className="leading-snug">{receipt.stateDiff}</span>
                         </div>
                       )}
@@ -480,8 +480,9 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                               </div>
                             </div>
                             {p.stressTest.mitigationSteps.length > 0 && (
-                              <p className="text-[10.5px] text-zinc-600 bg-amber-500/[0.04] p-2 rounded-xl border border-amber-500/15">
-                                🛡️ {p.stressTest.mitigationSteps[0]}
+                              <p className="text-[10.5px] text-zinc-600 bg-amber-500/[0.04] p-2 rounded-xl border border-amber-500/15 flex items-center gap-1.5">
+                                <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                <span>{p.stressTest.mitigationSteps[0]}</span>
                               </p>
                             )}
                           </div>
@@ -525,7 +526,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                           <div className="space-y-1.5">
                             {p.hazardSource && (
                               <div className="text-rose-700 font-medium text-[11.5px] flex items-start gap-1.5">
-                                <span>⚠️</span>
+                                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
                                 <span>{p.hazardSource}</span>
                               </div>
                             )}

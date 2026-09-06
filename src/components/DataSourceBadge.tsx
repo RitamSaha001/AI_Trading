@@ -26,7 +26,7 @@ export const DataSourceBadge: React.FC<Props> = ({
     return (
       <div
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-700 border border-rose-500/25 shadow-2xs"
-        title={`🔴 Disconnected: Market feed is offline or quote exceeds 45s threshold (${ageSec}s stale). Executable trading is safeguarded.`}
+        title={`Disconnected: Market feed is offline or quote exceeds 45s threshold (${ageSec}s stale). Executable trading is safeguarded.`}
       >
         <span className="w-2 h-2 rounded-full bg-rose-500" />
         <span className="font-semibold">DISCONNECTED</span>
@@ -39,7 +39,7 @@ export const DataSourceBadge: React.FC<Props> = ({
     return (
       <div
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-700 border border-amber-500/25 shadow-2xs animate-pulse"
-        title={`🟡 Degraded: Market data latency elevated (10-45s, currently ${ageSec}s)${isReconnecting ? ' [reconnecting]' : ''}${isSynthetic ? ' [synthetic fallback]' : ''}. Source: ${source}`}
+        title={`Degraded: Market data latency elevated (10-45s, currently ${ageSec}s)${isReconnecting ? ' [reconnecting]' : ''}${isSynthetic ? ' [synthetic fallback]' : ''}. Source: ${source}`}
       >
         <span className="w-2 h-2 rounded-full bg-amber-500" />
         <span className="font-semibold">DEGRADED</span>
@@ -51,7 +51,7 @@ export const DataSourceBadge: React.FC<Props> = ({
   return (
     <div
       className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-700 border border-emerald-500/25 shadow-2xs"
-      title={`🟢 Connected: Live market stream active with <10s latency (currently ${ageSec}s). Feed: ${source}`}
+      title={`Connected: Live market stream active with <10s latency (currently ${ageSec}s). Feed: ${source}`}
     >
       <span className="relative flex h-2 w-2">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />

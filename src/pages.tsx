@@ -63,6 +63,8 @@ import {
   Cpu,
   Lock,
   Check,
+  Building2,
+  Star,
 } from 'lucide-react';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { senseMarketDanger } from './domain/agentic';
@@ -948,9 +950,10 @@ export function Markets() {
                             e.stopPropagation();
                             toggleWatch(a);
                           }}
-                          className={`text-sm ${isWatched ? 'text-amber-500' : 'text-zinc-300 hover:text-zinc-600'}`}
+                          className={`p-1 rounded transition-colors ${isWatched ? 'text-amber-500 fill-amber-500' : 'text-zinc-300 hover:text-zinc-600'}`}
+                          title={isWatched ? 'Remove from Watchlist' : 'Add to Watchlist'}
                         >
-                          ★
+                          <Star className={`w-3.5 h-3.5 ${isWatched ? 'fill-amber-500 text-amber-500' : 'text-zinc-300 hover:text-zinc-500'}`} />
                         </button>
                         <div
                           className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white text-[11px] shrink-0"
@@ -1088,7 +1091,7 @@ export function Markets() {
                       }`}
                       title={isWatched ? 'Remove from Watchlist' : 'Add to Watchlist'}
                     >
-                      ★
+                      <Star className={`w-3.5 h-3.5 ${isWatched ? 'fill-amber-500 text-amber-500' : 'text-zinc-300 hover:text-zinc-500'}`} />
                     </button>
                   </div>
 
@@ -1275,7 +1278,7 @@ export function Portfolio() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-                <span className="text-xl">🇮🇳</span>
+                <Building2 className="w-5 h-5 text-indigo-400" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -1283,13 +1286,14 @@ export function Portfolio() {
                     Upstox (NSE / BSE) Authoritative Gateway
                   </h3>
                   <span
-                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1.5 ${
                       upstoxAccount?.tokenHealth?.status === 'HEALTHY'
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                         : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                     }`}
                   >
-                    {upstoxAccount?.tokenHealth?.status === 'HEALTHY' ? '🟢 Live Synced' : '⚠️ Token Expired'}
+                    <span className={`w-1.5 h-1.5 rounded-full ${upstoxAccount?.tokenHealth?.status === 'HEALTHY' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                    <span>{upstoxAccount?.tokenHealth?.status === 'HEALTHY' ? 'Live Synced' : 'Token Expired'}</span>
                   </span>
                   {upstoxAccount?.latencyMs !== undefined && (
                     <span className="text-[10px] font-mono text-zinc-400">
@@ -1477,8 +1481,8 @@ export function Portfolio() {
             <span className="text-[11px] font-semibold text-zinc-500 block">Circuit Breakers</span>
             <div className="flex items-center gap-1.5 mt-1">
               {state.strategies.some((s) => s.circuitBreakerTriggered) ? (
-                <span className="text-sm font-bold text-rose-600 flex items-center gap-1">
-                  <span>🚨</span>
+                <span className="text-sm font-bold text-rose-600 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                   <span>{state.strategies.filter((s) => s.circuitBreakerTriggered).length} Halted</span>
                 </span>
               ) : (
@@ -1511,11 +1515,17 @@ export function Portfolio() {
                 const isStale = maxAge > 45000;
                 const isLagging = maxAge >= 10000;
                 return isStale ? (
-                  <span className="text-sm font-bold text-rose-600">🔴 Stale (&gt;45s)</span>
+                  <span className="text-sm font-bold text-rose-600 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-500" /> Stale (&gt;45s)
+                  </span>
                 ) : isLagging ? (
-                  <span className="text-sm font-bold text-amber-600">🟡 Lagging ({Math.round(maxAge / 1000)}s)</span>
+                  <span className="text-sm font-bold text-amber-600 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" /> Lagging ({Math.round(maxAge / 1000)}s)
+                  </span>
                 ) : (
-                  <span className="text-sm font-bold text-emerald-600">🟢 Fresh (&lt;10s)</span>
+                  <span className="text-sm font-bold text-emerald-600 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Fresh (&lt;10s)
+                  </span>
                 );
               })()}
             </div>
@@ -2161,9 +2171,10 @@ export function Orders() {
                   <button
                     type="button"
                     onClick={alignTickSize}
-                    className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 mt-1 block"
+                    className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 mt-1 flex items-center gap-1"
                   >
-                    ⚠️ Price must be multiple of ₹0.05. Click to round to ₹{(Math.round(Number(limitPriceStr) * 20) / 20).toFixed(2)}
+                    <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                    <span>Price must be multiple of ₹0.05. Click to round to ₹{(Math.round(Number(limitPriceStr) * 20) / 20).toFixed(2)}</span>
                   </button>
                 ) : (
                   <p className="text-[10px] text-zinc-500">
@@ -2406,7 +2417,7 @@ export function Orders() {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-black/[0.08] space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-black/[0.06]">
               <div className="flex items-center gap-2">
-                <span className="text-xl">🇮🇳</span>
+                <Building2 className="w-4 h-4 text-indigo-600" />
                 <h3 className="text-sm font-bold text-zinc-950">Confirm Upstox Order</h3>
               </div>
               <button
@@ -2451,7 +2462,8 @@ export function Orders() {
 
             <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
               <div className="font-bold flex items-center gap-1.5">
-                <span>🛡️ Production Safety Gate Active:</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                <span>Production Safety Gate Active:</span>
               </div>
               <p className="text-[11px] text-amber-800 leading-relaxed">
                 Live trading is guarded (<code>UPSTOX_LIVE_TRADING_ENABLED=false</code>). Order will execute deterministically on the simulated paper engine against live NSE tick feeds. Zero money is deducted from your live bank account.
@@ -2618,11 +2630,12 @@ export function Strategies() {
                 Institutional Loss Prevention & Risk Sentinel
               </h3>
               <span
-                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1.5 ${
                   isCashFloorSafe ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                 }`}
               >
-                {isCashFloorSafe ? '15% Cash Floor Active ✅' : 'Cash Floor Warning ⚠️'}
+                <span className={`w-1.5 h-1.5 rounded-full ${isCashFloorSafe ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                <span>{isCashFloorSafe ? '15% Cash Floor Active' : 'Cash Floor Warning'}</span>
               </span>
             </div>
             <p className="text-xs text-zinc-600">
@@ -2730,8 +2743,20 @@ export function Strategies() {
               ({totalWins}W - {totalLosses}L)
             </span>
           </div>
-          <span className="text-[11px] text-emerald-600 font-medium mt-1">
-            {trippedBreakersCount > 0 ? `⚠️ ${trippedBreakersCount} Circuit Breakers Tripped` : 'Loss Sentinel Armed'}
+          <span className={`text-[11px] font-medium mt-1 flex items-center gap-1 ${
+            trippedBreakersCount > 0 ? 'text-rose-600' : 'text-emerald-600'
+          }`}>
+            {trippedBreakersCount > 0 ? (
+              <>
+                <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                <span>{trippedBreakersCount} Circuit Breakers Tripped</span>
+              </>
+            ) : (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span>Loss Sentinel Armed</span>
+              </>
+            )}
           </span>
         </GlassCard>
       </div>
@@ -2829,9 +2854,9 @@ export function Strategies() {
                   <span className="font-mono font-semibold">
                     {ind?.chopIndex !== null && ind?.chopIndex !== undefined ? ind.chopIndex.toFixed(1) : 'N/A'}{' '}
                     {ind?.isChopBlocked ? (
-                      <span className="text-rose-600 font-bold ml-1">🚫 CHOP VETO</span>
+                      <span className="text-rose-600 font-bold ml-1">CHOP VETO</span>
                     ) : (
-                      <span className="text-emerald-600 font-bold ml-1">✅ CLEAN</span>
+                      <span className="text-emerald-600 font-bold ml-1">CLEAN</span>
                     )}
                   </span>
                 </div>
@@ -2888,7 +2913,7 @@ export function Strategies() {
         {[
           { id: 'all', label: `All (${state.strategies.length})` },
           { id: 'active', label: `Active (${activeCount})` },
-          { id: 'quantum', label: '⚡ Titan Quantum (Zero-Loss)' },
+          { id: 'quantum', label: 'Titan Quantum (Capital Preservation)' },
           { id: 'titan', label: 'Titan Adaptive' },
           { id: 'ai', label: 'Composite Alpha AI' },
           { id: 'trend', label: 'VWAP & Trend' },
@@ -2956,7 +2981,7 @@ export function Strategies() {
                         <h3 className="font-bold text-sm text-zinc-900">{s.name}</h3>
                         {isQuantum && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-gradient-to-r from-indigo-600 to-emerald-600 text-white shadow-2xs">
-                            ⚡ ZERO-LOSS APEX
+                            CAPITAL PRESERVATION
                           </span>
                         )}
                         {isTitan && !isQuantum && (
@@ -2970,18 +2995,19 @@ export function Strategies() {
                           {s.kind.replace('_', ' ')}
                         </span>
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold ${
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold flex items-center gap-1 ${
                             accountMode === 'upstox'
                               ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                               : 'bg-zinc-100 text-zinc-600'
                           }`}
                         >
-                          {accountMode === 'upstox' ? '🟢 Upstox Live Target' : '📊 Paper Sim Target'}
+                          <span className={`w-1.5 h-1.5 rounded-full ${accountMode === 'upstox' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                          <span>{accountMode === 'upstox' ? 'Upstox Live Target' : 'Paper Sim Target'}</span>
                         </span>
                         {s.zeroLossMode !== false && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 flex items-center gap-1">
                             <Shield className="w-2.5 h-2.5 text-indigo-600" />
-                            Zero-Loss Armor
+                            Capital Protection
                           </span>
                         )}
                         {s.scaleOutEnabled !== false && (
@@ -3405,8 +3431,8 @@ export function Strategies() {
                     }}
                     className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-xl outline-none font-medium"
                   >
-                    <option value="titan_quantum">⚡ Titan Quantum Apex Sentinel (Zero-Loss Flagship)</option>
-                    <option value="titan_adaptive">👑 Titan Adaptive Multi-Regime Sentinel</option>
+                    <option value="titan_quantum">Titan Quantum Apex Sentinel (Capital Preservation Flagship)</option>
+                    <option value="titan_adaptive">Titan Adaptive Multi-Regime Sentinel</option>
                     <option value="ai_multi_factor">Composite Alpha Quant (AI Multi-Factor)</option>
                     <option value="vwap_trend">Institutional VWAP Trend Engine</option>
                     <option value="breakout_volatility">Adaptive Volatility Squeeze Breakout</option>
@@ -3825,10 +3851,11 @@ export function SettingsPage() {
             <Cpu className="w-4 h-4 text-indigo-600" />
             <h3 className="text-sm font-bold text-zinc-900">AI Intelligence Engine</h3>
           </div>
-          <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full ${
+          <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
             key ? 'bg-indigo-500/10 text-indigo-700' : 'bg-emerald-500/10 text-emerald-700'
           }`}>
-            {key ? '🟢 Gemini 3 Series Active' : '🛡️ 100% Free Offline Quant Engine Active'}
+            <span className={`w-1.5 h-1.5 rounded-full ${key ? 'bg-indigo-500' : 'bg-emerald-500'}`} />
+            <span>{key ? 'Gemini 3 Series Active' : 'Offline Quant Engine Active'}</span>
           </span>
         </div>
 
@@ -3928,8 +3955,8 @@ export function SettingsPage() {
             }`}
           >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm">🇮🇳</span>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-indigo-600" />
                 <strong className="text-xs font-bold text-zinc-900">Upstox (NSE/BSE Live Desk)</strong>
               </div>
               {accountMode === 'upstox' ? (
@@ -3960,7 +3987,7 @@ export function SettingsPage() {
             onClick={openUpstoxDrawer}
             className="text-xs font-bold text-indigo-600 hover:underline"
           >
-            {upstoxAccount?.connected ? 'Terminal Controls ⚙️' : 'Connect Upstox →'}
+            {upstoxAccount?.connected ? 'Terminal Controls' : 'Connect Upstox →'}
           </button>
         </div>
       </GlassCard>

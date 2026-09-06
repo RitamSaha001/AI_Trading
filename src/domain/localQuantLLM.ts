@@ -140,16 +140,16 @@ export function queryNexusDeterministicQuant(
       };
     }
 
-    const reply = `### 🤖 Autonomous Agentic Workflow: \`${workflowType}\`
+    const reply = `### Autonomous Agentic Workflow: \`${workflowType}\`
 
 Nexus has decomposed your directive into a structured 4-Phase Quantitative Execution Blueprint:
 
-#### 🧠 Agentic Reasoning & Telemetry Snapshot
-1. **Capital Solvency Check**: Portfolio equity is $\\$${pv.toLocaleString()}$ with **${cashBufferPct}% liquid cash** ($\$${state.cash.toLocaleString()}$). Mandatory 15% cash reserve floor is **${Number(cashBufferPct) >= 15 ? 'SECURED ✅' : 'VIOLATED ⚠️'}**.
+#### Agentic Reasoning & Telemetry Snapshot
+1. **Capital Solvency Check**: Portfolio equity is $\\$${pv.toLocaleString()}$ with **${cashBufferPct}% liquid cash** ($\$${state.cash.toLocaleString()}$). Mandatory 15% cash reserve floor is **${Number(cashBufferPct) >= 15 ? 'SECURED' : 'VIOLATED'}**.
 2. **Concentration & Volatility Audit**: Herfindahl index is $\\text{HHI} = ${rk.herfindahlIndex.toFixed(3)}$ (${rk.herfindahlIndex > 0.25 ? 'Concentration Hazard' : 'Balanced'}). Top holding \`${rk.topAsset}\` represents **${rk.topAssetConcentrationPct.toFixed(1)}%** of equity.
 3. **Alpha Radar Extraction**: Evaluated cross-sectional Sharpe ratios across markets. Top risk-adjusted alpha is currently **${topAlpha}** (Sharpe: $${alphaComp.tokens[0]?.sharpeEstimate || '1.82'}$, Regime: \`${alphaComp.tokens[0]?.regime || 'Expansion'}\`).
 
-#### 📋 4-Phase Execution Roadmap
+#### 4-Phase Execution Roadmap
 | Phase | Action Milestone | Operational Target | Status |
 | :--- | :--- | :--- | :--- |
 | **Phase 1: Capital Defense** | Solvency & Reserve Enforcement | Maintain $\\ge 15\\%$ cash liquidity cushion | \`COMPLETED\` |
@@ -188,7 +188,7 @@ Nexus has compiled the primary transaction proposal below. Authorize in the Dual
     q.includes('introduce yourself') ||
     q.includes('what are your capabilities')
   ) {
-    const reply = `### 👋 Hello! I am Nexus Intelligence
+    const reply = `### Nexus Intelligence
 
 I am your autonomous institutional quantitative desk, execution engine, and risk sentinel—operating completely in your browser with offline neural fallback intelligence.
 
@@ -216,7 +216,7 @@ How can I assist your portfolio today? You can ask a question, request a trade b
     q.includes('trade full-time') ||
     q.includes('full time trader')
   ) {
-    const reply = `### ☕ Thinking of Quitting Your Job to Trade Full-Time? A Honest Quant Perspective
+    const reply = `### Thinking of Quitting Your Job to Trade Full-Time?
 
 This is one of the most consequential decisions an investor can ponder. Let's examine the mathematics, volatility reality, and cognitive psychology before you take the leap:
 
@@ -252,7 +252,7 @@ When your rent depends on where Solana closes on a 4-hour candle, emotional cort
     q.includes('should i buy now it pumped') ||
     q.includes('am i too late')
   ) {
-    const reply = `### 🧘 Emotional Circuit Breaker: Neutralizing FOMO
+    const reply = `### Emotional Circuit Breaker: Neutralizing FOMO
 
 The urge to jump into a soaring green candle is hardwired human evolutionary biology: we fear social exclusion and regret missed opportunities. In financial markets, however, **FOMO is the primary liquidity mechanism smart money uses to exit positions**.
 
@@ -285,7 +285,7 @@ Remember: **There will always be another trade. Protecting your cash liquidity b
     q.includes('retail lose money') ||
     q.includes('why do i keep losing')
   ) {
-    const reply = `### 📉 Why 90%+ of Retail Traders Lose Money: The Cognitive & Mathematical Trap
+    const reply = `### Why 90%+ of Retail Traders Lose Money: The Cognitive & Mathematical Trap
 
 Academic studies across retail brokerage accounts consistently show that over $90\\%$ of individual traders lose capital over a 12-month horizon. This failure is rarely due to a lack of market information; it is the structural result of human psychological wiring:
 
@@ -320,7 +320,7 @@ $$\\text{Required Recovery Gain}: R_{\\text{req}} = \\frac{D}{1 - D} \\quad (\\t
     q.includes('explain to my grandmother') ||
     q.includes('simple words')
   ) {
-    const reply = `### 📖 Explaining Blockchain & Crypto in Simple Words
+    const reply = `### Explaining Distributed Ledgers in Simple Terms
 
 Imagine you and your four best friends—Alex, Maya, Leo, and Sam—love trading Pokémon cards and soccer stickers.
 
@@ -351,7 +351,7 @@ If Leo secretly tries to copy a sticker or erase his notebook and write *"Alex g
     q.includes('whitepaper') ||
     q.includes('vision of bitcoin')
   ) {
-    const reply = `### 📜 Satoshi Nakamoto & The Genesis of Decentralized Value
+    const reply = `### Satoshi Nakamoto & The Genesis of Decentralized Value
 
 On October 31, 2008, amidst the wreckage of the global financial crisis and the Lehman Brothers bankruptcy, an anonymous cryptographer using the pseudonym **Satoshi Nakamoto** published a nine-page PDF to the Cypherpunk mailing list: *"Bitcoin: A Peer-to-Peer Electronic Cash System"*.
 
@@ -383,7 +383,7 @@ This was not merely a timestamp; it was an ideological declaration: a peaceful s
     q.includes('make me laugh') ||
     q.includes('humor')
   ) {
-    const reply = `### 😄 Quantitative & Crypto Trading Humor
+    const reply = `### Quantitative & Crypto Trading Humor
 
 Here are a few favorites straight from the order book:
 
@@ -414,7 +414,7 @@ Here are a few favorites straight from the order book:
     q.includes('pitch') ||
     q.includes('verse')
   ) {
-    const reply = `### ⚡ The Quantitative Sentinel (A Trading Poem)
+    const reply = `### The Quantitative Sentinel: Institutional Principles
 
 *In candle shadows, green and red,*  
 *Where mortals trade with hope and dread,*  
@@ -451,7 +451,7 @@ Here are a few favorites straight from the order book:
       q.includes('slippage drag') ||
       (q.includes('fees') && (q.includes('trading') || q.includes('broker') || q.includes('drag') || q.includes('cost of trading'))))
   ) {
-    const reply = `### 🧾 Taxation, Fee Drag & The Hidden Costs of Active Trading
+    const reply = `### Taxation, Fee Drag & The Hidden Costs of Active Trading
 
 One of the largest leaks in retail compounding is ignoring the friction of transaction fees, spread slippage, and short-term capital gains taxation:
 
@@ -496,7 +496,7 @@ Where $\\tau$ is the effective tax rate. Minimizing unnecessary portfolio churn 
 
     const stress = simulatePortfolioStressTest(state, markets, scenarioId);
 
-    const reply = `### 🌪️ Institutional Stress-Test: \`${stress.title}\`
+    const reply = `### Institutional Stress-Test: \`${stress.title}\`
 
 Simulating a high-volatility systemic shock across your portfolio holdings:
 - **Projected Drawdown**: $-${stress.simulatedDrawdownPct}\\%$ (Estimated loss: $-\\$${stress.simulatedLossUsd.toLocaleString()}$)
@@ -545,7 +545,7 @@ Review the stress scenario audit below to verify capital defense measures.`;
   ) {
     const danger = senseMarketDanger(state, markets);
 
-    const reply = `### 🛡️ Sentinel Emergency Downside Mitigation Plan
+    const reply = `### Sentinel Emergency Downside Mitigation Plan
 
 During rapid drawdowns, cognitive panic is the primary destroyer of capital. The unblinking Sentinel has executed a deterministic portfolio triage:
 
@@ -565,8 +565,8 @@ $$\\text{Circuit Breaker Condition}: \\text{If } \\Delta V_{\\text{day}} < -8\\%
 
 ${
   danger.hazards.length > 0
-    ? `**Active Hazards Flagged by Sentinel:**\n` + danger.hazards.map((h) => `- ⚠️ ${h}`).join('\n')
-    : `✅ **Cash Reserve Status**: Liquid buffer is intact. Avoid emotional capitulation.`
+    ? `**Active Hazards Flagged by Sentinel:**\n` + danger.hazards.map((h) => `- ${h}`).join('\n')
+    : `**Cash Reserve Status**: Liquid buffer is intact. Avoid emotional capitulation.`
 }
 
 Review and authorize the emergency capital defense reallocation below to secure your cash buffer.`;
@@ -608,7 +608,7 @@ Review and authorize the emergency capital defense reallocation below to secure 
     q.includes('open interest')
   ) {
     const btcSpotStr = markets.BTC?.price ? `$${markets.BTC.price.toLocaleString()}` : '[Feed Unavailable]';
-    const reply = `### 📊 Perpetual Swaps & Funding Rate Microstructure
+    const reply = `### Perpetual Swaps & Funding Rate Microstructure
 
 In crypto derivatives markets, perpetual futures contracts have no fixed expiry. Exchanges anchor contract mark price ($P_{\\text{perp}}$) to spot index price ($P_{\\text{spot}}$) via periodic 8-hour **Funding Rate** payments:
 
@@ -652,7 +652,7 @@ When funding rates exceed $+0.08\\%$ ($>87\\%$ APR), funding fatigue typically i
     (q.includes('market maker') && q.includes('extract'))
   ) {
     const btcSpotStr = markets.BTC?.price ? `$${markets.BTC.price.toLocaleString()}` : '[Feed Unavailable]';
-    const reply = `### ⚡ Market Microstructure: MEV, Sandwich Attacks & Order Flow
+    const reply = `### Market Microstructure: MEV, Sandwich Attacks & Order Flow
 
 Maximal Extractable Value (MEV) represents the excess value extracted by searchers, block builders, and validators through transaction reordering, insertion, and censorship in the public mempool:
 
@@ -700,7 +700,7 @@ Where $\\sigma$ is the asset price volatility and $V_t$ is pool TVL. High volati
     q.includes('put-call')
   ) {
     const btcSpotStr = markets.BTC?.price ? `$${markets.BTC.price.toLocaleString()}` : '[Feed Unavailable]';
-    const reply = `### 📈 Options Volatility Surface & Institutional Skew Analysis
+    const reply = `### Options Volatility Surface & Institutional Skew Analysis
 
 In derivatives markets, options pricing surfaces reveal forward-looking risk premia and institutional downside hedging demand that cannot be seen on spot charts:
 
@@ -737,7 +737,7 @@ Institutions execute delta-neutral short volatility strategies (e.g. straddles/i
     q.includes('staking vs lending')
   ) {
     const ethSpotStr = markets.ETH?.price ? `$${markets.ETH.price.toLocaleString()}` : '[Feed Unavailable]';
-    const reply = `### ⚖️ Risk-Return Decomposition: Liquid Staking (LST) vs DeFi Lending
+    const reply = `### Risk-Return Decomposition: Liquid Staking (LST) vs DeFi Lending
 
 Comparing yield architecture and tail-risk failure modes between Liquid Staking (e.g., Lido, Jito) and Collateralized Lending (e.g., Aave, Compound):
 
@@ -781,7 +781,7 @@ Where $U = \\frac{\\text{Total Borrows}}{\\text{Total Liquidity}}$ is the capita
     const topPct = rk.topAssetConcentrationPct;
     const isConcentrated = hhi > 0.25 || topPct > 40;
 
-    const reply = `### 🔬 Portfolio Concentration Audit: Herfindahl-Hirschman Index (HHI)
+    const reply = `### Portfolio Concentration Audit: Herfindahl-Hirschman Index (HHI)
 
 Quantitative assessment of systemic concentration risk across your holdings:
 - **Herfindahl Index (HHI)**: $\\text{HHI} = ${hhi.toFixed(3)}$
@@ -807,7 +807,7 @@ ${Object.entries(rk.assetWeights)
 ${
   isConcentrated
     ? `> **Sentinel Concentration Warning**: Top asset exposure exceeds institutional safe-harbor limits. An autonomous rebalancing plan is recommended below to re-diversify weights.`
-    : `✅ Your portfolio satisfies diversification standards with balanced multi-asset risk distribution.`
+    : `Your portfolio satisfies diversification standards with balanced multi-asset risk distribution.`
 }`;
 
     let proposal: AIActionProposal | null = null;
@@ -835,7 +835,7 @@ ${
     q.includes('eip-4844')
   ) {
     const ethSpotStr = markets.ETH?.price ? `$${markets.ETH.price.toLocaleString()}` : '[Feed Unavailable]';
-    const reply = `### ⛓️ Layer-2 Rollup Microeconomics & Proof Mechanics
+    const reply = `### Layer-2 Rollup Microeconomics & Proof Mechanics
 
 Layer-2 rollups scale throughput by executing transactions off-chain and posting compressed transaction batches and state roots to Ethereum Layer-1:
 
@@ -872,7 +872,7 @@ Because ZK rollups achieve mathematical finality via validity proofs, capital br
     q.includes('amm')
   ) {
     const ethSpotStr = markets.ETH?.price ? `$${markets.ETH.price.toLocaleString()}` : '[Feed Unavailable]';
-    const reply = `### ⚡ Automated Market Makers: Uniswap v2 vs v3 & Impermanent Loss
+    const reply = `### Automated Market Makers: Uniswap v2 vs v3 & Impermanent Loss
 
 Decentralized AMMs eliminate order books using deterministic mathematical bonding curves:
 
@@ -917,7 +917,7 @@ In high-volatility sideways markets, concentrated v3 ranges maximize fee velocit
     const minerSellPressure = btcP
       ? `At $\\$${btcP.toLocaleString()}$, this represents only $\\approx \\$${((450 * btcP) / 1000000).toFixed(2)}\\text{M}/\\text{day}$ in new structural sell pressure from miners, amplifying spot ETF inflows.`
       : `At current market levels, structural miner issuance represents minimal daily sell pressure relative to spot ETF inflows.`;
-    const reply = `### 🌐 Macroeconomic Regime & Bitcoin Halving Supply Inelasticity
+    const reply = `### Macroeconomic Regime & Bitcoin Halving Supply Inelasticity
 
 Cryptocurrency asset valuations sit at the nexus of global fiat monetary liquidity and algorithmic supply schedules:
 
@@ -958,7 +958,7 @@ Quantitative risk models mandate holding at least **15% liquid USD cash buffer**
     q.includes('atr') ||
     q.includes('oscillator')
   ) {
-    const reply = `### 📐 Quantitative Indicator Architecture for \`${primaryAsset}\`
+    const reply = `### Quantitative Indicator Architecture for \`${primaryAsset}\`
 
 Evaluating mathematical oscillators and trend filters for **${primaryAsset}** (Spot: $${money(spotVal)}):
 
@@ -994,7 +994,7 @@ $$\\text{TR} = \\max\\left(H_t - L_t, |H_t - C_{t-1}|, |L_t - C_{t-1}|\\right), 
   ) {
     const dcaPlan = generateSmartDCAPlan(primaryAsset, 200, state, markets);
 
-    const reply = `### 📈 Smart Value-Weighted DCA for \`${primaryAsset}\`
+    const reply = `### Smart Value-Weighted DCA for \`${primaryAsset}\`
 
 Constructed an asymmetric dollar-cost averaging schedule calibrated to valuation bands:
 - **Target Asset**: \`${primaryAsset}\` (Spot Quote: $${money(spotVal)}$, RSI: $${primaryInd.rsi.toFixed(1)}$)
@@ -1035,7 +1035,7 @@ Authorize this Smart Value-Weighted DCA plan below to initiate disciplined progr
     const style = q.includes('growth') ? 'growth_weighted' : 'risk_parity';
     const plan = calculateAgenticAllocation(state, markets, style);
 
-    const reply = `### ⚖️ Autonomous Portfolio Rebalancing: \`${plan.style.replace('_', ' ').toUpperCase()}\`
+    const reply = `### Autonomous Portfolio Rebalancing: \`${plan.style.replace('_', ' ').toUpperCase()}\`
 
 Calculated optimal capital weights to maximize risk-adjusted returns:
 - **Total Portfolio Valuation**: $\\$${pv.toLocaleString()}$
@@ -1071,7 +1071,7 @@ Authorize in the Safety Gate to execute the sell orders first, freeing up liquid
     const targets = mentionedAssets.length >= 2 ? mentionedAssets.slice(0, 4) : (['BTC', 'ETH', 'SOL', 'AVAX'] as Asset[]);
     const comp = compareTokensAlpha(targets, markets);
 
-    const reply = `### 🔬 Multi-Asset Alpha Radar & Risk-Adjusted Comparison
+    const reply = `### Multi-Asset Alpha Radar & Risk-Adjusted Comparison
 
 Cross-sectional statistical evaluation across target assets:
 
@@ -1132,17 +1132,17 @@ $$\\text{Sharpe Ratio} = \\frac{\\mathbb{E}[R_i] - R_f}{\\sigma_i \\cdot \\sqrt{
     const isQuantum = bot.kind === 'titan_quantum';
 
     const reply = isQuantum
-      ? `### ⚡ Synthesized Algorithmic Engine: \`${bot.name}\`
+      ? `### Synthesized Algorithmic Engine: \`${bot.name}\`
 
-Calibrated flagship quantitative execution parameters for **${primaryAsset}** with Zero-Loss Capital Armor & Scale-Out Harvester:
-- **Engine Architecture**: \`TITAN QUANTUM APEX SENTINEL (ZERO-LOSS ARMORED)\`
+Calibrated flagship quantitative execution parameters for **${primaryAsset}** with Capital Protection Armor & Scale-Out Harvester:
+- **Engine Architecture**: \`TITAN QUANTUM APEX SENTINEL (CAPITAL PRESERVATION)\`
 - **Max Portfolio Allocation**: $${((bot.maxAllocation || 0.25) * 100).toFixed(0)}\\%$ (~$${money((bot.maxAllocation || 0.25) * pv)}$)
 - **Target Take-Profit (TP1/Runner)**: $+${bot.targetProfitPct}\\%$ (~$${money(spotVal * (1 + (bot.targetProfitPct || 6) / 100))}$)
 - **Initial Stop-Loss**: $-${bot.trailingStopPct}\\%$ (~$${money(spotVal * (1 - (bot.trailingStopPct || 2) / 100))}$)
 - **Choppiness Noise Filter**: $\\text{CHOP} \\le 60$ and $\\text{ADX} \\ge 18$ (Strict veto on consolidation noise)
 - **Quarantine Safeguard**: Virtual paper shadow verification (requires 2 consecutive paper wins upon any stop-out)
 
-#### 1. Zero-Loss Capital Armor Formulation
+#### 1. Capital Protection Armor Formulation
 $$\\text{Ratchet Trigger}: P \\ge P_0 \\cdot (1 + 0.008) \\implies \\text{Stop-Loss} = P_0 \\cdot (1 + 0.002)$$
 Locks in $+0.2\\%$ net profit above all taker exchange fees as soon as price advances $+0.8\\%$, mathematically eliminating downside P&L drag.
 
@@ -1153,7 +1153,7 @@ $$\\text{TP}_1 = P_0 + 1.8 \\cdot \\text{ATR}_{14} \\implies \\text{Harvest } 50
 $$\\text{CHOP}_{14} = 100 \\cdot \\frac{\\log_{10}\\left(\\frac{\\sum_{i=1}^{14} \\text{ATR}_1}{\\text{MaxHigh}_{14} - \\text{MinLow}_{14}}\\right)}{\\log_{10}(14)} \\le 60$$
 
 Deploy this algorithmic bot via the Safety Gate to activate autonomous tick evaluation while preserving the 15% cash floor.`
-      : `### 🤖 Synthesized Algorithmic Engine: \`${bot.name}\`
+      : `### Synthesized Algorithmic Engine: \`${bot.name}\`
 
 Calibrated quantitative execution parameters for **${primaryAsset}** based on current ATR & implied volatility:
 - **Engine Architecture**: \`${bot.kind.replace('_', ' ').toUpperCase()}\`
@@ -1205,7 +1205,7 @@ Deploy this algorithmic bot via the Safety Gate to activate autonomous tick eval
   ) {
     if (!spot || spot <= 0 || !primaryMarket) {
       return {
-        reply: `### ⚠️ Market Feed Unavailable: \`${primaryAsset}\`\n\nLive quotes for ${primaryAsset} are currently unavailable or disconnected. Under strict institutional execution protocols, executable order proposals are suspended until valid market data is restored.`,
+        reply: `### Market Feed Unavailable: \`${primaryAsset}\`\n\nLive quotes for ${primaryAsset} are currently unavailable or disconnected. Under strict institutional execution protocols, executable order proposals are suspended until valid market data is restored.`,
         actionProposal: null,
         engine: ENGINE_LABEL,
       };
@@ -1255,7 +1255,7 @@ Deploy this algorithmic bot via the Safety Gate to activate autonomous tick eval
 
     if (orderSide === 'sell') {
       if (currentHolding <= 0) {
-        gatingNotice = `\n\n> ℹ️ **Holding Status**: You currently hold 0 \`${primaryAsset}\`. No liquidation or trim order can be executed.`;
+        gatingNotice = `\n\n> **Holding Status**: You currently hold 0 \`${primaryAsset}\`. No liquidation or trim order can be executed.`;
       } else {
         // Trim 50% of available holding or full holding if small
         amount = +(Math.min(currentHolding, Math.max(currentHolding * 0.5, 0.0001))).toFixed(4);
@@ -1276,7 +1276,7 @@ Deploy this algorithmic bot via the Safety Gate to activate autonomous tick eval
       });
       amount = sized.quantity;
       if (amount <= 0) {
-        gatingNotice = `\n\n> ⚠️ **Execution Gate Block**: Order quantity is 0 under risk budget and mandatory 15% cash liquidity reserve.`;
+        gatingNotice = `\n\n> **Execution Gate Block**: Order quantity is 0 under risk budget and mandatory 15% cash liquidity reserve.`;
       }
     }
 
@@ -1296,13 +1296,13 @@ Deploy this algorithmic bot via the Safety Gate to activate autonomous tick eval
       if (safety.valid) {
         actionProposal = proposalCandidate;
       } else {
-        gatingNotice = `\n\n> ⚠️ **Execution Gate Block**: Order proposal disabled due to safety bounds: ${safety.errors.join('; ')}`;
+        gatingNotice = `\n\n> **Execution Gate Block**: Order proposal disabled due to safety bounds: ${safety.errors.join('; ')}`;
       }
     } else if (!validity.canExecute && amount > 0) {
-      gatingNotice = `\n\n> ⚠️ **Execution Gate Block**: Order proposal disabled due to market data feed validation: ${validity.errors.join('; ')}`;
+      gatingNotice = `\n\n> **Execution Gate Block**: Order proposal disabled due to market data feed validation: ${validity.errors.join('; ')}`;
     }
 
-    const reply = `### 📊 Quantitative Market Analysis: \`${primaryAsset}\`
+    const reply = `### Quantitative Market Analysis: \`${primaryAsset}\`
 
 - **Spot Quote**: $${money(spot)}$ ($${chg >= 0 ? '+' : ''}${chg.toFixed(2)}\\%$ 24h)
 - **Market Regime**: \`${primaryInd.signalLabel}\` (Composite score: $${primaryInd.score >= 0 ? '+' : ''}${primaryInd.score}/100$)
@@ -1331,7 +1331,7 @@ Nexus recommends an asymmetric **${orderSide.toUpperCase()}** order bracket with
   // (For any open-ended human inquiry, economic question, or creative prompt)
   // =========================================================================
   const topAsset = rk.topAsset || primaryAsset;
-  const reply = `### 🧠 Nexus Intelligence: Contextual Market Analysis
+  const reply = `### Nexus Intelligence: Contextual Market Analysis
 
 In response to your query: *"**${rawPrompt}**"*, here is a structured quantitative breakdown grounded in live portfolio telemetry and market conditions:
 

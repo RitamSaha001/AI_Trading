@@ -24,6 +24,8 @@ import {
   Sparkles,
   Search,
   CheckCircle,
+  CheckCircle2,
+  ChevronDown,
   AlertCircle,
   X,
   Volume2,
@@ -363,21 +365,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Right Header Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-3">
-            {/* Dual-Desk Switcher: Simulated Paper Sandbox | Upstox Indian Equities & F&O */}
-            <div className="flex items-center bg-black/[0.04] p-0.5 rounded-full border border-black/[0.06]">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Professional Segmented Desk Switcher */}
+            <div className="inline-flex items-center p-0.5 rounded-xl bg-zinc-100/90 border border-black/[0.06] shrink-0">
               <button
                 type="button"
                 onClick={() => setAccountMode('paper')}
-                className={`px-3 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 text-[11px] rounded-lg transition-all flex items-center gap-1.5 font-medium ${
                   accountMode === 'paper'
-                    ? 'bg-white text-zinc-900 shadow-xs font-bold'
+                    ? 'bg-white text-zinc-950 font-semibold shadow-2xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
-                title="Switch to Simulated Paper Desk ($50,000 Sandbox)"
+                title="Switch to Simulated Paper Sandbox"
               >
-                <span>📊</span>
-                <span className="hidden sm:inline">Simulated Desk</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                <span>Paper</span>
               </button>
 
               <button
@@ -389,111 +391,56 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     setAccountMode('upstox');
                   }
                 }}
-                className={`px-3 py-1 text-[11px] font-semibold rounded-full transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 text-[11px] rounded-lg transition-all flex items-center gap-1.5 font-medium ${
                   accountMode === 'upstox'
-                    ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                    ? 'bg-white text-zinc-950 font-semibold shadow-2xs'
                     : upstoxAccount?.connected
-                    ? 'text-indigo-700 hover:text-indigo-900 font-medium'
+                    ? 'text-indigo-600 hover:text-indigo-900'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
-                title={upstoxAccount?.connected ? 'Switch to Upstox (NSE / BSE) Desk' : 'Connect Upstox Indian Equities & F&O'}
+                title={upstoxAccount?.connected ? 'Upstox (NSE / BSE Live Desk)' : 'Connect Upstox Demat'}
               >
-                {upstoxAccount?.connected ? (
-                  <>
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        upstoxAccount.tokenHealth?.status === 'HEALTHY' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                      }`}
-                    />
-                    <span>🇮🇳 Upstox (NSE)</span>
-                    {upstoxAccount.tokenHealth && upstoxAccount.tokenHealth.status !== 'EXPIRED' && (
-                      <span className="hidden md:inline text-[9px] font-mono bg-white/20 px-1 py-0.2 rounded text-white">
-                        {upstoxAccount.tokenHealth.timeRemainingHuman}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <span>🇮🇳</span>
-                    <span>Upstox (NSE)</span>
-                  </>
-                )}
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    upstoxAccount?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'
+                  }`}
+                />
+                <span>Upstox</span>
+                <span className="hidden md:inline text-[10px] text-zinc-400 font-normal">NSE</span>
               </button>
-
-              {upstoxAccount?.connected && (
-                <button
-                  type="button"
-                  onClick={openUpstoxDrawer}
-                  className="px-1.5 py-1 text-[11px] text-zinc-400 hover:text-zinc-700 transition-colors"
-                  title="Upstox Terminal & Margin Controls"
-                >
-                  ⚙️
-                </button>
-              )}
             </div>
 
-            {/* Funds & Margin Quick Pill */}
+            {/* Funds Pill */}
             <button
               type="button"
               onClick={() => go('/wallet')}
-              className={`px-2.5 py-1 text-[11px] font-semibold rounded-full border transition-all flex items-center gap-1.5 ${
+              className={`px-2 sm:px-2.5 py-1 text-[11px] rounded-xl border transition-all flex items-center gap-1.5 shrink-0 ${
                 route === '/wallet'
-                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
-                  : 'bg-indigo-50/80 hover:bg-indigo-100 border-indigo-200/80 text-indigo-900'
+                  ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs font-semibold'
+                  : 'bg-white hover:bg-zinc-50 border-black/[0.08] text-zinc-700 shadow-2xs'
               }`}
-              title="Open Funds & Margin Ledger"
+              title="Funds, Margin & Capital Treasury"
             >
-              <Wallet className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Funds:</span>
-              <span className="font-mono font-bold">
+              <Wallet className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+              <span className="font-mono font-semibold text-zinc-900 text-[11px] sm:text-xs">
                 {accountMode === 'upstox' && upstoxAccount?.funds
                   ? moneyINR(upstoxAccount.funds.availableCash)
                   : moneyINR(state.cash)}
               </span>
             </button>
 
-            {/* Quick Start Visual Guide Trigger */}
-            <button
-              type="button"
-              onClick={() => setOnboardingOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-semibold rounded-full border border-indigo-200/80 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 transition-all flex items-center gap-1.5 shadow-2xs active:scale-95"
-              title="Launch Interactive Cockpit Walkthrough"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
-              <span className="hidden md:inline">Quick Start Guide</span>
-            </button>
-
-            {/* Authoritative Operational Health & Safety Indicator */}
-            <div className="hidden sm:block">
+            {/* Authoritative Operational Health & Safety Indicator (Single clean status pill) */}
+            <div className="hidden sm:block shrink-0">
               <OperationalHealthBanner accountMode={state.accountMode} />
             </div>
 
-            {/* Live Data Source Indicator (hidden on smallest screens to preserve space) */}
-            <div className="hidden sm:block">
-              <DataSourceBadge
-                source={currentDataSource}
-                isSynthetic={markets[state.selectedAsset]?.isSynthetic}
-                lastUpdated={markets[state.selectedAsset]?.lastUpdated}
-              />
-            </div>
-
-            {/* Audio Toggle */}
-            <button
-              type="button"
-              onClick={() => setSettings({ soundEnabled: !state.settings.soundEnabled })}
-              className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.04] transition-all"
-              title={state.settings.soundEnabled ? 'Mute acoustic feedback' : 'Enable acoustic feedback'}
-            >
-              {state.settings.soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            </button>
-
             {/* Notifications Popover */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setNotifOpen((v) => !v)}
                 className="relative p-2 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.04] transition-all"
-                title="Notifications"
+                title="Notifications & Execution Signals"
               >
                 <Bell className="w-4 h-4" />
                 {state.notifications.length > 0 && (
@@ -526,79 +473,63 @@ export function Shell({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            {/* Grievance & Dispute Redressal Desk Trigger */}
-            <button
-              type="button"
-              onClick={() => openGrievanceModal()}
-              className="relative p-2 rounded-xl text-zinc-500 hover:text-indigo-600 hover:bg-indigo-50/60 transition-all"
-              title="Grievance Redressal Desk & Dispute Resolution"
-            >
-              <LifeBuoy className="w-4 h-4" />
-              {state.grievanceTickets && state.grievanceTickets.some((t) => t.status !== 'resolved' && t.status !== 'closed') && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white" />
-              )}
-            </button>
-
-            {/* Google / Apple User Account Sign-In / Profile Pill */}
+            {/* User Account / Profile Pill */}
             {isAuthenticated && user ? (
               <button
                 type="button"
                 onClick={openUserProfileDrawer}
-                className="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full border border-black/[0.08] hover:border-black/[0.15] bg-white/80 hover:bg-white shadow-2xs transition-all active:scale-95"
-                title={`${user.displayName} (${user.email}) — Click for Profile & Security`}
+                className="flex items-center gap-1.5 p-1 sm:px-2.5 sm:py-1 rounded-xl border border-black/[0.08] hover:border-black/[0.15] bg-white hover:bg-zinc-50 shadow-2xs transition-all active:scale-95 shrink-0"
+                title={`${user.displayName} (${user.email})`}
               >
                 {user.photoURL ? (
                   <img
                     src={user.photoURL}
                     alt={user.displayName}
-                    className="w-5 h-5 rounded-full object-cover border border-black/10"
+                    className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-cover border border-black/10 shrink-0"
                   />
                 ) : (
-                  <div className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
-                    {user.displayName?.charAt(0) || user.email.charAt(0).toUpperCase()}
+                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-zinc-900 text-white text-[10px] sm:text-[11px] font-bold flex items-center justify-center shrink-0">
+                    {user.displayName?.charAt(0) || user.email?.charAt(0).toUpperCase() || 'U'}
                   </div>
                 )}
-                <span className="text-xs font-semibold text-zinc-800 max-w-[90px] truncate hidden sm:inline">
-                  {user.displayName || user.email.split('@')[0]}
+                <span className="text-xs font-semibold text-zinc-800 max-w-[70px] sm:max-w-[85px] truncate hidden sm:inline">
+                  {user.displayName ? user.displayName.split(' ')[0] : user.email?.split('@')[0]}
                 </span>
                 {user.isEmergencyLocked ? (
-                  <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                 ) : (
-                  <span className="text-[9px] font-bold px-1 rounded uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    {user.kycTier.toUpperCase()}
-                  </span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 hidden md:inline" />
                 )}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={openAuthModal}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold shadow-2xs transition-all active:scale-95"
-                title="Sign in with Google or Email for Secure Isolated Account"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold shadow-2xs transition-all active:scale-95 shrink-0"
+                title="Sign In for Isolated Account"
               >
                 <User className="w-3.5 h-3.5" />
-                <span>Sign In</span>
+                <span className="hidden sm:inline">Sign In</span>
               </button>
             )}
 
-            {/* AI Nexus Header Trigger - Apple Minimalist Pill */}
+            {/* AI Nexus Header Trigger */}
             <button
               type="button"
               onClick={() => (chatOpen ? closeChat() : openChat())}
-              className="group relative flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold text-zinc-900 bg-white/70 hover:bg-white/95 border border-black/[0.08] hover:border-black/[0.15] rounded-full shadow-xs backdrop-blur-xl transition-all active:scale-95"
+              className="group flex items-center gap-1.5 px-2.5 sm:px-3 py-1 text-xs font-semibold text-zinc-900 bg-white hover:bg-zinc-50 border border-black/[0.08] hover:border-black/[0.15] rounded-xl shadow-2xs transition-all active:scale-95 shrink-0"
+              title="Open Nexus AI Cockpit"
             >
-              <div className="relative flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5 text-zinc-900 transition-transform group-hover:rotate-12" />
-              </div>
-              <span className="tracking-tight hidden sm:inline">Nexus</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600 group-hover:rotate-12 transition-transform" />
+              <span className="font-medium hidden sm:inline">Nexus</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             </button>
           </div>
         </header>
 
-        {/* Persistent Account Mode & Safety Sentinel Banner */}
-        {user?.isEmergencyLocked ? (
-          <div className="bg-rose-600 text-white px-4 py-2.5 text-xs font-medium flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-md">
+        {/* Persistent Emergency Freeze Banner (Only shown if emergency freeze is explicitly active) */}
+        {user?.isEmergencyLocked && (
+          <div className="bg-rose-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-between shadow-md">
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 shrink-0 text-white animate-pulse" />
               <span>
@@ -608,81 +539,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={openUserProfileDrawer}
-              className="self-start sm:self-auto px-2.5 py-1 bg-white text-rose-700 hover:bg-rose-50 text-xs font-bold rounded-lg shadow-2xs transition-colors"
+              className="px-2.5 py-1 bg-white text-rose-700 hover:bg-rose-50 text-xs font-bold rounded-lg shadow-2xs transition-colors"
             >
               Open Security Drawer
             </button>
-          </div>
-        ) : accountMode === 'upstox' ? (
-          <div className="bg-indigo-950 text-indigo-100 border-b border-indigo-800/80 px-4 py-2 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner">
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  upstoxAccount?.connected && upstoxAccount?.tokenHealth?.status === 'HEALTHY'
-                    ? 'bg-emerald-400 animate-pulse'
-                    : 'bg-amber-400'
-                } shrink-0`}
-              />
-              <span>
-                <strong>🇮🇳 UPSTOX INDIAN EQUITIES &amp; F&amp;O DESK ACTIVE</strong> — Authoritative Gateway (
-                {upstoxAccount?.accountName ? `${upstoxAccount.accountName} • ` : ''}
-                {upstoxAccount?.accountId || 'Connected'}).
-                {upstoxAccount?.tokenHealth && upstoxAccount.tokenHealth.status !== 'EXPIRED' ? (
-                  <span className="ml-1 text-emerald-300 font-mono">
-                    Token expires in {upstoxAccount.tokenHealth.timeRemainingHuman} (03:30 AM IST).
-                  </span>
-                ) : (
-                  <span className="ml-1 text-amber-300 font-semibold">
-                    Daily token expired at 03:30 AM IST. Re-authenticate to refresh.
-                  </span>
-                )}
-                <span className="ml-1.5 text-indigo-300">
-                  Live safety gate: <strong>UPSTOX_LIVE_TRADING_ENABLED=false</strong> (Zero financial loss risk).
-                </span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={openUpstoxDrawer}
-                className="text-[11px] font-semibold bg-indigo-800 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg border border-indigo-600 transition-colors"
-              >
-                Upstox Terminal Controls
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountMode('paper')}
-                className="text-[11px] font-medium bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-lg transition-colors"
-              >
-                Return to Simulated Desk
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 backdrop-blur-xs">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold">
-                🎓
-              </span>
-              <span>
-                <strong>SIMULATED PAPER TRADING DESK</strong> — ₹5,00,000 virtual practice capital active. Zero financial risk.
-              </span>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  if (upstoxAccount?.connected) {
-                    setAccountMode('upstox');
-                  } else {
-                    openUpstoxDrawer();
-                  }
-                }}
-                className="text-[11px] font-semibold text-amber-900 hover:text-amber-950 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg border border-amber-300/60 transition-colors"
-              >
-                Switch to Upstox (NSE) Desk →
-              </button>
-            </div>
           </div>
         )}
 

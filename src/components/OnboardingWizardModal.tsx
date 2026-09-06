@@ -18,6 +18,8 @@ import {
   Compass,
   DollarSign,
   TrendingUp,
+  Building2,
+  Briefcase,
 } from 'lucide-react';
 
 interface OnboardingWizardModalProps {
@@ -173,7 +175,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                 <div className="p-4 rounded-2xl bg-black/[0.02] border border-black/[0.05] space-y-2 text-center sm:text-left">
                   <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto sm:mx-0">
-                    <span className="text-base">🇮🇳</span>
+                    <Building2 className="w-4 h-4 text-indigo-600" />
                   </div>
                   <h4 className="text-xs font-bold text-zinc-900">Upstox NSE / BSE Gateway</h4>
                   <p className="text-[11px] text-zinc-500 leading-tight">
@@ -229,7 +231,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">📊</span>
+                        <Briefcase className="w-4 h-4 text-zinc-700" />
                         <h4 className="text-xs font-bold text-zinc-900">Simulated Paper Desk</h4>
                       </div>
                       {accountMode === 'paper' && (
@@ -239,7 +241,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                       )}
                     </div>
                     <p className="text-xs text-zinc-600">
-                      $50,000 in virtual sandbox capital. Practice Indian equities &amp; global contracts with realistic slippage and zero financial risk.
+                      ₹5,00,000 in virtual practice capital. Practice Indian equities with realistic matching and zero financial risk.
                     </p>
                   </div>
                   <div className="mt-4 pt-3 border-t border-black/[0.06] text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5">
@@ -266,7 +268,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">🇮🇳</span>
+                        <Building2 className="w-4 h-4 text-indigo-600" />
                         <h4 className="text-xs font-bold text-zinc-900">Upstox (NSE / BSE) Desk</h4>
                       </div>
                       {accountMode === 'upstox' && (
@@ -281,10 +283,18 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-black/[0.06] flex items-center justify-between text-[11px]">
-                    <span className="text-zinc-500 font-medium">
-                      {upstoxAccount?.connected
-                        ? `🟢 ${upstoxAccount.accountId || 'Connected'} (Valid to 03:30 AM IST)`
-                        : '⚪ OAuth Not Connected'}
+                    <span className="text-zinc-500 font-medium flex items-center gap-1.5">
+                      {upstoxAccount?.connected ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>{upstoxAccount.accountId || 'Connected'} (Valid to 03:30 AM IST)</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-300" />
+                          <span>OAuth Not Connected</span>
+                        </>
+                      )}
                     </span>
                     <button
                       type="button"
@@ -294,7 +304,7 @@ export function OnboardingWizardModal({ isOpen, onClose }: OnboardingWizardModal
                       }}
                       className="text-indigo-600 font-bold hover:underline"
                     >
-                      {upstoxAccount?.connected ? 'Settings ⚙️' : 'Connect Demat →'}
+                      {upstoxAccount?.connected ? 'Settings' : 'Connect Demat →'}
                     </button>
                   </div>
                 </div>
