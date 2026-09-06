@@ -53,8 +53,16 @@ export async function verifyOriginOrCsrf(req: FastifyRequest, reply: FastifyRepl
     }
   }
 
-  // If an Origin or Referer is present, it MUST be an allowed origin
+  // If an Origin or Referer is present, it MUST be same-origin or an allowed origin
   if (requestOrigin) {
+    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host;
+    const proto = (req.headers['x-forwarded-proto'] as string) || (req.socket.encrypted ? 'https' : 'http');
+    const selfOrigin = host ? `${proto}://${host}`.toLowerCase() : null;
+
+    if (selfOrigin && requestOrigin === selfOrigin) {
+      return;
+    }
+
     const isAllowed = isValidAllowedOrigin(requestOrigin, config.NODE_ENV, config.ALLOWED_ORIGINS);
     if (!isAllowed) {
       return reply.status(403).send({
