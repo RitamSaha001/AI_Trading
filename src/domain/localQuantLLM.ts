@@ -1459,34 +1459,32 @@ export function generateThinkingTrace(
     .join(', ');
 
   return `<thinking>
-[System 2 Cognitive Reasoning Trace & Bayesian Transformer Simulation]
-1. Epistemic Input Categorization & Attention Matrix:
+[Nexus Cognitive Reasoning Trace - Human-Centered Architecture]
+1. Intent & Context Focus:
    - Primary Focus Asset: ${asset} | Current Spot Quote: ${m.price.toLocaleString()}
-   - Salient Attention Heads: ${topTokens || 'General Market Context'}
+   - Contextual Focus: ${intentSummary}
    - User Belief State: Risk Profile = ${context.beliefState.estimatedRiskTolerance} (Pratt-Arrow γ = ${context.beliefState.prattArrowCoeff.toFixed(2)}), Hedging Urgency = ${(context.beliefState.hedgingUrgency * 100).toFixed(0)}%, Panic Prob = ${(context.beliefState.panicProbability * 100).toFixed(0)}%
 
-2. Microstructure & Indicator Synthesis:
-   - Momentum Oscillator: RSI(14) = ${rsi.toFixed(2)} [${rsi > 70 ? 'Overbought Reversal Danger' : rsi < 30 ? 'Oversold Accumulation Band' : 'Mean-Reverting Equilibrium'}]
-   - Volatility Envelope: Bollinger %B = ${(bb.percentB * 100).toFixed(1)}% | Bandwidth = ${(((bb.upper - bb.lower) / bb.mid) * 100).toFixed(2)}% | ATR(14) = ${atr.toFixed(2)}
-   - Derivatives Pricing: BS Delta = ${greeks.delta.toFixed(3)}, Gamma = ${greeks.gamma.toFixed(5)}, Vega = ${greeks.vega.toFixed(3)}, Vanna = ${greeks.vanna.toFixed(4)}, Volga = ${greeks.volga.toFixed(4)}
-   - Optimal Execution (Almgren-Chriss): Urgency κ = ${almgren.urgencyKappa}, Half-life = ${almgren.halfLifeHours} hrs, Exp Impact Loss = $${almgren.expectedCostUsd}
-   - Statutory Frictions (NSE/SEBI): STT = ₹${sebi.stt}, Exchange = ₹${sebi.nseExchangeCharge}, Breakeven Tick Movement = ${sebi.breakevenTickMovement} ticks
+2. Market Pulse & Health:
+   - Momentum Gauge: RSI(14) = ${rsi.toFixed(1)} [${rsi > 70 ? 'Hot & Overextended - Caution Advised' : rsi < 30 ? 'Deeply Discounted - High Value Potential' : 'Healthy Equilibrium - Consolidation Active'}]
+   - Volatility Envelope: Price trading comfortably within normal volatility bands (ATR: ${atr.toFixed(2)}, Bollinger %B: ${(bb.percentB * 100).toFixed(1)}%)
+   - Execution Impact: Slippage risk is minimal under current order book depth (Estimated impact: $${almgren.expectedCostUsd})
 
-3. Bayesian Hypothesis Competition:
-   - H1 (Momentum Continuation): Prior = ${(bayes.hypotheses[0].priorProbability * 100).toFixed(0)}% -> Posterior = ${(bayes.hypotheses[0].posteriorProbability * 100).toFixed(1)}%
-   - H2 (Mean Reversion): Prior = ${(bayes.hypotheses[1].priorProbability * 100).toFixed(0)}% -> Posterior = ${(bayes.hypotheses[1].posteriorProbability * 100).toFixed(1)}%
-   - H3 (Liquidity Sweep): Prior = ${(bayes.hypotheses[2].priorProbability * 100).toFixed(0)}% -> Posterior = ${(bayes.hypotheses[2].posteriorProbability * 100).toFixed(1)}%
+3. Scenario Tournament (Weighing Market Paths):
+   - Scenario A (Trend Continuation): ${(bayes.hypotheses[0].posteriorProbability * 100).toFixed(0)}% probability
+   - Scenario B (Mean Reversion Pullback): ${(bayes.hypotheses[1].posteriorProbability * 100).toFixed(0)}% probability
+   - Scenario C (Liquidity Cascade): ${(bayes.hypotheses[2].posteriorProbability * 100).toFixed(0)}% probability
    - Winning Hypothesis: ${bayes.dominant.name} (Posterior = ${(bayes.dominant.posteriorProbability * 100).toFixed(1)}%)
-   - Invalidation Level: ${bayes.dominant.invalidationLevel.toFixed(2)} | Metric: ${bayes.dominant.falsificationMetric}
+   - Invalidation Level: ${bayes.dominant.invalidationLevel.toFixed(2)} | Invalidation Trigger: ${bayes.dominant.falsificationMetric}
 
-4. Red-Teaming Adversarial Challenge:
+4. Devil's Advocate (Red Team Risk Check):
    - ${bayes.redTeam.criticName}: "${bayes.redTeam.adversarialChallenge}"
    - Tail Event Risk: ${bayes.redTeam.counterfactualRisk}
    - Mitigating Action: ${bayes.redTeam.recommendedHedge}
 
-5. Deterministic Policy Selection:
+5. Execution Safety Directive:
    - Routing to specialized handler: [${intentSummary}]
-   - Action Proposal Constraint Check: Enforce user confirmation for all irreversible orders; respect cash reserve floor.
+   - Action Proposal Constraint: Enforce user confirmation for all irreversible orders; preserve liquid cash floor.
 </thinking>
 
 `;

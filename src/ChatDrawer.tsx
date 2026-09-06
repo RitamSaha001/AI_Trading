@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLumen } from './store';
 import {
   Sparkles,
@@ -28,11 +28,606 @@ import {
   PlayCircle,
   ExternalLink,
 } from 'lucide-react';
-import { money } from './trading';
+import { money, moneyINR } from './trading';
 import { isIndianAsset } from './domain/portfolio';
 import { resolveGemini3Model } from './gemini';
 import { LatexRenderer } from './components/LatexRenderer';
 import { go } from './Shell';
+
+/**
+ * High-speed token streaming typewriter animation for newly arrived assistant messages.
+ * Displays thinking traces immediately, animates the response text with a glowing cursor,
+ * and provides click-to-skip functionality.
+ */
+function TypewriterAssistantMessage({
+  content,
+  isLatest,
+}: {
+  content: string;
+  isLatest: boolean;
+}) {
+  // Extract thinking block if present
+  const { thinkingBlock, bodyContent } = useMemo(() => {
+    const match = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
+    if (match) {
+      return {
+        thinkingBlock: match[0],
+        bodyContent: content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim(),
+      };
+    }
+    return { thinkingBlock: '', bodyContent: content };
+  }, [content]);
+
+  // Keep track of messages that have already completed typing animation
+  const typedMessagesRef = useRef<Set<string>>(new Set());
+  const alreadyCompleted = !isLatest || typedMessagesRef.current.has(content);
+
+  const [displayedLength, setDisplayedLength] = useState(() =>
+    alreadyCompleted ? bodyContent.length : 0
+  );
+  const [isTyping, setIsTyping] = useState(() => !alreadyCompleted && bodyContent.length > 0);
+
+  useEffect(() => {
+    if (!isLatest || typedMessagesRef.current.has(content)) {
+      setDisplayedLength(bodyContent.length);
+      setIsTyping(false);
+      return;
+    }
+
+    if (bodyContent.length === 0) {
+      setDisplayedLength(0);
+      setIsTyping(false);
+      typedMessagesRef.current.add(content);
+      return;
+    }
+
+    setDisplayedLength(0);
+    setIsTyping(true);
+
+    // Fast, fluid typing rate: 3 to 6 chars per tick (~16ms), finishes under ~1.8s
+    const step = Math.max(3, Math.ceil(bodyContent.length / 55));
+    const timer = setInterval(() => {
+      setDisplayedLength((prev) => {
+        const next = prev + step;
+        if (next >= bodyContent.length) {
+          clearInterval(timer);
+          setIsTyping(false);
+          typedMessagesRef.current.add(content);
+          return bodyContent.length;
+        }
+        return next;
+      });
+    }, 16);
+
+    return () => clearInterval(timer);
+  }, [content, isLatest, bodyContent]);
+
+  const handleSkip = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setDisplayedLength(bodyContent.length);
+    setIsTyping(false);
+    typedMessagesRef.current.add(content);
+  };
+
+  const currentBody = isTyping ? bodyContent.slice(0, displayedLength) : bodyContent;
+  const renderContent = thinkingBlock
+    ? `${thinkingBlock}\n\n${currentBody}`
+    : currentBody;
+
+  return (
+    <div
+      className={`relative ${isTyping ? 'cursor-pointer select-none' : ''}`}
+      onClick={() => {
+        if (isTyping) handleSkip();
+      }}
+      title={isTyping ? 'Click to show full message' : undefined}
+    >
+      <LatexRenderer content={renderContent} />
+
+      {isTyping && (
+        <span
+          className="inline-block w-1.5 h-3.5 bg-indigo-600 rounded-xs animate-pulse ml-1 align-middle shadow-[0_0_8px_rgba(99,102,241,0.5)]"
+          aria-hidden="true"
+        />
+      )}
+
+      {isTyping && (
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={handleSkip}
+            className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-600 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+            title="Skip typing animation"
+          >
+            <span>Skip</span>
+            <Zap className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Apple-grade Action Proposal Card with gradient status bars,
+ * prominent direction badges, tactile confirmation controls, and dismiss capability.
+ */
+function ActionProposalCard({
+  proposal,
+  onExecute,
+  onDismiss,
+  isDismissed,
+  onUndoDismiss,
+  isIndian,
+  currentPrice,
+}: {
+  proposal: any;
+  index: number;
+  onExecute: () => void;
+  onDismiss: () => void;
+  isDismissed: boolean;
+  onUndoDismiss: () => void;
+  isIndian: boolean;
+  currentPrice?: number;
+}) {
+  if (isDismissed) {
+    return (
+      <div className="p-3.5 rounded-2xl bg-zinc-50/90 border border-zinc-200/70 text-xs text-zinc-500 flex items-center justify-between shadow-2xs animate-in fade-in duration-200">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-md bg-zinc-200/60 flex items-center justify-center text-zinc-500">
+            <Check className="w-3 h-3" />
+          </div>
+          <span className="font-medium text-zinc-700">Proposal dismissed</span>
+        </div>
+        <button
+          type="button"
+          onClick={onUndoDismiss}
+          className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
+        >
+          Undo
+        </button>
+      </div>
+    );
+  }
+
+  const p = proposal;
+  const isBuy = p.side === 'buy';
+  const effectivePrice = p.price || currentPrice || 0;
+  const notional = (p.amount || 0) * effectivePrice;
+
+  // Gradient stripe per type
+  const getGradient = () => {
+    if (p.type === 'order') {
+      return isBuy
+        ? 'from-emerald-500 via-teal-400 to-emerald-600'
+        : 'from-rose-500 via-red-500 to-amber-500';
+    }
+    if (p.type === 'deploy_strategy') return 'from-indigo-600 via-violet-600 to-purple-500';
+    if (p.type === 'smart_dca') return 'from-emerald-500 via-teal-400 to-cyan-500';
+    if (p.type === 'stress_test') return 'from-amber-500 via-orange-500 to-red-500';
+    if (p.type === 'emergency_defend') return 'from-rose-600 via-red-600 to-orange-600';
+    if (p.type === 'rebalance') return 'from-blue-600 via-indigo-600 to-cyan-500';
+    if (p.type === 'token_compare') return 'from-violet-600 via-purple-600 to-pink-500';
+    return 'from-amber-500 via-yellow-500 to-amber-400';
+  };
+
+  // Header Title and Icon
+  const getHeaderInfo = () => {
+    switch (p.type) {
+      case 'emergency_defend':
+        return {
+          icon: ShieldAlert,
+          iconColor: 'text-rose-600 bg-rose-50 border-rose-100',
+          title: 'Sentinel Capital Defense',
+          subtitle: 'Downside Volatility Mitigation Protocol',
+          actionLabel: 'Inspect Defense in Safety Gate',
+          actionIcon: ShieldAlert,
+        };
+      case 'stress_test':
+        return {
+          icon: Activity,
+          iconColor: 'text-amber-600 bg-amber-50 border-amber-100',
+          title: 'Portfolio Stress-Test Simulation',
+          subtitle: 'Scenario Shock & Capital Drawdown Audit',
+          actionLabel: 'Confirm Stress-Test Audit',
+          actionIcon: Activity,
+        };
+      case 'deploy_strategy':
+        return {
+          icon: Zap,
+          iconColor: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+          title: 'Synthesize Autonomous Bot',
+          subtitle: `${p.strategyParams?.kind || 'VWAP Momentum'} Fleet Execution`,
+          actionLabel: 'Authorize & Deploy Fleet Bot',
+          actionIcon: Zap,
+        };
+      case 'smart_dca':
+        return {
+          icon: TrendingUp,
+          iconColor: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+          title: 'Value-Weighted DCA Plan',
+          subtitle: 'Dynamic RSI Dip Accumulation',
+          actionLabel: 'Authorize & Deploy Smart DCA',
+          actionIcon: TrendingUp,
+        };
+      case 'rebalance':
+        return {
+          icon: Scale,
+          iconColor: 'text-blue-600 bg-blue-50 border-blue-100',
+          title: 'Agentic Risk-Parity Rebalance',
+          subtitle: 'Fractional Kelly Optimal Allocation',
+          actionLabel: 'Review Rebalance in Safety Gate',
+          actionIcon: Scale,
+        };
+      case 'token_compare':
+        return {
+          icon: Compass,
+          iconColor: 'text-violet-600 bg-violet-50 border-violet-100',
+          title: 'Multi-Token Alpha Radar',
+          subtitle: 'Cross-Asset Factor & Sharpe Benchmark',
+          actionLabel: 'Inspect in Trading Desk',
+          actionIcon: ArrowUpRight,
+        };
+      case 'order':
+        return {
+          icon: LineChart,
+          iconColor: isBuy ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-rose-600 bg-rose-50 border-rose-100',
+          title: isBuy ? 'Asymmetric Buy Order' : 'Take-Profit Sell Order',
+          subtitle: 'Paper Bracket Execution Ticket',
+          actionLabel: isBuy ? 'Authorize & Execute Buy Order' : 'Authorize & Execute Sell Order',
+          actionIcon: ShieldCheck,
+        };
+      default:
+        return {
+          icon: Bell,
+          iconColor: 'text-amber-600 bg-amber-50 border-amber-100',
+          title: 'Adaptive Volatility Alert',
+          subtitle: 'Real-Time Price Sentinel Trigger',
+          actionLabel: 'Arm Volatility Alert',
+          actionIcon: Bell,
+        };
+    }
+  };
+
+  const header = getHeaderInfo();
+  const HeaderIcon = header.icon;
+  const ActionIcon = header.actionIcon;
+
+  return (
+    <div className="relative rounded-2xl bg-white border border-zinc-200/90 shadow-[0_4px_20px_rgba(0,0,0,0.04)] overflow-hidden transition-all duration-200 animate-in fade-in zoom-in-[0.98]">
+      {/* Top Accent Gradient Stripe */}
+      <div className={`h-1.5 w-full bg-gradient-to-r ${getGradient()}`} />
+
+      <div className="p-4 space-y-3.5">
+        {/* Proposal Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-7 h-7 rounded-xl border flex items-center justify-center shadow-2xs ${header.iconColor}`}>
+              <HeaderIcon className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-zinc-900 tracking-tight leading-none">
+                {header.title}
+              </h3>
+              <p className="text-[10.5px] text-zinc-400 font-normal leading-tight mt-0.5">
+                {header.subtitle}
+              </p>
+            </div>
+          </div>
+
+          <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200/80 flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+            <span>{p.dangerLevel ? `${p.dangerLevel} Hazard` : 'Safety Gate'}</span>
+          </span>
+        </div>
+
+        {/* Hero Card Content per Type */}
+        {p.type === 'order' && (
+          <div className="space-y-2.5">
+            {/* Apple Wallet Style Asset Ticket */}
+            <div className="p-3 rounded-xl bg-gradient-to-r from-zinc-50 to-zinc-100/50 border border-zinc-200/70 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide uppercase ${
+                  isBuy ? 'bg-emerald-500 text-white shadow-2xs' : 'bg-rose-500 text-white shadow-2xs'
+                }`}>
+                  {p.side}
+                </span>
+                <div>
+                  <span className="text-xs font-bold text-zinc-900 font-mono tracking-tight block">
+                    {p.amount} {p.asset}
+                  </span>
+                  <span className="text-[10px] text-zinc-400">
+                    {p.orderType ? `${p.orderType.toUpperCase()} Execution` : 'Paper Bracket Ticket'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <span className="text-xs font-bold text-zinc-900 font-mono block">
+                  {notional > 0 ? (isIndian ? moneyINR(notional) : money(notional)) : 'Market Sized'}
+                </span>
+                <span className="text-[10px] text-zinc-400">Est. Notional</span>
+              </div>
+            </div>
+
+            {/* Metric Grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                <span className="text-[9px] text-zinc-400 font-semibold uppercase tracking-wider block font-sans">
+                  Entry Price
+                </span>
+                <span className="font-semibold text-zinc-800">
+                  {p.price ? (isIndian ? moneyINR(p.price) : money(p.price)) : (currentPrice ? (isIndian ? moneyINR(currentPrice) : money(currentPrice)) : 'Live Spot')}
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-200/60 text-emerald-900">
+                <span className="text-[9px] text-emerald-700 font-semibold uppercase tracking-wider block font-sans">
+                  Take-Profit Bracket
+                </span>
+                <span className="font-semibold text-emerald-800">
+                  {p.takeProfit ? (isIndian ? moneyINR(p.takeProfit) : money(p.takeProfit)) : '+2.8x ATR (+4.5%)'}
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-rose-50/60 border border-rose-200/60 text-rose-900">
+                <span className="text-[9px] text-rose-700 font-semibold uppercase tracking-wider block font-sans">
+                  Trailing Stop-Loss
+                </span>
+                <span className="font-semibold text-rose-800">
+                  {p.stopLoss ? (isIndian ? moneyINR(p.stopLoss) : money(p.stopLoss)) : '-1.5x ATR (-2.1%)'}
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                <span className="text-[9px] text-zinc-400 font-semibold uppercase tracking-wider block font-sans">
+                  Risk / Reward
+                </span>
+                <span className="font-semibold text-indigo-700">
+                  2.14 : 1 (Asymmetric)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {p.type === 'deploy_strategy' && p.strategyParams && (
+          <div className="space-y-2.5">
+            <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-50/70 to-purple-50/40 border border-indigo-100/90 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-indigo-950 font-sans block">
+                  {p.strategyParams.name}
+                </span>
+                <span className="text-[10px] text-indigo-600 font-mono">
+                  Autonomous {p.strategyParams.kind} Algorithm
+                </span>
+              </div>
+              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[10px] font-mono font-medium rounded-full">
+                Active Fleet Slot
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                <span className="text-[9px] text-zinc-400 font-semibold uppercase tracking-wider block font-sans">
+                  Max Allocation
+                </span>
+                <span className="font-semibold text-zinc-800">
+                  {((p.strategyParams.maxAllocation || 0.25) * 100).toFixed(0)}% Portfolio
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-200/60">
+                <span className="text-[9px] text-emerald-700 font-semibold uppercase tracking-wider block font-sans">
+                  Target Profit
+                </span>
+                <span className="font-semibold text-emerald-800">
+                  +{p.strategyParams.targetProfitPct || 5}%
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-rose-50/60 border border-rose-200/60">
+                <span className="text-[9px] text-rose-700 font-semibold uppercase tracking-wider block font-sans">
+                  Trailing Stop
+                </span>
+                <span className="font-semibold text-rose-800">
+                  -{p.strategyParams.trailingStopPct || 2}%
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                <span className="text-[9px] text-zinc-400 font-semibold uppercase tracking-wider block font-sans">
+                  Execution Loop
+                </span>
+                <span className="font-semibold text-zinc-800">
+                  Live Tick (2.5s)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {p.type === 'smart_dca' && p.dcaPlan && (
+          <div className="space-y-2.5">
+            <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50/70 to-teal-50/40 border border-emerald-100/90 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-emerald-950 font-sans block">
+                  Smart DCA Accumulator ({p.dcaPlan.asset})
+                </span>
+                <span className="text-[10px] text-emerald-700 font-mono">
+                  ${p.dcaPlan.baseAmountUsd} every {p.dcaPlan.frequency}
+                </span>
+              </div>
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-mono font-medium rounded-full">
+                Value-Weighted
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-200/60">
+                <span className="text-[9px] text-emerald-700 font-semibold uppercase tracking-wider block font-sans">
+                  Dip Scaler
+                </span>
+                <span className="font-semibold text-emerald-800">
+                  {p.dcaPlan.oversoldMultiplier}x on RSI &lt; 35
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-amber-50/60 border border-amber-200/60">
+                <span className="text-[9px] text-amber-700 font-semibold uppercase tracking-wider block font-sans">
+                  Peak Safety Pause
+                </span>
+                <span className="font-semibold text-amber-800">
+                  RSI &gt; {p.dcaPlan.pauseThresholdRsi}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {p.type === 'stress_test' && p.stressTest && (
+          <div className="space-y-2.5">
+            <div className="p-3 rounded-xl bg-gradient-to-r from-amber-50/70 to-orange-50/40 border border-amber-100/90 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-amber-950 font-sans block">
+                  {p.stressTest.title}
+                </span>
+                <span className="text-[10px] text-amber-700 font-mono">
+                  Simulated Macro Shock
+                </span>
+              </div>
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-mono font-medium rounded-full">
+                {p.stressTest.survivabilityRating} Cushion
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="p-2 rounded-xl bg-rose-50/60 border border-rose-200/60 text-rose-900">
+                <span className="text-[9px] text-rose-700 font-semibold uppercase tracking-wider block font-sans">
+                  Drawdown Shock
+                </span>
+                <span className="font-semibold text-rose-800">
+                  -{p.stressTest.simulatedDrawdownPct}%
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                <span className="text-[9px] text-zinc-400 font-semibold uppercase tracking-wider block font-sans">
+                  Projected Loss
+                </span>
+                <span className="font-semibold text-zinc-800">
+                  ${p.stressTest.simulatedLossUsd.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {p.stressTest.mitigationSteps.length > 0 && (
+              <div className="p-2 rounded-xl bg-amber-50/60 border border-amber-200/70 text-[11px] text-amber-900 flex items-start gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                <span className="leading-snug">{p.stressTest.mitigationSteps[0]}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {p.type === 'token_compare' && p.tokenComparison && (
+          <div className="space-y-2.5">
+            <div className="p-2.5 rounded-xl bg-purple-50/60 border border-purple-100 text-xs font-semibold text-purple-950">
+              {p.tokenComparison.verdict}
+            </div>
+            <div className="space-y-1.5">
+              {p.tokenComparison.tokens.map((t: any) => (
+                <div key={t.asset} className="flex justify-between items-center text-[11px] font-mono p-2 rounded-xl bg-zinc-50 border border-zinc-200/60">
+                  <span className="font-bold text-zinc-900">{t.asset}</span>
+                  <span className="text-zinc-500 text-[10.5px]">
+                    Sharpe {t.sharpeEstimate} • Vol {t.volAnnualizedPct}% • Beta {t.betaToBtc}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {p.type === 'emergency_defend' && (
+          <div className="space-y-2.5">
+            {p.hazardSource && (
+              <div className="p-2.5 rounded-xl bg-rose-50/80 border border-rose-200/70 text-xs text-rose-900 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold block">{p.hazardSource}</span>
+                  <span className="text-[10.5px] text-rose-700">Immediate de-risking recommended</span>
+                </div>
+              </div>
+            )}
+            {p.rebalanceSteps && p.rebalanceSteps.length > 0 && (
+              <div className="p-2 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
+                <span className="text-[9px] font-mono uppercase text-zinc-400 block">Defensive Rebalancing:</span>
+                {p.rebalanceSteps.slice(0, 3).map((step: any, sIdx: number) => (
+                  <div key={sIdx} className="flex justify-between text-[11px] font-mono">
+                    <span className="text-zinc-800">{step.action.toUpperCase()} {step.amount} {step.asset}</span>
+                    <span className="text-zinc-500">${step.targetValueUsd?.toFixed(0)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {p.type === 'rebalance' && (
+          <div className="space-y-2.5">
+            {p.rebalanceSteps && p.rebalanceSteps.length > 0 && (
+              <div className="p-2 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
+                <span className="text-[9px] font-mono uppercase text-zinc-400 block">Optimal Allocation Steps:</span>
+                {p.rebalanceSteps.slice(0, 3).map((step: any, sIdx: number) => (
+                  <div key={sIdx} className="flex justify-between text-[11px] font-mono">
+                    <span className="text-zinc-800">{step.action.toUpperCase()} {step.amount} {step.asset}</span>
+                    <span className="text-zinc-500">${step.targetValueUsd?.toFixed(0)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {p.type === 'alert' && (
+          <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/60 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-zinc-900 font-mono block">
+                {p.asset} {p.alertType}
+              </span>
+              <span className="text-[10px] text-zinc-400">Trigger Boundary</span>
+            </div>
+            <span className="text-xs font-bold text-amber-800 font-mono">
+              ${p.value}
+            </span>
+          </div>
+        )}
+
+        {/* AI Rationale Quote */}
+        {p.rationale && (
+          <div className="p-2.5 rounded-xl bg-zinc-50/70 border border-zinc-200/50 flex items-start gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-zinc-400 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-zinc-500 leading-relaxed font-sans italic">
+              &ldquo;{p.rationale}&rdquo;
+            </p>
+          </div>
+        )}
+
+        {/* Dual Action Controls: Primary + Dismiss */}
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onExecute}
+            className="flex-1 py-2.5 px-4 text-xs font-semibold rounded-xl text-white bg-zinc-950 hover:bg-black active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 transition-all group"
+          >
+            <ActionIcon className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+            <span>{header.actionLabel}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="py-2.5 px-3 rounded-xl text-xs font-medium text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 border border-zinc-200/80 active:scale-[0.98] transition-all flex items-center justify-center"
+            title="Dismiss proposal"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const {
@@ -41,11 +636,13 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
     chatLoading,
     executeActionProposal,
     state,
+    markets,
     prefilledChatPrompt,
   } = useLumen();
   const [text, setText] = useState('');
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false);
   const [executedActions, setExecutedActions] = useState<Record<number, boolean>>({});
+  const [dismissedProposals, setDismissedProposals] = useState<Record<number, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -262,7 +859,10 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     {isUser ? (
                       <div className="whitespace-pre-line">{m.text}</div>
                     ) : (
-                      <LatexRenderer content={m.text} />
+                      <TypewriterAssistantMessage
+                        content={m.text}
+                        isLatest={i === chatHistory.length - 1 && !isUser}
+                      />
                     )}
                   </div>
 
@@ -328,295 +928,74 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
                   {/* Visual Execution Receipt ("What Nexus Did") - Apple Pay Style */}
                   {receipt && (
-                    <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/70 space-y-2.5 shadow-2xs animate-in fade-in zoom-in-95 duration-200">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-emerald-800 font-semibold text-xs tracking-tight">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Execution Verified</span>
-                        </span>
-                        <span className="text-[10px] font-mono text-zinc-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/15">
-                          {new Date(receipt.executedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </span>
-                      </div>
-
-                      <div className="space-y-0.5">
-                        <h4 className="text-xs font-semibold text-zinc-900">{receipt.title}</h4>
-                        <p className="text-[11.5px] text-zinc-500 leading-relaxed">{receipt.summary}</p>
-                      </div>
-
-                      {receipt.stateDiff && (
-                        <div className="p-2.5 rounded-xl bg-white border border-emerald-200/80 text-[11px] font-mono font-medium text-emerald-900 flex items-start gap-2 shadow-2xs">
-                          <span className="text-emerald-700 font-bold whitespace-nowrap">State-Diff:</span>
-                          <span className="leading-snug">{receipt.stateDiff}</span>
+                    <div className="relative rounded-2xl bg-white border border-emerald-200/80 shadow-[0_4px_16px_rgba(16,185,129,0.08)] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                      <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600" />
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-emerald-800 font-semibold text-xs tracking-tight">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Execution Verified</span>
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/15">
+                            {new Date(receipt.executedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </span>
                         </div>
-                      )}
 
-                      {receipt.details && receipt.details.length > 0 && (
-                        <div className="p-2.5 rounded-xl bg-white border border-emerald-200/60 space-y-1 text-[11px] font-mono text-zinc-700 shadow-2xs">
-                          {receipt.details.map((d: string, dIdx: number) => (
-                            <div key={dIdx} className="flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                              <span>{d}</span>
-                            </div>
-                          ))}
+                        <div className="space-y-0.5">
+                          <h4 className="text-xs font-semibold text-zinc-900">{receipt.title}</h4>
+                          <p className="text-[11.5px] text-zinc-500 leading-relaxed">{receipt.summary}</p>
                         </div>
-                      )}
 
-                      {receipt.jumpRoute && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            go(receipt.jumpRoute as any);
-                            onClose();
-                          }}
-                          className="w-full py-2 px-3 text-xs font-semibold text-emerald-800 bg-emerald-100/70 hover:bg-emerald-100 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.99]"
-                        >
-                          <span>{receipt.jumpLabel || 'Inspect in Desk'}</span>
-                          <ArrowUpRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                        {receipt.stateDiff && (
+                          <div className="p-2.5 rounded-xl bg-emerald-50/50 border border-emerald-200/80 text-[11px] font-mono font-medium text-emerald-900 flex items-start gap-2 shadow-2xs">
+                            <span className="text-emerald-700 font-bold whitespace-nowrap">State-Diff:</span>
+                            <span className="leading-snug">{receipt.stateDiff}</span>
+                          </div>
+                        )}
+
+                        {receipt.details && receipt.details.length > 0 && (
+                          <div className="p-2.5 rounded-xl bg-zinc-50 border border-emerald-200/60 space-y-1 text-[11px] font-mono text-zinc-700 shadow-2xs">
+                            {receipt.details.map((d: string, dIdx: number) => (
+                              <div key={dIdx} className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                                <span>{d}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {receipt.jumpRoute && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              go(receipt.jumpRoute as any);
+                              onClose();
+                            }}
+                            className="w-full py-2 px-3 text-xs font-semibold text-emerald-800 bg-emerald-100/70 hover:bg-emerald-100 rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.99]"
+                          >
+                            <span>{receipt.jumpLabel || 'Inspect in Desk'}</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 
                   {/* Interactive Action Proposal Card */}
                   {hasAction && p && !receipt && (
-                    <div className="p-4 rounded-2xl bg-white border border-zinc-200/90 shadow-2xs space-y-3 animate-in fade-in duration-200">
-                      {/* Proposal Header */}
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className="flex items-center gap-2 text-zinc-900 tracking-tight">
-                          <div className="w-6 h-6 rounded-lg bg-black/[0.04] text-zinc-800 flex items-center justify-center">
-                            {p.type === 'emergency_defend' ? (
-                              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                            ) : p.type === 'stress_test' ? (
-                              <Activity className="w-3.5 h-3.5 text-amber-600" />
-                            ) : p.type === 'deploy_strategy' ? (
-                              <Zap className="w-3.5 h-3.5 text-indigo-600" />
-                            ) : p.type === 'smart_dca' ? (
-                              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : p.type === 'rebalance' ? (
-                              <Scale className="w-3.5 h-3.5 text-blue-600" />
-                            ) : p.type === 'token_compare' ? (
-                              <Compass className="w-3.5 h-3.5 text-violet-600" />
-                            ) : p.type === 'order' ? (
-                              <LineChart className="w-3.5 h-3.5 text-zinc-800" />
-                            ) : (
-                              <Bell className="w-3.5 h-3.5 text-amber-600" />
-                            )}
-                          </div>
-                          <span>
-                            {p.type === 'emergency_defend'
-                              ? 'Capital Defense Protocol'
-                              : p.type === 'stress_test'
-                              ? 'Stress-Test Simulation'
-                              : p.type === 'deploy_strategy'
-                              ? 'Synthesized Strategy Bot'
-                              : p.type === 'smart_dca'
-                              ? 'Value-Weighted DCA Plan'
-                              : p.type === 'rebalance'
-                              ? 'Agentic Rebalancing Plan'
-                              : p.type === 'token_compare'
-                              ? 'Multi-Token Alpha Radar'
-                              : p.type === 'order'
-                              ? 'Asymmetric Bracket Order'
-                              : 'Adaptive Volatility Alert'}
-                          </span>
-                        </span>
-
-                        <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-black/[0.03] text-zinc-600 border border-black/[0.04]">
-                          {p.dangerLevel ? `${p.dangerLevel} Hazard` : 'Requires Authorization'}
-                        </span>
-                      </div>
-
-                      {/* Proposal Body Details */}
-                      <div className="text-xs text-zinc-700 bg-white/70 p-3 rounded-2xl border border-black/[0.03] space-y-2">
-                        {p.type === 'deploy_strategy' && p.strategyParams && (
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="font-semibold text-zinc-900">{p.strategyParams.name}</span>
-                              <span className="px-2 py-0.5 bg-black/[0.03] text-zinc-600 text-[10px] font-mono rounded-full">
-                                {p.strategyParams.kind}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
-                              <div className="bg-black/[0.02] p-2 rounded-xl">
-                                <span className="text-[9px] text-zinc-400 block uppercase font-medium">Max Allocation</span>
-                                <span className="font-semibold text-zinc-800">
-                                  {((p.strategyParams.maxAllocation || 0.25) * 100).toFixed(0)}%
-                                </span>
-                              </div>
-                              <div className="bg-emerald-500/[0.06] p-2 rounded-xl border border-emerald-500/10">
-                                <span className="text-[9px] text-emerald-700 block uppercase font-medium">Take-Profit</span>
-                                <span className="font-semibold text-emerald-800">+{p.strategyParams.targetProfitPct || 5}%</span>
-                              </div>
-                              <div className="bg-rose-500/[0.06] p-2 rounded-xl border border-rose-500/10">
-                                <span className="text-[9px] text-rose-700 block uppercase font-medium">Trailing Stop</span>
-                                <span className="font-semibold text-rose-800">-{p.strategyParams.trailingStopPct || 2}%</span>
-                              </div>
-                              <div className="bg-black/[0.02] p-2 rounded-xl">
-                                <span className="text-[9px] text-zinc-400 block uppercase font-medium">Tick Frequency</span>
-                                <span className="font-semibold text-zinc-800">Live (2.5s)</span>
-                              </div>
-                            </div>
-                            <p className="text-[11px] text-zinc-500 leading-relaxed">{p.rationale}</p>
-                          </div>
-                        )}
-
-                        {p.type === 'stress_test' && p.stressTest && (
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="font-semibold text-zinc-900">{p.stressTest.title}</span>
-                              <span className="px-2 py-0.5 bg-amber-500/10 text-amber-800 text-[10px] font-mono rounded-full">
-                                {p.stressTest.survivabilityRating} Cushion
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
-                              <div className="bg-rose-500/[0.06] p-2 rounded-xl border border-rose-500/10">
-                                <span className="text-[9px] text-rose-700 block uppercase font-medium">Drawdown</span>
-                                <span className="font-semibold text-rose-800">-{p.stressTest.simulatedDrawdownPct}%</span>
-                              </div>
-                              <div className="bg-black/[0.02] p-2 rounded-xl">
-                                <span className="text-[9px] text-zinc-400 block uppercase font-medium">Simulated Loss</span>
-                                <span className="font-semibold text-zinc-800">${p.stressTest.simulatedLossUsd.toLocaleString()}</span>
-                              </div>
-                            </div>
-                            {p.stressTest.mitigationSteps.length > 0 && (
-                              <p className="text-[10.5px] text-zinc-600 bg-amber-500/[0.04] p-2 rounded-xl border border-amber-500/15 flex items-center gap-1.5">
-                                <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                                <span>{p.stressTest.mitigationSteps[0]}</span>
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {p.type === 'smart_dca' && p.dcaPlan && (
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="font-semibold text-zinc-900">Value-Weighted DCA ({p.dcaPlan.asset})</span>
-                              <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-800 text-[10px] font-mono rounded-full">
-                                ${p.dcaPlan.baseAmountUsd}/{p.dcaPlan.frequency}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-1.5 text-[10.5px] font-mono">
-                              <span className="px-2 py-1 bg-emerald-500/[0.06] text-emerald-800 rounded-lg border border-emerald-500/10">
-                                Dip Scaler: {p.dcaPlan.oversoldMultiplier}x on RSI &lt; 35
-                              </span>
-                              <span className="px-2 py-1 bg-amber-500/[0.06] text-amber-800 rounded-lg border border-amber-500/10">
-                                Top Pause: RSI &gt; {p.dcaPlan.pauseThresholdRsi}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-zinc-500 leading-relaxed">{p.rationale}</p>
-                          </div>
-                        )}
-
-                        {p.type === 'token_compare' && p.tokenComparison && (
-                          <div className="space-y-2">
-                            <p className="text-[11.5px] font-semibold text-zinc-900">{p.tokenComparison.verdict}</p>
-                            <div className="space-y-1">
-                              {p.tokenComparison.tokens.map((t: any) => (
-                                <div key={t.asset} className="flex justify-between text-[11px] font-mono p-1.5 rounded-xl bg-black/[0.02]">
-                                  <span className="font-bold text-zinc-900">{t.asset}</span>
-                                  <span className="text-zinc-500">Sharpe {t.sharpeEstimate} • Vol {t.volAnnualizedPct}% • Beta {t.betaToBtc}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {p.type === 'emergency_defend' && (
-                          <div className="space-y-1.5">
-                            {p.hazardSource && (
-                              <div className="text-rose-700 font-medium text-[11.5px] flex items-start gap-1.5">
-                                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
-                                <span>{p.hazardSource}</span>
-                              </div>
-                            )}
-                            <p className="text-zinc-600 text-[11px] leading-relaxed">{p.rationale}</p>
-                            {p.rebalanceSteps && p.rebalanceSteps.length > 0 && (
-                              <div className="pt-1 border-t border-black/[0.04] space-y-1">
-                                <span className="text-[10px] font-mono uppercase text-zinc-400">Defensive Maneuvers:</span>
-                                {p.rebalanceSteps.slice(0, 3).map((step: any, sIdx: number) => (
-                                  <div key={sIdx} className="flex justify-between text-[11px]">
-                                    <span className="font-mono text-zinc-700">{step.action.toUpperCase()} {step.amount} {step.asset}</span>
-                                    <span className="text-zinc-500 font-mono">${step.targetValueUsd?.toFixed(0)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {p.type === 'rebalance' && (
-                          <div className="space-y-1.5">
-                            <p className="text-zinc-600 text-[11px] leading-relaxed">{p.rationale}</p>
-                            {p.rebalanceSteps && p.rebalanceSteps.length > 0 && (
-                              <div className="pt-1 border-t border-black/[0.04] space-y-1">
-                                <span className="text-[10px] font-mono uppercase text-zinc-400">Optimal Allocation Steps:</span>
-                                {p.rebalanceSteps.slice(0, 3).map((step: any, sIdx: number) => (
-                                  <div key={sIdx} className="flex justify-between text-[11px]">
-                                    <span className="font-mono text-zinc-700">{step.action.toUpperCase()} {step.amount} {step.asset}</span>
-                                    <span className="text-zinc-500 font-mono">${step.targetValueUsd?.toFixed(0)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {p.type === 'order' && (
-                          <>
-                            <div className="flex justify-between items-center text-[11.5px]">
-                              <span className="text-zinc-500">Proposed Trade:</span>
-                              <strong className="uppercase font-semibold text-zinc-900 font-mono">
-                                {p.side} {p.amount} {p.asset}
-                              </strong>
-                            </div>
-                            {p.rationale && (
-                              <p className="text-[11px] text-zinc-500 pt-1 border-t border-black/[0.04] leading-relaxed">
-                                {p.rationale}
-                              </p>
-                            )}
-                          </>
-                        )}
-
-                        {p.type === 'alert' && (
-                          <>
-                            <div className="flex justify-between items-center text-[11.5px]">
-                              <span className="text-zinc-500">Trigger Target:</span>
-                              <strong className="font-semibold text-zinc-900 font-mono">
-                                {p.asset} {p.alertType} ${p.value}
-                              </strong>
-                            </div>
-                            {p.rationale && (
-                              <p className="text-[11px] text-zinc-500 pt-1 border-t border-black/[0.04] leading-relaxed">
-                                {p.rationale}
-                              </p>
-                            )}
-                          </>
-                        )}
-                      </div>
-
-                      {/* Safety Gate Action Trigger Button - Apple Obsidian Pill */}
-                      <button
-                        type="button"
-                        onClick={() => handleActionClick(p, i)}
-                        className="w-full py-2.5 px-4 text-xs font-semibold rounded-xl text-white bg-zinc-950 hover:bg-black active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 transition-all"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>
-                          {p.type === 'emergency_defend'
-                            ? 'Inspect Defense in Safety Gate'
-                            : p.type === 'deploy_strategy'
-                            ? 'Authorize & Deploy Strategy Bot'
-                            : p.type === 'smart_dca'
-                            ? 'Authorize & Deploy Smart DCA'
-                            : p.type === 'stress_test'
-                            ? 'Confirm Stress Test Audit'
-                            : p.type === 'rebalance'
-                            ? 'Review Rebalance in Safety Gate'
-                            : 'Inspect in AI Safety Gate'}
-                        </span>
-                      </button>
-                    </div>
+                    <ActionProposalCard
+                      proposal={p}
+                      index={i}
+                      onExecute={() => handleActionClick(p, i)}
+                      onDismiss={() => setDismissedProposals((prev) => ({ ...prev, [i]: true }))}
+                      isDismissed={Boolean(dismissedProposals[i])}
+                      onUndoDismiss={() => setDismissedProposals((prev) => ({ ...prev, [i]: false }))}
+                      isIndian={isIndian}
+                      currentPrice={
+                        markets[p.asset as keyof typeof markets]?.price ||
+                        (p.asset === state.selectedAsset ? markets[state.selectedAsset]?.price : undefined)
+                      }
+                    />
                   )}
                 </div>
               </div>

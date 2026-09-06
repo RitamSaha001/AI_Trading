@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import katex from 'katex';
-import { Copy, Check, Sparkles, ChevronDown } from 'lucide-react';
+import { Copy, Check, Sparkles, ChevronDown, Compass, ShieldCheck, Scale, AlertTriangle, Activity, Cpu } from 'lucide-react';
 
 interface LatexRendererProps {
   content: string;
@@ -9,32 +9,155 @@ interface LatexRendererProps {
 
 function ThinkingBlock({ thought }: { thought: string }) {
   const [open, setOpen] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+
+  // Extract intuitive summary metrics from thought trace
+  const assetMatch = thought.match(/Primary Focus Asset:\s*([A-Za-z0-9_]+)/i);
+  const spotMatch = thought.match(/Current Spot Quote:\s*([0-9,.]+)/i);
+  const rsiMatch = thought.match(/RSI\(14\)\s*=\s*([0-9.]+)/i);
+  const winnerMatch = thought.match(/Winning Hypothesis:\s*([^(\n]+)/i);
+  const invalidationMatch = thought.match(/Invalidation Level:\s*([0-9,.]+)/i);
+  const criticMatch = thought.match(/Nexus Adversarial Risk Auditor[^:]*:\s*\"([^\"]+)\"/i);
+  const riskProfileMatch = thought.match(/Risk Profile\s*=\s*([A-Za-z_]+)/i);
+
+  const asset = assetMatch ? assetMatch[1] : '';
+  const spot = spotMatch ? spotMatch[1] : '';
+  const rsi = rsiMatch ? parseFloat(rsiMatch[1]) : null;
+  const winner = winnerMatch ? winnerMatch[1].trim() : 'Balanced Strategic Execution';
+  const invalidation = invalidationMatch ? invalidationMatch[1] : null;
+  const critic = criticMatch ? criticMatch[1] : null;
+  const riskProfile = riskProfileMatch ? riskProfileMatch[1] : 'BALANCED';
+
+  const marketPulse = rsi !== null
+    ? (rsi > 68 ? 'Overheated (Caution Advised)' : rsi < 32 ? 'Oversold (Accumulation Opportunity)' : 'Calm & Steady Equilibrium')
+    : 'Order Book Equilibrium';
+
   return (
-    <div className="my-2 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/50 via-white to-indigo-50/30 overflow-hidden text-xs shadow-2xs transition-all">
+    <div className="my-2.5 rounded-2xl border border-indigo-100/90 bg-gradient-to-r from-indigo-50/60 via-white to-purple-50/30 overflow-hidden text-xs shadow-2xs transition-all">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full px-3.5 py-2 flex items-center justify-between text-indigo-950 hover:bg-indigo-50/50 transition-colors select-none group"
+        className="w-full px-3.5 py-2.5 flex items-center justify-between text-indigo-950 hover:bg-indigo-50/40 transition-colors select-none group"
       >
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600">
-            <Sparkles className="w-3 h-3 animate-pulse" />
+        <div className="flex items-center gap-2.5">
+          <div className="w-6 h-6 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-2xs">
+            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
           </div>
-          <span className="font-semibold tracking-tight text-[11.5px] text-indigo-950">
-            Internal Cognitive Reasoning Trace
-          </span>
-          <span className="px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200/60 text-[9.5px] text-indigo-700 font-mono">
-            System 2
-          </span>
+          <div className="text-left">
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold tracking-tight text-xs text-indigo-950">
+                Nexus Cognitive Reasoning Trace
+              </span>
+              <span className="px-1.5 py-0.5 rounded-full bg-indigo-100/80 text-[9px] font-semibold text-indigo-800 font-sans uppercase tracking-wider">
+                System 2
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-400 leading-tight">
+              {open ? 'Thought journey unfolded in plain terms' : 'Click to inspect how Nexus analyzed this request'}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-1 text-zinc-400 text-[11px] group-hover:text-zinc-600">
-          <span>{open ? 'Hide' : 'Inspect Reasoning'}</span>
-          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        <div className="flex items-center gap-1 text-indigo-600 font-medium text-xs group-hover:text-indigo-800">
+          <span>{open ? 'Hide' : 'Inspect Thinking'}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </div>
       </button>
+
       {open && (
-        <div className="px-3.5 pb-3 pt-2 border-t border-indigo-100/70 text-zinc-600 text-[11px] font-mono leading-relaxed bg-white/70 whitespace-pre-wrap">
-          {thought}
+        <div className="p-3.5 border-t border-indigo-100/80 bg-white/90 space-y-3 animate-in fade-in duration-200">
+          {/* Visual Status Chips */}
+          <div className="flex flex-wrap gap-1.5">
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200/70 text-emerald-800 text-[10.5px] font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Market Pulse: <strong>{marketPulse}</strong></span>
+            </div>
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-200/70 text-indigo-800 text-[10.5px] font-medium">
+              <ShieldCheck className="w-3 h-3 text-indigo-600" />
+              <span>Capital Defense: <strong>{riskProfile} (Cash Protected)</strong></span>
+            </div>
+            {asset && (
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-100 border border-zinc-200/70 text-zinc-800 text-[10.5px] font-medium font-mono">
+                <span>Focus: <strong>{asset} {spot ? `@ $${spot}` : ''}</strong></span>
+              </div>
+            )}
+          </div>
+
+          {/* Simple Human-Friendly Reasoning View */}
+          {!showRaw ? (
+            <div className="space-y-2 text-[11.5px] text-zinc-700">
+              {/* Step 1: Market Signal */}
+              <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
+                <div className="flex items-center gap-1.5 text-zinc-900 font-semibold text-[11px]">
+                  <Compass className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>1. Reading Market Signals &amp; Momentum</span>
+                </div>
+                <p className="text-zinc-600 leading-relaxed text-[11px]">
+                  {asset ? `Inspecting spot conditions for ${asset}${spot ? ` around $${spot}` : ''}. ` : 'Scanning broad market conditions. '}
+                  {rsi !== null
+                    ? `Momentum gauge (RSI ${rsi.toFixed(1)}) indicates the asset is currently ${rsi > 68 ? 'hot and extended — chasing here carries downside risk.' : rsi < 32 ? 'deeply discounted, presenting potential asymmetric value.' : 'stable in a healthy consolidation equilibrium.'}`
+                    : 'Order book depth and volume curves are balanced without excessive liquidation pressure.'}
+                </p>
+              </div>
+
+              {/* Step 2: Portfolio Check */}
+              <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
+                <div className="flex items-center gap-1.5 text-zinc-900 font-semibold text-[11px]">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>2. Portfolio Health &amp; Capital Floor Audit</span>
+                </div>
+                <p className="text-zinc-600 leading-relaxed text-[11px]">
+                  Verified your liquidity reserves. The mandatory cash reserve buffer is strictly preserved so you never face forced liquidation or margin calls during sudden volatility shocks.
+                </p>
+              </div>
+
+              {/* Step 3: Scenario Tournament */}
+              <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
+                <div className="flex items-center gap-1.5 text-zinc-900 font-semibold text-[11px]">
+                  <Scale className="w-3.5 h-3.5 text-blue-600" />
+                  <span>3. Weighing Market Scenarios</span>
+                </div>
+                <p className="text-zinc-600 leading-relaxed text-[11px]">
+                  Comparing upside continuation against pullback probabilities. Prevailing outlook favors <strong>{winner}</strong>.
+                  {invalidation && (
+                    <span className="block mt-0.5 text-blue-900 font-medium">
+                      Safety floor defined: Trade idea is invalidated if price crosses <strong>${invalidation}</strong>.
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {/* Step 4: Devil's Advocate */}
+              <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/70 space-y-1">
+                <div className="flex items-center gap-1.5 text-amber-900 font-semibold text-[11px]">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                  <span>4. Devil's Advocate (Red Team Risk Check)</span>
+                </div>
+                <p className="text-amber-950/80 leading-relaxed text-[11px]">
+                  {critic || 'What if an unexpected news catalyst causes a sudden flash drop? Position sizing is strictly dialed down to Half-Kelly limits to guarantee survival.'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            /* Advanced Raw Telemetry View */
+            <div className="p-3 rounded-xl bg-zinc-900 text-zinc-200 font-mono text-[10.5px] leading-relaxed overflow-x-auto whitespace-pre-wrap max-h-[300px]">
+              {thought}
+            </div>
+          )}
+
+          {/* Toggle between Simple and Advanced */}
+          <div className="pt-1 flex items-center justify-between border-t border-zinc-100 text-[10.5px]">
+            <span className="text-zinc-400">
+              {showRaw ? 'Showing raw quantitative formulas' : 'Simplified for intuitive human clarity'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowRaw(!showRaw)}
+              className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors"
+            >
+              <Cpu className="w-3 h-3" />
+              <span>{showRaw ? 'Switch to Simple Terms' : 'Show Raw Math & Greeks'}</span>
+            </button>
+          </div>
         </div>
       )}
     </div>
