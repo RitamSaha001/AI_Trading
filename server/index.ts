@@ -824,7 +824,8 @@ export function buildServer(): FastifyInstance {
   });
 
   server.get('/api/exchange/upstox/auth-url', { preHandler: requireAuth }, async (req: FastifyRequest) => {
-    const { state, authUrl, expiresAt } = await UpstoxClient.generateOAuthState(req.user!.id);
+    const query = req.query as { redirectUri?: string };
+    const { state, authUrl, expiresAt } = await UpstoxClient.generateOAuthState(req.user!.id, query?.redirectUri);
     return { success: true, authUrl, expiresAt };
   });
 

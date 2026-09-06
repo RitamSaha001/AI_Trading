@@ -212,11 +212,11 @@ export class UpstoxClient {
 
   /**
    * Generates the OAuth 2.0 authorization dialog URL.
-   * Strictly bound to server-configured UPSTOX_REDIRECT_URI.
+   * Strictly bound to server-configured UPSTOX_REDIRECT_URI or caller origin.
    */
-  public static getAuthorizationUrl(state: string): string {
+  public static getAuthorizationUrl(state: string, redirectUri?: string): string {
     const clientId = config.UPSTOX_CLIENT_ID || '';
-    const rUri = config.UPSTOX_REDIRECT_URI || '';
+    const rUri = redirectUri || config.UPSTOX_REDIRECT_URI || '';
     const baseHost = this.getBaseHostUrl();
     const query = new URLSearchParams({
       response_type: 'code',
@@ -229,13 +229,26 @@ export class UpstoxClient {
 
   /**
    * Generates a cryptographically random OAuth state, persists it in broker_oauth_states,
-   * and returns the authorization URL. Server strictly owns and binds redirect_uri.
+   * and returns the authorization URL.
    */
   public static async generateOAuthState(
-    userId: string
+    userId: string,
+    customRedirectUri?: string
   ): Promise<{ state: string; authUrl: string; expiresAt: number }> {
     const state = crypto.randomBytes(32).toString('hex');
-    const rUri = config.UPSTOX_REDIRECT_URI || '';
+    let rUri = config.UPSTOX_REDIRECT_URI || '';
+
+    if (customRedirectUri && typeof customRedirectUri === 'string') {
+      try {
+        const u = new URL(customRedirectUri);
+        if (config.ALLOWED_ORIGINS.includes(u.origin) || u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+          rUri = customRedirectUri;
+        }
+      } catch {
+        // keep default
+      }
+    }
+
     const now = Date.now();
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes TTL
 
@@ -246,7 +259,7 @@ export class UpstoxClient {
       [state, userId, rUri, expiresAt, now]
     );
 
-    const authUrl = this.getAuthorizationUrl(state);
+    const authUrl = this.getAuthorizationUrl(state, rUri);
     return { state, authUrl, expiresAt };
   }
 
@@ -306,11 +319,12 @@ export class UpstoxClient {
    * Strictly uses server-configured UPSTOX_REDIRECT_URI.
    */
   public static async exchangeAuthorizationCode(
-    code: string
+    code: string,
+    redirectUri?: string
   ): Promise<UpstoxOAuthTokenResponse> {
     const clientId = config.UPSTOX_CLIENT_ID || '';
     const clientSecret = config.UPSTOX_CLIENT_SECRET || '';
-    const rUri = config.UPSTOX_REDIRECT_URI || '';
+    const rUri = redirectUri || config.UPSTOX_REDIRECT_URI || '';
 
     if (!clientId || !clientSecret) {
       throw new StandardBrokerError(

@@ -266,7 +266,8 @@ export class UpstoxAdapter implements BrokerGateway {
       }
 
       const tokenResp = await UpstoxClient.exchangeAuthorizationCode(
-        credentials.code
+        credentials.code,
+        stateRes.redirectUri
       );
       accessToken = tokenResp.access_token;
     }
