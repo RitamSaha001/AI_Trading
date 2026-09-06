@@ -8,7 +8,14 @@
  */
 
 import crypto from 'crypto';
+import dns from 'dns';
 import { z } from 'zod';
+
+try {
+  dns.setDefaultResultOrder?.('ipv4first');
+} catch {
+  // Ignore in environments where setDefaultResultOrder is not supported
+}
 import { config } from '../../../config';
 import { getDb } from '../../../db';
 import { StandardBrokerError } from '../brokerGateway';
@@ -484,25 +491,55 @@ export class UpstoxClient {
 
     try {
       let outboundIp: string | null = null;
-      try {
-        const res = await this.executeRaw(
-          'https://api.ipify.org?format=json',
-          'GET',
-          { Accept: 'application/json' },
-          undefined,
-          3000
-        );
-        outboundIp = res?.ip || null;
-      } catch {
-        const res2 = await this.executeRaw(
-          'https://icanhazip.com',
-          'GET',
-          { Accept: 'text/plain' },
-          undefined,
-          3000
-        );
-        outboundIp = typeof res2 === 'string' ? res2.trim() : res2?.ip || null;
-      }
+
+      const fetchIpService = async (url: string, isJson: boolean): Promise<string | null> => {
+        try {
+          if (this.customTransport) {
+            const resp = await this.customTransport(url, {
+              method: 'GET',
+              headers: isJson ? { Accept: 'application/json' } : { Accept: 'text/plain' },
+              timeoutMs: 4000,
+            });
+            if (!resp.ok) return null;
+            if (isJson) {
+              const data = await resp.json().catch(() => ({}));
+              return data?.ip ? String(data.ip).trim() : null;
+            } else {
+              const text = await resp.text().catch(() => '');
+              const cleaned = text.trim();
+              return cleaned.length > 0 ? cleaned : null;
+            }
+          } else {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 4000);
+            try {
+              const resp = await fetch(url, {
+                method: 'GET',
+                headers: isJson ? { Accept: 'application/json' } : { Accept: 'text/plain' },
+                signal: controller.signal,
+              });
+              if (!resp.ok) return null;
+              if (isJson) {
+                const data = (await resp.json().catch(() => ({}))) as any;
+                return data?.ip ? String(data.ip).trim() : null;
+              } else {
+                const text = await resp.text().catch(() => '');
+                const cleaned = text.trim();
+                return cleaned.length > 0 ? cleaned : null;
+              }
+            } finally {
+              clearTimeout(timer);
+            }
+          }
+        } catch {
+          return null;
+        }
+      };
+
+      outboundIp =
+        (await fetchIpService('https://api.ipify.org?format=json', true)) ||
+        (await fetchIpService('https://icanhazip.com', false)) ||
+        (await fetchIpService('https://ifconfig.me/ip', false));
 
       const matches = Boolean(outboundIp && authoritativeRegistered.includes(outboundIp));
       const result: UpstoxIpDiagnostic = {
