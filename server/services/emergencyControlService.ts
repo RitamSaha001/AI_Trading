@@ -290,15 +290,30 @@ export class EmergencyControlService {
           if (closeProduct === 'DELIVERY' || closeProduct === 'CNC') closeProduct = 'D';
           if (closeProduct === 'INTRADAY' || closeProduct === 'MIS') closeProduct = 'I';
 
+          // Invariant: In Indian markets, raw MARKET orders on illiquid options or stocks at circuit limits are rejected.
+          // Fall back to a LIMIT order pinned to the circuit band if MARKET fails or for F&O contracts.
+          const isFO = pos.symbol.includes('FUT') || pos.symbol.includes('CE') || pos.symbol.includes('PE');
+          let orderType: 'MARKET' | 'LIMIT' = isFO ? 'LIMIT' : 'MARKET';
+          let orderPrice: number | undefined = price > 0 ? price : undefined;
+
+          if (orderType === 'LIMIT' && brokerId === 'upstox') {
+            const inst = UpstoxInstrumentRegistry.get(pos.symbol);
+            if (closeSide === 'SELL' && inst?.lowerCircuitLimit) {
+              orderPrice = inst.lowerCircuitLimit;
+            } else if (closeSide === 'BUY' && inst?.upperCircuitLimit) {
+              orderPrice = inst.upperCircuitLimit;
+            }
+          }
+
           try {
             await broker.placeOrder({
               userId,
               broker: brokerId as any,
               symbol: pos.symbol,
               side: closeSide,
-              type: 'MARKET',
+              type: orderType,
               quantity: absQty,
-              price: price > 0 ? price : undefined,
+              price: orderPrice,
               product: closeProduct,
               slice: shouldSlice,
               idempotencyKey: `idemp_${closeClientOrderId}`,
@@ -308,8 +323,35 @@ export class EmergencyControlService {
             });
             closeOrdersSubmittedCount++;
           } catch (orderErr: any) {
-            logger.error(`[PanicSquareOff] Failed to submit close order for ${pos.symbol}: ${orderErr.message}`);
-            errors.push(`Close order failed for ${pos.symbol}: ${orderErr.message}`);
+            // If MARKET order failed due to circuit filter or exchange prohibition, retry with pinned LIMIT order
+            if (orderType === 'MARKET' && price > 0) {
+              try {
+                const inst = brokerId === 'upstox' ? UpstoxInstrumentRegistry.get(pos.symbol) : null;
+                const limitPrice = closeSide === 'SELL' ? (inst?.lowerCircuitLimit || price) : (inst?.upperCircuitLimit || price);
+                await broker.placeOrder({
+                  userId,
+                  broker: brokerId as any,
+                  symbol: pos.symbol,
+                  side: closeSide,
+                  type: 'LIMIT',
+                  quantity: absQty,
+                  price: limitPrice,
+                  product: closeProduct,
+                  slice: shouldSlice,
+                  idempotencyKey: `idemp_${closeClientOrderId}_limit`,
+                  clientOrderId: `${closeClientOrderId}_limit`,
+                  accountMode: 'live',
+                  isSystemPanic: true,
+                });
+                closeOrdersSubmittedCount++;
+              } catch (retryErr: any) {
+                logger.error(`[PanicSquareOff] LIMIT fallback failed for ${pos.symbol}: ${retryErr.message}`);
+                errors.push(`Close order failed for ${pos.symbol}: ${orderErr.message} (LIMIT fallback: ${retryErr.message})`);
+              }
+            } else {
+              logger.error(`[PanicSquareOff] Failed to submit close order for ${pos.symbol}: ${orderErr.message}`);
+              errors.push(`Close order failed for ${pos.symbol}: ${orderErr.message}`);
+            }
           }
         }
       } catch (posErr: any) {

@@ -4,6 +4,7 @@ import { LedgerService } from './ledgerService';
 import { ExactDecimal, getAssetDecimals } from './precision';
 import { UpstoxInstrumentRegistry } from './brokers/upstox/upstoxInstrumentRegistry';
 import { UpstoxInstrumentMasterService } from './brokers/upstox/upstoxInstrumentMasterService';
+import { IndianMarketCalendar } from './brokers/upstox/indianMarketCalendar';
 
 export interface RiskEvaluationRequest {
   userId: string;
@@ -12,6 +13,9 @@ export interface RiskEvaluationRequest {
   symbol?: string;
   broker?: string;
   assetClass?: 'CRYPTO' | 'EQUITY' | 'FUTURE' | 'OPTION';
+  product?: string;
+  skipMarketHoursCheck?: boolean;
+  skipHoldingsCheck?: boolean;
   currency?: string;
   accountMode?: 'live' | 'paper';
   side: 'BUY' | 'SELL';
@@ -142,6 +146,29 @@ export class ServerRiskEngine {
     const notionalUsd = notionalAmount; // retained for backward compatibility
     const notionalNative = notionalAmount;
     const notionalInr = quoteAsset === 'INR' ? notionalAmount : undefined;
+
+    // Market hours check for Indian Equities and Derivatives in live trading
+    const isIndianMarket = isUpstox || assetClass === 'EQUITY' || assetClass === 'FUTURE' || assetClass === 'OPTION';
+    const skipMarketHours = req.skipMarketHoursCheck || req.accountMode === 'paper' || (req as any).isAmo;
+    if (!skipMarketHours && req.accountMode === 'live' && isIndianMarket) {
+      if (!IndianMarketCalendar.isMarketOpen()) {
+        return {
+          approved: false,
+          rejectReason: 'Market is closed. Live orders cannot be placed outside NSE/BSE regular trading hours (09:15 - 15:30 IST).',
+          requiredCashReserve: 0,
+          notionalUsd,
+          notionalNative,
+          portfolioEquityUsd: 0,
+          portfolioEquityNative: 0,
+          notional: notionalAmount,
+          portfolioEquity: 0,
+          currency: quoteAsset,
+          currencySymbol,
+          singleOrderPct: 0,
+          projectedConcentrationPct: 0,
+        };
+      }
+    }
 
     // Derivative and Equity Contract Constraint Validation (P0-9 & P0-10)
     if (inst) {
@@ -322,7 +349,12 @@ export class ServerRiskEngine {
         // Crypto assets: check crypto_holdings (8 decimals for standard crypto)
         if (key.startsWith('crypto_holdings:') && key.includes(asset)) {
           const balDec = ExactDecimal.fromMinor(balMinor, 8);
-          portfolioEquityDec = portfolioEquityDec.add(balDec.mul(priceDec));
+          let cryptoVal = balDec.mul(priceDec);
+          if (quoteAsset === 'INR') {
+            // Convert USD crypto valuation to INR benchmark rate (₹87.50 / USD)
+            cryptoVal = cryptoVal.mul(ExactDecimal.from('87.50'));
+          }
+          portfolioEquityDec = portfolioEquityDec.add(cryptoVal);
         }
       }
     }
@@ -334,7 +366,21 @@ export class ServerRiskEngine {
         portfolioEquityDec = quoteAsset === 'INR' ? ExactDecimal.from(1_000_000) : ExactDecimal.from(100_000);
         tradingCashDec = portfolioEquityDec;
       } else {
-        portfolioEquityDec = notionalDec;
+        return {
+          approved: false,
+          rejectReason: `Insufficient portfolio equity: Insufficient funds. Total portfolio value is ${currencySymbol}0.00. Please deposit funds before live trading.`,
+          requiredCashReserve: 0,
+          notionalUsd,
+          notionalNative,
+          portfolioEquityUsd: 0,
+          portfolioEquityNative: 0,
+          notional: notionalAmount,
+          portfolioEquity: 0,
+          currency: quoteAsset,
+          currencySymbol,
+          singleOrderPct: 0,
+          projectedConcentrationPct: 0,
+        };
       }
     }
 
@@ -342,23 +388,108 @@ export class ServerRiskEngine {
     const portfolioEquityUsd = portfolioEquityAmount;
     const portfolioEquityNative = portfolioEquityAmount;
 
-    // Check cash availability for live BUY orders
-    if (req.accountMode !== 'paper' && req.side === 'BUY' && tradingCashDec.lte(ExactDecimal.zero())) {
-      return {
-        approved: false,
-        rejectReason: `Insufficient funds: Available cash balance is ${currencySymbol}0.00. Please deposit ${quoteAsset} before live trading.`,
-        requiredCashReserve: 0,
-        notionalUsd,
-        notionalNative,
-        portfolioEquityUsd: 0,
-        portfolioEquityNative: 0,
-        notional: notionalAmount,
-        portfolioEquity: 0,
-        currency: quoteAsset,
-        currencySymbol,
-        singleOrderPct: 0,
-        projectedConcentrationPct: 0,
-      };
+    // Calculate current asset holdings
+    let currentAssetMinor = 0n;
+    let assetHoldingsDecimals = 8;
+    if (assetClass === 'EQUITY' || assetClass === 'FUTURE' || assetClass === 'OPTION') {
+      currentAssetMinor = BigInt(
+        balances[`equity_holdings:${asset}`]?.balance ??
+          balances[`asset_holdings:${asset}`]?.balance ??
+          balances[`derivative_positions:${asset}`]?.balance ??
+          0
+      );
+      assetHoldingsDecimals = 0;
+    } else {
+      currentAssetMinor = BigInt(balances[`crypto_holdings:${asset}`]?.balance ?? 0);
+      assetHoldingsDecimals = 8;
+    }
+    const currentAssetHoldingDec = ExactDecimal.fromMinor(currentAssetMinor, assetHoldingsDecimals);
+
+    // Pre-trade cash, margin, and holdings validations for live accounts
+    if (req.accountMode !== 'paper') {
+      if (assetClass === 'EQUITY') {
+        const isDelivery = req.product === 'D' || req.product === 'CNC' || !req.product || req.product === 'DELIVERY';
+        if (req.side === 'SELL' && isDelivery && !req.skipHoldingsCheck) {
+          // SEBI compliance: Retail delivery sales must be covered by pre-existing holdings
+          if (currentAssetHoldingDec.lt(qtyDec)) {
+            return {
+              approved: false,
+              rejectReason: `Insufficient holdings: Cannot place delivery SELL order for ${req.quantity} shares of ${asset} with only ${currentAssetHoldingDec.toDisplayNumber()} available. Naked short selling is prohibited by SEBI.`,
+              requiredCashReserve: 0,
+              notionalUsd,
+              notionalNative,
+              portfolioEquityUsd: portfolioEquityAmount,
+              portfolioEquityNative: portfolioEquityAmount,
+              notional: notionalAmount,
+              portfolioEquity: portfolioEquityAmount,
+              currency: quoteAsset,
+              currencySymbol,
+              singleOrderPct: 0,
+              projectedConcentrationPct: 0,
+            };
+          }
+        } else if (req.side === 'BUY' && tradingCashDec.lte(ExactDecimal.zero())) {
+          return {
+            approved: false,
+            rejectReason: `Insufficient funds: Available cash balance is ${currencySymbol}0.00. Please deposit ${quoteAsset} before live trading.`,
+            requiredCashReserve: 0,
+            notionalUsd,
+            notionalNative,
+            portfolioEquityUsd: 0,
+            portfolioEquityNative: 0,
+            notional: notionalAmount,
+            portfolioEquity: 0,
+            currency: quoteAsset,
+            currencySymbol,
+            singleOrderPct: 0,
+            projectedConcentrationPct: 0,
+          };
+        }
+      } else if (assetClass === 'FUTURE' || assetClass === 'OPTION') {
+        // Derivative margin requirements (SPAN + Exposure)
+        let requiredMarginDec: ExactDecimal;
+        if (assetClass === 'OPTION' && req.side === 'BUY') {
+          // Long options require 100% premium paid upfront
+          requiredMarginDec = notionalDec;
+        } else {
+          // Short options and all futures require SPAN + Exposure margin (minimum 15% of notional)
+          requiredMarginDec = notionalDec.mul(ExactDecimal.from('0.15'));
+        }
+
+        if (tradingCashDec.lt(requiredMarginDec)) {
+          return {
+            approved: false,
+            rejectReason: `Insufficient margin: Derivative ${req.side} order requires ${currencySymbol}${requiredMarginDec.toDisplayNumber()} initial margin (SPAN + Exposure), but available cash is only ${currencySymbol}${tradingCashDec.toDisplayNumber()}.`,
+            requiredCashReserve: 0,
+            notionalUsd,
+            notionalNative,
+            portfolioEquityUsd: portfolioEquityAmount,
+            portfolioEquityNative: portfolioEquityAmount,
+            notional: notionalAmount,
+            portfolioEquity: portfolioEquityAmount,
+            currency: quoteAsset,
+            currencySymbol,
+            singleOrderPct: 0,
+            projectedConcentrationPct: 0,
+          };
+        }
+      } else if (req.side === 'BUY' && tradingCashDec.lte(ExactDecimal.zero())) {
+        return {
+          approved: false,
+          rejectReason: `Insufficient funds: Available cash balance is ${currencySymbol}0.00. Please deposit ${quoteAsset} before live trading.`,
+          requiredCashReserve: 0,
+          notionalUsd,
+          notionalNative,
+          portfolioEquityUsd: 0,
+          portfolioEquityNative: 0,
+          notional: notionalAmount,
+          portfolioEquity: 0,
+          currency: quoteAsset,
+          currencySymbol,
+          singleOrderPct: 0,
+          projectedConcentrationPct: 0,
+        };
+      }
     }
 
     // 6. Max Single Order Percentage (40% hard policy)
@@ -388,8 +519,18 @@ export class ServerRiskEngine {
     const minReservePctDec = ExactDecimal.from(String(minReservePct));
     const requiredCashReserveDec = portfolioEquityDec.mul(minReservePctDec);
     const requiredCashReserve = requiredCashReserveDec.toDisplayNumber();
-    if (req.side === 'BUY') {
-      const remainingCashDec = tradingCashDec.sub(notionalDec);
+
+    let cashCommittedDec = ExactDecimal.zero();
+    if (assetClass === 'OPTION') {
+      cashCommittedDec = req.side === 'BUY' ? notionalDec : notionalDec.mul(ExactDecimal.from('0.15'));
+    } else if (assetClass === 'FUTURE') {
+      cashCommittedDec = notionalDec.mul(ExactDecimal.from('0.15'));
+    } else if (req.side === 'BUY') {
+      cashCommittedDec = notionalDec;
+    }
+
+    if (cashCommittedDec.gt(ExactDecimal.zero())) {
+      const remainingCashDec = tradingCashDec.sub(cashCommittedDec);
       if (remainingCashDec.lt(requiredCashReserveDec)) {
         return {
           approved: false,
@@ -410,22 +551,6 @@ export class ServerRiskEngine {
     }
 
     // 8. Max Asset Concentration (50% policy)
-    let currentAssetMinor = 0n;
-    let assetHoldingsDecimals = 8;
-    if (assetClass === 'EQUITY' || assetClass === 'FUTURE' || assetClass === 'OPTION') {
-      currentAssetMinor = BigInt(
-        balances[`equity_holdings:${asset}`]?.balance ??
-          balances[`asset_holdings:${asset}`]?.balance ??
-          balances[`derivative_positions:${asset}`]?.balance ??
-          0
-      );
-      assetHoldingsDecimals = 0;
-    } else {
-      currentAssetMinor = BigInt(balances[`crypto_holdings:${asset}`]?.balance ?? 0);
-      assetHoldingsDecimals = 8;
-    }
-
-    const currentAssetHoldingDec = ExactDecimal.fromMinor(currentAssetMinor, assetHoldingsDecimals);
     const currentHoldingNotionalDec = currentAssetHoldingDec.mul(priceDec);
     const projectedHoldingNotionalDec = req.side === 'BUY'
       ? currentHoldingNotionalDec.add(notionalDec)

@@ -880,31 +880,58 @@ export class UpstoxAdapter implements BrokerGateway {
 
     // Broker-authoritative state determination (P0-5 fix)
     let finalStatus: string;
+    const executedQty = Math.max(reconcileRes?.executedQty || 0, Number(order.filled_quantity || 0));
+
     if (!reconcileRes || reconcileRes.status === 'UNKNOWN') {
       // Reconciliation failed or inconclusive — MUST NOT become terminal CANCELED
       finalStatus = 'UNKNOWN';
+    } else if (executedQty > 0) {
+      // Partially filled before cancellation: must remain PARTIALLY_FILLED
+      finalStatus = 'PARTIALLY_FILLED';
     } else if (reconcileRes.status === 'CANCELED' || reconcileRes.status === 'REJECTED') {
       finalStatus = reconcileRes.status;
-    } else if ((reconcileRes.executedQty || 0) > 0) {
-      finalStatus = 'PARTIALLY_FILLED';
     } else {
       finalStatus = 'CANCELED';
     }
 
-    // Only release reservations when authoritatively CANCELED (not UNKNOWN)
+    // Safely release reservations based on authoritative outcome:
+    // UNKNOWN: do NOT release reservations
     if (finalStatus === 'CANCELED' || finalStatus === 'REJECTED') {
-      if (order.side === 'BUY' && order.reserved_cash > 0) {
-        await LedgerService.releaseCashReservation(userId, `res_${clientOrderId}`, 'live').catch(() => {});
-      }
+      // Zero executed fills: safely release entire order reservation
+      await LedgerService.releaseOrderReservation({ orderId: clientOrderId }).catch(() => {});
     } else if (finalStatus === 'PARTIALLY_FILLED') {
-      // For partial fills, release only the unfilled portion
-      const filledNotional = (reconcileRes?.executedQty || 0) * (reconcileRes?.avgPrice || 0);
-      const remainingReserve = Math.max(0, Number(order.reserved_cash || 0) - filledNotional);
-      if (order.side === 'BUY' && remainingReserve > 0) {
-        await LedgerService.releaseCashReservation(userId, `res_${clientOrderId}`, 'live').catch(() => {});
+      // Partial fill: release ONLY the unexecuted remainder
+      const filledNotional = executedQty * (reconcileRes?.avgPrice || Number(order.price || 0));
+      const filledNotionalMinor = BigInt(Math.round(filledNotional * 100));
+
+      const resRecord = await db.queryOne<any>(
+        `SELECT * FROM order_reservations WHERE order_id = ? AND status IN ('ACTIVE', 'PARTIALLY_CONSUMED')`,
+        [clientOrderId]
+      );
+      if (resRecord) {
+        const totalAmount = BigInt(resRecord.amount_minor);
+        const consumed = BigInt(resRecord.consumed_minor);
+        const alreadyReleased = BigInt(resRecord.released_minor);
+        const unconsumed = totalAmount - consumed - alreadyReleased;
+
+        if (consumed === 0n && filledNotionalMinor > 0n && unconsumed > filledNotionalMinor) {
+          const excessToRelease = unconsumed - filledNotionalMinor;
+          await LedgerService.releaseReservation({
+            userId,
+            accountType: 'trading_allocated',
+            assetOrCurrency: 'INR',
+            amountMinor: excessToRelease,
+            referenceId: `cancel_excess_${clientOrderId}`,
+          }).catch(() => {});
+          await db.execute(
+            `UPDATE order_reservations SET released_minor = released_minor + ?, updated_at = ? WHERE id = ?`,
+            [excessToRelease, Date.now(), resRecord.id]
+          );
+        } else {
+          await LedgerService.releaseOrderReservation({ orderId: clientOrderId }).catch(() => {});
+        }
       }
     }
-    // UNKNOWN: do NOT release reservations
 
     await OrderStateMachine.transitionOrder(clientOrderId, finalStatus, {
       reason: 'Broker-authoritative cancel finalization',
@@ -930,8 +957,8 @@ export class UpstoxAdapter implements BrokerGateway {
   async modifyOrder(orderId: string, updates: Partial<BrokerOrderRequest>): Promise<BrokerOrder> {
     const db = getDb();
     const order = await db.queryOne<any>(
-      `SELECT * FROM exchange_orders WHERE client_order_id = ? OR exchange_order_id = ?`,
-      [orderId, orderId]
+      `SELECT * FROM exchange_orders WHERE client_order_id = ? OR exchange_order_id = ? OR id = ?`,
+      [orderId, orderId, orderId]
     );
 
     if (!order) {
@@ -995,7 +1022,14 @@ export class UpstoxAdapter implements BrokerGateway {
             'upstox'
           );
         }
-        await LedgerService.reserveCash(order.user_id, `mod_res_${order.client_order_id}`, cashDelta, 'live').catch(() => {});
+        await LedgerService.reserveOrderFunds({
+          userId: order.user_id,
+          orderId: `mod_res_${order.client_order_id}`,
+          accountMode: 'live',
+          accountType: 'trading_allocated',
+          assetOrCurrency: 'INR',
+          amountMinor: BigInt(Math.round(cashDelta * 100)),
+        }).catch(() => {});
         additionalReservationCreated = true;
       }
     }
@@ -1011,8 +1045,20 @@ export class UpstoxAdapter implements BrokerGateway {
         disclosed_quantity: updates.disclosedQuantity ?? (order.disclosed_qty ? Number(order.disclosed_qty) : undefined),
       });
     } catch (brokerErr: any) {
-      if (additionalReservationCreated && cashDelta > 0) {
-        await LedgerService.releaseCashReservation(order.user_id, `mod_res_${order.client_order_id}`, 'live').catch(() => {});
+      const errMsg = brokerErr?.message || String(brokerErr);
+      const isNetworkTimeout = /timeout|ETIMEDOUT|ECONNRESET|fetch failed|network|socket/i.test(errMsg);
+      if (isNetworkTimeout) {
+        logger.warn(`[UpstoxAdapter] modifyOrder network timeout for ${order.client_order_id}. State is ambiguous. Preserving reservation delta and transitioning to UNKNOWN.`);
+        await OrderStateMachine.transitionOrder(order.client_order_id, 'UNKNOWN', {
+          reason: `modifyOrder ambiguous timeout: ${errMsg}`,
+          source: 'upstox_adapter',
+          actor: 'modify_order',
+        }).catch(() => {});
+        this.reconcileUnknownOrder(order.client_order_id, order.symbol, order.user_id).catch(() => {});
+      } else {
+        if (additionalReservationCreated && cashDelta > 0) {
+          await LedgerService.releaseOrderReservation(`mod_res_${order.client_order_id}`).catch(() => {});
+        }
       }
       throw brokerErr;
     }
@@ -1250,7 +1296,12 @@ export class UpstoxAdapter implements BrokerGateway {
       return { found: false, status: 'UNKNOWN' };
     }
 
-    const mappedStatus = this.normalizeOrderStatus(venueOrder.status);
+    const venueExecutedQty = Number(venueOrder.filled_quantity || 0);
+    let mappedStatus = this.normalizeOrderStatus(venueOrder.status);
+    if (mappedStatus === 'CANCELED' && venueExecutedQty > 0) {
+      mappedStatus = 'PARTIALLY_FILLED';
+    }
+
     let fills: BrokerFill[] = [];
 
     if (mappedStatus === 'FILLED' || mappedStatus === 'PARTIALLY_FILLED') {
@@ -1262,6 +1313,17 @@ export class UpstoxAdapter implements BrokerGateway {
       if (mappedStatus === 'FILLED') {
         await OrderStateMachine.transitionOrder(clientOrderId, 'FILLED', {
           reason: 'Venue reconciled FILLED',
+          source: 'upstox_adapter',
+          actor: 'reconciliation',
+          extraFields: {
+            exchange_order_id: venueOrder.order_id,
+            executed_qty: venueOrder.filled_quantity,
+            avg_price: venueOrder.average_price,
+          },
+        });
+      } else if (mappedStatus === 'PARTIALLY_FILLED') {
+        await OrderStateMachine.transitionOrder(clientOrderId, 'PARTIALLY_FILLED', {
+          reason: venueOrder.status_message || 'Venue reconciled PARTIALLY_FILLED',
           source: 'upstox_adapter',
           actor: 'reconciliation',
           extraFields: {
@@ -1319,22 +1381,27 @@ export class UpstoxAdapter implements BrokerGateway {
     const creds = await this.getCredentials(userId);
     if (!creds || !creds.accessToken) return [];
 
-    const trades = await UpstoxClient.getOrderTrades(creds.accessToken, exchangeOrderId);
-    return trades.map((t) => ({
-      tradeId: t.trade_id,
-      fillId: t.trade_id,
-      exchangeTradeId: t.trade_id,
-      orderId: exchangeOrderId,
-      clientOrderId,
-      symbol: t.trading_symbol || symbol,
-      price: String(t.average_price || t.price || 0),
-      qty: String(t.quantity),
-      quoteQty: String(t.quantity * (t.average_price || t.price || 0)),
-      commission: undefined,
-      commissionAsset: 'INR',
-      commissionStatus: 'UNRESOLVED',
-      time: t.exchange_timestamp ? new Date(t.exchange_timestamp).getTime() : Date.now(),
-    }));
+    try {
+      const trades = await UpstoxClient.getOrderTrades(creds.accessToken, exchangeOrderId);
+      return trades.map((t) => ({
+        tradeId: t.trade_id,
+        fillId: t.trade_id,
+        exchangeTradeId: t.trade_id,
+        orderId: exchangeOrderId,
+        clientOrderId,
+        symbol: t.trading_symbol || symbol,
+        price: String(t.average_price || t.price || 0),
+        qty: String(t.quantity),
+        quoteQty: String(t.quantity * (t.average_price || t.price || 0)),
+        commission: undefined,
+        commissionAsset: 'INR',
+        commissionStatus: 'UNRESOLVED',
+        time: t.exchange_timestamp ? new Date(t.exchange_timestamp).getTime() : Date.now(),
+      }));
+    } catch (err: any) {
+      logger.warn(`[UpstoxAdapter] Failed to fetch fills for ${exchangeOrderId}: ${err?.message}`);
+      return [];
+    }
   }
 
   // ==========================================================================

@@ -380,19 +380,37 @@ export class LiveOrderGateService {
     }
 
     // Fail closed on dynamic price bands (circuit limits) (P0-10)
-    if (order.type === 'LIMIT' && order.price) {
+    const isLimitType = order.type === 'LIMIT' || order.type === 'STOP_LOSS_LIMIT' || order.type === 'SL' || (order.type as string) === 'SL-M';
+    if (order.price && (order.type === 'LIMIT' || order.type === 'STOP_LOSS_LIMIT' || order.type === 'SL')) {
       const limitPrice = Number(order.price);
       if (liveQuote.lowerCircuitLimit && limitPrice < liveQuote.lowerCircuitLimit) {
         throw new StandardBrokerError(
           'CIRCUIT_LIMIT_BREACH',
-          `Limit price ${limitPrice} is below lower circuit limit ${liveQuote.lowerCircuitLimit}.`,
+          `Order price ${limitPrice} is below lower circuit limit ${liveQuote.lowerCircuitLimit}.`,
           brokerId
         );
       }
       if (liveQuote.upperCircuitLimit && limitPrice > liveQuote.upperCircuitLimit) {
         throw new StandardBrokerError(
           'CIRCUIT_LIMIT_BREACH',
-          `Limit price ${limitPrice} is above upper circuit limit ${liveQuote.upperCircuitLimit}.`,
+          `Order price ${limitPrice} is above upper circuit limit ${liveQuote.upperCircuitLimit}.`,
+          brokerId
+        );
+      }
+    }
+    if (order.triggerPrice && (order.type === 'STOP_LOSS' || order.type === 'STOP_LOSS_LIMIT' || order.type === 'SL' || (order.type as string) === 'SL-M')) {
+      const triggerPrice = Number(order.triggerPrice);
+      if (liveQuote.lowerCircuitLimit && triggerPrice < liveQuote.lowerCircuitLimit) {
+        throw new StandardBrokerError(
+          'CIRCUIT_LIMIT_BREACH',
+          `Trigger price ${triggerPrice} is below lower circuit limit ${liveQuote.lowerCircuitLimit}.`,
+          brokerId
+        );
+      }
+      if (liveQuote.upperCircuitLimit && triggerPrice > liveQuote.upperCircuitLimit) {
+        throw new StandardBrokerError(
+          'CIRCUIT_LIMIT_BREACH',
+          `Trigger price ${triggerPrice} is above upper circuit limit ${liveQuote.upperCircuitLimit}.`,
           brokerId
         );
       }
@@ -410,42 +428,53 @@ export class LiveOrderGateService {
       }
     }
 
-    const riskResult = await RiskEngine.evaluateTrade({
-      userId: order.userId,
-      broker: 'upstox',
-      assetClass,
-      currency: instrument.quoteAsset || 'INR',
-      accountMode: 'live',
-      symbol: order.symbol,
-      asset: instrument.baseAsset || order.symbol,
-      quoteAsset: instrument.quoteAsset || 'INR',
-      side: order.side,
-      type: order.type as any,
-      quantity: order.quantity,
-      price,
-      marketQuoteAgeMs: serverQuoteAgeMs,
-      idempotencyKey: order.clientOrderId || order.idempotencyKey,
-    });
-
-    if (!riskResult.approved) {
-      await AuditService.logEvent({
+    let riskResult: any = null;
+    if (!isPanicBypass) {
+      riskResult = await RiskEngine.evaluateTrade({
         userId: order.userId,
-        eventType: 'ORDER_REJECTED',
-        source: 'live_order_gate_service',
-        actor: 'risk_engine',
-        result: 'BLOCKED',
-        metadata: { symbol: order.symbol, reason: riskResult.rejectReason },
+        broker: 'upstox',
+        assetClass,
+        currency: instrument.quoteAsset || 'INR',
+        accountMode: 'live',
+        symbol: order.symbol,
+        asset: instrument.baseAsset || order.symbol,
+        quoteAsset: instrument.quoteAsset || 'INR',
+        side: order.side,
+        type: order.type as any,
+        quantity: order.quantity,
+        price,
+        marketQuoteAgeMs: serverQuoteAgeMs,
+        idempotencyKey: order.clientOrderId || order.idempotencyKey,
       });
 
-      throw new StandardBrokerError(
-        'ORDER_REJECTED',
-        `Pre-submission risk check rejected: ${riskResult.rejectReason || 'Limits exceeded'}`,
-        brokerId
-      );
+      if (!riskResult.approved) {
+        await AuditService.logEvent({
+          userId: order.userId,
+          eventType: 'ORDER_REJECTED',
+          source: 'live_order_gate_service',
+          actor: 'risk_engine',
+          result: 'BLOCKED',
+          metadata: { symbol: order.symbol, reason: riskResult.rejectReason },
+        });
+
+        if (riskResult.rejectReason?.toLowerCase().includes('insufficient holdings')) {
+          throw new StandardBrokerError(
+            'INSUFFICIENT_HOLDINGS',
+            `Insufficient sellable equity: ${riskResult.rejectReason}`,
+            brokerId
+          );
+        }
+
+        throw new StandardBrokerError(
+          'ORDER_REJECTED',
+          `Pre-submission risk check rejected: ${riskResult.rejectReason || 'Limits exceeded'}`,
+          brokerId
+        );
+      }
     }
 
     // 13. Comprehensive Risk Snapshot Drift Check
-    if (!isPanicBypass && confirmation && confirmation.riskSnapshot) {
+    if (!isPanicBypass && confirmation && confirmation.riskSnapshot && riskResult) {
       const snapshot = confirmation.riskSnapshot;
       const currentEquity = riskResult.portfolioEquity || 0;
       const initialEquity = snapshot.accountEquity || currentEquity;

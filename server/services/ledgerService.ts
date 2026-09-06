@@ -371,8 +371,8 @@ export class LedgerService {
           amount,
           newFromBal,
           params.assetOrCurrency,
-          params.referenceType,
-          params.referenceId,
+          params.referenceType || 'transfer',
+          params.referenceId || txId,
           params.idempotencyKey || null,
           params.description || 'Internal allocation transfer',
           now,
@@ -402,8 +402,8 @@ export class LedgerService {
           amount,
           newToBal,
           params.assetOrCurrency,
-          params.referenceType,
-          params.referenceId,
+          params.referenceType || 'transfer',
+          params.referenceId || txId,
           params.idempotencyKey || null,
           params.description || 'Internal allocation transfer',
           now,
@@ -814,6 +814,11 @@ export class LedgerService {
         if (currentBal < amount) {
           throw new Error('Insufficient balance for refund debit');
         }
+        if (reserved < amount) {
+          throw new Error(
+            `Insufficient reserved balance for refund debit: reserved ${reserved.toString()}, needed ${amount.toString()}`
+          );
+        }
       } else {
         if (currentBal - reserved < amount) {
           throw new Error('Insufficient unreserved balance for refund debit');
@@ -822,7 +827,7 @@ export class LedgerService {
 
       // 1. Debit Sovereign Cash (and consume reservation if previously reserved)
       const newBal = currentBal - amount;
-      const newReserved = params.isReserved ? (reserved >= amount ? reserved - amount : 0n) : reserved;
+      const newReserved = params.isReserved ? (reserved - amount) : reserved;
       await tx.execute(
         `UPDATE ledger_accounts SET balance_minor = ?, reserved_minor = ?, updated_at = ? WHERE id = ?`,
         [newBal, newReserved, now, acc.id]
@@ -1268,6 +1273,14 @@ export class LedgerService {
 
       const priceDec = params.price instanceof ExactDecimal ? params.price : ExactDecimal.from(params.price);
       const qtyDec = params.quantity instanceof ExactDecimal ? params.quantity : ExactDecimal.from(params.quantity);
+
+      if (priceDec.lte(ExactDecimal.zero())) {
+        throw new Error(`Fill price must be strictly positive (> 0): got ${priceDec.toString()}`);
+      }
+      if (qtyDec.lte(ExactDecimal.zero())) {
+        throw new Error(`Fill quantity must be strictly positive (> 0): got ${qtyDec.toString()}`);
+      }
+
       const notionalDec = priceDec.mul(qtyDec);
 
       const priceExact = priceDec.toString();
@@ -1284,6 +1297,9 @@ export class LedgerService {
 
       if (params.fee !== undefined && params.fee !== null) {
         feeDec = params.fee instanceof ExactDecimal ? params.fee : ExactDecimal.from(params.fee);
+        if (feeDec.lt(ExactDecimal.zero())) {
+          throw new Error(`Fill fee cannot be negative: got ${feeDec.toString()}`);
+        }
         feeMinor = feeDec.toMinor(getAssetDecimals(feeAsset));
       } else if (accountMode === 'paper') {
         feeDec = ExactDecimal.zero();
@@ -1417,9 +1433,14 @@ export class LedgerService {
           [cashAcc.id]
         );
         let currentReserved = BigInt(refreshedCashAcc?.reserved_minor ?? 0);
-        if (consumedMinor === 0n && currentReserved > 0n) {
-          const directRelease = currentReserved >= totalCashNeeded ? totalCashNeeded : currentReserved;
-          currentReserved -= directRelease;
+        if (consumedMinor === 0n) {
+          // Unreserved fill: must be covered strictly by free unreserved cash
+          const unreservedCash = currentCashBal - currentReserved;
+          if (unreservedCash < totalCashNeeded) {
+            throw new Error(
+              `Insufficient unreserved cash balance to settle fill: current unreserved ${unreservedCash.toString()}, needed ${totalCashNeeded.toString()} (total balance ${currentCashBal.toString()}, reserved ${currentReserved.toString()})`
+            );
+          }
         }
 
         newCashBal = currentCashBal - totalCashNeeded;
@@ -1708,9 +1729,14 @@ export class LedgerService {
           [assetAcc.id]
         );
         let currentReserved = BigInt(refreshedAssetAcc?.reserved_minor ?? 0);
-        if (consumedMinor === 0n && currentReserved > 0n) {
-          const directRelease = currentReserved >= qtyAssetMinor ? qtyAssetMinor : currentReserved;
-          currentReserved -= directRelease;
+        if (consumedMinor === 0n) {
+          // Unreserved fill: must be covered strictly by free unreserved asset balance
+          const unreservedAsset = currentAssetBal - currentReserved;
+          if (unreservedAsset < qtyAssetMinor) {
+            throw new Error(
+              `Insufficient unreserved asset balance to settle sell fill: current unreserved ${unreservedAsset.toString()}, needed ${qtyAssetMinor.toString()} (total balance ${currentAssetBal.toString()}, reserved ${currentReserved.toString()})`
+            );
+          }
         }
 
         newAssetBal = currentAssetBal - qtyAssetMinor;

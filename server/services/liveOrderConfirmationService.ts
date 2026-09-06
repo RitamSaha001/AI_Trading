@@ -173,6 +173,8 @@ export class LiveOrderConfirmationService {
       assetClass: 'EQUITY',
       currency,
       accountMode: 'live',
+      skipMarketHoursCheck: true,
+      skipHoldingsCheck: true,
       symbol: req.symbol,
       asset: instrument.baseAsset || req.symbol,
       quoteAsset: currency,

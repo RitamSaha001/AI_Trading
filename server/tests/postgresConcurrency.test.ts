@@ -5,7 +5,7 @@ import { LedgerService } from '../services/ledgerService';
 import crypto from 'node:crypto';
 
 describe('PostgreSQL Real Concurrency & Financial Invariants Suite', { timeout: 90000 }, () => {
-  const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+  const dbUrl = process.env.TEST_DATABASE_URL;
   const isPostgres = Boolean(dbUrl && dbUrl.startsWith('postgres'));
 
   let pgClient: PostgresClient | null = null;
