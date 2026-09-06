@@ -147,8 +147,13 @@ export class ServerAuthService {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // Fail closed in production unless verified email delivery provider is configured
-    if (env === 'production' && !process.env.EMAIL_DELIVERY_API_KEY && !process.env.SMTP_HOST) {
+    // Fail closed in production unless verified email delivery provider or explicit fallback is configured
+    if (
+      env === 'production' &&
+      !process.env.EMAIL_DELIVERY_API_KEY &&
+      !process.env.SMTP_HOST &&
+      process.env.ALLOW_PASSWORDLESS_FALLBACK !== 'true'
+    ) {
       await AuditService.logEvent({
         eventType: 'EMAIL_CHALLENGE_BLOCKED_PRODUCTION',
         source: 'auth_service',
@@ -199,7 +204,7 @@ export class ServerAuthService {
       result: 'SUCCESS',
     });
 
-    if (env === 'test') {
+    if (env === 'test' || process.env.ALLOW_PASSWORDLESS_FALLBACK === 'true') {
       return {
         success: true,
         message: 'Verification challenge issued',

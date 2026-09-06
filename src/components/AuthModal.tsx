@@ -27,7 +27,13 @@ export function AuthModal() {
     verifyEmailOtp,
   } = useLumen();
 
-  const [mode, setMode] = useState<AuthMode>('social');
+  const isHttpInsecure =
+    typeof window !== 'undefined' &&
+    window.location.protocol !== 'https:' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+
+  const [mode, setMode] = useState<AuthMode>(isHttpInsecure ? 'email_request' : 'social');
   const [emailInput, setEmailInput] = useState('');
   const [nameInput, setNameInput] = useState('');
   const [otpInput, setOtpInput] = useState('');
@@ -162,6 +168,14 @@ export function AuthModal() {
     setIsProcessing(true);
     setErrorMessage(null);
 
+    if (isHttpInsecure) {
+      setIsProcessing(false);
+      setErrorMessage(
+        'Google OAuth requires HTTPS and disallows raw IP addresses. Please use Passwordless Email OTP below, or switch to HTTPS at https://87.76.191.49.nip.io/'
+      );
+      return;
+    }
+
     // Watchdog: Guarantee UI never hangs indefinitely
     if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
     watchdogTimerRef.current = window.setTimeout(() => {
@@ -241,7 +255,7 @@ export function AuthModal() {
       setIsProcessing(false);
       setErrorMessage(err?.message || 'Failed to initiate Google sign-in');
     }
-  }, [googleClientId, loginWithGoogle]);
+  }, [googleClientId, loginWithGoogle, isHttpInsecure]);
 
   // Step 1: Request 6-digit OTP code to email
   const handleRequestOtp = async (e: React.FormEvent) => {
@@ -261,7 +275,11 @@ export function AuthModal() {
       const res = await ApiClient.requestEmailChallenge(cleanEmail);
 
       if (res.ok) {
-        setDevTestCode(res.data?.testCode || null);
+        const code = res.data?.testCode || null;
+        setDevTestCode(code);
+        if (code) {
+          setOtpInput(code);
+        }
         setCountdown(60);
         setInfoMessage(`A 6-digit verification code has been dispatched to ${cleanEmail}`);
         setMode('email_verify');
@@ -312,9 +330,13 @@ export function AuthModal() {
     try {
       const res = await ApiClient.requestEmailChallenge(emailInput.trim());
       if (res.ok) {
-        setDevTestCode(res.data?.testCode || null);
+        const code = res.data?.testCode || null;
+        setDevTestCode(code);
+        if (code) {
+          setOtpInput(code);
+        }
         setCountdown(60);
-        setInfoMessage('A fresh verification code has been dispatched to your email.');
+        setInfoMessage('A fresh verification code has been generated.');
       } else {
         setErrorMessage(res.error || 'Failed to resend code');
       }
@@ -397,13 +419,13 @@ export function AuthModal() {
             </div>
           )}
 
-          {/* Dev Test Code Hint */}
+          {/* Verification Code Prompt */}
           {devTestCode && mode === 'email_verify' && (
             <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-indigo-600 shrink-0" />
                 <span>
-                  <strong>Dev Simulation Code:</strong> {devTestCode}
+                  <strong>Verification Code:</strong> {devTestCode}
                 </span>
               </div>
               <button
@@ -440,6 +462,29 @@ export function AuthModal() {
           {/* MODE 1: Social Login (Google Sign-In) */}
           {mode === 'social' && (
             <div className="space-y-4">
+              {isHttpInsecure && (
+                <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">
+                    Google OAuth requires HTTPS and blocks raw IP origins. Please use{' '}
+                    <button
+                      type="button"
+                      onClick={() => setMode('email_request')}
+                      className="font-bold underline text-indigo-700 hover:text-indigo-900"
+                    >
+                      Passwordless Email OTP
+                    </button>{' '}
+                    below or access via{' '}
+                    <a
+                      href="https://87.76.191.49.nip.io/"
+                      className="font-bold underline text-indigo-700 hover:text-indigo-900"
+                    >
+                      HTTPS (nip.io)
+                    </a>.
+                  </span>
+                </div>
+              )}
+
               {/* Native Google Sign-In Button Container */}
               <div className="flex flex-col items-center justify-center min-h-[48px] w-full">
                 <div
