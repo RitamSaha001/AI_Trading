@@ -1,6 +1,12 @@
 import { getDb, DBClient } from '../db';
 import crypto from 'node:crypto';
 
+export interface LeaseController {
+  leaseId: string;
+  isLeaseValid(): boolean;
+  assertLeaseValid(actionDescription?: string): void;
+}
+
 export class DistributedLockService {
   private static instanceId: string = `inst_${process.pid}_${crypto.randomBytes(4).toString('hex')}`;
 
@@ -149,11 +155,13 @@ export class DistributedLockService {
   /**
    * Executes a callback safely protected by a distributed lease.
    * If another instance holds the lease, safely skips execution and returns null.
+   * Treats lease heartbeat renewal failures as safety events, terminating lease validity
+   * to halt ongoing financial mutations.
    */
   static async withLock<T>(
     workerName: string,
     ttlMs: number,
-    fn: (leaseId: string) => Promise<T>,
+    fn: (leaseController: LeaseController) => Promise<T>,
     db: DBClient = getDb()
   ): Promise<T | null> {
     const leaseId = await this.acquireLease(workerName, ttlMs, db);
@@ -161,18 +169,51 @@ export class DistributedLockService {
       return null;
     }
 
+    let isHealthy = true;
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 2;
+
+    const controller: LeaseController = {
+      leaseId,
+      isLeaseValid: () => isHealthy,
+      assertLeaseValid: (actionDescription?: string) => {
+        if (!isHealthy) {
+          throw new Error(
+            `[DistributedLockService] Safety Halt: Distributed lease for '${workerName}' (id: ${leaseId}) was lost. Halting ${actionDescription || 'financial mutation'} immediately to prevent split-brain execution.`
+          );
+        }
+      },
+    };
+
     // Auto-renew lease in background to prevent expiration during long tasks
     const heartbeatInterval = Math.max(5000, Math.floor(ttlMs / 3));
     const heartbeatTimer = setInterval(async () => {
       try {
-        await this.renewLease(workerName, ttlMs, leaseId, db);
+        const renewed = await this.renewLease(workerName, ttlMs, leaseId, db);
+        if (!renewed) {
+          consecutiveFailures++;
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            isHealthy = false;
+            console.error(
+              `[DistributedLockService] CRITICAL: Lease ownership lost for ${workerName} (id: ${leaseId}). Halting lease validity.`
+            );
+          }
+        } else {
+          consecutiveFailures = 0;
+        }
       } catch (err: any) {
-        console.warn(`[DistributedLockService] Heartbeat lease renewal failed for ${workerName}:`, err.message);
+        consecutiveFailures++;
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          isHealthy = false;
+          console.error(
+            `[DistributedLockService] CRITICAL: Heartbeat lease renewal failed consecutively for ${workerName} (id: ${leaseId}): ${err.message}. Halting lease validity.`
+          );
+        }
       }
     }, heartbeatInterval);
 
     try {
-      return await fn(leaseId);
+      return await fn(controller);
     } finally {
       clearInterval(heartbeatTimer);
       await this.releaseLease(workerName, leaseId, db).catch((err) => {

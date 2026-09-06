@@ -991,7 +991,12 @@ export class LedgerService {
 
       const lockedAcc = await this.lockAccount(acc.id, tx);
       const currentReserved = BigInt(lockedAcc.reserved_minor);
-      const newReserved = currentReserved >= amount ? currentReserved - amount : 0n;
+      if (currentReserved < amount) {
+        throw new Error(
+          `Ledger Invariant Violation: Attempted to release ${amount} from account ${lockedAcc.id}, but only ${currentReserved} is currently reserved.`
+        );
+      }
+      const newReserved = currentReserved - amount;
       const now = Date.now();
 
       await tx.execute(
@@ -1137,7 +1142,12 @@ export class LedgerService {
     const lockedAcc = await this.lockAccount(reservation.account_id, params.tx);
     if (lockedAcc) {
       const currentReserved = BigInt(lockedAcc.reserved_minor);
-      const newReserved = currentReserved >= toConsume ? currentReserved - toConsume : 0n;
+      if (currentReserved < toConsume) {
+        throw new Error(
+          `Ledger Invariant Violation: Attempted to consume ${toConsume} from account ${lockedAcc.id}, but only ${currentReserved} is currently reserved.`
+        );
+      }
+      const newReserved = currentReserved - toConsume;
       await params.tx.execute(
         `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
         [newReserved, now, lockedAcc.id]
@@ -1183,7 +1193,12 @@ export class LedgerService {
           const lockedAcc = await this.lockAccount(res.account_id, tx);
           if (lockedAcc) {
             const currentReserved = BigInt(lockedAcc.reserved_minor);
-            const newReserved = currentReserved >= unconsumed ? currentReserved - unconsumed : 0n;
+            if (currentReserved < unconsumed) {
+              throw new Error(
+                `Ledger Invariant Violation: Attempted to release unconsumed ${unconsumed} from account ${lockedAcc.id}, but only ${currentReserved} is currently reserved.`
+              );
+            }
+            const newReserved = currentReserved - unconsumed;
             await tx.execute(
               `UPDATE ledger_accounts SET reserved_minor = ?, updated_at = ? WHERE id = ?`,
               [newReserved, now, lockedAcc.id]

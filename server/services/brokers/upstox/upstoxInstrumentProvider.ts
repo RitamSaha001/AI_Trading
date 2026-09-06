@@ -37,6 +37,9 @@ export class UpstoxInstrumentProvider implements InstrumentRulesProvider {
     if (authInst?.basePrice && authInst.basePrice > 0) {
       return authInst.basePrice;
     }
+    if (authInst?.lastPrice && authInst.lastPrice > 0) {
+      return authInst.lastPrice;
+    }
     return 100;
   }
 

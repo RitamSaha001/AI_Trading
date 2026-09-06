@@ -471,6 +471,21 @@ export class UpstoxAdapter implements BrokerGateway {
       throw new StandardBrokerError('ORDER_REJECTED', `Unknown instrument: ${order.symbol}`, 'upstox');
     }
 
+    // Dynamic Product Selection via UpstoxProductMatrix (Deterministic Pre-Validation P0-3)
+    const segment = instrument.segment || (instrument.exchange === 'NSE' ? 
+      (instrument.instrumentType === 'FUT' || instrument.instrumentType === 'OPT' ? 'NSE_FO' : 'NSE_EQ') :
+      (instrument.instrumentType === 'FUT' || instrument.instrumentType === 'OPT' ? 'BSE_FO' : 'BSE_EQ'));
+    const productResolution = UpstoxProductMatrix.resolveProduct(segment, order.product);
+    if (!productResolution) {
+      throw new StandardBrokerError(
+        'ORDER_REJECTED',
+        `Unsupported product '${order.product}' for segment '${segment}'. Allowed: ${UpstoxProductMatrix.getAllowedProducts(segment)?.join(', ') || 'none'}.`,
+        'upstox'
+      );
+    }
+    const product: 'D' | 'I' | 'M' = productResolution.wireProduct;
+    order.product = productResolution.product;
+
     // 2. Paper Simulation Path
     if (accountMode === 'paper') {
       const riskResult = await RiskEngine.evaluateTrade({
@@ -501,12 +516,55 @@ export class UpstoxAdapter implements BrokerGateway {
       return this.executePaperOrder(order, clientOrderId, instrument);
     }
 
-    // 3. Live Mode Execution Pipeline: Server-Authoritative 15-Point Live Order Gate
-    const gateResult = await LiveOrderGateService.verifyLiveOrderPreSubmission(order, order.confirmationId);
-    const creds = gateResult.credentials;
+    // 3. Live Mode Execution Pipeline: Server-Authoritative Atomic Order Intent & Reservation Protocol (P0-2)
+    if (!config.UPSTOX_LIVE_TRADING_ENABLED) {
+      throw new StandardBrokerError(
+        'ORDER_REJECTED',
+        'UPSTOX_LIVE_TRADING_DISABLED: Upstox live trading is currently disabled by server safety gate (READ_ONLY / PAPER mode only).',
+        'upstox'
+      );
+    }
+
     const price = order.price ? Number(order.price) : (this.instrumentProvider.getEstimatedPrice(order.symbol) || 0);
     const notional = ExactDecimal.from(order.quantity).times(price > 0 ? price : 1);
     const now = Date.now();
+    const orderRecordId = `ord_upstox_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+    const gateResult = await db.transaction(async (tx) => {
+      // 1. Insert record into exchange_orders with status SUBMITTING within tx
+      await tx.execute(
+        `INSERT INTO exchange_orders (
+          id, user_id, client_order_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, quote_asset, notional,
+          fee, reserved_cash, reserved_qty, orig_qty_exact, price_exact, notional_exact,
+          broker, idempotency_key, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 'upstox', ?, ?, ?)`,
+        [
+          orderRecordId,
+          order.userId,
+          clientOrderId,
+          order.symbol,
+          order.side,
+          order.type,
+          order.quantity,
+          price,
+          instrument.quoteAsset || 'INR',
+          notional.toNumber(),
+          order.side === 'BUY' ? notional.toNumber() : 0,
+          String(order.quantity),
+          String(price),
+          notional.toString(),
+          order.idempotencyKey || clientOrderId,
+          now,
+          now,
+        ]
+      );
+
+      // 2. Comprehensive 15-Point Pre-Submission Gate + Atomic Confirmation Consumption + Ledger Reservation within tx
+      return await LiveOrderGateService.verifyLiveOrderPreSubmission(order, order.confirmationId, { tx });
+    });
+
+    const creds = gateResult.credentials;
 
     await AuditService.logEvent({
       userId: order.userId,
@@ -516,50 +574,6 @@ export class UpstoxAdapter implements BrokerGateway {
       metadata: { clientOrderId, symbol: order.symbol, side: order.side, quantity: order.quantity, notional: notional.toNumber() },
       result: 'SUCCESS',
     });
-
-    // Insert record into exchange_orders with status SUBMITTING
-    const orderRecordId = `ord_upstox_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-    await db.execute(
-      `INSERT INTO exchange_orders (
-        id, user_id, client_order_id, symbol, side, type, status,
-        orig_qty, executed_qty, price, avg_price, quote_asset, notional,
-        fee, reserved_cash, reserved_qty, orig_qty_exact, price_exact, notional_exact,
-        broker, idempotency_key, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 'upstox', ?, ?, ?)`,
-      [
-        orderRecordId,
-        order.userId,
-        clientOrderId,
-        order.symbol,
-        order.side,
-        order.type,
-        order.quantity,
-        price,
-        instrument.quoteAsset || 'INR',
-        notional.toNumber(),
-        order.side === 'BUY' ? notional.toNumber() : 0,
-        String(order.quantity),
-        String(price),
-        notional.toString(),
-        order.idempotencyKey || clientOrderId,
-        now,
-        now,
-      ]
-    );
-
-    // Dynamic Product Selection via UpstoxProductMatrix (P0-3 Wire Fix)
-    const segment = instrument.segment || (instrument.exchange === 'NSE' ? 
-      (instrument.instrumentType === 'FUT' || instrument.instrumentType === 'OPT' ? 'NSE_FO' : 'NSE_EQ') :
-      (instrument.instrumentType === 'FUT' || instrument.instrumentType === 'OPT' ? 'BSE_FO' : 'BSE_EQ'));
-    const productResolution = UpstoxProductMatrix.resolveProduct(segment, order.product);
-    if (!productResolution) {
-      throw new StandardBrokerError(
-        'ORDER_REJECTED',
-        `Unsupported product '${order.product}' for segment '${segment}'. Allowed: ${UpstoxProductMatrix.getAllowedProducts(segment)?.join(', ') || 'none'}.`,
-        'upstox'
-      );
-    }
-    const product: 'D' | 'I' | 'M' = productResolution.wireProduct;
 
     // Expanded Order Intent (Finding 10)
     const validity: 'DAY' | 'IOC' = (String(order.validity).toUpperCase() === 'IOC') ? 'IOC' : 'DAY';
@@ -672,15 +686,30 @@ export class UpstoxAdapter implements BrokerGateway {
         },
       });
 
-      // Persist child sliced venue orders (P0-7)
+      // Persist child sliced venue orders with venue-reported quantities (P1-3)
       const childCount = venueOrderIds.length;
       const totalQtyNum = Number(order.quantity);
       const sliceBaseQty = Math.floor(totalQtyNum / childCount);
       const remainder = totalQtyNum - sliceBaseQty * childCount;
 
+      const venueQuantities = new Map<string, number>();
+      if (childCount > 1 && creds?.accessToken) {
+        try {
+          const orderBook = await UpstoxClient.getOrderBook(creds.accessToken);
+          for (const item of orderBook) {
+            if (venueOrderIds.includes(item.order_id) && Number(item.quantity) > 0) {
+              venueQuantities.set(item.order_id, Number(item.quantity));
+            }
+          }
+        } catch (e: any) {
+          logger.warn(`[UpstoxAdapter] Failed to query venue order book for sliced child quantities: ${e.message}`);
+        }
+      }
+
       for (let i = 0; i < childCount; i++) {
         const vId = venueOrderIds[i];
-        const childQty = i === 0 ? sliceBaseQty + remainder : sliceBaseQty;
+        const venueQty = venueQuantities.get(vId);
+        const childQty = venueQty !== undefined ? venueQty : (i === 0 ? sliceBaseQty + remainder : sliceBaseQty);
         const childId = `ord_child_${clientOrderId}_${i}_${Date.now()}`;
         await db.execute(
           `INSERT INTO exchange_order_children (

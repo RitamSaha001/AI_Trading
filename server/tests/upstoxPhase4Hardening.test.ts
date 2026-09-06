@@ -121,13 +121,20 @@ describe('Upstox Phase 4 Hardening & Execution Safety', () => {
     await db.execute(`UPDATE ledger_accounts SET balance_minor = 50 WHERE id = ?`, [infyAcc.id]);
 
     // Enable live trading flag and mock market open and IP check
-    const origLive = config.UPSTOX_LIVE_TRADING_ENABLED;
-    (config as any).UPSTOX_LIVE_TRADING_ENABLED = true;
+    vi.spyOn(config, 'UPSTOX_LIVE_TRADING_ENABLED', 'get').mockReturnValue(true);
     vi.spyOn(IndianMarketCalendar, 'isMarketOpen').mockReturnValue(true);
     vi.spyOn(UpstoxClient, 'checkOutboundIp').mockResolvedValue({
       status: 'PASS',
       publicIp: '1.2.3.4',
       configuredIp: '1.2.3.4',
+    });
+    vi.spyOn(UpstoxClient, 'getQuote').mockResolvedValue({
+      'NSE_EQ|INE009A01021': {
+        last_price: 1800,
+        timestamp: new Date().toISOString(),
+        lower_circuit_limit: 1600,
+        upper_circuit_limit: 2000,
+      } as any,
     });
     vi.spyOn(UpstoxClient, 'placeOrder').mockResolvedValue({
       order_id: 'upstox_order_sell_001',
@@ -169,7 +176,6 @@ describe('Upstox Phase 4 Hardening & Execution Safety', () => {
       expect(BigInt(refreshedAcc.reserved_minor)).toBe(10n);
       expect(refreshedAcc.account_type).toBe('equity_holdings');
     } finally {
-      (config as any).UPSTOX_LIVE_TRADING_ENABLED = origLive;
       vi.restoreAllMocks();
     }
   });
@@ -193,8 +199,7 @@ describe('Upstox Phase 4 Hardening & Execution Safety', () => {
       ]
     );
 
-    const origLive = config.UPSTOX_LIVE_TRADING_ENABLED;
-    (config as any).UPSTOX_LIVE_TRADING_ENABLED = true;
+    vi.spyOn(config, 'UPSTOX_LIVE_TRADING_ENABLED', 'get').mockReturnValue(true);
     vi.spyOn(IndianMarketCalendar, 'isMarketOpen').mockReturnValue(false);
 
     try {
@@ -211,7 +216,6 @@ describe('Upstox Phase 4 Hardening & Execution Safety', () => {
         })
       ).rejects.toThrow('Indian markets (NSE/BSE) are currently closed');
     } finally {
-      (config as any).UPSTOX_LIVE_TRADING_ENABLED = origLive;
       vi.restoreAllMocks();
     }
   });

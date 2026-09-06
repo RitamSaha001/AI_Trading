@@ -260,12 +260,19 @@ export class ServerRiskEngine {
     const symbolPattern = req.symbol || `${asset}%`;
 
     // 3. Duplicate Order Rate-Limit / Cooldown Check (5 seconds window)
-    const recentDuplicate = await db.queryOne<any>(
-      `SELECT id FROM exchange_orders 
-       WHERE user_id = ? AND symbol LIKE ? AND side = ? 
-       AND created_at > ? AND status IN ('SUBMITTING', 'OPEN')`,
-      [req.userId, symbolPattern, req.side, Date.now() - 5000]
-    );
+    const recentDuplicateQuery = req.idempotencyKey
+      ? `SELECT id FROM exchange_orders 
+         WHERE user_id = ? AND symbol LIKE ? AND side = ? 
+         AND created_at > ? AND status IN ('SUBMITTING', 'OPEN')
+         AND client_order_id != ? AND idempotency_key != ?`
+      : `SELECT id FROM exchange_orders 
+         WHERE user_id = ? AND symbol LIKE ? AND side = ? 
+         AND created_at > ? AND status IN ('SUBMITTING', 'OPEN')`;
+    const recentDuplicateParams = req.idempotencyKey
+      ? [req.userId, symbolPattern, req.side, Date.now() - 5000, req.idempotencyKey, req.idempotencyKey]
+      : [req.userId, symbolPattern, req.side, Date.now() - 5000];
+
+    const recentDuplicate = await db.queryOne<any>(recentDuplicateQuery, recentDuplicateParams);
 
     if (recentDuplicate) {
       return {

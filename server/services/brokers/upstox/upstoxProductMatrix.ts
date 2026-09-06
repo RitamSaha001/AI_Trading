@@ -128,7 +128,7 @@ export class UpstoxProductMatrix {
     const rule = this.RULES[cleanSegment];
     if (!rule) return null;
 
-    const normalized = this.normalizeProduct(rawProduct);
+    const normalized = rawProduct ? this.normalizeProduct(rawProduct) : rule.defaultProduct;
     if (!normalized || !rule.allowedProducts.includes(normalized)) return null;
 
     return {

@@ -11,6 +11,7 @@ import { RateLimitTracker } from './rateLimitTracker';
 import { OperationalSafetyGate } from './operationalSafetyService';
 import { UserDataStreamManager } from './userDataStreamManager';
 import { ReconciliationWorker } from './reconciliationWorker';
+import { OrderFillsService } from './orderFillsService';
 import crypto from 'node:crypto';
 
 export interface BinanceCredentials {
@@ -1211,32 +1212,21 @@ export class BinanceGateway {
           const accountingEventId = `settlement:binance:${input.userId}:${input.symbol}:${tradeId}`;
           const fillDbId = `fill_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
-          await tx.execute(
-            `INSERT INTO exchange_fills (
-              id, order_id, exchange_trade_id, canonical_fill_key, symbol,
-              price, price_exact, qty, qty_exact,
-              commission, commission_exact, commission_asset, commission_status,
-              quote_qty, quote_qty_exact, executed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AUTHORITATIVE', ?, ?, ?)
-            ON CONFLICT (canonical_fill_key) DO NOTHING`,
-            [
-              fillDbId,
-              clientOrderId,
-              tradeId,
-              canonicalFillKey,
-              input.symbol,
-              fillPriceDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
-              fillPriceDec.toString(),
-              fillQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
-              fillQtyDec.toString(),
-              fillCommissionDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
-              fillCommissionDec.toString(),
-              fillAsset,
-              fillNotionalDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
-              fillNotionalDec.toString(),
-              fill.time || Date.now(),
-            ]
-          );
+          await OrderFillsService.recordFill(tx, {
+            fillDbId,
+            orderIdentifier: clientOrderId,
+            exchangeTradeId: tradeId,
+            canonicalFillKey,
+            symbol: input.symbol,
+            price: fillPriceDec,
+            qty: fillQtyDec,
+            commission: fillCommissionDec,
+            commissionAsset: fillAsset,
+            commissionStatus: 'AUTHORITATIVE',
+            quoteQty: fillNotionalDec,
+            executedAt: now,
+            broker: 'binance',
+          });
 
           await LedgerService.processFill({
             userId: input.userId,
@@ -1503,32 +1493,21 @@ export class BinanceGateway {
               const accountingEventId = `settlement:binance:${input.userId}:${input.symbol}:${tradeId}`;
               const fillDbId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
-              await tx.execute(
-                `INSERT INTO exchange_fills (
-                  id, order_id, exchange_trade_id, canonical_fill_key, symbol,
-                  price, price_exact, qty, qty_exact,
-                  commission, commission_exact, commission_asset, commission_status,
-                  quote_qty, quote_qty_exact, executed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AUTHORITATIVE', ?, ?, ?)
-                ON CONFLICT (canonical_fill_key) DO NOTHING`,
-                [
-                  fillDbId,
-                  clientOrderId,
-                  tradeId,
-                  canonicalFillKey,
-                  input.symbol,
-                  fillPriceDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
-                  fillPriceDec.toString(),
-                  fillQtyDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
-                  fillQtyDec.toString(),
-                  fillCommissionDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
-                  fillCommissionDec.toString(),
-                  fillAsset,
-                  fillNotionalDec.toDisplayNumber(), // PRECISION_BOUNDARY: legacy REAL column
-                  fillNotionalDec.toString(),
-                  fill.time || Date.now(),
-                ]
-              );
+              await OrderFillsService.recordFill(tx, {
+                fillDbId,
+                orderIdentifier: clientOrderId,
+                exchangeTradeId: tradeId,
+                canonicalFillKey,
+                symbol: input.symbol,
+                price: fillPriceDec,
+                qty: fillQtyDec,
+                commission: fillCommissionDec,
+                commissionAsset: fillAsset,
+                commissionStatus: 'AUTHORITATIVE',
+                quoteQty: fillNotionalDec,
+                executedAt: fill.time || Date.now(),
+                broker: 'binance',
+              });
 
               await LedgerService.processFill({
                 userId: input.userId,
@@ -1932,28 +1911,21 @@ export class BinanceGateway {
             const fillNotionalDec = fillPriceDec.mul(fillQtyDec);
             const fillCommissionDec = ExactDecimal.from(vf.commission);
             const fillAsset = vf.commissionAsset || order.quote_asset;
-            await db.execute(
-              `INSERT INTO exchange_fills (
-                id, order_id, exchange_trade_id, canonical_fill_key, symbol,
-                price, price_exact, qty, qty_exact,
-                commission, commission_exact, commission_asset, commission_status,
-                quote_qty, quote_qty_exact, executed_at
-              ) VALUES (?, ?, ?, ?, ?, 0.0, ?, 0.0, ?, 0.0, ?, ?, 'AUTHORITATIVE', 0.0, ?, ?)
-              ON CONFLICT (canonical_fill_key) DO NOTHING`,
-              [
-                fillDbId,
-                clientOrderId,
-                tradeId,
-                canonicalFillKey,
-                order.symbol,
-                fillPriceDec.toString(),
-                fillQtyDec.toString(),
-                fillCommissionDec.toString(),
-                fillAsset,
-                fillNotionalDec.toString(),
-                vf.time || now,
-              ]
-            );
+            await OrderFillsService.recordFill(db, {
+              fillDbId,
+              orderIdentifier: clientOrderId,
+              exchangeTradeId: tradeId,
+              canonicalFillKey,
+              symbol: order.symbol,
+              price: fillPriceDec,
+              qty: fillQtyDec,
+              commission: fillCommissionDec,
+              commissionAsset: fillAsset,
+              commissionStatus: 'AUTHORITATIVE',
+              quoteQty: fillNotionalDec,
+              executedAt: vf.time || now,
+              broker: 'binance',
+            });
           }
           existingFills = await db.query<any>(
             `SELECT * FROM exchange_fills WHERE order_id = ?`,

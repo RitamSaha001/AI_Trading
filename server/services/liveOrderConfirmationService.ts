@@ -10,7 +10,7 @@
  *    drift, executes pre-submission gates, and dispatches to the broker.
  */
 
-import { getDb } from '../db';
+import { getDb, DBClient } from '../db';
 import { AuditService, logger } from './auditService';
 import { BrokerOrder, BrokerOrderRequest } from './brokers/brokerTypes';
 import { UpstoxInstrumentProvider } from './brokers/upstox/upstoxInstrumentProvider';
@@ -61,7 +61,13 @@ export interface LiveOrderConfirmationRecord {
     accountEquity: number;
     availableCash: number;
     notional: number;
+    isProvisionalPrice?: boolean;
+    priceSource?: string;
+    executionWarning?: string;
   };
+  isProvisionalPrice?: boolean;
+  priceSource?: string;
+  executionWarning?: string;
   clientOrderId: string;
   idempotencyKey: string;
   status: 'PENDING' | 'CONSUMED' | 'EXPIRED' | 'REJECTED' | 'CANCELLED';
@@ -227,12 +233,21 @@ export class LiveOrderConfirmationService {
     const confirmationId = `loc_${now}_${crypto.randomBytes(6).toString('hex')}`;
     const idempotencyKey = `idemp_${clientOrderId}`;
 
+    const isProvisionalPrice = !req.price;
+    const priceSource = req.price ? 'LIMIT_USER_SPECIFIED' : 'PROVISIONAL_ESTIMATED_TICK';
+    const executionWarning = isProvisionalPrice
+      ? 'Provisional price based on estimated tick. Actual execution price may vary significantly in live market. Pre-submission quote freshness required at execution gate.'
+      : undefined;
+
     const riskSnapshot = {
       singleOrderPct: riskResult.singleOrderPct || 0,
       projectedConcentrationPct: riskResult.projectedConcentrationPct || 0,
       accountEquity: riskResult.portfolioEquity || 0,
       availableCash: riskResult.availableCash || 0,
       notional,
+      isProvisionalPrice,
+      priceSource,
+      ...(executionWarning ? { executionWarning } : {}),
     };
 
     await db.execute(
@@ -319,6 +334,9 @@ export class LiveOrderConfirmationService {
       currency,
       orderHash,
       riskSnapshot,
+      isProvisionalPrice,
+      priceSource,
+      executionWarning,
       clientOrderId,
       idempotencyKey,
       status: 'PENDING',
@@ -379,6 +397,9 @@ export class LiveOrderConfirmationService {
       currency: row.currency,
       orderHash: row.order_hash,
       riskSnapshot: parsedSnapshot,
+      isProvisionalPrice: parsedSnapshot?.isProvisionalPrice,
+      priceSource: parsedSnapshot?.priceSource,
+      executionWarning: parsedSnapshot?.executionWarning,
       clientOrderId: row.client_order_id,
       idempotencyKey: row.idempotency_key,
       status,
@@ -395,9 +416,10 @@ export class LiveOrderConfirmationService {
    */
   public static async claimConfirmationAtomically(
     confirmationId: string,
-    userId: string
+    userId: string,
+    tx?: DBClient
   ): Promise<{ claimed: boolean; reason?: string; record?: any }> {
-    const db = getDb();
+    const db = tx || getDb();
     const now = Date.now();
 
     // Check current state

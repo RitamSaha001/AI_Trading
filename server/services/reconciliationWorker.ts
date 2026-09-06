@@ -3,13 +3,14 @@ import { AuditService, logger } from './auditService';
 import { BrokerRegistry } from './brokers/brokerRegistry';
 import { LedgerService } from './ledgerService';
 import { ExactDecimal } from './precision';
-import { DistributedLockService } from './distributedLockService';
+import { DistributedLockService, LeaseController } from './distributedLockService';
 import { CircuitBreakerService } from './circuitBreakerService';
 import { OperationalSafetyService } from './operationalSafetyService';
 import { ClockSyncService } from './clockSyncService';
 import { RateLimitTracker } from './rateLimitTracker';
 import { config } from '../config';
 import { OrderStateMachine } from './orderStateMachine';
+import { OrderFillsService } from './orderFillsService';
 import crypto from 'node:crypto';
 
 /**
@@ -151,8 +152,9 @@ export class ReconciliationWorker {
     diff: ExactDecimal,
     tolerance: ExactDecimal = ExactDecimal.from('0.00000001')
   ): DiscrepancyClassification {
-    if (diff.isZero()) return 'EXACT_MATCH';
-    if (diff.lte(tolerance)) return 'WITHIN_PRECISION';
+    const magnitude = diff.abs();
+    if (magnitude.isZero()) return 'EXACT_MATCH';
+    if (magnitude.lte(tolerance)) return 'WITHIN_PRECISION';
     return 'MATERIAL_MISMATCH';
   }
 
@@ -161,8 +163,8 @@ export class ReconciliationWorker {
    * Uses DistributedLockService to prevent concurrent execution across multi-instance deployments.
    */
   static async runReconciliation(userId?: string): Promise<ReconciliationResult> {
-    const lockResult = await DistributedLockService.withLock('worker:reconciliation', 60_000, async () => {
-      return this.executeReconciliationInternal(userId);
+    const lockResult = await DistributedLockService.withLock('worker:reconciliation', 60_000, async (leaseController) => {
+      return this.executeReconciliationInternal(userId, leaseController);
     });
 
     if (!lockResult) {
@@ -180,7 +182,10 @@ export class ReconciliationWorker {
     return lockResult;
   }
 
-  private static async executeReconciliationInternal(userId?: string): Promise<ReconciliationResult> {
+  private static async executeReconciliationInternal(
+    userId?: string,
+    leaseController?: LeaseController
+  ): Promise<ReconciliationResult> {
     if (this.isRunning) {
       logger.warn('Reconciliation run skipped: already in progress.');
       return {
@@ -368,7 +373,7 @@ export class ReconciliationWorker {
           const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : [];
           let tradesSucceeded = true;
           for (const sym of symbols) {
-            const tradeResult = await this.reconcileTrades(userId, runId, sym);
+            const tradeResult = await this.reconcileTrades(userId, runId, sym, undefined, leaseController);
             mismatchesFound += tradeResult.mismatches;
             if (!tradeResult.success) {
               tradesSucceeded = false;
@@ -458,7 +463,7 @@ export class ReconciliationWorker {
             const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : [];
             let userTradesSucceeded = true;
             for (const sym of symbols) {
-              const tradeResult = await this.reconcileTrades(uId, runId, sym);
+              const tradeResult = await this.reconcileTrades(uId, runId, sym, undefined, leaseController);
               mismatchesFound += tradeResult.mismatches;
               if (!tradeResult.success) {
                 userTradesSucceeded = false;
@@ -599,7 +604,8 @@ export class ReconciliationWorker {
     userId: string,
     runId: string = `rec_run_${Date.now()}`,
     symbol: string,
-    mockVenueTrades?: any[]
+    mockVenueTrades?: any[],
+    leaseController?: LeaseController
   ): Promise<ReconciliationStepResult> {
     let mismatches = 0;
     const db = getDb();
@@ -720,6 +726,7 @@ export class ReconciliationWorker {
         const commissionStatus = trade.commissionStatus || (activeBroker === 'upstox' ? 'UNRESOLVED' : 'AUTHORITATIVE');
 
         // Invariant: Never overwrite past ledger history. Post explicit compensating fill and accounting event.
+        leaseController?.assertLeaseValid('reconciliation fill settlement');
         await db.transaction(async (tx) => {
           if (!localOrder) {
             await tx.execute(
@@ -771,28 +778,21 @@ export class ReconciliationWorker {
             );
           }
 
-          await tx.execute(
-            `INSERT INTO exchange_fills (
-              id, order_id, exchange_trade_id, canonical_fill_key, symbol,
-              price, price_exact, qty, qty_exact,
-              commission, commission_exact, commission_asset, commission_status,
-              quote_qty, quote_qty_exact, executed_at
-            ) VALUES (?, ?, ?, ?, ?, 0.0, ?, 0.0, ?, 0.0, ?, ?, 'AUTHORITATIVE', 0.0, ?, ?)
-            ON CONFLICT (canonical_fill_key) DO NOTHING`,
-            [
-              fillDbId,
-              orderId,
-              tradeId,
-              canonicalFillKey,
-              symbol,
-              fillPriceDec.toString(),
-              fillQtyDec.toString(),
-              fillCommissionDec.toString(),
-              fillAsset,
-              fillNotionalDec.toString(),
-              trade.time || Date.now(),
-            ]
-          );
+          await OrderFillsService.recordFill(tx, {
+            fillDbId,
+            orderIdentifier: orderId,
+            exchangeTradeId: tradeId,
+            canonicalFillKey,
+            symbol,
+            price: fillPriceDec,
+            qty: fillQtyDec,
+            commission: fillCommissionDec,
+            commissionAsset: fillAsset,
+            commissionStatus,
+            quoteQty: fillNotionalDec,
+            executedAt: trade.time || Date.now(),
+            broker: activeBroker,
+          });
 
           await LedgerService.processFill({
             userId,
@@ -855,6 +855,7 @@ export class ReconciliationWorker {
           : (trade.commissionAsset || 'USDT');
         const baseAsset = symbol.replace(new RegExp(`${quoteAsset}$`), '') || symbol;
 
+        leaseController?.assertLeaseValid('reconciliation commission update');
         await db.transaction(async (tx) => {
           await tx.execute(
             `UPDATE exchange_fills SET

@@ -22,7 +22,7 @@
  * 15. Atomic Double-Entry Ledger Reservation
  */
 
-import { getDb } from '../db';
+import { getDb, DBClient } from '../db';
 import { config } from '../config';
 import { AuditService, logger } from './auditService';
 import { BrokerOrderRequest } from './brokers/brokerTypes';
@@ -31,6 +31,7 @@ import { UpstoxClient } from './brokers/upstox/upstoxClient';
 import { UpstoxAdapter } from './brokers/upstox/upstoxAdapter';
 import { UpstoxInstrumentProvider } from './brokers/upstox/upstoxInstrumentProvider';
 import { UpstoxInstrumentRegistry } from './brokers/upstox/upstoxInstrumentRegistry';
+import { UpstoxProductMatrix } from './brokers/upstox/upstoxProductMatrix';
 import { IndianMarketCalendar } from './brokers/upstox/indianMarketCalendar';
 import { RiskEngine } from './riskEngine';
 import { LedgerService } from './ledgerService';
@@ -57,7 +58,8 @@ export class LiveOrderGateService {
    */
   public static async verifyLiveOrderPreSubmission(
     order: BrokerOrderRequest,
-    confirmationId?: string
+    confirmationId?: string,
+    options?: { tx?: DBClient }
   ): Promise<LiveOrderGateVerificationResult> {
     const brokerId = (order.broker || 'upstox').toLowerCase();
 
@@ -107,7 +109,7 @@ export class LiveOrderGateService {
     }
 
     // 4. User Authorization & Account Limits
-    const db = getDb();
+    const db = options?.tx || getDb();
     const user = await db.queryOne<any>(`SELECT id, role FROM users WHERE id = ?`, [order.userId]);
     if (!user) {
       throw new StandardBrokerError(
@@ -228,6 +230,19 @@ export class LiveOrderGateService {
     const instrument = instrumentProvider.getInstrument(order.symbol);
     if (!instrument) {
       throw new StandardBrokerError('ORDER_REJECTED', `Unsupported Upstox instrument: ${order.symbol}`, brokerId);
+    }
+
+    // Authoritative Product & Segment Matrix Validation (P0-3)
+    const segment = instrument.segment || (instrument.exchange === 'NSE' ? 
+      (instrument.instrumentType === 'FUT' || instrument.instrumentType === 'OPT' ? 'NSE_FO' : 'NSE_EQ') :
+      (instrument.instrumentType === 'FUT' || instrument.instrumentType === 'OPT' ? 'BSE_FO' : 'BSE_EQ'));
+    const productResolution = UpstoxProductMatrix.resolveProduct(segment, rawProduct);
+    if (!productResolution) {
+      throw new StandardBrokerError(
+        'ORDER_REJECTED',
+        `Unsupported product '${order.product}' for segment '${segment}'. Allowed: ${UpstoxProductMatrix.getAllowedProducts(segment)?.join(', ') || 'none'}.`,
+        brokerId
+      );
     }
 
     // 11. System Panic Bypass or Two-Step Human Confirmation Token Verification
@@ -567,7 +582,11 @@ export class LiveOrderGateService {
     // 15. Atomically Consume Confirmation (Only AFTER all checks pass!)
     let confirmationRecord = null;
     if (!isPanicBypass) {
-      const claimResult = await LiveOrderConfirmationService.claimConfirmationAtomically(confirmationId, order.userId);
+      const claimResult = await LiveOrderConfirmationService.claimConfirmationAtomically(
+        confirmationId,
+        order.userId,
+        options?.tx
+      );
       if (!claimResult.claimed) {
         throw new StandardBrokerError(
           'CONFIRMATION_INVALID',
@@ -599,6 +618,7 @@ export class LiveOrderGateService {
           accountType: 'trading_allocated',
           assetOrCurrency: instrument.quoteAsset || 'INR',
           amountMinor: reservedCashMinor,
+          tx: options?.tx,
         });
       } else if (order.side === 'SELL' && reservedQtyMinor > 0n) {
         await LedgerService.reserveOrderFunds({
@@ -608,6 +628,7 @@ export class LiveOrderGateService {
           accountType: 'equity_holdings',
           assetOrCurrency: instrument.baseAsset || order.symbol,
           amountMinor: reservedQtyMinor,
+          tx: options?.tx,
         });
       }
     }

@@ -109,6 +109,7 @@ describe('Phase 4B Code Review Hardening: 7 Critical Issues Verification', () =>
   });
 
   afterEach(async () => {
+    UpstoxClient.resetForTesting();
     const db = getDb();
     await EmergencyControlService.setState('TRADING_NORMAL', 'Teardown reset', 'test_runner');
     IndianMarketCalendar.setMockMarketOpen(null);

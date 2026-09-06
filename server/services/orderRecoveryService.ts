@@ -5,8 +5,10 @@ import { LedgerService } from './ledgerService';
 import { OrderStateMachine } from './orderStateMachine';
 import { ExactDecimal } from './precision';
 import { AuditService } from './auditService';
-import { DistributedLockService } from './distributedLockService';
+import { DistributedLockService, LeaseController } from './distributedLockService';
 import { config } from '../config';
+import { OrderFillsService } from './orderFillsService';
+import { UpstoxInstrumentMasterService } from './brokers/upstox/upstoxInstrumentMasterService';
 import crypto from 'node:crypto';
 
 export interface RecoverySweepResult {
@@ -35,8 +37,8 @@ export class OrderRecoveryService {
    */
   static async runRecoverySweep(): Promise<RecoverySweepResult> {
     return (
-      (await DistributedLockService.withLock('worker:order_recovery', 60_000, async () => {
-        return this.executeRecoverySweepInternal();
+      (await DistributedLockService.withLock('worker:order_recovery', 60_000, async (leaseController) => {
+        return this.executeRecoverySweepInternal(leaseController);
       })) || {
         ordersInspected: 0,
         recoveredCount: 0,
@@ -49,7 +51,7 @@ export class OrderRecoveryService {
   /**
    * Internal implementation of recovery sweep.
    */
-  private static async executeRecoverySweepInternal(): Promise<RecoverySweepResult> {
+  private static async executeRecoverySweepInternal(leaseController?: LeaseController): Promise<RecoverySweepResult> {
     this.isRunning = true;
     const db = getDb();
 
@@ -83,6 +85,7 @@ export class OrderRecoveryService {
 
         if (venueResult.notFoundConfirmed) {
           // Case A: Exchange confirms order was NEVER accepted on the book
+          leaseController?.assertLeaseValid('order recovery rejection');
           await db.transaction(async (tx) => {
             await OrderStateMachine.transitionOrder(clientOrderId, 'REJECTED', {
               tx,
@@ -210,9 +213,13 @@ export class OrderRecoveryService {
               ? ExactDecimal.from(order.price_exact || order.price || '0')
               : totalExecutedNotionalDec.div(totalExecutedQtyDec);
 
-            const baseAsset = order.symbol.replace(order.quote_asset, '');
+            const authInst = UpstoxInstrumentMasterService.getInstrument(order.symbol) ||
+              (broker ? (broker as any).getInstrument?.(order.symbol) : null);
+            const baseAsset = authInst?.baseAsset || order.base_asset ||
+              (order.symbol.endsWith(order.quote_asset) ? order.symbol.slice(0, -order.quote_asset.length) : order.symbol);
             const now = Date.now();
 
+            leaseController?.assertLeaseValid('order recovery fill settlement');
             await db.transaction(async (tx) => {
               await OrderStateMachine.transitionOrder(clientOrderId, 'FILLED', {
                 tx,
@@ -249,28 +256,21 @@ export class OrderRecoveryService {
                 const accountingEventId = `settlement:${broker.id}:${order.user_id}:${order.symbol}:${tradeId}`;
                 const fillDbId = `fill_rec_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
-                await tx.execute(
-                  `INSERT INTO exchange_fills (
-                    id, order_id, exchange_trade_id, canonical_fill_key, symbol,
-                    price, price_exact, qty, qty_exact,
-                    commission, commission_exact, commission_asset, commission_status,
-                    quote_qty, quote_qty_exact, executed_at
-                  ) VALUES (?, ?, ?, ?, ?, 0.0, ?, 0.0, ?, 0.0, ?, ?, 'AUTHORITATIVE', 0.0, ?, ?)
-                  ON CONFLICT (canonical_fill_key) DO NOTHING`,
-                  [
-                    fillDbId,
-                    clientOrderId,
-                    tradeId,
-                    canonicalFillKey,
-                    order.symbol,
-                    fillPriceDec.toString(),
-                    fillQtyDec.toString(),
-                    fillCommissionDec.toString(),
-                    fillAsset,
-                    fillNotionalDec.toString(),
-                    fill.time || now,
-                  ]
-                );
+                await OrderFillsService.recordFill(tx, {
+                  fillDbId,
+                  orderIdentifier: order.id,
+                  exchangeTradeId: tradeId,
+                  canonicalFillKey,
+                  symbol: order.symbol,
+                  price: fillPriceDec,
+                  qty: fillQtyDec,
+                  commission: fillCommissionDec,
+                  commissionAsset: fillAsset,
+                  commissionStatus: 'AUTHORITATIVE',
+                  quoteQty: fillNotionalDec,
+                  executedAt: fill.time || now,
+                  broker: broker.id,
+                });
 
                 await LedgerService.processFill({
                   userId: order.user_id,

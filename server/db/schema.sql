@@ -358,6 +358,7 @@ CREATE INDEX IF NOT EXISTS idx_order_reservations_status ON order_reservations(s
 CREATE TABLE IF NOT EXISTS exchange_fills (
   id TEXT PRIMARY KEY,
   order_id TEXT NOT NULL REFERENCES exchange_orders(id) ON DELETE CASCADE,
+  client_order_id TEXT,
   exchange_trade_id TEXT NOT NULL,
   canonical_fill_key TEXT UNIQUE,
   symbol TEXT NOT NULL,
@@ -378,6 +379,7 @@ CREATE TABLE IF NOT EXISTS exchange_fills (
   UNIQUE(order_id, exchange_trade_id)
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_fills_order ON exchange_fills(order_id);
+CREATE INDEX IF NOT EXISTS idx_exchange_fills_client_order ON exchange_fills(client_order_id);
 CREATE INDEX IF NOT EXISTS idx_exchange_fills_processed ON exchange_fills(ledger_processed);
 CREATE INDEX IF NOT EXISTS idx_exchange_fills_broker ON exchange_fills(broker);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_fills_canonical_key ON exchange_fills(canonical_fill_key);

@@ -182,7 +182,7 @@ export class OrderStateMachine {
           options.releaseReservationOnTerminal &&
           ['CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED', 'FAILED'].includes(targetStatus)
         ) {
-          await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx: client }).catch(() => {});
+          await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx: client });
         }
 
         return await client.queryOne<any>(
@@ -220,9 +220,7 @@ export class OrderStateMachine {
         options.releaseReservationOnTerminal &&
         ['CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED', 'FAILED'].includes(targetStatus)
       ) {
-        await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx: client }).catch((err) => {
-          console.warn(`[OrderStateMachine] Warning: Failed to release reservation for ${clientOrderId}:`, err?.message);
-        });
+        await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx: client });
       }
 
       // 5. Emit structured audit log
