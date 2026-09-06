@@ -21,6 +21,10 @@ import {
   validateSectorExposureLimit,
   calculateChandelierExit,
   calculateVolumeMetrics,
+  calculateDynamicProfitRatchet,
+  evaluateSessionTimingQuality,
+  calculateCrossSectionalAlphaRanking,
+  calculateSmartLimitPrice,
 } from './quantEngine';
 
 // Institutional Indian Bluechip Assets monitored by the Autonomous Desk
@@ -357,9 +361,11 @@ export function tickAutonomousPilot(
     };
   }
 
-  // 2. Market Hours Check (for live Upstox mode)
+  // 2. Market Hours & Timing Quality Check (for live Upstox mode)
   const isLiveUpstox = state.accountMode === 'upstox';
   const session = isMarketSessionOpen(now);
+  const timingQuality = evaluateSessionTimingQuality(now);
+
   if (isLiveUpstox && !session.isOpen) {
     return {
       updatedFleet,
@@ -386,14 +392,248 @@ export function tickAutonomousPilot(
       .map((o) => o.asset)
   );
 
-  // 3. Process Monitored Fleet Assets
+  // 3A. STEP 1: OPEN POSITION MANAGEMENT (Stepped Breakeven Defense & Multi-Tranche Profit Ladder)
   for (const asset of UPSTOX_FLEET_ASSETS) {
     const market = markets[asset];
     if (!market || !market.price || market.price <= 0) continue;
 
-    const price = market.price;
     const currentHolding = state.positions[asset] || 0;
+    if (currentHolding <= 0) continue;
+
+    const price = market.price;
     const avgBuyPrice = state.avgBuyPrice?.[asset] || price;
+    const {
+      strategy,
+      regimeLabel,
+      hurst,
+      atr,
+      sector,
+      squeezeStatus,
+      vwap,
+      volumeSurgeRatio,
+    } = determineAssetStrategyAndRegime(market);
+
+    let fleetStatus: AssetFleetStatus = updatedFleet[asset] || {
+      asset,
+      assignedStrategy: strategy,
+      regimeLabel,
+      hurst,
+      currentPrice: price,
+      state: 'IN_POSITION' as FleetAssetLifecycle,
+      sector,
+      squeezeStatus,
+      trancheStage: 0,
+    };
+
+    const unrealizedPnl = (price - avgBuyPrice) * currentHolding;
+    const unrealizedPnlPct = +(((price - avgBuyPrice) / avgBuyPrice) * 100).toFixed(2);
+
+    let currentStop = fleetStatus.stopLossPrice || alignToTickSize(avgBuyPrice - atr * profile.stopLossAtrMultiplier, asset);
+    let currentTarget = fleetStatus.takeProfitPrice || alignToTickSize(avgBuyPrice + atr * profile.takeProfitAtrMultiplier, asset);
+    let lifecycleState: FleetAssetLifecycle = 'IN_POSITION';
+    let trancheStage = fleetStatus.trancheStage || 0;
+
+    // Multi-Tranche Ladder Levels
+    const t1Price = alignToTickSize(avgBuyPrice + atr * 1.5, asset);
+    const t2Price = currentTarget;
+    const t3Chandelier = calculateChandelierExit(market.history, 22, 2.0);
+
+    // Stepped Trailing Defense: Ratchet stop-loss dynamically (+0.8 ATR -> Breakeven, +1.5 ATR -> +0.5 ATR, +2.2 ATR -> +1.2 ATR)
+    const dynamicRatchet = calculateDynamicProfitRatchet(
+      avgBuyPrice,
+      price,
+      atr,
+      currentStop,
+      isIndianAsset(asset) ? 0.05 : 0.01
+    );
+
+    if (dynamicRatchet.isRatcheted && dynamicRatchet.ratchetedStopPrice > currentStop) {
+      currentStop = dynamicRatchet.ratchetedStopPrice;
+      lifecycleState = 'TRAILING_PROFIT';
+      newActionLogs.push({
+        id: `log_ratchet_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'TRAILING_RATCHET',
+        strategy,
+        detail: `Stepped Defense (${dynamicRatchet.stageName}): Ratcheted stop-loss to ₹${currentStop.toFixed(2)} (+${dynamicRatchet.gainAtrMultiples} ATR gain). Zero downside risk.`,
+        price,
+        status: 'EXECUTED',
+      });
+    }
+
+    // Tranche 1 Profit Harvest: Take partial profit (33%) at +1.5 ATR
+    if (trancheStage === 0 && price >= t1Price && currentHolding >= 2 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      const exitQty = Math.max(1, Math.floor(currentHolding * 0.33));
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: exitQty,
+        price: alignToTickSize(price, asset),
+        type: 'limit',
+        strategyName: `Auto-Pilot: ${strategy} Tranche 1 Harvest`,
+        reason: `Tranche 1 (+1.5 ATR) reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Locking partial profit.`,
+        trancheStage: 1,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      trancheStage = 1;
+      currentStop = alignToTickSize(Math.max(currentStop, avgBuyPrice + atr * 0.5), asset);
+      lifecycleState = 'TRAILING_PROFIT';
+
+      newActionLogs.push({
+        id: `log_t1_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'PROFIT_HARVEST_T1',
+        strategy,
+        detail: `Harvested Tranche 1 (33% = ${exitQty} shares) at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Stop moved to ₹${currentStop.toFixed(2)}.`,
+        price,
+        status: 'EXECUTED',
+      });
+    }
+    // Tranche 2 Profit Harvest: Take core target (50% of remaining) at T2
+    else if (trancheStage <= 1 && price >= t2Price && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      const exitQty = Math.max(1, Math.floor(currentHolding * 0.5));
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: exitQty,
+        price: alignToTickSize(price, asset),
+        type: 'limit',
+        strategyName: `Auto-Pilot: ${strategy} Core Target Harvest`,
+        reason: `Core Target T2 reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Harvesting core gain.`,
+        trancheStage: 2,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      trancheStage = 2;
+      currentStop = t1Price;
+      lifecycleState = currentHolding > exitQty ? 'TRAILING_PROFIT' : 'COOLDOWN';
+
+      newActionLogs.push({
+        id: `log_tp_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'TAKE_PROFIT',
+        strategy,
+        detail: `Harvested Core Target T2 (${exitQty} shares) at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Trailing remainder.`,
+        price,
+        status: 'EXECUTED',
+      });
+    }
+    // Tranche 3 Chandelier Runner Exit: Trail remainder until breakdown below 22-period high - 2 ATR
+    else if (trancheStage >= 2 && price <= t3Chandelier && currentHolding > 0 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: currentHolding,
+        price: alignToTickSize(price, asset),
+        type: 'market',
+        strategyName: `Auto-Pilot: ${strategy} Chandelier Runner Exit`,
+        reason: `Chandelier Trailing Exit triggered at ₹${price.toFixed(2)}. Final runner closed.`,
+        trancheStage: 3,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      lifecycleState = 'COOLDOWN';
+      trancheStage = 0;
+
+      newActionLogs.push({
+        id: `log_chandelier_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'CHANDELIER_EXIT',
+        strategy,
+        detail: `Closed final runner (${currentHolding} shares) on Chandelier Exit at ₹${price.toFixed(2)}.`,
+        price,
+        status: 'EXECUTED',
+      });
+    }
+    // Capital Defense Stop Loss Triggered
+    else if (price <= currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: currentHolding,
+        price: alignToTickSize(price, asset),
+        type: 'market',
+        strategyName: `Auto-Pilot: ${strategy} Capital Defense Stop`,
+        reason: `Stop hit at ₹${price.toFixed(2)}. Protecting capital.`,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      lifecycleState = 'COOLDOWN';
+      trancheStage = 0;
+
+      newActionLogs.push({
+        id: `log_sl_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'STOP_LOSS',
+        strategy,
+        detail: `Executed stop-loss exit on ${currentHolding} shares at ₹${price.toFixed(2)}.`,
+        price,
+        status: 'EXECUTED',
+      });
+    }
+
+    updatedFleet[asset] = {
+      ...fleetStatus,
+      assignedStrategy: strategy,
+      regimeLabel,
+      hurst,
+      currentPrice: price,
+      state: lifecycleState,
+      entryPrice: avgBuyPrice,
+      stopLossPrice: currentStop,
+      takeProfitPrice: currentTarget,
+      takeProfit2Price: t2Price,
+      takeProfit3Price: t3Chandelier,
+      trailingStopPrice: currentStop,
+      unrealizedPnl: +unrealizedPnl.toFixed(2),
+      unrealizedPnlPct,
+      unitsHeld: currentHolding,
+      sector,
+      squeezeStatus,
+      trancheStage,
+      vwap,
+      volumeSurgeRatio,
+    };
+  }
+
+  // 3B. STEP 2: CANDIDATE SCANNING ACROSS FLEET (Unallocated Assets)
+  interface CandidateSetup {
+    asset: Asset;
+    market: Market;
+    strategy: PilotStrategyKind;
+    regimeLabel: string;
+    hurst: number;
+    ouZScore: number;
+    atr: number;
+    sector: string;
+    squeezeStatus: 'SQUEEZE_ON' | 'SQUEEZE_OFF' | 'NO_SQUEEZE';
+    vwap: number;
+    volumeSurgeRatio: number;
+    hasInstitutionalVolume: boolean;
+    entryRationale: string;
+    price: number;
+  }
+
+  const candidatePool: CandidateSetup[] = [];
+
+  for (const asset of UPSTOX_FLEET_ASSETS) {
+    const market = markets[asset];
+    if (!market || !market.price || market.price <= 0) continue;
+
+    const currentHolding = state.positions[asset] || 0;
+    if (currentHolding > 0) continue; // Handled in position management above
+
+    const price = market.price;
     const {
       strategy,
       regimeLabel,
@@ -419,192 +659,7 @@ export function tickAutonomousPilot(
       trancheStage: 0,
     };
 
-    // A. EXISTING OPEN POSITION MANAGEMENT (Multi-Tier Profit Ladder & Trailing Stop Ratchet)
-    if (currentHolding > 0) {
-      const unrealizedPnl = (price - avgBuyPrice) * currentHolding;
-      const unrealizedPnlPct = +(((price - avgBuyPrice) / avgBuyPrice) * 100).toFixed(2);
-      const profitDistance = price - avgBuyPrice;
-
-      let currentStop = fleetStatus.stopLossPrice || alignToTickSize(avgBuyPrice - atr * profile.stopLossAtrMultiplier, asset);
-      let currentTarget = fleetStatus.takeProfitPrice || alignToTickSize(avgBuyPrice + atr * profile.takeProfitAtrMultiplier, asset);
-      let lifecycleState: FleetAssetLifecycle = 'IN_POSITION';
-      let trancheStage = fleetStatus.trancheStage || 0;
-
-      // Multi-Tranche Ladder Levels
-      const t1Price = alignToTickSize(avgBuyPrice + atr * 1.5, asset);
-      const t2Price = currentTarget;
-      const t3Chandelier = calculateChandelierExit(market.history, 22, 2.0);
-
-      // Trailing Stop Ratchet: If in profit by >= 1.5 ATR, ratchet stop-loss above entry to lock in gain
-      if (profitDistance >= atr * 1.5) {
-        const ratchetedStop = alignToTickSize(Math.max(currentStop, avgBuyPrice + atr * 0.2), asset);
-        if (ratchetedStop > currentStop) {
-          currentStop = ratchetedStop;
-          lifecycleState = 'TRAILING_PROFIT';
-          newActionLogs.push({
-            id: `log_ratchet_${asset}_${now}`,
-            timestamp: now,
-            asset,
-            action: 'TRAILING_RATCHET',
-            strategy,
-            detail: `Ratcheted trailing stop-loss to ₹${currentStop.toFixed(2)} (guaranteeing zero capital loss).`,
-            price,
-            status: 'EXECUTED',
-          });
-        }
-      }
-
-      // Tranche 1 Profit Harvest: Take partial profit (33%) at +1.5 ATR
-      if (trancheStage === 0 && price >= t1Price && currentHolding >= 2 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
-        const exitQty = Math.max(1, Math.floor(currentHolding * 0.33));
-        ordersToDispatch.push({
-          asset,
-          side: 'sell',
-          amount: exitQty,
-          price: alignToTickSize(price, asset),
-          type: 'limit',
-          strategyName: `Auto-Pilot: ${strategy} Tranche 1 Harvest`,
-          reason: `Tranche 1 (+1.5 ATR) reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Locking partial profit.`,
-          trancheStage: 1,
-        });
-
-        rateLimits.requestsThisMinute++;
-        rateLimits.lastDispatchedAt = now;
-        trancheStage = 1;
-        currentStop = alignToTickSize(Math.max(currentStop, avgBuyPrice + atr * 0.2), asset);
-        lifecycleState = 'TRAILING_PROFIT';
-
-        newActionLogs.push({
-          id: `log_t1_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'PROFIT_HARVEST_T1',
-          strategy,
-          detail: `Harvested Tranche 1 (33% = ${exitQty} shares) at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Stop moved to ₹${currentStop.toFixed(2)}.`,
-          price,
-          status: 'EXECUTED',
-        });
-      }
-
-      // Tranche 2 Profit Harvest: Take core target (50% of remaining) at T2
-      else if (trancheStage <= 1 && price >= t2Price && evaluateRateLimitAllowance(rateLimits, now).allowed) {
-        const exitQty = Math.max(1, Math.floor(currentHolding * 0.5));
-        ordersToDispatch.push({
-          asset,
-          side: 'sell',
-          amount: exitQty,
-          price: alignToTickSize(price, asset),
-          type: 'limit',
-          strategyName: `Auto-Pilot: ${strategy} Core Target Harvest`,
-          reason: `Core Target T2 reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Harvesting core gain.`,
-          trancheStage: 2,
-        });
-
-        rateLimits.requestsThisMinute++;
-        rateLimits.lastDispatchedAt = now;
-        trancheStage = 2;
-        currentStop = t1Price; // Trail stop to T1
-        lifecycleState = currentHolding > exitQty ? 'TRAILING_PROFIT' : 'COOLDOWN';
-
-        newActionLogs.push({
-          id: `log_tp_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'TAKE_PROFIT',
-          strategy,
-          detail: `Harvested Core Target T2 (${exitQty} shares) at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Trailing remainder.`,
-          price,
-          status: 'EXECUTED',
-        });
-      }
-
-      // Tranche 3 Chandelier Runner Exit: Trail remainder until breakdown below 22-period high - 2 ATR
-      else if (trancheStage >= 2 && price <= t3Chandelier && currentHolding > 0 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
-        ordersToDispatch.push({
-          asset,
-          side: 'sell',
-          amount: currentHolding,
-          price: alignToTickSize(price, asset),
-          type: 'market',
-          strategyName: `Auto-Pilot: ${strategy} Chandelier Runner Exit`,
-          reason: `Chandelier Trailing Exit triggered at ₹${price.toFixed(2)}. Final runner closed.`,
-          trancheStage: 3,
-        });
-
-        rateLimits.requestsThisMinute++;
-        rateLimits.lastDispatchedAt = now;
-        lifecycleState = 'COOLDOWN';
-        trancheStage = 0;
-
-        newActionLogs.push({
-          id: `log_chandelier_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'CHANDELIER_EXIT',
-          strategy,
-          detail: `Closed final runner (${currentHolding} shares) on Chandelier Exit at ₹${price.toFixed(2)}.`,
-          price,
-          status: 'EXECUTED',
-        });
-      }
-
-      // Capital Defense Stop Loss Triggered
-      else if (price <= currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
-        ordersToDispatch.push({
-          asset,
-          side: 'sell',
-          amount: currentHolding,
-          price: alignToTickSize(price, asset),
-          type: 'market',
-          strategyName: `Auto-Pilot: ${strategy} Capital Defense Stop`,
-          reason: `Stop hit at ₹${price.toFixed(2)}. Protecting capital.`,
-        });
-
-        rateLimits.requestsThisMinute++;
-        rateLimits.lastDispatchedAt = now;
-        lifecycleState = 'COOLDOWN';
-        trancheStage = 0;
-
-        newActionLogs.push({
-          id: `log_sl_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'STOP_LOSS',
-          strategy,
-          detail: `Executed stop-loss exit on ${currentHolding} shares at ₹${price.toFixed(2)}.`,
-          price,
-          status: 'EXECUTED',
-        });
-      }
-
-      updatedFleet[asset] = {
-        ...fleetStatus,
-        assignedStrategy: strategy,
-        regimeLabel,
-        hurst,
-        currentPrice: price,
-        state: lifecycleState,
-        entryPrice: avgBuyPrice,
-        stopLossPrice: currentStop,
-        takeProfitPrice: currentTarget,
-        takeProfit2Price: t2Price,
-        takeProfit3Price: t3Chandelier,
-        trailingStopPrice: currentStop,
-        unrealizedPnl: +unrealizedPnl.toFixed(2),
-        unrealizedPnlPct,
-        unitsHeld: currentHolding,
-        sector,
-        squeezeStatus,
-        trancheStage,
-        vwap,
-        volumeSurgeRatio,
-      };
-
-      continue;
-    }
-
-    // B. NEW OPPORTUNITY ENTRY EVALUATION (Zero Current Position)
-    // Anti-churn and deduplication checks
+    // Cooldown & pending order check
     if (pendingBuyAssets.has(asset) || fleetStatus.state === 'COOLDOWN') {
       const cooldownElapsed = now - (fleetStatus.lastActionAt || 0);
       if (fleetStatus.state === 'COOLDOWN' && cooldownElapsed > 180000) {
@@ -626,7 +681,25 @@ export function tickAutonomousPilot(
       }
     }
 
-    // Evaluate Entry Signal based on the asset's assigned strategy & microstructure
+    // Session Timing Check for New Entries in live Upstox mode
+    if (isLiveUpstox && !timingQuality.allowsNewEntries) {
+      updatedFleet[asset] = {
+        ...fleetStatus,
+        assignedStrategy: strategy,
+        regimeLabel,
+        hurst,
+        currentPrice: price,
+        state: 'MONITORING',
+        unitsHeld: 0,
+        sector,
+        squeezeStatus,
+        vwap,
+        volumeSurgeRatio,
+      };
+      continue;
+    }
+
+    // Evaluate Entry Signal based on strategy & microstructure
     let hasEntrySignal = false;
     let entryRationale = '';
 
@@ -654,30 +727,92 @@ export function tickAutonomousPilot(
       }
     } else {
       const ind = indicators(market.history, market.candles);
-      if (ind.score >= 65 && price > (ind.s30 ?? 0)) {
+      const minScore = 65 + (isLiveUpstox ? Math.min(15, timingQuality.convictionThresholdDelta) : 0);
+      if (ind.score >= minScore && price > (ind.s30 ?? 0)) {
         hasEntrySignal = true;
         entryRationale = `Titan Alpha Multi-Factor Score (+${ind.score}/100) with favorable variance.`;
       }
     }
 
-    if (!hasEntrySignal) {
-      updatedFleet[asset] = {
-        ...fleetStatus,
-        assignedStrategy: strategy,
+    // Session-Aware Midday Noise Filtration
+    if (hasEntrySignal && isLiveUpstox && timingQuality.phase === 'MIDDAY_CONSOLIDATION') {
+      if (volumeSurgeRatio < timingQuality.minVolumeSurgeRequired && squeezeStatus !== 'SQUEEZE_OFF' && hurst < 0.60) {
+        hasEntrySignal = false; // Filter low-volume midday whipsaws
+      }
+    }
+
+    if (hasEntrySignal) {
+      candidatePool.push({
+        asset,
+        market,
+        strategy,
         regimeLabel,
         hurst,
-        currentPrice: price,
-        state: 'MONITORING',
-        unitsHeld: 0,
+        ouZScore,
+        atr,
         sector,
         squeezeStatus,
         vwap,
         volumeSurgeRatio,
-      };
-      continue;
+        hasInstitutionalVolume,
+        entryRationale,
+        price,
+      });
     }
 
-    // 4. Position Sizing & Capital Allocation Bounds (Half-Kelly & Sector Defense)
+    // Update fleet telemetry
+    updatedFleet[asset] = {
+      ...fleetStatus,
+      assignedStrategy: strategy,
+      regimeLabel,
+      hurst,
+      currentPrice: price,
+      state: 'MONITORING',
+      unitsHeld: 0,
+      sector,
+      squeezeStatus,
+      vwap,
+      volumeSurgeRatio,
+    };
+  }
+
+  // 3C. STEP 3: CROSS-SECTIONAL ALPHA RANKING & CAPITAL ALLOCATION
+  const rankedAlphaList = calculateCrossSectionalAlphaRanking(
+    candidatePool.map((c) => ({
+      asset: c.asset,
+      market: c.market,
+      hurst: c.hurst,
+      squeezeStatus: c.squeezeStatus,
+      volumeSurgeRatio: c.volumeSurgeRatio,
+      vwap: c.vwap,
+    }))
+  );
+
+  const alphaByAsset = new Map(rankedAlphaList.map((r) => [r.asset, r]));
+
+  // Sort candidatePool by alpha rank (Rank #1 first!)
+  candidatePool.sort((a, b) => {
+    const rankA = alphaByAsset.get(a.asset)?.rank ?? 999;
+    const rankB = alphaByAsset.get(b.asset)?.rank ?? 999;
+    return rankA - rankB;
+  });
+
+  // Iterate in order of highest conviction alpha rank
+  for (const cand of candidatePool) {
+    const ranked = alphaByAsset.get(cand.asset);
+    const asset = cand.asset;
+    const price = cand.price;
+    const atr = cand.atr;
+    const sector = cand.sector;
+    const strategy = cand.strategy;
+
+    // Update telemetry
+    if (updatedFleet[asset]) {
+      updatedFleet[asset].alphaRank = ranked?.rank;
+      updatedFleet[asset].alphaConvictionIndex = ranked?.alphaConvictionIndex;
+    }
+
+    // Check rate limit
     const rateCheck = evaluateRateLimitAllowance(rateLimits, now);
     if (!rateCheck.allowed) {
       rateLimits.isThrottled = true;
@@ -691,37 +826,31 @@ export function tickAutonomousPilot(
         price,
         status: 'THROTTLED',
       });
-      updatedFleet[asset] = {
-        ...fleetStatus,
-        assignedStrategy: strategy,
-        regimeLabel,
-        hurst,
-        currentPrice: price,
-        state: 'MONITORING',
-        sector,
-        squeezeStatus,
-      };
       continue;
     }
 
-    // Stop and Target Brackets
-    const stopLossDist = Math.max(price * 0.008, atr * profile.stopLossAtrMultiplier);
-    const stopLossPrice = alignToTickSize(price - stopLossDist, asset);
-    const takeProfitPrice = alignToTickSize(price + stopLossDist * profile.minRiskReward, asset);
-    const takeProfit2Price = alignToTickSize(price + atr * profile.takeProfitAtrMultiplier, asset);
-    const takeProfit3Price = calculateChandelierExit(market.history, 22, 2.0);
+    // Smart Limit Pullback Pricing (Avoids chasing ask/top of candle)
+    const limitPrice = calculateSmartLimitPrice(price, cand.vwap, atr, isIndianAsset(asset) ? 0.05 : 0.01);
 
-    const riskPerShare = price - stopLossPrice;
+    // Stop and Target Brackets
+    const stopLossDist = Math.max(limitPrice * 0.008, atr * profile.stopLossAtrMultiplier);
+    const stopLossPrice = alignToTickSize(limitPrice - stopLossDist, asset);
+    const takeProfitPrice = alignToTickSize(limitPrice + stopLossDist * profile.minRiskReward, asset);
+    const takeProfit2Price = alignToTickSize(limitPrice + atr * profile.takeProfitAtrMultiplier, asset);
+    const takeProfit3Price = calculateChandelierExit(cand.market.history, 22, 2.0);
+
+    const riskPerShare = limitPrice - stopLossPrice;
     if (riskPerShare <= 0) continue;
 
-    // Half-Kelly Sizing Factor Calculation
-    let estWinRate = 0.58;
-    if (profileKey === 'conservative') estWinRate = 0.65;
-    else if (profileKey === 'momentum') estWinRate = 0.54;
-    if (hasInstitutionalVolume) estWinRate += 0.04;
-    if (squeezeStatus === 'SQUEEZE_OFF') estWinRate += 0.04;
+    // Dynamic Multi-Factor Kelly Win Rate Calibration
+    let estWinRate = profileKey === 'conservative' ? 0.65 : profileKey === 'momentum' ? 0.54 : 0.58;
+    if (cand.hasInstitutionalVolume) estWinRate += 0.04;
+    if (cand.squeezeStatus === 'SQUEEZE_OFF') estWinRate += 0.04;
+    if (cand.hurst > 0.60) estWinRate += 0.03;
+    if ((ranked?.relativeStrengthPct || 0) > 0) estWinRate += 0.03;
+    if ((ranked?.alphaConvictionIndex || 0) >= 75) estWinRate += 0.03;
 
-    const rrRatio = (takeProfitPrice - price) / riskPerShare;
+    const rrRatio = (takeProfitPrice - limitPrice) / riskPerShare;
     const kellyRes = calculateHalfKellyFraction(estWinRate, rrRatio, 1.25, 0.4);
 
     // Sizing via Fractional Risk Budget multiplied by Half-Kelly multiplier
@@ -731,14 +860,14 @@ export function tickAutonomousPilot(
 
     // Cap single asset concentration at 25% of portfolio equity
     const maxAssetExposure = pv * 0.25;
-    let proposedNotional = unitsToBuy * price;
+    let proposedNotional = unitsToBuy * limitPrice;
     if (proposedNotional > maxAssetExposure) {
-      unitsToBuy = Math.max(1, Math.floor(maxAssetExposure / price));
-      proposedNotional = unitsToBuy * price;
+      unitsToBuy = Math.max(1, Math.floor(maxAssetExposure / limitPrice));
+      proposedNotional = unitsToBuy * limitPrice;
     }
 
-    // Check cash liquidity constraint: must preserve minimum cash floor
-    const requiredOrderCash = unitsToBuy * price;
+    // Check cash liquidity constraint: must preserve mandatory cash reserve floor
+    const requiredOrderCash = unitsToBuy * limitPrice;
     if (requiredOrderCash > allocatableCash || allocatableCash <= 0) {
       newActionLogs.push({
         id: `log_cash_floor_${asset}_${now}`,
@@ -747,7 +876,7 @@ export function tickAutonomousPilot(
         action: 'SKIPPED',
         strategy,
         detail: `Preserving mandatory ${minCashFloorPct}% liquid cash buffer. Required: ₹${requiredOrderCash.toFixed(2)}, Allocatable: ₹${allocatableCash.toFixed(2)}.`,
-        price,
+        price: limitPrice,
         status: 'BLOCKED',
       });
       continue;
@@ -771,7 +900,7 @@ export function tickAutonomousPilot(
         action: 'SECTOR_CAP_DEFENSE',
         strategy,
         detail: sectorCheck.reason || `Sector concentration cap (35%) reached for ${sector}.`,
-        price,
+        price: limitPrice,
         status: 'BLOCKED',
       });
       continue;
@@ -782,14 +911,14 @@ export function tickAutonomousPilot(
       asset,
       side: 'buy',
       amount: unitsToBuy,
-      price: alignToTickSize(price, asset),
+      price: limitPrice,
       stopLoss: stopLossPrice,
       takeProfit: takeProfitPrice,
       takeProfit2: takeProfit2Price,
       takeProfit3: takeProfit3Price,
       type: 'limit',
-      strategyName: `Auto-Pilot: ${strategy}`,
-      reason: `${entryRationale} [Half-Kelly: ${kellyRes.recommendedSizeMultiplier}x, Sector: ${sector}]`,
+      strategyName: `Auto-Pilot: ${strategy} [Rank #${ranked?.rank || 1} ACI:${ranked?.alphaConvictionIndex || 0}]`,
+      reason: `${cand.entryRationale} [Rank #${ranked?.rank || 1}, ACI:${ranked?.alphaConvictionIndex || 0}, Half-Kelly: ${kellyRes.recommendedSizeMultiplier}x, Sector: ${sector}]`,
     });
 
     // Update internal pacing and cash
@@ -799,26 +928,28 @@ export function tickAutonomousPilot(
     pendingBuyAssets.add(asset);
 
     updatedFleet[asset] = {
-      ...fleetStatus,
+      ...updatedFleet[asset],
       assignedStrategy: strategy,
-      regimeLabel,
-      hurst,
+      regimeLabel: cand.regimeLabel,
+      hurst: cand.hurst,
       currentPrice: price,
       state: 'ORDER_PENDING',
-      entryPrice: price,
+      entryPrice: limitPrice,
       stopLossPrice,
       takeProfitPrice,
       takeProfit2Price,
       takeProfit3Price,
       unitsHeld: 0,
       lastActionAt: now,
-      lastActionDetail: entryRationale,
+      lastActionDetail: cand.entryRationale,
       sector,
-      squeezeStatus,
+      squeezeStatus: cand.squeezeStatus,
       trancheStage: 0,
       kellyFraction: kellyRes.recommendedSizeMultiplier,
-      vwap,
-      volumeSurgeRatio,
+      vwap: cand.vwap,
+      volumeSurgeRatio: cand.volumeSurgeRatio,
+      alphaRank: ranked?.rank,
+      alphaConvictionIndex: ranked?.alphaConvictionIndex,
     };
 
     newActionLogs.push({
@@ -827,8 +958,8 @@ export function tickAutonomousPilot(
       asset,
       action: 'BUY_ENTRY',
       strategy,
-      detail: `${entryRationale} Ordered ${unitsToBuy} shares at ₹${price.toFixed(2)} (SL: ₹${stopLossPrice.toFixed(2)}, T1: ₹${takeProfitPrice.toFixed(2)}, T2: ₹${takeProfit2Price.toFixed(2)}).`,
-      price,
+      detail: `[Rank #${ranked?.rank || 1} ACI:${ranked?.alphaConvictionIndex || 0}] ${cand.entryRationale} Limit buy ordered for ${unitsToBuy} shares at ₹${limitPrice.toFixed(2)} (SL: ₹${stopLossPrice.toFixed(2)}, T1: ₹${takeProfitPrice.toFixed(2)}, T2: ₹${takeProfit2Price.toFixed(2)}).`,
+      price: limitPrice,
       status: 'EXECUTED',
     });
   }

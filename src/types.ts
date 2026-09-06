@@ -626,6 +626,8 @@ export interface AssetFleetStatus {
   kellyFraction?: number;
   vwap?: number;
   volumeSurgeRatio?: number;
+  alphaRank?: number;
+  alphaConvictionIndex?: number;
 }
 
 export interface PilotRateLimitStatus {

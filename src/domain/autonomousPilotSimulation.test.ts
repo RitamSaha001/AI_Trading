@@ -9,6 +9,12 @@ import {
   alignToTickSize,
   PILOT_PROFILES,
 } from './autonomousPilot';
+import {
+  evaluateSessionTimingQuality,
+  calculateDynamicProfitRatchet,
+  calculateCrossSectionalAlphaRanking,
+  calculateSmartLimitPrice,
+} from './quantEngine';
 import { AppState, Asset, Market } from '../types';
 import { portfolioValue } from './portfolio';
 
@@ -359,4 +365,149 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       expect(res.newActionLogs.some((l) => l.action === 'THROTTLED' && l.strategy.includes('Circuit Breaker'))).toBe(true);
     });
   });
+
+  describe('7. Cross-Sectional Alpha Ranking Prioritization (Best-of-Breed Allocation)', () => {
+    it('prioritizes higher Alpha Conviction Index (ACI) asset over lower ACI asset when capital is limited', () => {
+      const state = create10kState('balanced');
+      // Set cash so only 1 order can be funded (allocatable cash = 6000 - 4500 = 1500)
+      state.cash = 6000.00;
+      if (state.upstoxAccount?.funds) {
+        state.upstoxAccount.funds.availableCash = 6000.00;
+        state.upstoxAccount.funds.totalEquity = 10000.00;
+      }
+
+      // Candidate 1: TATAMOTORS at ₹950 (oversold value dip with institutional volume surge)
+      const tataHistory = Array.from({ length: 40 }, (_, i) => 1050 - i * 2.5);
+      const tataMarket = createMockMarket('TATAMOTORS', 950, tataHistory);
+      tataMarket.candles[tataMarket.candles.length - 1].volume = 150000; // Strong volume surge
+
+      // Candidate 2: SBIN at ₹820 (flat volume, lower conviction)
+      const sbinHistory = Array.from({ length: 40 }, (_, i) => 900 - i * 2.0);
+      const sbinMarket = createMockMarket('SBIN', 820, sbinHistory);
+
+      const markets: any = {
+        TATAMOTORS: tataMarket,
+        SBIN: sbinMarket,
+      };
+
+      // 10:30 IST morning window
+      const morningWindowTime = new Date('2026-09-07T05:00:00Z').getTime();
+      const res = tickAutonomousPilot(state, markets, morningWindowTime);
+
+      // Verify that TATAMOTORS was ranked #1 and dispatched
+      expect(res.ordersToDispatch.length).toBeGreaterThanOrEqual(1);
+      expect(res.ordersToDispatch[0].asset).toBe('TATAMOTORS');
+      expect(res.updatedFleet.TATAMOTORS.alphaRank).toBe(1);
+      expect(res.updatedFleet.TATAMOTORS.alphaConvictionIndex).toBeGreaterThan(40);
+    });
+  });
+
+  describe('8. Stepped Breakeven Defense (Zero-Risk Trailing Guarantee)', () => {
+    it('ratchets stop-loss to entry price + tick (Breakeven) once gain reaches +0.8 to +1.0 ATR on 1-share holdings', () => {
+      const entryPrice = 950.00;
+      const initialStop = 910.00;
+      const atr = 20.00;
+
+      // Price gains +1.0 ATR (970.00)
+      const ratchet = calculateDynamicProfitRatchet(entryPrice, 970.00, atr, initialStop, 0.05);
+
+      expect(ratchet.isRatcheted).toBe(true);
+      expect(ratchet.stageName).toBe('STEPPED_BREAKEVEN');
+      expect(ratchet.ratchetedStopPrice).toBe(950.05); // Entry + 1 tick (guarantees zero capital loss)
+    });
+
+    it('locks in banked profit (+0.5 ATR) once gain reaches +1.5 ATR', () => {
+      const entryPrice = 950.00;
+      const initialStop = 910.00;
+      const atr = 20.00;
+
+      // Price gains +1.6 ATR (982.00)
+      const ratchet = calculateDynamicProfitRatchet(entryPrice, 982.00, atr, initialStop, 0.05);
+
+      expect(ratchet.isRatcheted).toBe(true);
+      expect(ratchet.stageName).toBe('LOCKED_PROFIT_T1');
+      expect(ratchet.ratchetedStopPrice).toBe(960.00); // 950 + 20 * 0.5 = 960 (profitable stop)
+    });
+
+    it('locks in core profit (+1.2 ATR) once gain reaches +2.2 ATR', () => {
+      const entryPrice = 950.00;
+      const initialStop = 910.00;
+      const atr = 20.00;
+
+      // Price gains +2.3 ATR (996.00)
+      const ratchet = calculateDynamicProfitRatchet(entryPrice, 996.00, atr, initialStop, 0.05);
+
+      expect(ratchet.isRatcheted).toBe(true);
+      expect(ratchet.stageName).toBe('CORE_TARGET_T2');
+      expect(ratchet.ratchetedStopPrice).toBe(974.00); // 950 + 20 * 1.2 = 974
+    });
+  });
+
+  describe('9. NSE Session Timing & Intraday Whipsaw Filtration', () => {
+    it('classifies opening 10-minute noise (09:20 IST) with +8 conviction threshold penalty', () => {
+      // 2026-09-07 09:20 IST -> UTC 03:50
+      const openNoiseTime = new Date('2026-09-07T03:50:00Z').getTime();
+      const quality = evaluateSessionTimingQuality(openNoiseTime);
+
+      expect(quality.phase).toBe('OPENING_VOLATILITY');
+      expect(quality.allowsNewEntries).toBe(true);
+      expect(quality.convictionThresholdDelta).toBe(8);
+      expect(quality.minVolumeSurgeRequired).toBe(1.5);
+    });
+
+    it('classifies prime morning expansion (10:30 IST) with optimal conditions', () => {
+      // 2026-09-07 10:30 IST -> UTC 05:00
+      const morningTime = new Date('2026-09-07T05:00:00Z').getTime();
+      const quality = evaluateSessionTimingQuality(morningTime);
+
+      expect(quality.phase).toBe('MORNING_EXPANSION');
+      expect(quality.allowsNewEntries).toBe(true);
+      expect(quality.convictionThresholdDelta).toBe(0);
+    });
+
+    it('classifies midday lull (12:30 IST) with higher volume surge hurdle (1.35x)', () => {
+      // 2026-09-07 12:30 IST -> UTC 07:00
+      const middayTime = new Date('2026-09-07T07:00:00Z').getTime();
+      const quality = evaluateSessionTimingQuality(middayTime);
+
+      expect(quality.phase).toBe('MIDDAY_CONSOLIDATION');
+      expect(quality.allowsNewEntries).toBe(true);
+      expect(quality.convictionThresholdDelta).toBe(6);
+      expect(quality.minVolumeSurgeRequired).toBe(1.35);
+    });
+
+    it('blocks new entries after 15:00 IST intraday cutoff', () => {
+      // 2026-09-07 15:10 IST -> UTC 09:40
+      const closingTime = new Date('2026-09-07T09:40:00Z').getTime();
+      const quality = evaluateSessionTimingQuality(closingTime);
+
+      expect(quality.phase).toBe('CLOSING_SQUAREOFF');
+      expect(quality.allowsNewEntries).toBe(false);
+    });
+
+    it('blocks entries on weekends', () => {
+      // 2026-09-06 is Sunday
+      const weekendTime = new Date('2026-09-06T06:00:00Z').getTime();
+      const quality = evaluateSessionTimingQuality(weekendTime);
+
+      expect(quality.phase).toBe('POST_CLOSE');
+      expect(quality.allowsNewEntries).toBe(false);
+    });
+  });
+
+  describe('10. Smart Microstructure Limit Pullback Pricing', () => {
+    it('anchors limit orders to pullback support near VWAP rather than chasing candle highs', () => {
+      const currentPrice = 950.00;
+      const vwap = 942.00;
+      const atr = 20.00;
+
+      const limitPrice = calculateSmartLimitPrice(currentPrice, vwap, atr, 0.05);
+
+      // Should be slightly discounted below LTP, aligned to tick size
+      expect(limitPrice).toBeLessThan(currentPrice);
+      expect(limitPrice).toBeGreaterThanOrEqual(vwap);
+      expect(Math.round(limitPrice * 100) % 5).toBe(0);
+    });
+  });
 });
+

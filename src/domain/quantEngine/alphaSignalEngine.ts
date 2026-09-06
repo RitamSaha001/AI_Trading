@@ -364,3 +364,305 @@ export function calculateVolumeMetrics(
     hasInstitutionalVolume,
   };
 }
+
+export interface DynamicProfitRatchetResult {
+  ratchetedStopPrice: number;
+  stageName: 'INITIAL_RISK' | 'STEPPED_BREAKEVEN' | 'LOCKED_PROFIT_T1' | 'CORE_TARGET_T2' | 'CHANDELIER_RUNNER';
+  isRatcheted: boolean;
+  gainAtrMultiples: number;
+}
+
+/**
+ * Computes stepped trailing stop-loss levels to guarantee winning trades never round-trip to a loss:
+ * - At >= +0.8 ATR: Move stop to Breakeven + Tick (100% risk-free trade).
+ * - At >= +1.5 ATR: Lock in +0.5 ATR profit.
+ * - At >= +2.2 ATR: Lock in +1.2 ATR core profit.
+ */
+export function calculateDynamicProfitRatchet(
+  entryPrice: number,
+  currentPrice: number,
+  atr: number,
+  currentStopPrice: number,
+  tickSize: number = 0.05
+): DynamicProfitRatchetResult {
+  const profitDistance = currentPrice - entryPrice;
+  const safeAtr = Math.max(0.01, atr);
+  const gainAtrMultiples = +(profitDistance / safeAtr).toFixed(2);
+
+  let ratchetedStop = currentStopPrice;
+  let stageName: DynamicProfitRatchetResult['stageName'] = 'INITIAL_RISK';
+
+  // Level 3: Core target reached (+2.2 ATR) -> Ratchet stop to +1.2 ATR
+  if (gainAtrMultiples >= 2.2) {
+    const t2Lock = entryPrice + safeAtr * 1.2;
+    ratchetedStop = Math.max(ratchetedStop, t2Lock);
+    stageName = 'CORE_TARGET_T2';
+  }
+  // Level 2: Target 1 reached (+1.5 ATR) -> Ratchet stop to +0.5 ATR (banked gain)
+  else if (gainAtrMultiples >= 1.5) {
+    const t1Lock = entryPrice + safeAtr * 0.5;
+    ratchetedStop = Math.max(ratchetedStop, t1Lock);
+    stageName = 'LOCKED_PROFIT_T1';
+  }
+  // Level 1: Initial expansion (+0.8 ATR) -> Stepped Breakeven (Entry + 1 tick)
+  else if (gainAtrMultiples >= 0.8) {
+    const breakeven = entryPrice + tickSize;
+    ratchetedStop = Math.max(ratchetedStop, breakeven);
+    stageName = 'STEPPED_BREAKEVEN';
+  }
+
+  // Align ratcheted stop to tick size
+  const alignedStop = +(Math.round(ratchetedStop / tickSize) * tickSize).toFixed(2);
+  const isRatcheted = alignedStop > currentStopPrice;
+
+  return {
+    ratchetedStopPrice: Math.max(currentStopPrice, alignedStop),
+    stageName,
+    isRatcheted,
+    gainAtrMultiples,
+  };
+}
+
+export type NseSessionPhase =
+  | 'PRE_OPEN'
+  | 'OPENING_VOLATILITY'
+  | 'MORNING_EXPANSION'
+  | 'MIDDAY_CONSOLIDATION'
+  | 'AFTERNOON_EXPANSION'
+  | 'CLOSING_SQUAREOFF'
+  | 'POST_CLOSE';
+
+export interface SessionTimingQuality {
+  phase: NseSessionPhase;
+  allowsNewEntries: boolean;
+  convictionThresholdDelta: number; // e.g. +8 during opening noise or midday lull
+  minVolumeSurgeRequired: number;  // e.g. 1.35x during midday lull
+  reason: string;
+}
+
+/**
+ * Classifies Indian Market (NSE) intraday session phases to eliminate low-volume whipsaws.
+ */
+export function evaluateSessionTimingQuality(now: number = Date.now()): SessionTimingQuality {
+  const d = new Date(now);
+  // IST is UTC + 5:30
+  const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+  const ist = new Date(utc + 3600000 * 5.5);
+
+  const day = ist.getDay();
+  if (day === 0 || day === 6) {
+    return {
+      phase: 'POST_CLOSE',
+      allowsNewEntries: false,
+      convictionThresholdDelta: 999,
+      minVolumeSurgeRequired: 2.0,
+      reason: 'Weekend - Indian exchange closed',
+    };
+  }
+
+  const hours = ist.getHours();
+  const minutes = ist.getMinutes();
+  const timeInMinutes = hours * 60 + minutes;
+
+  const preOpen = 9 * 60;          // 09:00
+  const openTime = 9 * 60 + 15;     // 09:15
+  const openNoiseEnd = 9 * 60 + 25; // 09:25 (first 10 min high volatility auction)
+  const morningEnd = 11 * 60 + 30;  // 11:30
+  const middayEnd = 13 * 60 + 15;   // 13:15
+  const afternoonEnd = 15 * 60;     // 15:00 (intraday cut-off)
+  const closeTime = 15 * 60 + 30;   // 15:30
+
+  if (timeInMinutes < preOpen) {
+    return {
+      phase: 'PRE_OPEN',
+      allowsNewEntries: false,
+      convictionThresholdDelta: 999,
+      minVolumeSurgeRequired: 2.0,
+      reason: 'Market pre-open: No orders permitted.',
+    };
+  }
+  if (timeInMinutes < openTime) {
+    return {
+      phase: 'PRE_OPEN',
+      allowsNewEntries: false,
+      convictionThresholdDelta: 999,
+      minVolumeSurgeRequired: 2.0,
+      reason: 'NSE Call Auction / Pre-market price discovery session.',
+    };
+  }
+  if (timeInMinutes < openNoiseEnd) {
+    return {
+      phase: 'OPENING_VOLATILITY',
+      allowsNewEntries: true,
+      convictionThresholdDelta: +8, // Require 8 points higher conviction score to avoid fake opening gaps
+      minVolumeSurgeRequired: 1.5,
+      reason: 'Opening volatility window (09:15-09:25): Strict volume & score filtering active.',
+    };
+  }
+  if (timeInMinutes < morningEnd) {
+    return {
+      phase: 'MORNING_EXPANSION',
+      allowsNewEntries: true,
+      convictionThresholdDelta: 0,
+      minVolumeSurgeRequired: 1.15,
+      reason: 'Prime morning institutional expansion window (09:25-11:30).',
+    };
+  }
+  if (timeInMinutes < middayEnd) {
+    return {
+      phase: 'MIDDAY_CONSOLIDATION',
+      allowsNewEntries: true,
+      convictionThresholdDelta: +6, // Raise threshold slightly to prevent buying flat lunch consolidation
+      minVolumeSurgeRequired: 1.35, // Require genuine volume surge to justify entering at midday
+      reason: 'European pre-open / Midday consolidation (11:30-13:15): High false breakout rate.',
+    };
+  }
+  if (timeInMinutes < afternoonEnd) {
+    return {
+      phase: 'AFTERNOON_EXPANSION',
+      allowsNewEntries: true,
+      convictionThresholdDelta: 0,
+      minVolumeSurgeRequired: 1.20,
+      reason: 'Afternoon continuation & expansion window (13:15-15:00).',
+    };
+  }
+  if (timeInMinutes < closeTime) {
+    return {
+      phase: 'CLOSING_SQUAREOFF',
+      allowsNewEntries: false,
+      convictionThresholdDelta: 999,
+      minVolumeSurgeRequired: 2.0,
+      reason: 'Intraday squaring and closing run (15:00-15:30): No new positions permitted.',
+    };
+  }
+  return {
+    phase: 'POST_CLOSE',
+    allowsNewEntries: false,
+    convictionThresholdDelta: 999,
+    minVolumeSurgeRequired: 2.0,
+    reason: 'Market closed.',
+  };
+}
+
+export interface CandidateAlphaScore {
+  asset: string;
+  alphaConvictionIndex: number; // 0 to 100
+  hurst: number;
+  relativeStrengthPct: number;
+  squeezeStatus: 'SQUEEZE_ON' | 'SQUEEZE_OFF' | 'NO_SQUEEZE';
+  volumeSurgeRatio: number;
+  isAboveVwap: boolean;
+  hasInstitutionalVolume: boolean;
+  sector: string;
+  rank: number;
+  breakdown: string;
+}
+
+/**
+ * Computes Cross-Sectional Alpha Ranking across all fleet candidates.
+ * Prioritizes high-conviction leaders (Hurst trend persistence, Squeeze release, Volume surge, Relative strength).
+ */
+export function calculateCrossSectionalAlphaRanking(
+  candidates: Array<{
+    asset: string;
+    market: Market;
+    hurst: number;
+    squeezeStatus: 'SQUEEZE_ON' | 'SQUEEZE_OFF' | 'NO_SQUEEZE';
+    volumeSurgeRatio: number;
+    vwap: number;
+    compositeScore?: number;
+  }>
+): CandidateAlphaScore[] {
+  if (!candidates || candidates.length === 0) return [];
+
+  // Compute average return across fleet to measure cross-sectional relative strength
+  const assetReturns: Record<string, number> = {};
+  let totalRet = 0;
+  let count = 0;
+  for (const c of candidates) {
+    const history = c.market?.history || [];
+    if (history.length >= 10) {
+      const ret = (history[history.length - 1] - history[history.length - 10]) / history[history.length - 10];
+      assetReturns[c.asset] = ret;
+      totalRet += ret;
+      count++;
+    } else {
+      assetReturns[c.asset] = 0;
+    }
+  }
+  const avgFleetReturn = count > 0 ? totalRet / count : 0;
+
+  const scored = candidates.map((c) => {
+    const price = c.market?.price || 1;
+    const isAboveVwap = price >= (c.vwap || price);
+    const relStrength = (assetReturns[c.asset] || 0) - avgFleetReturn;
+    const relativeStrengthPct = +(relStrength * 100).toFixed(2);
+
+    // 1. Hurst score (0 to 25 points): H=0.5 is 10pts, H>=0.7 is 25pts
+    const hurstPoints = Math.max(0, Math.min(25, (c.hurst - 0.45) * 80));
+
+    // 2. Squeeze Release score (0 to 25 points): SQUEEZE_OFF gives 25pts, SQUEEZE_ON 15pts
+    let squeezePoints = 5;
+    if (c.squeezeStatus === 'SQUEEZE_OFF') squeezePoints = 25;
+    else if (c.squeezeStatus === 'SQUEEZE_ON') squeezePoints = 15;
+
+    // 3. Volume Surge score (0 to 20 points): 1.0x is 5pts, 2.0x is 20pts
+    const volPoints = Math.max(0, Math.min(20, (c.volumeSurgeRatio - 0.8) * 16.6));
+
+    // 4. Relative Strength vs Fleet (0 to 15 points): Leading the fleet adds edge
+    const rsPoints = Math.max(0, Math.min(15, 7.5 + relativeStrengthPct * 3));
+
+    // 5. VWAP & Base Quality Factor (0 to 15 points)
+    const vwapPoints = isAboveVwap ? 15 : 5;
+
+    const rawAci = hurstPoints + squeezePoints + volPoints + rsPoints + vwapPoints;
+    const alphaConvictionIndex = Math.max(0, Math.min(100, Math.round(rawAci)));
+
+    const sector = getAssetSector(c.asset);
+    const hasInstitutionalVolume = c.volumeSurgeRatio >= 1.25 && isAboveVwap;
+
+    return {
+      asset: c.asset,
+      alphaConvictionIndex,
+      hurst: c.hurst,
+      relativeStrengthPct,
+      squeezeStatus: c.squeezeStatus,
+      volumeSurgeRatio: c.volumeSurgeRatio,
+      isAboveVwap,
+      hasInstitutionalVolume,
+      sector,
+      rank: 0,
+      breakdown: `ACI ${alphaConvictionIndex}/100 (Hurst:${hurstPoints.toFixed(0)}, Squeeze:${squeezePoints}, Vol:${volPoints.toFixed(0)}, RS:${rsPoints.toFixed(0)}, VWAP:${vwapPoints})`,
+    };
+  });
+
+  // Rank descending by alpha conviction index
+  scored.sort((a, b) => b.alphaConvictionIndex - a.alphaConvictionIndex);
+
+  // Assign ranks
+  scored.forEach((item, idx) => {
+    item.rank = idx + 1;
+  });
+
+  return scored;
+}
+
+/**
+ * Calculates optimal limit entry price anchoring to microstructure support (VWAP/EMA pullback)
+ * to avoid chasing market ask and eliminate slippage.
+ */
+export function calculateSmartLimitPrice(
+  currentPrice: number,
+  vwap: number,
+  atr: number,
+  tickSize: number = 0.05
+): number {
+  if (currentPrice <= 0) return 0;
+  // If price is extended well above VWAP, place limit at modest pullback discount (0.10% - 0.20% below LTP)
+  // but no lower than VWAP. If price is near VWAP, place at current tick.
+  const pullbackBuffer = Math.min(atr * 0.15, currentPrice * 0.002);
+  const targetPrice = Math.max(vwap, currentPrice - pullbackBuffer);
+  // Align to tick size
+  return +(Math.round(targetPrice / tickSize) * tickSize).toFixed(2);
+}
+
