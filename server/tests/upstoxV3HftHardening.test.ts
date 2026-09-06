@@ -231,7 +231,7 @@ describe('Upstox V3 HFT & Execution Hardening Suite', () => {
     const origExecute = db.execute.bind(db);
     let firstUpdateDone = false;
     db.execute = async (sql: string, params: any[]) => {
-      if (sql.includes('UPDATE exchange_orders') && sql.includes("'OPEN'")) {
+      if (sql.includes('UPDATE exchange_orders') && (sql.includes("'OPEN'") || (Array.isArray(params) && params.includes('OPEN')))) {
         firstUpdateDone = true;
         throw new Error('Simulated database connection drop after broker acceptance');
       }

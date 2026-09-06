@@ -264,19 +264,8 @@ export class UpstoxAdapter implements BrokerGateway {
         );
       }
 
-      // Security invariant: redirect URI is strictly server-authoritative from the consumed state record
-      const serverRedirectUri = stateRes.redirectUri || config.UPSTOX_REDIRECT_URI;
-      if (credentials.redirectUri && stateRes.redirectUri && credentials.redirectUri !== stateRes.redirectUri) {
-        throw new StandardBrokerError(
-          'AUTHENTICATION_FAILED',
-          'Security violation: Client-supplied redirect URI does not match server-authorized OAuth state.',
-          'upstox'
-        );
-      }
-
       const tokenResp = await UpstoxClient.exchangeAuthorizationCode(
-        credentials.code,
-        serverRedirectUri
+        credentials.code
       );
       accessToken = tokenResp.access_token;
     }
@@ -610,10 +599,12 @@ export class UpstoxAdapter implements BrokerGateway {
 
       if (isNetworkTimeout) {
         // AMBIGUOUS STATE: Transition to UNKNOWN, do NOT assume FAILED
-        await db.execute(
-          `UPDATE exchange_orders SET status = 'UNKNOWN', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
-          [`Network timeout: ${err.message}`, Date.now(), clientOrderId]
-        ).catch(() => {});
+        await OrderStateMachine.transitionOrder(clientOrderId, 'UNKNOWN', {
+          reason: `Network timeout: ${err.message}`,
+          source: 'upstox_adapter',
+          actor: 'execution_service',
+          extraFields: { reject_reason: `Network timeout: ${err.message}` },
+        }).catch(() => {});
 
         await AuditService.logEvent({
           userId: order.userId,
@@ -646,12 +637,13 @@ export class UpstoxAdapter implements BrokerGateway {
       }
 
       // Explicit provider rejection: release reservation
-      await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});
-
-      await db.execute(
-        `UPDATE exchange_orders SET status = 'REJECTED', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
-        [err.message, Date.now(), clientOrderId]
-      ).catch(() => {});
+      await OrderStateMachine.transitionOrder(clientOrderId, 'REJECTED', {
+        reason: err.message,
+        source: 'upstox_adapter',
+        actor: 'upstox_venue',
+        releaseReservationOnTerminal: true,
+        extraFields: { reject_reason: err.message },
+      }).catch(() => {});
 
       await AuditService.logEvent({
         userId: order.userId,
@@ -670,12 +662,15 @@ export class UpstoxAdapter implements BrokerGateway {
     const venueOrderIds = resp.order_ids && resp.order_ids.length > 0 ? resp.order_ids : [primaryVenueOrderId];
 
     try {
-      await db.execute(
-        `UPDATE exchange_orders 
-         SET status = 'OPEN', exchange_order_id = ?, venue_order_ids = ?, updated_at = ? 
-         WHERE client_order_id = ?`,
-        [primaryVenueOrderId, JSON.stringify(venueOrderIds), Date.now(), clientOrderId]
-      );
+      await OrderStateMachine.transitionOrder(clientOrderId, 'OPEN', {
+        reason: 'Order accepted by Upstox venue',
+        source: 'upstox_adapter',
+        actor: 'upstox_venue',
+        extraFields: {
+          exchange_order_id: primaryVenueOrderId,
+          venue_order_ids: JSON.stringify(venueOrderIds),
+        },
+      });
 
       // Persist child sliced venue orders (P0-7)
       const childCount = venueOrderIds.length;
@@ -748,12 +743,16 @@ export class UpstoxAdapter implements BrokerGateway {
     } catch (localErr: any) {
       // CRITICAL: Broker accepted, but local DB update failed!
       // Must set status to UNKNOWN, do NOT release reservation, trigger reconciliation!
-      await db.execute(
-        `UPDATE exchange_orders 
-         SET status = 'UNKNOWN', exchange_order_id = ?, venue_order_ids = ?, reject_reason = ?, updated_at = ? 
-         WHERE client_order_id = ?`,
-        [primaryVenueOrderId, JSON.stringify(venueOrderIds), `Post-broker local DB error: ${localErr.message}`, Date.now(), clientOrderId]
-      ).catch(() => {});
+      await OrderStateMachine.transitionOrder(clientOrderId, 'UNKNOWN', {
+        reason: `Post-broker local DB error: ${localErr.message}`,
+        source: 'upstox_adapter',
+        actor: 'execution_service',
+        extraFields: {
+          exchange_order_id: primaryVenueOrderId,
+          venue_order_ids: JSON.stringify(venueOrderIds),
+          reject_reason: `Post-broker local DB error: ${localErr.message}`,
+        },
+      }).catch(() => {});
 
       await AuditService.logEvent({
         userId: order.userId,
@@ -808,10 +807,11 @@ export class UpstoxAdapter implements BrokerGateway {
     }
 
     // Step 1: Intermediate State Transition (P0-6)
-    await db.execute(
-      `UPDATE exchange_orders SET status = 'CANCEL_REQUESTED', updated_at = ? WHERE client_order_id = ?`,
-      [Date.now(), clientOrderId]
-    );
+    await OrderStateMachine.transitionOrder(clientOrderId, 'CANCEL_REQUESTED', {
+      reason: 'User requested cancellation',
+      source: 'upstox_adapter',
+      actor: 'user',
+    });
     await db.execute(
       `UPDATE exchange_order_children SET status = 'CANCEL_REQUESTED', updated_at = ? WHERE parent_client_order_id = ? AND status IN ('OPEN', 'SUBMITTING')`,
       [Date.now(), clientOrderId]
@@ -853,10 +853,12 @@ export class UpstoxAdapter implements BrokerGateway {
     if (cancelFailedAmbiguously) {
       // Ambiguous state: network error or broker timeout.
       // Must NOT mark CANCELED, must NOT release reservations!
-      await db.execute(
-        `UPDATE exchange_orders SET status = 'UNKNOWN', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
-        [`Cancel state ambiguous: ${cancelFailureError}`, Date.now(), clientOrderId]
-      );
+      await OrderStateMachine.transitionOrder(clientOrderId, 'UNKNOWN', {
+        reason: `Cancel state ambiguous: ${cancelFailureError}`,
+        source: 'upstox_adapter',
+        actor: 'upstox_venue',
+        extraFields: { reject_reason: `Cancel state ambiguous: ${cancelFailureError}` },
+      });
       await this.reconcileUnknownOrder(clientOrderId, order.symbol, userId).catch(() => {});
       const updated = await db.queryOne<any>(
         `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
@@ -904,10 +906,11 @@ export class UpstoxAdapter implements BrokerGateway {
     }
     // UNKNOWN: do NOT release reservations
 
-    await db.execute(
-      `UPDATE exchange_orders SET status = ?, updated_at = ? WHERE client_order_id = ?`,
-      [finalStatus, Date.now(), clientOrderId]
-    );
+    await OrderStateMachine.transitionOrder(clientOrderId, finalStatus, {
+      reason: 'Broker-authoritative cancel finalization',
+      source: 'upstox_adapter',
+      actor: 'upstox_venue',
+    });
     await db.execute(
       `UPDATE exchange_order_children SET status = ?, updated_at = ? WHERE parent_client_order_id = ? AND status IN ('CANCEL_REQUESTED', 'OPEN')`,
       [finalStatus, Date.now(), clientOrderId]
@@ -1216,16 +1219,16 @@ export class UpstoxAdapter implements BrokerGateway {
         aggregatedStatus = totalExecuted > 0 ? 'PARTIALLY_FILLED' : 'OPEN';
       }
 
-      if (aggregatedStatus === 'CANCELED' || aggregatedStatus === 'REJECTED') {
-        await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});
-      }
-
-      await db.execute(
-        `UPDATE exchange_orders 
-         SET status = ?, executed_qty = ?, avg_price = ?, updated_at = ?
-         WHERE client_order_id = ?`,
-        [aggregatedStatus, totalExecuted, aggregateAvgPrice, Date.now(), clientOrderId]
-      );
+      await OrderStateMachine.transitionOrder(clientOrderId, aggregatedStatus, {
+        reason: 'Sliced order child aggregation',
+        source: 'upstox_adapter',
+        actor: 'reconciliation',
+        releaseReservationOnTerminal: true,
+        extraFields: {
+          executed_qty: totalExecuted,
+          avg_price: aggregateAvgPrice,
+        },
+      });
 
       return {
         found: true,
@@ -1257,21 +1260,36 @@ export class UpstoxAdapter implements BrokerGateway {
     // Update local DB state
     if (order) {
       if (mappedStatus === 'FILLED') {
-        await db.execute(
-          `UPDATE exchange_orders SET status = 'FILLED', exchange_order_id = ?, executed_qty = ?, avg_price = ?, updated_at = ? WHERE client_order_id = ?`,
-          [venueOrder.order_id, venueOrder.filled_quantity, venueOrder.average_price, Date.now(), clientOrderId]
-        );
+        await OrderStateMachine.transitionOrder(clientOrderId, 'FILLED', {
+          reason: 'Venue reconciled FILLED',
+          source: 'upstox_adapter',
+          actor: 'reconciliation',
+          extraFields: {
+            exchange_order_id: venueOrder.order_id,
+            executed_qty: venueOrder.filled_quantity,
+            avg_price: venueOrder.average_price,
+          },
+        });
       } else if (mappedStatus === 'REJECTED' || mappedStatus === 'CANCELED') {
-        await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});
-        await db.execute(
-          `UPDATE exchange_orders SET status = ?, exchange_order_id = ?, reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
-          [mappedStatus, venueOrder.order_id, venueOrder.status_message || '', Date.now(), clientOrderId]
-        );
+        await OrderStateMachine.transitionOrder(clientOrderId, mappedStatus, {
+          reason: venueOrder.status_message || 'Venue reconciled terminal',
+          source: 'upstox_adapter',
+          actor: 'reconciliation',
+          releaseReservationOnTerminal: true,
+          extraFields: {
+            exchange_order_id: venueOrder.order_id,
+            reject_reason: venueOrder.status_message || '',
+          },
+        });
       } else if (mappedStatus === 'OPEN') {
-        await db.execute(
-          `UPDATE exchange_orders SET status = 'OPEN', exchange_order_id = ?, updated_at = ? WHERE client_order_id = ?`,
-          [venueOrder.order_id, Date.now(), clientOrderId]
-        );
+        await OrderStateMachine.transitionOrder(clientOrderId, 'OPEN', {
+          reason: 'Venue reconciled OPEN',
+          source: 'upstox_adapter',
+          actor: 'reconciliation',
+          extraFields: {
+            exchange_order_id: venueOrder.order_id,
+          },
+        });
       }
     }
 

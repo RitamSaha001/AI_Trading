@@ -9,6 +9,7 @@ import { OperationalSafetyService } from './operationalSafetyService';
 import { ClockSyncService } from './clockSyncService';
 import { RateLimitTracker } from './rateLimitTracker';
 import { config } from '../config';
+import { OrderStateMachine } from './orderStateMachine';
 import crypto from 'node:crypto';
 
 /**
@@ -866,26 +867,20 @@ export class ReconciliationWorker {
           );
 
           if (localOrder) {
-            await tx.execute(
-              `UPDATE exchange_orders SET
-                status = 'FILLED',
-                fee = 0.0,
-                fee_exact = ?,
-                fee_asset = ?,
-                actual_commission_exact = ?,
-                actual_commission_asset = ?,
-                commission_status = 'AUTHORITATIVE',
-                updated_at = ?
-               WHERE id = ?`,
-              [
-                fillCommissionDec.toString(),
-                fillAsset,
-                fillCommissionDec.toString(),
-                fillAsset,
-                Date.now(),
-                localOrder.id,
-              ]
-            );
+            await OrderStateMachine.transitionOrder(localOrder.client_order_id, 'FILLED', {
+              tx,
+              reason: 'Authoritative fill reconciled from broker trades',
+              source: 'reconciliation_worker',
+              actor: 'reconciliation',
+              extraFields: {
+                fee: 0.0,
+                fee_exact: fillCommissionDec.toString(),
+                fee_asset: fillAsset,
+                actual_commission_exact: fillCommissionDec.toString(),
+                actual_commission_asset: fillAsset,
+                commission_status: 'AUTHORITATIVE',
+              },
+            });
           }
 
           await LedgerService.processFill({

@@ -84,20 +84,20 @@ export class OrderRecoveryService {
         if (venueResult.notFoundConfirmed) {
           // Case A: Exchange confirms order was NEVER accepted on the book
           await db.transaction(async (tx) => {
-            await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx });
-            await tx.execute(
-              `UPDATE exchange_orders 
-               SET status = 'REJECTED', 
-                   reserved_cash = 0, reserved_qty = 0, reserved_cash_minor = 0, reserved_qty_minor = 0,
-                   reject_reason = ?, 
-                   updated_at = ? 
-               WHERE client_order_id = ?`,
-              [
-                'Recovery: Order never reached exchange venue before interruption',
-                Date.now(),
-                clientOrderId,
-              ]
-            );
+            await OrderStateMachine.transitionOrder(clientOrderId, 'REJECTED', {
+              tx,
+              reason: 'Recovery: Order never reached exchange venue before interruption',
+              source: 'order_recovery_service',
+              actor: 'system',
+              releaseReservationOnTerminal: true,
+              extraFields: {
+                reserved_cash: 0,
+                reserved_qty: 0,
+                reserved_cash_minor: 0,
+                reserved_qty_minor: 0,
+                reject_reason: 'Recovery: Order never reached exchange venue before interruption',
+              },
+            });
           });
 
           await AuditService.logEvent({
@@ -143,34 +143,22 @@ export class OrderRecoveryService {
 
             if (!hasAuthoritativeCommission) {
               // Authoritative fee data missing! Keep order in RECONCILING, commission_status = 'PENDING'
-              if (currentStatus !== 'RECONCILING') {
-                OrderStateMachine.validateTransition(currentStatus, 'RECONCILING', clientOrderId);
-              }
-
-              await db.execute(
-                `UPDATE exchange_orders SET
-                  status = 'RECONCILING',
-                  exchange_order_id = ?,
-                  executed_qty = 0.0,
-                  executed_qty_exact = ?,
-                  avg_price = 0.0,
-                  avg_price_exact = ?,
-                  cumulative_quote_qty = 0.0,
-                  cumulative_quote_exact = ?,
-                  executed_notional_exact = ?,
-                  commission_status = 'PENDING',
-                  updated_at = ?
-                 WHERE client_order_id = ?`,
-                [
-                  venueResult.exchangeOrderId || order.exchange_order_id || `ex_rec_${Date.now()}`,
-                  venueResult.executedQtyExact || order.orig_qty_exact || String(order.orig_qty || 0),
-                  venueResult.avgPriceExact || order.price_exact || String(order.price || 0),
-                  order.notional_exact || String(order.notional || 0),
-                  order.notional_exact || String(order.notional || 0),
-                  Date.now(),
-                  clientOrderId,
-                ]
-              );
+              await OrderStateMachine.transitionOrder(clientOrderId, 'RECONCILING', {
+                reason: 'Missing authoritative fee data from exchange venue',
+                source: 'order_recovery_service',
+                actor: 'system',
+                extraFields: {
+                  exchange_order_id: venueResult.exchangeOrderId || order.exchange_order_id || `ex_rec_${Date.now()}`,
+                  executed_qty: 0.0,
+                  executed_qty_exact: venueResult.executedQtyExact || order.orig_qty_exact || String(order.orig_qty || 0),
+                  avg_price: 0.0,
+                  avg_price_exact: venueResult.avgPriceExact || order.price_exact || String(order.price || 0),
+                  cumulative_quote_qty: 0.0,
+                  cumulative_quote_exact: order.notional_exact || String(order.notional || 0),
+                  executed_notional_exact: order.notional_exact || String(order.notional || 0),
+                  commission_status: 'PENDING',
+                },
+              });
 
               await AuditService.logEvent({
                 userId: order.user_id,
@@ -226,39 +214,28 @@ export class OrderRecoveryService {
             const now = Date.now();
 
             await db.transaction(async (tx) => {
-              await tx.execute(
-                `UPDATE exchange_orders SET
-                  status = 'FILLED',
-                  exchange_order_id = ?,
-                  executed_qty = 0.0,
-                  executed_qty_exact = ?,
-                  avg_price = 0.0,
-                  avg_price_exact = ?,
-                  cumulative_quote_qty = 0.0,
-                  cumulative_quote_exact = ?,
-                  executed_notional_exact = ?,
-                  fee = 0.0,
-                  fee_exact = ?,
-                  fee_asset = ?,
-                  actual_commission_exact = ?,
-                  actual_commission_asset = ?,
-                  commission_status = 'AUTHORITATIVE',
-                  updated_at = ?
-                 WHERE client_order_id = ?`,
-                [
-                  venueResult.exchangeOrderId || order.exchange_order_id || `ex_rec_${now}`,
-                  totalExecutedQtyDec.toString(),
-                  avgPriceDec.toString(),
-                  totalExecutedNotionalDec.toString(),
-                  totalExecutedNotionalDec.toString(),
-                  totalCommissionDec.toString(),
-                  actualCommissionAsset,
-                  totalCommissionDec.toString(),
-                  actualCommissionAsset,
-                  now,
-                  clientOrderId,
-                ]
-              );
+              await OrderStateMachine.transitionOrder(clientOrderId, 'FILLED', {
+                tx,
+                reason: 'Recovery: Authoritative multi-fill settlement',
+                source: 'order_recovery_service',
+                actor: 'system',
+                extraFields: {
+                  exchange_order_id: venueResult.exchangeOrderId || order.exchange_order_id || `ex_rec_${now}`,
+                  executed_qty: 0.0,
+                  executed_qty_exact: totalExecutedQtyDec.toString(),
+                  avg_price: 0.0,
+                  avg_price_exact: avgPriceDec.toString(),
+                  cumulative_quote_qty: 0.0,
+                  cumulative_quote_exact: totalExecutedNotionalDec.toString(),
+                  executed_notional_exact: totalExecutedNotionalDec.toString(),
+                  fee: 0.0,
+                  fee_exact: totalCommissionDec.toString(),
+                  fee_asset: actualCommissionAsset,
+                  actual_commission_exact: totalCommissionDec.toString(),
+                  actual_commission_asset: actualCommissionAsset,
+                  commission_status: 'AUTHORITATIVE',
+                },
+              });
 
               for (let idx = 0; idx < fills!.length; idx++) {
                 const fill = fills![idx];
@@ -337,15 +314,19 @@ export class OrderRecoveryService {
             });
           } else if (exchangeStatus === 'CANCELED' || exchangeStatus === 'CANCELLED' || exchangeStatus === 'EXPIRED') {
             await db.transaction(async (tx) => {
-              await LedgerService.releaseOrderReservation({ orderId: clientOrderId, tx });
-              await tx.execute(
-                `UPDATE exchange_orders 
-                 SET status = 'CANCELED', 
-                     reserved_cash = 0, reserved_qty = 0, reserved_cash_minor = 0, reserved_qty_minor = 0,
-                     updated_at = ? 
-                 WHERE client_order_id = ?`,
-                [Date.now(), clientOrderId]
-              );
+              await OrderStateMachine.transitionOrder(clientOrderId, 'CANCELED', {
+                tx,
+                reason: `Recovery: Venue status was ${exchangeStatus}`,
+                source: 'order_recovery_service',
+                actor: 'system',
+                releaseReservationOnTerminal: true,
+                extraFields: {
+                  reserved_cash: 0,
+                  reserved_qty: 0,
+                  reserved_cash_minor: 0,
+                  reserved_qty_minor: 0,
+                },
+              });
             });
 
             await AuditService.logEvent({
@@ -366,10 +347,14 @@ export class OrderRecoveryService {
             });
           } else if (exchangeStatus === 'NEW' || exchangeStatus === 'PARTIALLY_FILLED') {
             const targetStatus = exchangeStatus === 'NEW' ? 'OPEN' : 'PARTIALLY_FILLED';
-            await db.execute(
-              `UPDATE exchange_orders SET status = ?, exchange_order_id = ?, updated_at = ? WHERE client_order_id = ?`,
-              [targetStatus, venueResult.exchangeOrderId || order.exchange_order_id, Date.now(), clientOrderId]
-            );
+            await OrderStateMachine.transitionOrder(clientOrderId, targetStatus, {
+              reason: `Recovery: Syncing venue status ${exchangeStatus}`,
+              source: 'order_recovery_service',
+              actor: 'system',
+              extraFields: {
+                exchange_order_id: venueResult.exchangeOrderId || order.exchange_order_id,
+              },
+            });
 
             result.recoveredCount++;
             result.actions.push({
@@ -384,10 +369,14 @@ export class OrderRecoveryService {
           const ageMs = Date.now() - Number(order.created_at);
           if (currentStatus === 'SUBMITTING' && ageMs > 30000) {
             // Stuck in SUBMITTING without exchange ACK -> transition to UNKNOWN without releasing reservations
-            await db.execute(
-              `UPDATE exchange_orders SET status = 'UNKNOWN', reject_reason = ?, updated_at = ? WHERE client_order_id = ?`,
-              ['Stuck in SUBMITTING state; preserved reservation in UNKNOWN state', Date.now(), clientOrderId]
-            );
+            await OrderStateMachine.transitionOrder(clientOrderId, 'UNKNOWN', {
+              reason: 'Stuck in SUBMITTING state; preserved reservation in UNKNOWN state',
+              source: 'order_recovery_service',
+              actor: 'system',
+              extraFields: {
+                reject_reason: 'Stuck in SUBMITTING state; preserved reservation in UNKNOWN state',
+              },
+            });
             result.recoveredCount++;
             result.actions.push({
               clientOrderId,

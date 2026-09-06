@@ -820,13 +820,12 @@ export function buildServer(): FastifyInstance {
   });
 
   server.get('/api/exchange/upstox/auth-url', { preHandler: requireAuth }, async (req: FastifyRequest) => {
-    const redirectUri = (req.query as any)?.redirectUri;
-    const { state, authUrl, expiresAt } = await UpstoxClient.generateOAuthState(req.user!.id, redirectUri);
+    const { state, authUrl, expiresAt } = await UpstoxClient.generateOAuthState(req.user!.id);
     return { success: true, authUrl, expiresAt };
   });
 
   server.post('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { code: string; state: string; redirectUri?: string };
+    const body = req.body as { code: string; state: string };
     if (!body?.code) {
       return reply.status(400).send({ success: false, error: 'Authorization code is required' });
     }
@@ -838,7 +837,6 @@ export function buildServer(): FastifyInstance {
       const audit = await broker.saveCredentials!(req.user!.id, {
         code: body.code,
         state: body.state,
-        redirectUri: body.redirectUri,
       });
       return { success: true, audit, message: 'Upstox connected and credentials encrypted at rest.' };
     } catch (err: any) {

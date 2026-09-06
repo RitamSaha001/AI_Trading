@@ -1153,13 +1153,23 @@ export function Provider({ children }: { children: React.ReactNode }) {
         // Synchronize with server-authoritative authentication
         const token = options?.credential || options?.idToken;
         const serverRes = await ApiClient.loginGoogle(token).catch(() => null);
+        const isProd =
+          (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.PROD)) ||
+          (typeof globalThis !== 'undefined' && (globalThis as any)?.process?.env?.NODE_ENV === 'production');
+
+        if (!serverRes?.ok && isProd) {
+          throw new Error(serverRes?.error || 'Authentication server unreachable. Google sign-in could not be verified.');
+        }
+
         let session = await signInWithGoogle(options);
         if (serverRes?.ok && serverRes?.data?.user) {
           session = {
             ...session,
+            token: serverRes.data.token || session.token,
             user: {
               ...session.user!,
               uid: serverRes.data.user?.id || session.user!.uid,
+              displayName: serverRes.data.user?.displayName || serverRes.data.user?.display_name || session.user!.displayName,
               kycTier: serverRes.data.user?.kycTier || serverRes.data.user?.kyc_tier || session.user!.kycTier,
             },
           };
@@ -1177,6 +1187,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         setAuthModalOpen(false);
       } catch (e: any) {
         triggerToast('Sign In Error', e?.message || 'Failed to sign in with Google', 'warn');
+        throw e;
       }
     },
     [triggerToast]
@@ -1188,13 +1199,23 @@ export function Provider({ children }: { children: React.ReactNode }) {
         const serverRes = options?.identityToken
           ? await ApiClient.loginApple(options.identityToken, undefined, options?.displayName).catch(() => null)
           : null;
+        const isProd =
+          (typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.PROD)) ||
+          (typeof globalThis !== 'undefined' && (globalThis as any)?.process?.env?.NODE_ENV === 'production');
+
+        if (!serverRes?.ok && isProd) {
+          throw new Error(serverRes?.error || 'Authentication server unreachable. Apple ID sign-in could not be verified.');
+        }
+
         let session = await signInWithApple(options);
         if (serverRes?.ok && serverRes?.data?.user) {
           session = {
             ...session,
+            token: serverRes.data.token || session.token,
             user: {
               ...session.user!,
               uid: serverRes.data.user?.id || session.user!.uid,
+              displayName: serverRes.data.user?.displayName || serverRes.data.user?.display_name || session.user!.displayName,
               kycTier: serverRes.data.user?.kycTier || serverRes.data.user?.kyc_tier || session.user!.kycTier,
             },
           };
@@ -1212,6 +1233,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         setAuthModalOpen(false);
       } catch (e: any) {
         triggerToast('Sign In Error', e?.message || 'Failed to sign in with Apple', 'warn');
+        throw e;
       }
     },
     [triggerToast]

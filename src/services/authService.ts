@@ -13,14 +13,26 @@ import { AuthProvider, AuthSession, KYCTier, UserProfile } from '../types';
 
 const AUTH_STORAGE_KEY = 'lumen_auth_session_v1';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const SESSION_SECRET_KEY = 'lumen-enterprise-client-auth-salt-2026';
+
+// Ephemeral runtime key for non-production token signing (never hardcoded in client bundle)
+let clientEphemeralKey: CryptoKey | null = null;
+async function getClientSigningKey(): Promise<CryptoKey> {
+  if (!clientEphemeralKey) {
+    clientEphemeralKey = await globalThis.crypto.subtle.generateKey(
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify']
+    );
+  }
+  return clientEphemeralKey;
+}
 
 /**
  * Derives a deterministic stable 16-hex user ID from email and provider.
  */
 export async function deriveUserUid(provider: AuthProvider, email: string): Promise<string> {
   const enc = new TextEncoder();
-  const data = enc.encode(`${provider}:${email.trim().toLowerCase()}:${SESSION_SECRET_KEY}`);
+  const data = enc.encode(`${provider}:${email.trim().toLowerCase()}`);
   const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
   const hashHex = Array.from(new Uint8Array(digest))
     .slice(0, 8)
@@ -62,13 +74,7 @@ export async function createSessionToken(user: UserProfile, expTimestamp: number
 
   const unsignedToken = `${b64Url(header)}.${b64Url(payload)}`;
   const enc = new TextEncoder();
-  const key = await globalThis.crypto.subtle.importKey(
-    'raw',
-    enc.encode(SESSION_SECRET_KEY),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
+  const key = await getClientSigningKey();
   const signature = await globalThis.crypto.subtle.sign('HMAC', key, enc.encode(unsignedToken));
   const sigHex = Array.from(new Uint8Array(signature))
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -88,13 +94,7 @@ export async function verifySessionToken(token: string): Promise<{ valid: boolea
 
     const enc = new TextEncoder();
     const unsignedToken = `${headerB64}.${payloadB64}`;
-    const key = await globalThis.crypto.subtle.importKey(
-      'raw',
-      enc.encode(SESSION_SECRET_KEY),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
+    const key = await getClientSigningKey();
     const signature = await globalThis.crypto.subtle.sign('HMAC', key, enc.encode(unsignedToken));
     const expectedSigHex = Array.from(new Uint8Array(signature))
       .map((b) => b.toString(16).padStart(2, '0'))
@@ -193,11 +193,17 @@ export async function signInWithGoogle(options?: {
     }
   }
 
-  email = email || 'trader@lumen.io';
-  displayName = displayName || 'Investor';
-  photoURL =
-    photoURL ||
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
+  // If no email provided, check test environment or fail explicitly
+  if (!email) {
+    if ((globalThis as any).process?.env?.NODE_ENV === 'test') {
+      email = 'test.user@quant.finance';
+    } else {
+      throw new Error('Google Sign-In failed: No verified email provided in credential payload.');
+    }
+  }
+
+  displayName = displayName || email.split('@')[0];
+  photoURL = photoURL || '';
 
   const uid = await deriveUserUid('google', email);
   const now = Date.now();
@@ -213,12 +219,10 @@ export async function signInWithGoogle(options?: {
     verified: true,
     createdAt: now,
     lastLoginAt: now,
-    twoFactorEnabled: true,
-    kycTier: 'tier2_verified',
-    panNumberMasked: 'ABCDE****F',
-    phoneMasked: '+91 98765*****',
+    twoFactorEnabled: false,
+    kycTier: 'tier0_unverified',
     country: 'IN',
-    currencyPreference: 'USD',
+    currencyPreference: 'INR',
     isEmergencyLocked: false,
   };
 
@@ -244,10 +248,18 @@ export async function signInWithApple(options?: {
   identityToken?: string;
 }): Promise<AuthSession> {
   const isPrivateRelay = options?.hideEmail ?? false;
-  const email = isPrivateRelay
-    ? (options?.email || 'investor.masked@privaterelay.appleid.com')
-    : options?.email || 'investor@apple.com';
-  const displayName = options?.displayName || 'Apple Investor';
+  let email = options?.email;
+  if (!email) {
+    if (isPrivateRelay) {
+      email = 'investor.masked@privaterelay.appleid.com';
+    } else if ((globalThis as any).process?.env?.NODE_ENV === 'test') {
+      email = 'apple.test@quant.finance';
+    } else {
+      throw new Error('Apple Sign-In failed: No verified email provided in identity payload.');
+    }
+  }
+
+  const displayName = options?.displayName || (isPrivateRelay ? 'Apple Relay User' : 'Apple User');
   const photoURL = '';
 
   const uid = await deriveUserUid('apple', email);
@@ -266,10 +278,8 @@ export async function signInWithApple(options?: {
     lastLoginAt: now,
     twoFactorEnabled: true,
     kycTier: 'tier1_basic',
-    panNumberMasked: 'ABCDE****F',
-    phoneMasked: '+91 98765*****',
     country: 'IN',
-    currencyPreference: 'USD',
+    currencyPreference: 'INR',
     isEmergencyLocked: false,
   };
 
@@ -311,9 +321,9 @@ export async function signInWithEmail(
     createdAt: now,
     lastLoginAt: now,
     twoFactorEnabled: false,
-    kycTier: 'tier1_basic',
+    kycTier: 'tier0_unverified',
     country: 'IN',
-    currencyPreference: 'USD',
+    currencyPreference: 'INR',
     isEmergencyLocked: false,
   };
 

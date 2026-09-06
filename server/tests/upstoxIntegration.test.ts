@@ -205,7 +205,7 @@ describe('Phase 2: Upstox Broker Gateway Integration Suite', () => {
         return mockResponse(404, { status: 'error', message: 'Not found' });
       });
 
-      const tokenRes = await UpstoxClient.exchangeAuthorizationCode('mock_auth_code_123', 'http://localhost:5173/oauth/callback');
+      const tokenRes = await UpstoxClient.exchangeAuthorizationCode('mock_auth_code_123');
       expect(tokenRes.access_token).toBe('upstox_test_access_token_xyz123');
       expect(tokenRes.user_id).toBe('UCC12345');
 

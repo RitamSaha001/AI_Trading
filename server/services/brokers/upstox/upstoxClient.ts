@@ -98,7 +98,14 @@ export class UpstoxRateLimiter {
     if (this.requestTimestamps30Min.length >= this.MAX_REQUESTS_PER_30_MINUTES) {
       const oldest = this.requestTimestamps30Min[0];
       const waitMs = Math.max(100, this.WINDOW_30_MINUTES_MS - (now - oldest));
-      await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 5000)));
+      if (waitMs > 1000) {
+        throw new StandardBrokerError(
+          'RATE_LIMITED',
+          `Upstox 30-minute rolling rate limit exceeded (${this.MAX_REQUESTS_PER_30_MINUTES} requests / 30m). Backpressure wait of ${Math.ceil(waitMs / 1000)}s required.`,
+          'upstox'
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
 
     // 2. Enforce 10 req/s token bucket with burst capacity 20
@@ -109,7 +116,14 @@ export class UpstoxRateLimiter {
 
     if (this.tokens < 1) {
       const waitMs = Math.ceil(((1 - this.tokens) / this.MAX_REQUESTS_PER_SECOND) * 1000);
-      await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 2000)));
+      if (waitMs > 1500) {
+        throw new StandardBrokerError(
+          'RATE_LIMITED',
+          `Upstox per-second rate limit exhausted. Token refill required (${waitMs}ms).`,
+          'upstox'
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
       this.tokens = 0;
       this.lastRefill = Date.now();
     } else {
@@ -120,13 +134,20 @@ export class UpstoxRateLimiter {
   }
 
   public static async throttleOrder(): Promise<void> {
-    await this.throttleRequest();
+    // Note: throttleRequest() is invoked automatically by this.request() - do not double throttle
     const now = Date.now();
     this.orderTimestamps = this.orderTimestamps.filter((ts) => now - ts < 60_000);
     if (this.orderTimestamps.length >= this.MAX_ORDERS_PER_MINUTE) {
       const oldest = this.orderTimestamps[0];
       const waitMs = Math.max(100, 60_000 - (now - oldest));
-      await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 3000)));
+      if (waitMs > 1000) {
+        throw new StandardBrokerError(
+          'RATE_LIMITED',
+          `Upstox per-minute order rate limit exceeded (${this.MAX_ORDERS_PER_MINUTE} orders/min). Retry after ${Math.ceil(waitMs / 1000)}s.`,
+          'upstox'
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
     this.orderTimestamps.push(Date.now());
   }
@@ -182,12 +203,11 @@ export class UpstoxClient {
 
   /**
    * Generates the OAuth 2.0 authorization dialog URL.
-   * Executed strictly server-side; never leaks client secrets.
+   * Strictly bound to server-configured UPSTOX_REDIRECT_URI.
    */
-  public static getAuthorizationUrl(state: string, redirectUri?: string): string {
+  public static getAuthorizationUrl(state: string): string {
     const clientId = config.UPSTOX_CLIENT_ID || '';
-    // Server-configured redirect URI strictly takes precedence over client-supplied value
-    const rUri = config.UPSTOX_REDIRECT_URI || redirectUri || '';
+    const rUri = config.UPSTOX_REDIRECT_URI || '';
     const baseHost = this.getBaseHostUrl();
     const query = new URLSearchParams({
       response_type: 'code',
@@ -200,15 +220,13 @@ export class UpstoxClient {
 
   /**
    * Generates a cryptographically random OAuth state, persists it in broker_oauth_states,
-   * and returns the authorization URL. Server strictly controls redirect_uri.
+   * and returns the authorization URL. Server strictly owns and binds redirect_uri.
    */
   public static async generateOAuthState(
-    userId: string,
-    redirectUri?: string
+    userId: string
   ): Promise<{ state: string; authUrl: string; expiresAt: number }> {
     const state = crypto.randomBytes(32).toString('hex');
-    // Server strictly owns redirect URI; client cannot override configured URI
-    const rUri = config.UPSTOX_REDIRECT_URI || redirectUri || '';
+    const rUri = config.UPSTOX_REDIRECT_URI || '';
     const now = Date.now();
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes TTL
 
@@ -219,7 +237,7 @@ export class UpstoxClient {
       [state, userId, rUri, expiresAt, now]
     );
 
-    const authUrl = this.getAuthorizationUrl(state, rUri);
+    const authUrl = this.getAuthorizationUrl(state);
     return { state, authUrl, expiresAt };
   }
 
@@ -276,14 +294,14 @@ export class UpstoxClient {
 
   /**
    * Exchanges authorization code for access token via server-to-server POST.
+   * Strictly uses server-configured UPSTOX_REDIRECT_URI.
    */
   public static async exchangeAuthorizationCode(
-    code: string,
-    redirectUri?: string
+    code: string
   ): Promise<UpstoxOAuthTokenResponse> {
     const clientId = config.UPSTOX_CLIENT_ID || '';
     const clientSecret = config.UPSTOX_CLIENT_SECRET || '';
-    const rUri = redirectUri || config.UPSTOX_REDIRECT_URI || '';
+    const rUri = config.UPSTOX_REDIRECT_URI || '';
 
     if (!clientId || !clientSecret) {
       throw new StandardBrokerError(
