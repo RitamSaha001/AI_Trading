@@ -50,6 +50,7 @@ import {
 } from './upstoxExpiry';
 import { IndianMarketCalendar } from './indianMarketCalendar';
 import { LiveOrderGateService } from '../../liveOrderGateService';
+import { OtrLimiterService } from '../../otrLimiterService';
 
 export class UpstoxAdapter implements BrokerGateway {
   public readonly id: BrokerId = 'upstox';
@@ -591,12 +592,18 @@ export class UpstoxAdapter implements BrokerGateway {
     const triggerPriceNum = order.triggerPrice ? Number(order.triggerPrice) : undefined;
     const disclosedQtyNum = order.disclosedQuantity ? Number(order.disclosedQuantity) : undefined;
 
+    // Record order placement for SEBI OTR compliance
+    OtrLimiterService.recordEvent(order.userId, order.symbol, 'PLACE');
+    const strategyTag = ((order as any).strategyId || (order as any).strategyName)
+      ? OtrLimiterService.formatStrategyTag((order as any).strategyId || (order as any).strategyName, clientOrderId)
+      : clientOrderId.slice(-20);
+
     const payload: UpstoxPlaceOrderPayload = {
       quantity: Number(order.quantity),
       product,
       validity,
       price: upstoxOrderType === 'MARKET' ? 0 : price,
-      tag: clientOrderId.slice(-20),
+      tag: strategyTag,
       instrument_token: instrument.instrumentKey,
       order_type: upstoxOrderType,
       transaction_type: order.side,
@@ -835,6 +842,10 @@ export class UpstoxAdapter implements BrokerGateway {
       return this.mapOrderRecord(order);
     }
 
+    // Assert safe SEBI Order-to-Trade Ratio before processing cancellation
+    OtrLimiterService.assertOtrLimit(userId, order.symbol, 'CANCEL');
+    OtrLimiterService.recordEvent(userId, order.symbol, 'CANCEL');
+
     // Step 1: Intermediate State Transition (P0-6)
     await OrderStateMachine.transitionOrder(clientOrderId, 'CANCEL_REQUESTED', {
       reason: 'User requested cancellation',
@@ -1001,6 +1012,10 @@ export class UpstoxAdapter implements BrokerGateway {
         'upstox'
       );
     }
+
+    // Assert safe SEBI Order-to-Trade Ratio before processing modification
+    OtrLimiterService.assertOtrLimit(order.user_id, order.symbol, 'MODIFY');
+    OtrLimiterService.recordEvent(order.user_id, order.symbol, 'MODIFY');
 
     const creds = await this.getCredentials(order.user_id);
     if (!creds || !creds.accessToken) {

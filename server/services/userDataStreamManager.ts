@@ -4,6 +4,7 @@ import { ReconciliationWorker } from './reconciliationWorker';
 import { CircuitBreakerService } from './circuitBreakerService';
 import { AuditService, logger } from './auditService';
 import { BinanceUserStreamTransport } from './binanceUserStreamTransport';
+import { UpstoxUserStreamTransport } from './brokers/upstox/upstoxUserStreamTransport';
 import { config } from '../config';
 
 export type StreamHealthState = 'ACTIVE' | 'UNHEALTHY' | 'DISCONNECTED' | 'RECONNECTING';
@@ -270,6 +271,22 @@ export class UserDataStreamManager {
           logger.warn(`[UserDataStreamManager] Failed to restore stream for user ${acc.user_id}: ${err.message}`);
         }
       }
+      // Restore Upstox user stream connections
+      const upstoxCreds = await db.query<{ user_id: string; access_token_encrypted: string }>(
+        `SELECT user_id, access_token_encrypted FROM broker_credentials 
+         WHERE broker = 'upstox' AND can_trade = 1`
+      );
+      for (const cred of upstoxCreds) {
+        try {
+          if (cred.access_token_encrypted) {
+            UpstoxUserStreamTransport.start(cred.user_id, cred.access_token_encrypted);
+            count++;
+          }
+        } catch (err: any) {
+          logger.warn(`[UserDataStreamManager] Failed to restore Upstox stream for user ${cred.user_id}: ${err.message}`);
+        }
+      }
+
       return count;
     } catch (err: any) {
       logger.error(`[UserDataStreamManager] Error querying active accounts for stream restoration: ${err.message}`);
@@ -298,6 +315,7 @@ export class UserDataStreamManager {
       this.keepAliveTimer = null;
     }
     BinanceUserStreamTransport.stopAll();
+    UpstoxUserStreamTransport.stopAll();
     this.sessions.clear();
   }
 

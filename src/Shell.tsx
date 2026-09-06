@@ -14,6 +14,7 @@ import { UserProfileDrawer } from './components/UserProfileDrawer';
 import { GrievanceModal } from './components/GrievanceModal';
 import { LegalFooter } from './components/LegalFooter';
 import { UpstoxTerminalDrawer } from './components/UpstoxTerminalDrawer';
+import { LiveOrderConfirmationModal } from './components/LiveOrderConfirmationModal';
 import {
   LayoutDashboard,
   BarChart3,
@@ -124,6 +125,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     openUpstoxDrawer,
     closeUpstoxDrawer,
     syncUpstoxAccount,
+    liveOrderProposal,
+    liveOrderConfirmationOpen,
+    closeLiveOrderConfirmation,
+    confirmLiveOrderExecution,
   } = useLumen();
   const route = useRoute();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -836,6 +841,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Formal Grievance Redressal & Dispute Ticket Desk Modal */}
       <GrievanceModal />
+
+      {/* SEBI Two-Step Live Order Confirmation Modal */}
+      <LiveOrderConfirmationModal
+        isOpen={liveOrderConfirmationOpen}
+        proposal={liveOrderProposal}
+        onConfirm={confirmLiveOrderExecution}
+        onClose={closeLiveOrderConfirmation}
+      />
     </div>
   );
 }

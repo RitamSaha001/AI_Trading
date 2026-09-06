@@ -45,6 +45,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   RESERVING: ['RESERVED', 'REJECTED', 'FAILED'],
   RESERVED: ['SUBMITTING', 'CANCEL_REQUESTED', 'CANCELLED', 'CANCELED', 'REJECTED', 'FAILED'],
   SUBMITTING: ['OPEN', 'PARTIALLY_FILLED', 'FILLED', 'REJECTED', 'UNKNOWN', 'RECONCILING', 'FAILED', 'CANCEL_REQUESTED'],
+  SUBMITTED: ['OPEN', 'PARTIALLY_FILLED', 'FILLED', 'REJECTED', 'UNKNOWN', 'RECONCILING', 'FAILED', 'CANCEL_REQUESTED'],
   OPEN: ['PARTIALLY_FILLED', 'FILLED', 'CANCEL_REQUESTED', 'CANCELLED', 'CANCELED', 'EXPIRED', 'UNKNOWN', 'RECONCILING'],
   PARTIALLY_FILLED: ['PARTIALLY_FILLED', 'FILLED', 'CANCEL_REQUESTED', 'CANCELLED', 'CANCELED', 'EXPIRED', 'UNKNOWN', 'RECONCILING'],
   CANCEL_REQUESTED: ['CANCELLED', 'CANCELED', 'FILLED', 'PARTIALLY_FILLED', 'UNKNOWN', 'RECONCILING'],
@@ -137,7 +138,7 @@ export class OrderStateMachine {
    * This is the SOLE AUTHORITATIVE MUTATOR for order lifecycle transitions.
    */
   static async transitionOrder(
-    clientOrderId: string,
+    orderIdentifier: string,
     toStatus: OrderStatus | string,
     options: TransitionOrderOptions = {}
   ): Promise<any> {
@@ -145,18 +146,20 @@ export class OrderStateMachine {
     const targetStatus = this.normalizeStatus(toStatus);
 
     const executeTransition = async (client: DBClient) => {
-      // 1. Fetch current order state under transaction
+      // 1. Fetch current order state under transaction (resolves by client_order_id or internal primary key)
       const selectSql = client.isPostgres?.()
-        ? `SELECT * FROM exchange_orders WHERE client_order_id = ? FOR UPDATE`
-        : `SELECT * FROM exchange_orders WHERE client_order_id = ?`;
+        ? `SELECT * FROM exchange_orders WHERE client_order_id = ? OR id = ? FOR UPDATE`
+        : `SELECT * FROM exchange_orders WHERE client_order_id = ? OR id = ?`;
 
-      const currentOrder = await client.queryOne<any>(selectSql, [clientOrderId]);
+      const currentOrder = await client.queryOne<any>(selectSql, [orderIdentifier, orderIdentifier]);
       if (!currentOrder) {
         throw new Error(
-          `Order '${clientOrderId}' not found in exchange_orders for state transition to ${targetStatus}`
+          `Order '${orderIdentifier}' not found in exchange_orders for state transition to ${targetStatus}`
         );
       }
 
+      const clientOrderId = currentOrder.client_order_id;
+      const internalId = currentOrder.id;
       const fromStatus = currentOrder.status;
       const fromNorm = this.normalizeStatus(fromStatus);
 
@@ -166,14 +169,14 @@ export class OrderStateMachine {
           const setClauses: string[] = ['updated_at = ?'];
           const params: any[] = [Date.now()];
           for (const [key, value] of Object.entries(options.extraFields)) {
-            if (key !== 'status' && key !== 'updated_at' && key !== 'client_order_id') {
+            if (key !== 'status' && key !== 'updated_at' && key !== 'client_order_id' && key !== 'id') {
               setClauses.push(`${key} = ?`);
               params.push(value);
             }
           }
-          params.push(clientOrderId);
+          params.push(internalId);
           await client.execute(
-            `UPDATE exchange_orders SET ${setClauses.join(', ')} WHERE client_order_id = ?`,
+            `UPDATE exchange_orders SET ${setClauses.join(', ')} WHERE id = ?`,
             params
           );
         }
@@ -186,8 +189,8 @@ export class OrderStateMachine {
         }
 
         return await client.queryOne<any>(
-          `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
-          [clientOrderId]
+          `SELECT * FROM exchange_orders WHERE id = ?`,
+          [internalId]
         );
       }
 
@@ -202,16 +205,16 @@ export class OrderStateMachine {
 
       if (options.extraFields) {
         for (const [key, value] of Object.entries(options.extraFields)) {
-          if (key !== 'status' && key !== 'updated_at' && key !== 'client_order_id') {
+          if (key !== 'status' && key !== 'updated_at' && key !== 'client_order_id' && key !== 'id') {
             setClauses.push(`${key} = ?`);
             params.push(value);
           }
         }
       }
-      params.push(clientOrderId);
+      params.push(internalId);
 
       await client.execute(
-        `UPDATE exchange_orders SET ${setClauses.join(', ')} WHERE client_order_id = ?`,
+        `UPDATE exchange_orders SET ${setClauses.join(', ')} WHERE id = ?`,
         params
       );
 

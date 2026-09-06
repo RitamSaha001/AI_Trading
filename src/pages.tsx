@@ -2023,12 +2023,15 @@ export function Orders() {
   };
 
   const executeOrder = () => {
+    const isLive = currentDeskMode === 'upstox' && Boolean(upstoxAccount?.connected);
     order(side, selectedAsset, numAmount, {
       type: orderType,
       limitPrice: orderType === 'limit' && limitPriceStr ? Number(limitPriceStr) : undefined,
       takeProfit: takeProfitStr ? Number(takeProfitStr) : undefined,
       stopLoss: stopLossStr ? Number(stopLossStr) : undefined,
       product: isIndian ? product : undefined,
+      live: isLive,
+      accountMode: isLive ? 'live' : undefined,
     });
     setShowLiveConfirmModal(false);
   };
@@ -2037,10 +2040,6 @@ export function Orders() {
     e.preventDefault();
     if (!isTickSizeValid) {
       alignTickSize();
-      return;
-    }
-    if (currentDeskMode === 'upstox' && upstoxAccount?.connected) {
-      setShowLiveConfirmModal(true);
       return;
     }
     executeOrder();

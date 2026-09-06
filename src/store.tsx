@@ -30,6 +30,7 @@ import {
   QuantitativeOpportunity,
   AutonomousPilotState,
 } from './types';
+import { LiveOrderProposalData } from './components/LiveOrderConfirmationModal';
 import {
   scanAllMarkets,
   checkPilotCircuitBreaker,
@@ -144,8 +145,10 @@ type Ctx = {
       takeProfit?: number;
       stopLoss?: number;
       product?: 'CNC' | 'MIS' | 'MTF' | string;
+      live?: boolean;
+      accountMode?: 'paper' | 'live' | string;
     }
-  ) => { ok: boolean; error?: string; order?: Order };
+  ) => { ok: boolean; error?: string; order?: Order; pendingLiveConfirmation?: boolean };
   cancelPendingOrder: (orderId: string) => boolean | Promise<boolean>;
   toggleStrategy: (id: string) => void;
   updateStrategy: (id: string, p: Partial<StrategyConfig>) => void;
@@ -248,6 +251,11 @@ type Ctx = {
   scanPilotOpportunities: () => void;
   executePilotRecommendation: (opp: QuantitativeOpportunity) => { ok: boolean; error?: string };
   resetPilotCircuitBreaker: () => void;
+  liveOrderProposal: LiveOrderProposalData | null;
+  liveOrderConfirmationOpen: boolean;
+  openLiveOrderConfirmation: (proposal: LiveOrderProposalData) => void;
+  closeLiveOrderConfirmation: () => void;
+  confirmLiveOrderExecution: (proposal: LiveOrderProposalData) => Promise<void>;
 };
 
 const Context = createContext<Ctx | null>(null);
@@ -518,6 +526,63 @@ export function Provider({ children }: { children: React.ReactNode }) {
     }));
     triggerToast('Upstox Disconnected', 'Upstox session terminated and switched back to Simulated Desk.', 'info');
   }, [triggerToast]);
+
+  // SEBI Two-Step Live Order Confirmation State
+  const [liveOrderProposal, setLiveOrderProposal] = useState<LiveOrderProposalData | null>(null);
+  const [liveOrderConfirmationOpen, setLiveOrderConfirmationOpen] = useState(false);
+
+  const openLiveOrderConfirmation = useCallback((proposal: LiveOrderProposalData) => {
+    setLiveOrderProposal(proposal);
+    setLiveOrderConfirmationOpen(true);
+  }, []);
+
+  const closeLiveOrderConfirmation = useCallback(() => {
+    setLiveOrderConfirmationOpen(false);
+    setLiveOrderProposal(null);
+  }, []);
+
+  const confirmLiveOrderExecution = useCallback(
+    async (proposal: LiveOrderProposalData) => {
+      try {
+        const res = await ApiClient.confirmLiveOrder({
+          confirmationId: proposal.confirmationId,
+          symbol: proposal.symbol,
+          side: proposal.side,
+          type: proposal.type,
+          quantity: proposal.quantity,
+          price: proposal.price,
+          triggerPrice: proposal.triggerPrice,
+          product: proposal.product,
+          validity: proposal.validity,
+          disclosedQuantity: proposal.disclosedQuantity,
+          slice: proposal.slice,
+          broker: proposal.broker,
+        });
+
+        if (res.ok && res.data?.order) {
+          const ord = res.data.order;
+          triggerToast(
+            'Live Order Executed',
+            `Order for ${proposal.quantity} ${proposal.symbol} sent to venue (${ord.status})`,
+            'success'
+          );
+          syncUpstoxAccount();
+        } else {
+          triggerToast(
+            'Live Execution Notice',
+            res.error || 'Live order execution rejected by venue gate',
+            'warn'
+          );
+        }
+      } catch (err: any) {
+        triggerToast('Live Order Error', err?.message || 'Failed to execute live order', 'warn');
+      } finally {
+        setLiveOrderConfirmationOpen(false);
+        setLiveOrderProposal(null);
+      }
+    },
+    [syncUpstoxAccount, triggerToast]
+  );
 
   // Live Exchange Bridge State
   const [exchangeAccount, setExchangeAccount] = useState<ExchangeAccountInfo | null>(() => state.exchangeAccount || null);
@@ -1758,6 +1823,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
         takeProfit?: number;
         stopLoss?: number;
         product?: 'CNC' | 'MIS' | 'MTF' | string;
+        live?: boolean;
+        accountMode?: 'paper' | 'live' | string;
       }
     ) => {
       if (stateRef.current.authSession?.user?.isEmergencyLocked) {
@@ -1782,6 +1849,36 @@ export function Provider({ children }: { children: React.ReactNode }) {
             triggerToast('Invalid Tick Size', 'NSE/BSE equities require limit prices in multiples of ₹0.05.', 'warn');
             return { ok: false, error: 'Price must be a multiple of ₹0.05' };
           }
+        }
+
+        // Live orders require SEBI-compliant two-step human confirmation
+        if (options?.live || options?.accountMode === 'live') {
+          ApiClient.proposeLiveOrder({
+            symbol,
+            side: side === 'buy' ? 'BUY' : 'SELL',
+            type: upstoxOrderType,
+            quantity: qty,
+            price: price > 0 ? price : undefined,
+            triggerPrice: options?.stopPrice,
+            product,
+            broker: 'upstox',
+          })
+            .then((res) => {
+              if (res.ok && res.data?.confirmation) {
+                const conf = res.data.confirmation;
+                openLiveOrderConfirmation({
+                  ...conf,
+                  ttlSeconds: Math.max(0, Math.round(((conf.expiresAt || Date.now() + 60000) - Date.now()) / 1000)),
+                });
+              } else {
+                triggerToast('Live Proposal Notice', res.error || 'Could not generate live order proposal', 'warn');
+              }
+            })
+            .catch((err: any) => {
+              triggerToast('Live Proposal Error', err?.message || 'Failed to communicate with live order gate', 'warn');
+            });
+
+          return { ok: true, pendingLiveConfirmation: true };
         }
 
         // Safe dispatch: paper mode executes deterministically through Upstox adapter; live orders require two-step confirmation
@@ -2128,7 +2225,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
       return r;
     },
-    [triggerToast, syncExchangeBalances, syncWeb3Balances]
+    [triggerToast, syncExchangeBalances, syncWeb3Balances, syncUpstoxAccount, openLiveOrderConfirmation]
   );
 
   const cancelPendingOrder = useCallback(
@@ -3104,6 +3201,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
       scanPilotOpportunities,
       executePilotRecommendation,
       resetPilotCircuitBreaker,
+      liveOrderProposal,
+      liveOrderConfirmationOpen,
+      openLiveOrderConfirmation,
+      closeLiveOrderConfirmation,
+      confirmLiveOrderExecution,
     }),
     [
       state,
@@ -3211,6 +3313,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
       scanPilotOpportunities,
       executePilotRecommendation,
       resetPilotCircuitBreaker,
+      liveOrderProposal,
+      liveOrderConfirmationOpen,
+      openLiveOrderConfirmation,
+      closeLiveOrderConfirmation,
+      confirmLiveOrderExecution,
     ]
   );
 
