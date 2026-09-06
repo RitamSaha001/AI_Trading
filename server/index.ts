@@ -33,6 +33,8 @@ import { RateLimitTracker } from './services/rateLimitTracker';
 import { UserDataStreamManager } from './services/userDataStreamManager';
 import { LiveOrderConfirmationService } from './services/liveOrderConfirmationService';
 import { EmergencyControlService } from './services/emergencyControlService';
+import { UpstoxTotpAuthService } from './services/brokers/upstox/upstoxTotpAuthService';
+import { IntradaySquareOffService } from './services/intradaySquareOffService';
 
 let isShuttingDown = false;
 
@@ -55,6 +57,8 @@ export async function shutdownServer(server?: FastifyInstance): Promise<void> {
     OrderRecoveryService.stop();
     ClockSyncService.stop();
     UserDataStreamManager.stop();
+    UpstoxTotpAuthService.stop();
+    IntradaySquareOffService.stop();
   } catch (err: any) {
     logger.warn('Error stopping background workers:', err.message);
   }
@@ -1319,6 +1323,12 @@ if (isMain || process.env.START_SERVER === 'true') {
         console.warn(`[Reconciliation] Initial startup reconciliation sweep warning: ${err.message}`);
       });
       ReconciliationWorker.startPeriodicScheduler(60_000);
+
+      console.log(`[UpstoxAuth] Starting Upstox daily session health monitor...`);
+      UpstoxTotpAuthService.startScheduler();
+
+      console.log(`[IntradayEgress] Starting mandatory 15:15 IST intraday square-off scheduler...`);
+      IntradaySquareOffService.startScheduler();
 
       const server = buildServer();
 

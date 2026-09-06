@@ -616,15 +616,31 @@ export class UpstoxAdapter implements BrokerGateway {
     try {
       resp = await UpstoxClient.placeOrder(creds.accessToken, payload);
     } catch (err: any) {
-      const isNetworkTimeout = err instanceof StandardBrokerError && err.code === 'NETWORK_ERROR';
+      const errMsg = err?.message || String(err);
+      const isNetworkTimeout =
+        (err instanceof StandardBrokerError && (err.code === 'NETWORK_ERROR' || err.code === 'TIMEOUT' || err.code === 'SERVICE_UNAVAILABLE')) ||
+        /timeout|ETIMEDOUT|ECONNRESET|ENOTFOUND|fetch failed|network|socket|gateway|502|503|504/i.test(errMsg) ||
+        err?.name === 'AbortError';
 
       if (isNetworkTimeout) {
+        logger.warn(`[UpstoxAdapter] placeOrder network timeout for ${clientOrderId}. Performing immediate venue recovery sweep.`);
+
+        // Attempt immediate synchronous venue reconciliation
+        const recon = await this.reconcileUnknownOrder(clientOrderId, order.symbol, order.userId).catch(() => null);
+        if (recon && recon.found) {
+          logger.info(`[UpstoxAdapter] Immediate venue recovery succeeded for ${clientOrderId}: status=${recon.status}`);
+          const recovered = await db.queryOne<any>(`SELECT * FROM exchange_orders WHERE client_order_id = ?`, [clientOrderId]);
+          if (recovered) {
+            return this.mapOrderRecord(recovered);
+          }
+        }
+
         // AMBIGUOUS STATE: Transition to UNKNOWN, do NOT assume FAILED
         await OrderStateMachine.transitionOrder(clientOrderId, 'UNKNOWN', {
-          reason: `Network timeout: ${err.message}`,
+          reason: `Network timeout: ${errMsg}`,
           source: 'upstox_adapter',
           actor: 'execution_service',
-          extraFields: { reject_reason: `Network timeout: ${err.message}` },
+          extraFields: { reject_reason: `Network timeout: ${errMsg}` },
         }).catch(() => {});
 
         await AuditService.logEvent({
@@ -632,12 +648,9 @@ export class UpstoxAdapter implements BrokerGateway {
           eventType: 'ORDER_UNKNOWN',
           source: 'upstox_adapter',
           actor: 'execution_service',
-          metadata: { clientOrderId, error: err.message },
+          metadata: { clientOrderId, error: errMsg },
           result: 'BLOCKED',
         }).catch(() => {});
-
-        // Trigger immediate venue reconciliation
-        await this.reconcileUnknownOrder(clientOrderId, order.symbol, order.userId).catch(() => {});
 
         return {
           id: clientOrderId,

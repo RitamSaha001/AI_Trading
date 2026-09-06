@@ -146,13 +146,33 @@ export class OtrLimiterService {
   }
 
   /**
-   * Asserts that a proposed modification or cancellation does not breach safe OTR limits.
+   * Asserts that a proposed order placement, modification or cancellation does not breach safe OTR limits.
    * Throws a StandardBrokerError if throttled.
    */
-  public static assertOtrLimit(userId: string, symbol: string, action: 'MODIFY' | 'CANCEL'): void {
+  public static assertOtrLimit(userId: string, symbol: string, action: 'PLACE' | 'MODIFY' | 'CANCEL'): void {
     const stats = this.getStats(userId, symbol);
-    const totalActions = stats.ordersPlaced + stats.ordersModified + stats.ordersCancelled;
 
+    if (action === 'PLACE') {
+      const placementRatio = stats.ordersFilled > 0 ? stats.ordersPlaced / stats.ordersFilled : stats.ordersPlaced;
+      if (stats.ordersPlaced >= 20 && placementRatio >= 20) {
+        const msg = `SEBI OTR Guard: Order placement ratio (${placementRatio.toFixed(1)}:1) breached safe ceiling (20:1) for ${symbol}. PLACE throttled to prevent runaway order penalties.`;
+        logger.warn(`[OtrLimiterService] ${msg}`);
+
+        void AuditService.logEvent({
+          userId,
+          eventType: 'OTR_LIMIT_THROTTLED',
+          source: 'otr_limiter_service',
+          actor: 'sebi_compliance_guard',
+          result: 'BLOCKED',
+          metadata: { symbol, stats, action, placementRatio },
+        });
+
+        throw new StandardBrokerError('OTR_LIMIT_EXCEEDED', msg, 'upstox');
+      }
+      return;
+    }
+
+    const totalActions = stats.ordersPlaced + stats.ordersModified + stats.ordersCancelled;
     if (totalActions >= this.MIN_ORDERS_FOR_THROTTLE && stats.ratio >= this.MAX_SAFE_OTR_RATIO) {
       const msg = `SEBI OTR Guard: Order-to-Trade Ratio (${stats.ratio.toFixed(1)}:1) breached safe ceiling (${this.MAX_SAFE_OTR_RATIO}:1) for ${symbol}. ${action} throttled to prevent exchange penalty fines.`;
       logger.warn(`[OtrLimiterService] ${msg}`);

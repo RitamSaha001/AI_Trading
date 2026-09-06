@@ -38,6 +38,8 @@ import { LedgerService } from './ledgerService';
 import { ExactDecimal } from './precision';
 import { EmergencyControlService } from './emergencyControlService';
 import { LiveOrderConfirmationService } from './liveOrderConfirmationService';
+import { IntradaySquareOffService } from './intradaySquareOffService';
+import { OtrLimiterService } from './otrLimiterService';
 
 export interface LiveOrderGateVerificationResult {
   passed: boolean;
@@ -218,6 +220,23 @@ export class LiveOrderGateService {
         `Unsupported order product: ${order.product}. Permitted products: ${validProducts.join(', ')}`,
         brokerId
       );
+    }
+
+    // Intraday (MIS) 15:00 IST Cutoff Check (Component 2)
+    const isMisProduct = rawProduct === 'MIS' || rawProduct === 'I' || rawProduct === 'INTRADAY';
+    if (isMisProduct && order.side === 'BUY' && !order.isSystemPanic) {
+      if (IntradaySquareOffService.isCutoffActive()) {
+        throw new StandardBrokerError(
+          'INTRADAY_CUTOFF_ACTIVE',
+          'Market is within intraday cutoff window (>= 15:00 IST). No new Intraday (MIS) BUY orders are permitted.',
+          brokerId
+        );
+      }
+    }
+
+    // SEBI Order-to-Trade Ratio (OTR) Pre-Submission Check (Component 4)
+    if (!order.isSystemPanic) {
+      OtrLimiterService.assertOtrLimit(order.userId, order.symbol, 'PLACE');
     }
 
     // 10. Authoritative Instrument Rules, Price Bands & Freeze Limits (Findings 1 & 8)
@@ -560,6 +579,26 @@ export class LiveOrderGateService {
             `Insufficient liquid INR cash for live order. Required: ₹${notional.toFixed(2)}, Available: ₹${(Number(availableMinor) / 100).toFixed(2)}`,
             brokerId
           );
+        }
+
+        // Real-Time Broker Venue Margin Pre-Flight Check (Component 1)
+        try {
+          const venueFunds = await upstoxAdapter.getFunds(order.userId);
+          if (venueFunds) {
+            const venueAvailableMinor = venueFunds.availableCash.toMinor(2);
+            if (venueAvailableMinor < reservedCashMinor) {
+              throw new StandardBrokerError(
+                'INSUFFICIENT_FUNDS',
+                `Insufficient Upstox broker margin for live order. Required: ₹${notional.toFixed(2)}, Available on Upstox: ₹${venueFunds.availableCash.toFixed(2)}`,
+                brokerId
+              );
+            }
+          }
+        } catch (err: any) {
+          if (err instanceof StandardBrokerError && err.code === 'INSUFFICIENT_FUNDS') {
+            throw err;
+          }
+          logger.warn(`[LiveOrderGate] Could not query Upstox venue funds pre-flight: ${err.message}`);
         }
       } else if (order.side === 'SELL' && reservedQtyMinor > 0n) {
         const baseAsset = instrument.baseAsset || order.symbol;
