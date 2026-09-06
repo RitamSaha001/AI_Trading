@@ -117,6 +117,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     openUpstoxDrawer,
     closeUpstoxDrawer,
     syncUpstoxAccount,
+    triggerToast,
     liveOrderProposal,
     liveOrderConfirmationOpen,
     closeLiveOrderConfirmation,
@@ -141,23 +142,43 @@ export function Shell({ children }: { children: React.ReactNode }) {
         url.searchParams.delete('state');
         window.history.replaceState({}, document.title, url.pathname + (url.hash ? url.hash.split('?')[0] : ''));
 
+        // Proactively open the Upstox Terminal Drawer so the user has immediate visual feedback
+        openUpstoxDrawer();
+        triggerToast('Authenticating Upstox', 'Connecting Demat session for 87BSJ2 (RAJASREE SAHA)...', 'info');
+
+        const redirectUri = window.location.origin + window.location.pathname;
         import('./services/apiClient').then(({ ApiClient }) => {
-          ApiClient.submitUpstoxCallback(code, stateParam || '')
+          ApiClient.submitUpstoxCallback(code, stateParam || '', redirectUri)
             .then(async (res) => {
               if (res.ok) {
                 setAccountMode('upstox');
                 await syncUpstoxAccount();
+                triggerToast('Upstox Live Connected', 'Demat 87BSJ2 (RAJASREE SAHA) authenticated for live trading.', 'success');
+              } else {
+                openUpstoxDrawer();
+                const isSegment = res.data?.code === 'UPSTOX_SEGMENT_INACTIVE' || /No segments for these users are active/i.test(res.error || '');
+                if (isSegment) {
+                  triggerToast(
+                    'Upstox Segment Pending',
+                    'Demat 87BSJ2 is awaiting segment activation from Upstox app. Simulation mode active.',
+                    'warn'
+                  );
+                } else {
+                  triggerToast('Upstox Connection Failed', res.error || 'Failed to exchange authorization code.', 'warn');
+                }
               }
             })
             .catch((err) => {
               console.error('Failed to exchange Upstox OAuth code:', err);
+              openUpstoxDrawer();
+              triggerToast('Upstox Connection Error', err.message || 'Network error during Upstox token exchange.', 'warn');
             });
         });
       }
     } catch {
       // ignore
     }
-  }, [setAccountMode, syncUpstoxAccount]);
+  }, [openUpstoxDrawer, setAccountMode, syncUpstoxAccount, triggerToast]);
 
   useEffect(() => {
     try {

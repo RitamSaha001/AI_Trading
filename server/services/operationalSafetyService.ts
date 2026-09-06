@@ -156,7 +156,7 @@ export class OperationalSafetyService {
 
     // 1. Check active operational kill switches
     const activeFreezes = await db.query<any>(
-      `SELECT * FROM operational_kill_switches WHERE is_frozen = 1 ORDER BY frozen_at DESC`
+      `SELECT * FROM operational_kill_switches WHERE is_frozen = TRUE ORDER BY frozen_at DESC`
     );
 
     for (const f of activeFreezes) {
@@ -195,14 +195,14 @@ export class OperationalSafetyService {
     const activeBreakers = await CircuitBreakerService.listActiveBreakers();
 
     const activeFreezes = await db.query<any>(
-      `SELECT scope, target, freeze_reason FROM operational_kill_switches WHERE is_frozen = 1`
+      `SELECT scope, target, freeze_reason FROM operational_kill_switches WHERE is_frozen = TRUE`
     );
 
     const isGlobalFrozen = activeFreezes.some((f) => f.scope === 'GLOBAL');
 
     // Query unresolved critical mismatches
     const criticalMismatches = await db.query<any>(
-      `SELECT COUNT(*) as cnt FROM reconciliation_mismatches WHERE severity = 'CRITICAL' AND resolved = 0`
+      `SELECT COUNT(*) as cnt FROM reconciliation_mismatches WHERE severity = 'CRITICAL' AND resolved = FALSE`
     );
     const unresolvedMismatches = Number(criticalMismatches[0]?.cnt || 0);
 
@@ -377,7 +377,7 @@ export class OperationalSafetyGate {
     // 4. Reconciliation Health (No unresolved CRITICAL or HIGH mismatches for user or symbol)
     const activeMismatches = await db.query<any>(
       `SELECT id, notes, severity FROM reconciliation_mismatches 
-       WHERE severity IN ('CRITICAL', 'HIGH') AND resolved = 0 AND (user_id = ? OR entity_id = ?)`,
+       WHERE severity IN ('CRITICAL', 'HIGH') AND resolved = FALSE AND (user_id = ? OR entity_id = ?)`,
       [params.userId, params.symbol]
     );
     if (activeMismatches.length > 0) {

@@ -442,7 +442,7 @@ export class ReconciliationWorker {
       } else {
         // Global scheduled run: Enumerate and reconcile EVERY registered user with exchange credentials
         const registeredUsers = await db.query<any>(
-          `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = 1`
+          `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = TRUE`
         );
 
         let allUsersTransportSucceeded = registeredUsers.length > 0;

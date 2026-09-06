@@ -830,7 +830,7 @@ export function buildServer(): FastifyInstance {
   });
 
   server.post('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { code: string; state: string };
+    const body = req.body as { code: string; state: string; redirectUri?: string };
     if (!body?.code) {
       return reply.status(400).send({ success: false, error: 'Authorization code is required' });
     }
@@ -842,10 +842,21 @@ export function buildServer(): FastifyInstance {
       const audit = await broker.saveCredentials!(req.user!.id, {
         code: body.code,
         state: body.state,
+        redirectUri: body.redirectUri,
       });
       return { success: true, audit, message: 'Upstox connected and credentials encrypted at rest.' };
     } catch (err: any) {
-      return reply.status(400).send({ success: false, error: err.message });
+      logger.warn(`[Upstox Callback] Authentication or token exchange failed: ${err.message}`);
+      const isSegmentInactive = /No segments for these users are active|UDAPI100058/i.test(err.message);
+      return reply.status(400).send({
+        success: false,
+        code: isSegmentInactive ? 'UPSTOX_SEGMENT_INACTIVE' : 'UPSTOX_AUTH_FAILED',
+        error: isSegmentInactive
+          ? 'Upstox reported that trading segments are inactive or awaiting reactivation for this account. Please reactivate segments in Upstox web/app, or paste an active access token.'
+          : err.message,
+        details: err.message,
+        accountId: '87BSJ2',
+      });
     }
   });
 

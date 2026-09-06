@@ -26,7 +26,7 @@ async function apiRequest<T = any>(
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { ok: false, error: data.error || `HTTP ${res.status}` };
+      return { ok: false, error: data.error || data.message || `HTTP ${res.status}`, data };
     }
     return { ok: true, data };
   } catch (err: any) {
@@ -287,7 +287,7 @@ export const ApiClient = {
   },
 
   async submitUpstoxCallback(code: string, state: string, redirectUri?: string) {
-    return apiRequest<{ audit: any; message: string }>('/api/exchange/upstox/callback', {
+    return apiRequest<{ audit?: any; message?: string; code?: string; details?: string; accountId?: string }>('/api/exchange/upstox/callback', {
       method: 'POST',
       body: JSON.stringify({ code, state, redirectUri }),
     });

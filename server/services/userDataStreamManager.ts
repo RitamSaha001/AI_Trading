@@ -258,7 +258,7 @@ export class UserDataStreamManager {
     const db = getDb();
     try {
       const activeAccounts = await db.query<{ user_id: string }>(
-        `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = 1`
+        `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = TRUE`
       );
       let count = 0;
       for (const acc of activeAccounts) {
@@ -275,7 +275,7 @@ export class UserDataStreamManager {
       // Restore Upstox user stream connections
       const upstoxCreds = await db.query<{ user_id: string; access_token_encrypted: string }>(
         `SELECT user_id, access_token_encrypted FROM broker_credentials 
-         WHERE broker = 'upstox' AND can_trade = 1`
+         WHERE broker = 'upstox' AND can_trade = TRUE`
       );
       for (const cred of upstoxCreds) {
         try {

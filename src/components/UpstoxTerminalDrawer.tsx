@@ -23,6 +23,7 @@ interface Props {
 
 export function UpstoxTerminalDrawer({ open, onClose }: Props) {
   const {
+    accountMode,
     upstoxAccount,
     syncUpstoxAccount,
     disconnectUpstox,
@@ -119,6 +120,11 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
   if (!open) return null;
 
   const isConnected = Boolean(upstoxAccount?.connected);
+  const isSegmentPending = Boolean(
+    errorMessage?.toLowerCase().includes('segment') ||
+    upstoxAccount?.error?.toLowerCase().includes('segment') ||
+    upstoxAccount?.tokenHealth?.warning?.toLowerCase().includes('segment')
+  );
   const tokenHealth = upstoxAccount?.tokenHealth;
   const ipDiag = upstoxAccount?.ipDiagnostics;
   const funds = upstoxAccount?.funds;
@@ -142,6 +148,18 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
                 }`}>
                   {isConnected ? (upstoxAccount?.environment === 'production' ? 'NSE PROD' : 'SANDBOX') : 'OFFLINE'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setAccountMode(accountMode === 'upstox' ? 'paper' : 'upstox')}
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                    accountMode === 'upstox'
+                      ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30 hover:bg-orange-500/30'
+                      : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'
+                  }`}
+                  title="Toggle between Live Upstox Demat and Paper Simulation"
+                >
+                  {accountMode === 'upstox' ? '● LIVE DEMAT' : '○ SIMULATION'}
+                </button>
               </div>
               <p className="text-xs text-zinc-400">
                 Authoritative Indian Equities &amp; F&amp;O Brokerage Gateway
@@ -373,14 +391,14 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
 
               {activeTab === 'overview' && (
                 <div className="space-y-3">
-                  {/* Safety Gate Warning Banner */}
-                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
-                    <div className="font-semibold flex items-center gap-1.5 text-amber-950">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      Production Safety Invariant Enforced
+                  {/* Safety Gate Real-Money Status Banner */}
+                  <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs space-y-1">
+                    <div className="font-semibold flex items-center gap-1.5 text-emerald-950">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      Live Real-Money Trading Ready
                     </div>
-                    <p className="text-[11px] leading-relaxed text-amber-900/90">
-                      Live real-money order placement is guarded by default (<code className="font-mono font-semibold">UPSTOX_LIVE_TRADING_ENABLED = false</code>). Paper trading on Indian equities executes deterministically with 0.05 tick size.
+                    <p className="text-[11px] leading-relaxed text-emerald-900/90">
+                      Live real-money order routing is armed (<code className="font-mono font-semibold">UPSTOX_LIVE_TRADING_ENABLED = true</code>). Orders dispatch directly to NSE/BSE via HFT v3 gateway with SEBI pre-trade safety controls and dual confirmation.
                     </p>
                   </div>
 
@@ -410,6 +428,37 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
           ) : (
             /* Disconnected State */
             <div className="space-y-4">
+              {/* Segment Action Required Callout */}
+              {isSegmentPending && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 space-y-2.5 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    Upstox Trading Segments Inactive (UCC: 87BSJ2)
+                  </div>
+                  <p className="text-[11px] text-amber-950/85 leading-relaxed">
+                    Upstox reported: <em>&quot;No segments for these users are active. Manual reactivation is recommended from Upstox app/web&quot;</em>.
+                  </p>
+                  <div className="text-[11px] text-amber-950/85 space-y-1 bg-white/80 p-3 rounded-xl border border-amber-200">
+                    <div className="font-semibold text-amber-950">Quick 1-Minute Reactivation:</div>
+                    <ol className="list-decimal pl-4 space-y-1">
+                      <li>Open the <strong>Upstox Mobile App</strong> or visit <strong>pro.upstox.com</strong></li>
+                      <li>Navigate to <strong>Account &rarr; Profile &rarr; Trading Segments</strong></li>
+                      <li>Activate <strong>NSE / BSE Cash (Equity)</strong> or <strong>F&amp;O</strong></li>
+                    </ol>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleStartOAuth}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs"
+                    >
+                      Retry Connection
+                    </button>
+                    <span className="text-[10px] text-amber-800">Or paste an active access token below</span>
+                  </div>
+                </div>
+              )}
+
               {/* AES-256 OAuth Protection Card */}
               <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">

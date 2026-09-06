@@ -76,7 +76,7 @@ export class IntradaySquareOffService {
     const userRows = targetUserId
       ? [{ user_id: targetUserId }]
       : await db.query<{ user_id: string }>(
-          `SELECT DISTINCT user_id FROM broker_credentials WHERE broker = 'upstox' AND can_trade = 1`
+          `SELECT DISTINCT user_id FROM broker_credentials WHERE broker = 'upstox' AND can_trade = TRUE`
         );
 
     for (const { user_id: userId } of userRows) {

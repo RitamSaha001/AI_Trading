@@ -194,7 +194,7 @@ export class InFlightMtmService {
 
     // Query all live users with active credentials
     const users = await db.query<{ user_id: string; broker: string }>(
-      `SELECT DISTINCT user_id, broker FROM broker_credentials WHERE can_trade = 1`
+      `SELECT DISTINCT user_id, broker FROM broker_credentials WHERE can_trade = TRUE`
     );
 
     for (const { user_id, broker } of users) {
