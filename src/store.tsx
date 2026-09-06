@@ -6,6 +6,7 @@ import {
   DataSource,
   Market,
   Order,
+  OrderStatus,
   OrderType,
   Side,
   StrategyConfig,
@@ -513,13 +514,14 @@ export function Provider({ children }: { children: React.ReactNode }) {
     if (isUpstoxSyncingRef.current) return;
     isUpstoxSyncingRef.current = true;
     try {
-      const [accRes, fundsRes, posRes, hldRes, healthRes, diagRes] = await Promise.allSettled([
+      const [accRes, fundsRes, posRes, hldRes, healthRes, diagRes, ordersRes] = await Promise.allSettled([
         ApiClient.getExchangeAccount('upstox'),
         ApiClient.getBrokerFunds('upstox'),
         ApiClient.getBrokerPositions('upstox'),
         ApiClient.getBrokerHoldings('upstox'),
         ApiClient.getUpstoxTokenHealth(),
         ApiClient.getUpstoxIpDiagnostics(),
+        ApiClient.getOrders(),
       ]);
 
       const accData = accRes.status === 'fulfilled' && accRes.value.ok ? accRes.value.data?.account : null;
@@ -528,6 +530,28 @@ export function Provider({ children }: { children: React.ReactNode }) {
       const hldData = hldRes.status === 'fulfilled' && hldRes.value.ok ? hldRes.value.data?.holdings : [];
       const healthData = healthRes.status === 'fulfilled' && healthRes.value.ok ? healthRes.value.data?.health : null;
       const diagData = diagRes.status === 'fulfilled' && diagRes.value.ok ? diagRes.value.data?.diagnostics : null;
+      const serverOrders = ordersRes.status === 'fulfilled' && ordersRes.value.ok ? (ordersRes.value.data?.orders || []) : [];
+
+      const mappedOrders: Order[] = serverOrders.map((row: any) => ({
+        id: row.client_order_id || row.id,
+        ts: Number(row.created_at) || Date.now(),
+        side: (row.side?.toLowerCase() as Side) || 'buy',
+        type: (row.type?.toLowerCase() as OrderType) || 'market',
+        asset: row.symbol as Asset,
+        amount: Number(row.orig_qty || row.quantity || 0),
+        price: Number(row.avg_price || row.price || 0),
+        limitPrice: row.type?.toUpperCase() === 'LIMIT' ? Number(row.price || 0) : undefined,
+        stopPrice: row.trigger_price ? Number(row.trigger_price) : undefined,
+        fee: Number(row.fee || 0),
+        notional: Number(row.notional || 0),
+        auto: Boolean(row.is_autonomous || row.auto),
+        strategyName: row.strategy_name || (row.broker === 'upstox' ? 'Upstox Live Order' : undefined),
+        status: row.status === 'FILLED' ? 'filled' : (row.status === 'REJECTED' ? 'rejected' : (row.status === 'CANCELLED' ? 'cancelled' : 'pending')),
+        product: row.product,
+        validity: row.validity,
+        broker: row.broker,
+        accountMode: row.broker === 'upstox' ? 'upstox' : 'exchange',
+      }));
 
       const isConn = Boolean(accData?.connected);
 
@@ -553,11 +577,76 @@ export function Provider({ children }: { children: React.ReactNode }) {
         };
 
         setUpstoxAccount(updated);
-        setState((s) => ({
-          ...s,
-          upstoxAccount: updated,
-          ...(s.accountMode === 'paper' && isConn ? { accountMode: 'upstox' } : {}),
-        }));
+        setState((s) => {
+          const isUpstoxActive = s.accountMode === 'upstox';
+
+          let nextPositions = s.positions;
+          let nextAvgBuyPrice = s.avgBuyPrice;
+          let nextCash = s.cash;
+
+          if (isUpstoxActive && isConn) {
+            const upstoxPositions: Record<Asset, number> = {} as Record<Asset, number>;
+            const upstoxAvgBuyPrice: Record<Asset, number> = {} as Record<Asset, number>;
+
+            if (updated.holdings) {
+              for (const h of updated.holdings) {
+                const sym = (h.symbol || '').toUpperCase() as Asset;
+                const qty = Number(h.quantity) || 0;
+                const avg = Number(h.averagePrice) || 0;
+                if (qty > 0) {
+                  upstoxPositions[sym] = (upstoxPositions[sym] || 0) + qty;
+                  if (avg > 0) {
+                    upstoxAvgBuyPrice[sym] = avg;
+                  }
+                }
+              }
+            }
+
+            if (updated.positions) {
+              for (const p of updated.positions) {
+                const sym = (p.symbol || '').toUpperCase() as Asset;
+                const qty = Number(p.quantity) || 0;
+                const avg = Number(p.averagePrice) || 0;
+                upstoxPositions[sym] = (upstoxPositions[sym] || 0) + qty;
+                if (avg > 0 && !upstoxAvgBuyPrice[sym]) {
+                  upstoxAvgBuyPrice[sym] = avg;
+                }
+              }
+            }
+
+            nextPositions = upstoxPositions;
+            nextAvgBuyPrice = upstoxAvgBuyPrice;
+            if (updated.funds?.availableCash !== undefined) {
+              nextCash = Number(updated.funds.availableCash) || 0;
+            }
+          }
+
+          let nextOrders = s.orders;
+          if (mappedOrders.length > 0) {
+            const merged = [...s.orders];
+            for (const mo of mappedOrders) {
+              const idx = merged.findIndex((o) => o.id === mo.id);
+              if (idx >= 0) {
+                merged[idx] = { ...merged[idx], ...mo };
+              } else {
+                merged.unshift(mo);
+              }
+            }
+            nextOrders = merged;
+          }
+
+          return {
+            ...s,
+            upstoxAccount: updated,
+            ...(isConn && !s.upstoxAccount?.connected && s.accountMode === 'paper' ? { accountMode: 'upstox' } : {}),
+            orders: nextOrders,
+            ...(isUpstoxActive && isConn ? {
+              positions: nextPositions,
+              avgBuyPrice: nextAvgBuyPrice,
+              cash: nextCash,
+            } : {}),
+          };
+        });
       }
     } catch (err) {
       console.warn('Upstox account sync encountered error:', err);
@@ -613,6 +702,34 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
         if (res.ok && res.data?.order) {
           const ord = res.data.order;
+          const mappedStatus: OrderStatus =
+            ord.status === 'FILLED' ? 'filled' : (ord.status === 'REJECTED' ? 'rejected' : 'pending');
+          const executedOrder: Order = {
+            id: ord.id || ord.clientOrderId || proposal.confirmationId,
+            ts: ord.time || Date.now(),
+            side: (proposal.side.toLowerCase() as Side) || 'buy',
+            type: (proposal.type.toLowerCase() as OrderType) || 'market',
+            asset: proposal.symbol as Asset,
+            amount: Number(ord.origQty || proposal.quantity),
+            price: Number(ord.price || proposal.price || 0),
+            limitPrice: proposal.type.toUpperCase() === 'LIMIT' ? proposal.price : undefined,
+            stopPrice: proposal.triggerPrice,
+            fee: Number(ord.price || proposal.price || 0) * proposal.quantity * 0.0008,
+            notional: Number(ord.price || proposal.price || 0) * proposal.quantity,
+            auto: false,
+            strategyName: 'Live Human Confirmed',
+            status: mappedStatus,
+            product: proposal.product,
+            validity: proposal.validity,
+            broker: (proposal.broker as any) || 'upstox',
+            accountMode: 'upstox',
+          };
+
+          setState((s) => ({
+            ...s,
+            orders: [executedOrder, ...s.orders.filter((o) => o.id !== executedOrder.id)],
+          }));
+
           triggerToast(
             'Live Order Executed',
             `Order for ${proposal.quantity} ${proposal.symbol} sent to venue (${ord.status})`,
@@ -1970,7 +2087,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        const isLive = options?.live || options?.accountMode === 'live';
+        const isLive = options?.live ?? (options?.accountMode ? options.accountMode === 'live' : Boolean(stateRef.current.upstoxAccount?.connected));
         const isAuto = Boolean(options?.auto || (options as any)?.isAutonomous);
 
         // Live manual orders require SEBI-compliant two-step human confirmation

@@ -600,6 +600,7 @@ export class UpstoxAdapter implements BrokerGateway {
       ? OtrLimiterService.formatStrategyTag((order as any).strategyId || (order as any).strategyName, clientOrderId)
       : clientOrderId.slice(-20);
 
+    const isAmo = Boolean((order as any).isAmo || (order as any).amo || order.validity === 'AMO');
     const payload: UpstoxPlaceOrderPayload = {
       quantity: Number(order.quantity),
       product,
@@ -612,6 +613,7 @@ export class UpstoxAdapter implements BrokerGateway {
       trigger_price: triggerPriceNum,
       disclosed_quantity: disclosedQtyNum,
       slice: order.slice,
+      is_amo: isAmo || undefined,
     };
 
     let resp: any = null;

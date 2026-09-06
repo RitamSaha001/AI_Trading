@@ -1957,9 +1957,13 @@ export function Orders() {
   const upstoxHoldingQty = Number(
     upstoxAccount?.holdings?.find((h) => h.symbol === selectedAsset || h.instrumentKey?.includes(selectedAsset))?.quantity || 0
   );
+  const upstoxPositionQty = Number(
+    upstoxAccount?.positions?.find((p) => p.symbol === selectedAsset || p.instrumentKey?.includes(selectedAsset))?.quantity || 0
+  );
+  const totalUpstoxQty = upstoxHoldingQty + upstoxPositionQty;
   const availableHolding =
     currentDeskMode === 'upstox'
-      ? (upstoxHoldingQty > 0 ? upstoxHoldingQty : currentHolding)
+      ? (totalUpstoxQty > 0 ? totalUpstoxQty : currentHolding)
       : currentHolding;
 
   // NSE Equities strictly require tick size multiple of 0.05
