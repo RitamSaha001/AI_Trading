@@ -589,12 +589,67 @@ export interface QuantitativeOpportunity {
   timestamp: number;
 }
 
+export type PilotStrategyKind =
+  | 'Hurst Trend Rider'
+  | 'OU Mean Reversion'
+  | 'Titan Alpha Sentinel'
+  | 'Value Accumulator';
+
+export type FleetAssetLifecycle =
+  | 'MONITORING'
+  | 'ORDER_PENDING'
+  | 'IN_POSITION'
+  | 'TRAILING_PROFIT'
+  | 'COOLDOWN';
+
+export interface AssetFleetStatus {
+  asset: Asset;
+  assignedStrategy: PilotStrategyKind;
+  regimeLabel: string;
+  hurst: number;
+  currentPrice: number;
+  state: FleetAssetLifecycle;
+  entryPrice?: number;
+  stopLossPrice?: number;
+  takeProfitPrice?: number;
+  trailingStopPrice?: number;
+  unrealizedPnl?: number;
+  unrealizedPnlPct?: number;
+  unitsHeld?: number;
+  lastActionAt?: number;
+  lastActionDetail?: string;
+}
+
+export interface PilotRateLimitStatus {
+  requestsThisMinute: number;
+  maxPerMinute: number;
+  minSpacingMs: number;
+  lastDispatchedAt: number;
+  queueLength: number;
+  isThrottled: boolean;
+}
+
+export interface PilotActionLog {
+  id: string;
+  timestamp: number;
+  asset: Asset;
+  action: 'BUY_ENTRY' | 'TAKE_PROFIT' | 'STOP_LOSS' | 'TRAILING_RATCHET' | 'THROTTLED' | 'SKIPPED';
+  strategy: string;
+  detail: string;
+  price: number;
+  status: 'EXECUTED' | 'THROTTLED' | 'BLOCKED';
+}
+
 export interface AutonomousPilotState {
   enabled: boolean;
   profile: AutonomousPilotProfile;
+  executionMode: 'full_autonomous' | 'semi_autonomous';
   maxDailyDrawdownPct: number;
   riskPerTradePct: number;
   activeOpportunities: QuantitativeOpportunity[];
+  activeFleet: Record<string, AssetFleetStatus>;
+  rateLimitStatus: PilotRateLimitStatus;
+  actionLogs: PilotActionLog[];
   lastScanAt: number | null;
   dailyStartingValue: number;
   dailyDrawdownPct: number;
@@ -602,7 +657,7 @@ export interface AutonomousPilotState {
   tripReason?: string;
   totalAutopilotTradesExecuted: number;
   autoPilotProfitTotal: number;
-};
+}
 
 
 // ---------------------------------------------------------------------------

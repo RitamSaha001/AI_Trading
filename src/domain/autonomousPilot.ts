@@ -72,6 +72,8 @@ export const PILOT_PROFILES: Record<AutonomousPilotProfile, PilotProfileConfig> 
   },
 };
 
+import { initializeFleetStatus, createDefaultRateLimitStatus } from './autonomousPilotEngine';
+
 /**
  * Creates default initial state for Autonomous Local Quant Pilot.
  */
@@ -79,9 +81,13 @@ export function createDefaultAutonomousPilotState(startingValue = 50000): Autono
   return {
     enabled: false,
     profile: 'conservative',
+    executionMode: 'full_autonomous',
     maxDailyDrawdownPct: 1.5,
     riskPerTradePct: 0.75,
     activeOpportunities: [],
+    activeFleet: initializeFleetStatus(),
+    rateLimitStatus: createDefaultRateLimitStatus(),
+    actionLogs: [],
     lastScanAt: null,
     dailyStartingValue: startingValue,
     dailyDrawdownPct: 0,
@@ -360,3 +366,5 @@ export function checkPilotCircuitBreaker(
 
   return { tripped: false, drawdownPct };
 }
+
+export * from './autonomousPilotEngine';

@@ -29,6 +29,7 @@ import {
   AutonomousPilotProfile,
   QuantitativeOpportunity,
   AutonomousPilotState,
+  PilotActionLog,
 } from './types';
 import { LiveOrderProposalData } from './components/LiveOrderConfirmationModal';
 import {
@@ -36,6 +37,7 @@ import {
   checkPilotCircuitBreaker,
   PILOT_PROFILES,
   createDefaultAutonomousPilotState,
+  tickAutonomousPilot,
 } from './domain/autonomousPilot';
 import {
   createDefaultWallet,
@@ -248,6 +250,9 @@ type Ctx = {
   autonomousPilot: AutonomousPilotState;
   toggleAutonomousPilot: () => void;
   setPilotProfile: (profile: AutonomousPilotProfile) => void;
+  setPilotExecutionMode: (mode: 'full_autonomous' | 'semi_autonomous') => void;
+  emergencyDisarmPilot: () => void;
+  clearPilotLogs: () => void;
   scanPilotOpportunities: () => void;
   executePilotRecommendation: (opp: QuantitativeOpportunity) => { ok: boolean; error?: string };
   resetPilotCircuitBreaker: () => void;
@@ -436,6 +441,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const stateRef = useRef(state);
   const marketsRef = useRef(markets);
   const toastTimeoutRef = useRef<any>(null);
+  const orderRef = useRef<any>(null);
 
   const triggerToast = useCallback((title: string, message: string, type: 'success' | 'info' | 'warn' = 'info') => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -1779,6 +1785,70 @@ export function Provider({ children }: { children: React.ReactNode }) {
         // ATOMIC MERGE onto latest state
         setState((prev) => mergeTickResults(prev, mutations));
       }
+
+      // 4. Master Autonomous Pilot Execution (Zero Gemini, Multi-Asset Fleet Orchestration, Rate-Limited)
+      const currentPilot = stateRef.current.autonomousPilot;
+      if (currentPilot?.enabled) {
+        const pilotResult = tickAutonomousPilot(stateRef.current, m);
+
+        if (pilotResult.circuitBreakerTripped && !currentPilot.circuitBreakerTripped) {
+          triggerToast(
+            'Auto-Pilot Circuit Breaker Tripped',
+            pilotResult.tripReason || 'Daily drawdown limit reached. Halting executions.',
+            'warn'
+          );
+        }
+
+        // Dispatch queued orders (if in full_autonomous mode and within rate limits)
+        if (currentPilot.executionMode === 'full_autonomous' && pilotResult.ordersToDispatch.length > 0) {
+          for (const prop of pilotResult.ordersToDispatch) {
+            if (orderRef.current) {
+              const res = orderRef.current(
+                prop.side,
+                prop.asset,
+                prop.amount,
+                {
+                  type: prop.type,
+                  limitPrice: prop.price,
+                  stopLoss: prop.stopLoss,
+                  takeProfit: prop.takeProfit,
+                  auto: true,
+                  strategyName: prop.strategyName,
+                  product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
+                }
+              );
+
+              if (res && res.ok) {
+                const msg = `Auto-Pilot executed ${prop.side.toUpperCase()} ${prop.amount} ${prop.asset} @ ₹${prop.price.toFixed(2)} [${prop.strategyName}]`;
+                if (stateRef.current.settings.soundEnabled) playChime('trade');
+                triggerToast(`Auto-Pilot: ${prop.asset}`, msg, 'success');
+              }
+            }
+          }
+        }
+
+        // Update state with refreshed fleet telemetry, rate limit meters, and action logs
+        setState((prev) => {
+          const p = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+          const mergedLogs = [
+            ...pilotResult.newActionLogs,
+            ...(p.actionLogs || []),
+          ].slice(0, 50);
+
+          return {
+            ...prev,
+            autonomousPilot: {
+              ...p,
+              activeFleet: pilotResult.updatedFleet,
+              rateLimitStatus: pilotResult.updatedRateLimits,
+              actionLogs: mergedLogs,
+              circuitBreakerTripped: pilotResult.circuitBreakerTripped || p.circuitBreakerTripped,
+              tripReason: pilotResult.tripReason || p.tripReason,
+              totalAutopilotTradesExecuted: p.totalAutopilotTradesExecuted + pilotResult.ordersToDispatch.length,
+            },
+          };
+        });
+      }
     }, 2500);
 
     return () => clearInterval(loopId);
@@ -2227,6 +2297,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
     },
     [triggerToast, syncExchangeBalances, syncWeb3Balances, syncUpstoxAccount, openLiveOrderConfirmation]
   );
+  orderRef.current = order;
 
   const cancelPendingOrder = useCallback(
     async (orderId: string) => {
@@ -2953,6 +3024,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
       if (nextEnabled) {
         updated.activeOpportunities = scanAllMarkets(prev, markets, updated.profile);
         updated.lastScanAt = Date.now();
+        const pilotRes = tickAutonomousPilot(prev, markets);
+        updated.activeFleet = pilotRes.updatedFleet;
+        updated.rateLimitStatus = pilotRes.updatedRateLimits;
       }
       return { ...prev, autonomousPilot: updated };
     });
@@ -2968,11 +3042,14 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const setPilotProfile = useCallback((profile: AutonomousPilotProfile) => {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      const pilotRes = tickAutonomousPilot(prev, markets);
       const updated = {
         ...current,
         profile,
         riskPerTradePct: PILOT_PROFILES[profile].maxRiskPerTradePct,
         activeOpportunities: scanAllMarkets(prev, markets, profile),
+        activeFleet: pilotRes.updatedFleet,
+        rateLimitStatus: pilotRes.updatedRateLimits,
         lastScanAt: Date.now(),
       };
       return { ...prev, autonomousPilot: updated };
@@ -2980,15 +3057,85 @@ export function Provider({ children }: { children: React.ReactNode }) {
     triggerToast('Pilot Profile Updated', `Active profile switched to ${PILOT_PROFILES[profile].name}.`, 'info');
   }, [markets, triggerToast]);
 
+  const setPilotExecutionMode = useCallback((mode: 'full_autonomous' | 'semi_autonomous') => {
+    setState((prev) => {
+      const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      return {
+        ...prev,
+        autonomousPilot: {
+          ...current,
+          executionMode: mode,
+        },
+      };
+    });
+    triggerToast(
+      'Execution Mode Updated',
+      mode === 'full_autonomous'
+        ? 'Full Autonomous: Pilot undertakes all quantitative strategies and executes automatically.'
+        : 'Semi-Autonomous: Pilot undertakes analysis and generates 1-click execution cards.',
+      'info'
+    );
+  }, [triggerToast]);
+
+  const emergencyDisarmPilot = useCallback(() => {
+    setState((prev) => {
+      const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      const disarmLog: PilotActionLog = {
+        id: `disarm_${Date.now()}`,
+        timestamp: Date.now(),
+        asset: 'RELIANCE',
+        action: 'THROTTLED',
+        strategy: 'Emergency Disarm Switch',
+        detail: 'Emergency Disarm engaged: All autonomous execution halted immediately.',
+        price: 0,
+        status: 'BLOCKED',
+      };
+      const updatedOrders = prev.orders.map((o) => {
+        if (o.auto && o.status === 'pending') {
+          return { ...o, status: 'cancelled' as const, rejectReason: 'Emergency Disarm Cancel' };
+        }
+        return o;
+      });
+
+      return {
+        ...prev,
+        orders: updatedOrders,
+        autonomousPilot: {
+          ...current,
+          enabled: false,
+          actionLogs: [disarmLog, ...(current.actionLogs || [])].slice(0, 50),
+        },
+      };
+    });
+    triggerToast('Auto-Pilot Disarmed', 'Emergency disarm engaged: all autonomous operations halted.', 'warn');
+  }, [triggerToast]);
+
+  const clearPilotLogs = useCallback(() => {
+    setState((prev) => {
+      const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      return {
+        ...prev,
+        autonomousPilot: {
+          ...current,
+          actionLogs: [],
+        },
+      };
+    });
+    triggerToast('Logs Cleared', 'Autonomous pilot activity log cleared.', 'info');
+  }, [triggerToast]);
+
   const scanPilotOpportunities = useCallback(() => {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
       const opps = scanAllMarkets(prev, markets, current.profile);
+      const pilotRes = tickAutonomousPilot(prev, markets);
       return {
         ...prev,
         autonomousPilot: {
           ...current,
           activeOpportunities: opps,
+          activeFleet: pilotRes.updatedFleet,
+          rateLimitStatus: pilotRes.updatedRateLimits,
           lastScanAt: Date.now(),
         },
       };
@@ -3198,6 +3345,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
       autonomousPilot,
       toggleAutonomousPilot,
       setPilotProfile,
+      setPilotExecutionMode,
+      emergencyDisarmPilot,
+      clearPilotLogs,
       scanPilotOpportunities,
       executePilotRecommendation,
       resetPilotCircuitBreaker,
@@ -3310,6 +3460,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
       autonomousPilot,
       toggleAutonomousPilot,
       setPilotProfile,
+      setPilotExecutionMode,
+      emergencyDisarmPilot,
+      clearPilotLogs,
       scanPilotOpportunities,
       executePilotRecommendation,
       resetPilotCircuitBreaker,
