@@ -591,25 +591,12 @@ export class LiveOrderGateService {
 
     if (!isPanicBypass) {
       if (order.side === 'BUY' && reservedCashMinor > 0n) {
-        const cashAcc = await db.queryOne<any>(
-          `SELECT balance_minor, reserved_minor FROM ledger_accounts
-           WHERE user_id = ? AND account_mode = 'live' AND account_type = 'trading_allocated' AND asset_or_currency = 'INR'`,
-          [order.userId]
-        );
-        const availableMinor = cashAcc ? BigInt(cashAcc.balance_minor || 0) - BigInt(cashAcc.reserved_minor || 0) : 0n;
-        if (availableMinor < reservedCashMinor) {
-          throw new StandardBrokerError(
-            'INSUFFICIENT_FUNDS',
-            `Insufficient liquid INR cash for live order. Required: ₹${notional.toFixed(2)}, Available: ₹${(Number(availableMinor) / 100).toFixed(2)}`,
-            brokerId
-          );
-        }
-
-        // Real-Time Broker Venue Margin Pre-Flight Check (Component 1)
+        // Query Upstox venue funds pre-flight
+        let venueAvailableMinor: bigint | null = null;
         try {
           const venueFunds = await upstoxAdapter.getFunds(order.userId);
           if (venueFunds) {
-            const venueAvailableMinor = venueFunds.availableCash.toMinor(2);
+            venueAvailableMinor = venueFunds.availableCash.toMinor(2);
             if (venueAvailableMinor < reservedCashMinor) {
               throw new StandardBrokerError(
                 'INSUFFICIENT_FUNDS',
@@ -624,20 +611,57 @@ export class LiveOrderGateService {
           }
           logger.warn(`[LiveOrderGate] Could not query Upstox venue funds pre-flight: ${err.message}`);
         }
+
+        const cashAcc = await LedgerService.getOrCreateAccount(order.userId, 'trading_allocated', 'INR', 'live', db);
+        const availableMinor = BigInt(cashAcc.balance_minor || 0) - BigInt(cashAcc.reserved_minor || 0);
+
+        // If local ledger has insufficient free cash, but venue funds verified, synchronize local ledger
+        if (availableMinor < reservedCashMinor) {
+          if (venueAvailableMinor !== null && venueAvailableMinor >= reservedCashMinor) {
+            const neededBalance = BigInt(cashAcc.reserved_minor || 0) + (venueAvailableMinor > reservedCashMinor ? venueAvailableMinor : reservedCashMinor);
+            await db.execute(
+              `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
+              [neededBalance, Date.now(), cashAcc.id]
+            );
+          } else {
+            throw new StandardBrokerError(
+              'INSUFFICIENT_FUNDS',
+              `Insufficient liquid INR cash for live order. Required: ₹${notional.toFixed(2)}, Available: ₹${(Number(availableMinor) / 100).toFixed(2)}`,
+              brokerId
+            );
+          }
+        }
       } else if (order.side === 'SELL' && reservedQtyMinor > 0n) {
         const baseAsset = instrument.baseAsset || order.symbol;
-        const holdingAcc = await db.queryOne<any>(
-          `SELECT balance_minor, reserved_minor FROM ledger_accounts
-           WHERE user_id = ? AND account_mode = 'live' AND account_type = 'equity_holdings' AND asset_or_currency = ?`,
-          [order.userId, baseAsset]
-        );
-        const availableQtyMinor = holdingAcc ? BigInt(holdingAcc.balance_minor || 0) - BigInt(holdingAcc.reserved_minor || 0) : 0n;
+        const holdingAcc = await LedgerService.getOrCreateAccount(order.userId, 'equity_holdings', baseAsset, 'live', db);
+        const availableQtyMinor = BigInt(holdingAcc.balance_minor || 0) - BigInt(holdingAcc.reserved_minor || 0);
+
         if (availableQtyMinor < reservedQtyMinor) {
-          throw new StandardBrokerError(
-            'INSUFFICIENT_HOLDINGS',
-            `Insufficient sellable equity shares for ${baseAsset}. Required: ${order.quantity} shares, Available: ${availableQtyMinor} shares`,
-            brokerId
-          );
+          // Check Upstox broker holdings and positions
+          let brokerShares = 0n;
+          try {
+            const [holdings, positions] = await Promise.all([
+              upstoxAdapter.getHoldings(order.userId).catch(() => []),
+              upstoxAdapter.getPositions(order.userId).catch(() => []),
+            ]);
+            const holdingItem = holdings.find((h: any) => h.symbol === baseAsset || h.symbol === order.symbol);
+            const posItem = positions.find((p: any) => p.symbol === baseAsset || p.symbol === order.symbol);
+            brokerShares = BigInt(Math.max(0, Math.floor(Number(holdingItem?.quantity || 0) + Number(posItem?.quantity || 0))));
+          } catch {}
+
+          if (brokerShares >= reservedQtyMinor) {
+            const neededBalance = BigInt(holdingAcc.reserved_minor || 0) + brokerShares;
+            await db.execute(
+              `UPDATE ledger_accounts SET balance_minor = ?, updated_at = ? WHERE id = ?`,
+              [neededBalance, Date.now(), holdingAcc.id]
+            );
+          } else {
+            throw new StandardBrokerError(
+              'INSUFFICIENT_HOLDINGS',
+              `Insufficient sellable equity shares for ${baseAsset}. Required: ${order.quantity} shares, Available: ${availableQtyMinor > brokerShares ? availableQtyMinor : brokerShares} shares`,
+              brokerId
+            );
+          }
         }
       }
     }

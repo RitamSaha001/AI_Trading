@@ -309,6 +309,11 @@ export const ApiClient = {
     return apiRequest<{ success: boolean; instruments: any[] }>('/api/market/instruments/upstox');
   },
 
+  async getUpstoxMarketQuotes(symbols?: string[]) {
+    const q = symbols && symbols.length > 0 ? `?symbols=${encodeURIComponent(symbols.join(','))}` : '';
+    return apiRequest<{ success: boolean; quotes: Record<string, any> }>(`/api/market/quotes/upstox${q}`);
+  },
+
   async getBrokerFunds(broker: string = 'upstox') {
     return apiRequest<{ funds: any }>(`/api/exchange/funds?broker=${encodeURIComponent(broker)}`);
   },

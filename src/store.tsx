@@ -299,6 +299,52 @@ function playChime(type: 'success' | 'alert' | 'trade') {
   }
 }
 
+/**
+ * Projects effective portfolio positions and available cash for the Autonomous Pilot.
+ * When accountMode === 'upstox', ensures real Upstox Demat holdings and intraday positions
+ * are merged into the evaluation state so trailing stops, ATR harvests, and risk sizing
+ * operate directly against real Upstox assets.
+ */
+function getEffectivePilotState(state: AppState): AppState {
+  if (state.accountMode !== 'upstox' || !state.upstoxAccount) {
+    return state;
+  }
+
+  const effectivePositions: Record<Asset, number> = { ...state.positions };
+  const effectiveAvgBuyPrice: Record<Asset, number> = { ...state.avgBuyPrice };
+
+  if (state.upstoxAccount.holdings) {
+    for (const h of state.upstoxAccount.holdings) {
+      const sym = (h.symbol || '').toUpperCase() as Asset;
+      const qty = Number(h.quantity) || 0;
+      const avg = Number(h.averagePrice) || 0;
+      effectivePositions[sym] = (effectivePositions[sym] || 0) + qty;
+      if (avg > 0) {
+        effectiveAvgBuyPrice[sym] = avg;
+      }
+    }
+  }
+
+  if (state.upstoxAccount.positions) {
+    for (const p of state.upstoxAccount.positions) {
+      const sym = (p.symbol || '').toUpperCase() as Asset;
+      const qty = Number(p.quantity) || 0;
+      const avg = Number(p.averagePrice) || 0;
+      effectivePositions[sym] = (effectivePositions[sym] || 0) + qty;
+      if (avg > 0 && !effectiveAvgBuyPrice[sym]) {
+        effectiveAvgBuyPrice[sym] = avg;
+      }
+    }
+  }
+
+  return {
+    ...state,
+    cash: state.upstoxAccount.funds?.availableCash ?? state.cash,
+    positions: effectivePositions,
+    avgBuyPrice: effectiveAvgBuyPrice,
+  };
+}
+
 export interface TickMutations {
   cashDelta?: number;
   positionDeltas?: Partial<Record<Asset, number>>;
@@ -1789,7 +1835,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       // 4. Master Autonomous Pilot Execution (Zero Gemini, Multi-Asset Fleet Orchestration, Rate-Limited)
       const currentPilot = stateRef.current.autonomousPilot;
       if (currentPilot?.enabled) {
-        const pilotResult = tickAutonomousPilot(stateRef.current, m);
+        const pilotResult = tickAutonomousPilot(getEffectivePilotState(stateRef.current), m);
 
         if (pilotResult.circuitBreakerTripped && !currentPilot.circuitBreakerTripped) {
           triggerToast(
@@ -1981,6 +2027,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
           .then(async (backendRes) => {
             if (backendRes.ok && backendRes.data?.order) {
               const ord = backendRes.data.order;
+              const mappedStatus = ord.status === 'FILLED' ? 'filled' : (ord.status === 'REJECTED' ? 'rejected' : 'pending');
+              setState((s) => ({
+                ...s,
+                orders: s.orders.map((o) => (o.id === clientOrderId ? { ...o, status: mappedStatus, id: ord.id || o.id } : o)),
+              }));
               triggerToast(
                 isLive ? 'Upstox Live Algo Order Executed' : 'Upstox Order Submitted',
                 `Dispatched ${side.toUpperCase()} ${qty} ${a} (${ord.status}) [${options?.strategyName || 'Manual'}]`,
@@ -1990,10 +2041,18 @@ export function Provider({ children }: { children: React.ReactNode }) {
               return;
             }
             if (backendRes.error) {
+              setState((s) => ({
+                ...s,
+                orders: s.orders.map((o) => (o.id === clientOrderId ? { ...o, status: 'rejected' } : o)),
+              }));
               triggerToast('Order Placement Blocked', backendRes.error, 'warn');
             }
           })
           .catch((err: any) => {
+            setState((s) => ({
+              ...s,
+              orders: s.orders.map((o) => (o.id === clientOrderId ? { ...o, status: 'rejected' } : o)),
+            }));
             triggerToast('Order Network Failure', err?.message || 'Failed to contact broker gateway', 'warn');
           });
 
@@ -2010,7 +2069,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
           notional: price * qty,
           auto: Boolean(options?.auto),
           strategyName: options?.strategyName,
-          status: options?.type === 'limit' ? 'pending' : 'filled',
+          status: options?.type === 'limit' || isLive ? 'pending' : 'filled',
           stopLoss: options?.stopLoss,
           takeProfit: options?.takeProfit,
           product,
@@ -3034,9 +3093,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
       nextEnabled = !current.enabled;
       const updated = { ...current, enabled: nextEnabled };
       if (nextEnabled) {
-        updated.activeOpportunities = scanAllMarkets(prev, markets, updated.profile);
+        const effState = getEffectivePilotState(prev);
+        updated.activeOpportunities = scanAllMarkets(effState, markets, updated.profile);
         updated.lastScanAt = Date.now();
-        const pilotRes = tickAutonomousPilot(prev, markets);
+        const pilotRes = tickAutonomousPilot(effState, markets);
         updated.activeFleet = pilotRes.updatedFleet;
         updated.rateLimitStatus = pilotRes.updatedRateLimits;
       }
@@ -3054,12 +3114,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const setPilotProfile = useCallback((profile: AutonomousPilotProfile) => {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
-      const pilotRes = tickAutonomousPilot(prev, markets);
+      const effState = getEffectivePilotState(prev);
+      const pilotRes = tickAutonomousPilot(effState, markets);
       const updated = {
         ...current,
         profile,
         riskPerTradePct: PILOT_PROFILES[profile].maxRiskPerTradePct,
-        activeOpportunities: scanAllMarkets(prev, markets, profile),
+        activeOpportunities: scanAllMarkets(effState, markets, profile),
         activeFleet: pilotRes.updatedFleet,
         rateLimitStatus: pilotRes.updatedRateLimits,
         lastScanAt: Date.now(),
@@ -3139,8 +3200,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const scanPilotOpportunities = useCallback(() => {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
-      const opps = scanAllMarkets(prev, markets, current.profile);
-      const pilotRes = tickAutonomousPilot(prev, markets);
+      const effState = getEffectivePilotState(prev);
+      const opps = scanAllMarkets(effState, markets, current.profile);
+      const pilotRes = tickAutonomousPilot(effState, markets);
       return {
         ...prev,
         autonomousPilot: {

@@ -185,9 +185,36 @@ export const formatQty = (qty: number, asset: Asset): string => {
 export const STABLECOINS = ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'] as const;
 
 export function portfolioValue(
-  state: Pick<AppState, 'cash' | 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account' | 'web3Positions'>>,
+  state: Pick<AppState, 'cash' | 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account' | 'web3Positions' | 'upstoxAccount'>>,
   markets: Record<Asset, Market | undefined>
 ): number {
+  if (state.accountMode === 'upstox' && state.upstoxAccount) {
+    const funds = state.upstoxAccount.funds;
+    if (funds && typeof funds.totalEquity === 'number' && funds.totalEquity > 0) {
+      return funds.totalEquity;
+    }
+    const availCash = funds?.availableCash ?? 0;
+    let holdingsVal = 0;
+    if (state.upstoxAccount.holdings) {
+      for (const h of state.upstoxAccount.holdings) {
+        const qty = Number(h.quantity) || 0;
+        const sym = (h.symbol || '').toUpperCase() as Asset;
+        const price = markets[sym]?.price || Number(h.currentPrice) || Number(h.averagePrice) || 0;
+        holdingsVal += qty * price;
+      }
+    }
+    let positionsVal = 0;
+    if (state.upstoxAccount.positions) {
+      for (const p of state.upstoxAccount.positions) {
+        const qty = Number(p.quantity) || 0;
+        const sym = (p.symbol || '').toUpperCase() as Asset;
+        const price = markets[sym]?.price || Number(p.currentPrice) || Number(p.averagePrice) || 0;
+        positionsVal += qty * price;
+      }
+    }
+    return availCash + holdingsVal + positionsVal;
+  }
+
   if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
     const balances = state.exchangeAccount.balances;
     const stableCash = STABLECOINS.reduce(
@@ -236,8 +263,11 @@ export function portfolioValue(
  * Returns active liquid cash based on account mode (stablecoins for exchange/web3, cash for paper).
  */
 export function getActiveLiquidCash(
-  state: Pick<AppState, 'cash'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account'>>
+  state: Pick<AppState, 'cash'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account' | 'upstoxAccount'>>
 ): number {
+  if (state.accountMode === 'upstox' && state.upstoxAccount?.funds) {
+    return state.upstoxAccount.funds.availableCash || 0;
+  }
   if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
     return STABLECOINS.reduce(
       (sum, coin) => sum + (state.exchangeAccount?.balances[coin]?.free || 0),
@@ -254,9 +284,26 @@ export function getActiveLiquidCash(
  * Returns active position units for an asset based on account mode.
  */
 export function getActiveAssetUnits(
-  state: Pick<AppState, 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account' | 'web3Positions'>>,
+  state: Pick<AppState, 'positions'> & Partial<Pick<AppState, 'accountMode' | 'exchangeAccount' | 'web3Account' | 'web3Positions' | 'upstoxAccount'>>,
   asset: Asset
 ): number {
+  if (state.accountMode === 'upstox') {
+    let units = 0;
+    const sym = asset.toUpperCase();
+    if (state.upstoxAccount?.holdings) {
+      const h = state.upstoxAccount.holdings.find(
+        (x) => (x.symbol || '').toUpperCase() === sym
+      );
+      if (h) units += Number(h.quantity) || 0;
+    }
+    if (state.upstoxAccount?.positions) {
+      const p = state.upstoxAccount.positions.find(
+        (x) => (x.symbol || '').toUpperCase() === sym
+      );
+      if (p) units += Number(p.quantity) || 0;
+    }
+    return units;
+  }
   if (state.accountMode === 'exchange' && state.exchangeAccount?.balances) {
     return state.exchangeAccount.balances[asset]?.free || 0;
   }

@@ -5,6 +5,7 @@ import { CircuitBreakerService } from './circuitBreakerService';
 import { AuditService, logger } from './auditService';
 import { BinanceUserStreamTransport } from './binanceUserStreamTransport';
 import { UpstoxUserStreamTransport } from './brokers/upstox/upstoxUserStreamTransport';
+import { UpstoxAdapter } from './brokers/upstox/upstoxAdapter';
 import { config } from '../config';
 
 export type StreamHealthState = 'ACTIVE' | 'UNHEALTHY' | 'DISCONNECTED' | 'RECONNECTING';
@@ -279,7 +280,8 @@ export class UserDataStreamManager {
       for (const cred of upstoxCreds) {
         try {
           if (cred.access_token_encrypted) {
-            UpstoxUserStreamTransport.start(cred.user_id, cred.access_token_encrypted);
+            const accessToken = UpstoxAdapter.decryptSecret(cred.access_token_encrypted);
+            UpstoxUserStreamTransport.start(cred.user_id, accessToken);
             count++;
           }
         } catch (err: any) {

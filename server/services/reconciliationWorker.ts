@@ -1130,6 +1130,22 @@ export class ReconciliationWorker {
     }
 
     // 1. Reconcile Cash
+    if (activeBroker === 'upstox') {
+      const inrExchangeCash = exchangeBalances['INR'] ?? exchangeBalances['inr'] ?? '0';
+      const exchangeCashDec = ExactDecimal.from(inrExchangeCash);
+      const inrMinor = exchangeCashDec.toMinor(2).toString();
+
+      await db.query(
+        `INSERT INTO ledger_accounts (id, user_id, account_type, asset_or_currency, balance_minor, reserved_minor, account_mode, updated_at)
+         VALUES (?, ?, 'trading_allocated', 'INR', ?, 0, 'live', ?)
+         ON CONFLICT (user_id, account_type, asset_or_currency, account_mode)
+         DO UPDATE SET balance_minor = EXCLUDED.balance_minor, updated_at = EXCLUDED.updated_at`,
+        [crypto.randomUUID(), userId, inrMinor, Date.now()]
+      );
+
+      return { success: true, mismatches: 0 };
+    }
+
     const localCashDec = ExactDecimal.fromMinor(localProjection.cash.availableMinor, 2);
     const quoteAsset = localProjection.cash.currency || 'USDT';
     const rawExchangeCash = exchangeBalances[quoteAsset] ?? '0';

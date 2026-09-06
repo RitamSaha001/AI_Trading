@@ -18,7 +18,7 @@ import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
 import { ExactDecimal } from './services/precision';
 import { BinanceGateway } from './services/binanceGateway';
-import { BrokerRegistry, BrokerGateway, UpstoxClient, UpstoxConnectivityValidator, UpstoxInstrumentRegistry } from './services/brokers';
+import { BrokerRegistry, BrokerGateway, UpstoxClient, UpstoxConnectivityValidator, UpstoxInstrumentRegistry, UpstoxAdapter } from './services/brokers';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
 import { OrderRecoveryService } from './services/orderRecoveryService';
@@ -868,6 +868,53 @@ export function buildServer(): FastifyInstance {
   server.get('/api/market/instruments/upstox', async () => {
     const instruments = UpstoxInstrumentRegistry.getAll();
     return { success: true, instruments };
+  });
+
+  server.get('/api/market/quotes/upstox', async (req: FastifyRequest) => {
+    const query = (req.query as any) || {};
+    const symbolsParam = query.symbols as string | undefined;
+    const defaultSymbols = [
+      'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL',
+      'ITC', 'KOTAKBANK', 'LT', 'TATAMOTORS', 'AXISBANK', 'MARUTI', 'SUNPHARMA',
+      'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC'
+    ];
+    const requestedSymbols = symbolsParam
+      ? symbolsParam.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean)
+      : defaultSymbols;
+
+    const upstox = BrokerRegistry.get('upstox') as UpstoxAdapter;
+    const quotes: Record<string, any> = {};
+
+    let userId: string | undefined;
+    const token = extractSessionToken(req);
+    if (token) {
+      try {
+        const user = await ServerAuthService.validateSession(token);
+        if (user) userId = user.id;
+      } catch {}
+    }
+    if (!userId) {
+      const db = getDb();
+      const anyCred = await db.queryOne<{ user_id: string }>(
+        `SELECT user_id FROM broker_credentials WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL ORDER BY updated_at DESC LIMIT 1`
+      );
+      if (anyCred) userId = anyCred.user_id;
+    }
+
+    await Promise.all(
+      requestedSymbols.map(async (sym) => {
+        try {
+          const q = await upstox.getMarketQuote(sym, userId);
+          if (q) {
+            quotes[sym] = q;
+          }
+        } catch (err: any) {
+          logger.warn(`[MarketQuotes] Failed to fetch quote for ${sym}: ${err.message}`);
+        }
+      })
+    );
+
+    return { success: true, quotes };
   });
 
   server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
