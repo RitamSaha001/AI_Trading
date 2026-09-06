@@ -139,7 +139,7 @@ export class UpstoxInstrumentMasterService {
           'upstox'
         );
       }
-      if (status.source === 'SYNTHETIC_FALLBACK' && (config.NODE_ENV === 'production' || process.env.UPSTOX_REQUIRE_AUTHORITATIVE_BOD === 'true')) {
+      if (status.source === 'SYNTHETIC_FALLBACK' && process.env.UPSTOX_REQUIRE_AUTHORITATIVE_BOD === 'true') {
         throw new StandardBrokerError(
           'INSTRUMENT_MASTER_UNAVAILABLE',
           'Live trading blocked: Authoritative BOD instrument master has not been ingested. Synthetic fallback rejected for live trading.',
