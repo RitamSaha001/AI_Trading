@@ -42,7 +42,9 @@ export function AuthModal() {
   const otpInputRef = useRef<HTMLInputElement>(null);
   const watchdogTimerRef = useRef<number | null>(null);
 
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const googleClientId =
+    import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+    '581000394815-l869n4epd0d4j9rsj5behbo882konj47.apps.googleusercontent.com';
 
   // Cleanup watchdog timer on unmount
   useEffect(() => {
@@ -156,24 +158,63 @@ export function AuthModal() {
   }, [authModalOpen, mode, googleClientId, loginWithGoogle]);
 
   // Handle Google button fallback click & One-Tap with fail-safe moment listener
-  const handleGooglePromptClick = useCallback(() => {
+  const handleGooglePromptClick = useCallback(async () => {
     setIsProcessing(true);
     setErrorMessage(null);
 
     // Watchdog: Guarantee UI never hangs indefinitely
     if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
-    watchdogTimerRef.current = setTimeout(() => {
+    watchdogTimerRef.current = window.setTimeout(() => {
       setIsProcessing(false);
     }, 6000);
 
     try {
-      const google = (window as any).google;
+      let google = (window as any).google;
+      if (!google?.accounts?.id) {
+        // Dynamically await or inject Google GSI script
+        await new Promise<void>((resolve) => {
+          const existing = document.getElementById('google-gsi-script') as HTMLScriptElement;
+          if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            setTimeout(resolve, 1500);
+            return;
+          }
+          const script = document.createElement('script');
+          script.id = 'google-gsi-script';
+          script.src = 'https://accounts.google.com/gsi/client';
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => resolve();
+          document.head.appendChild(script);
+          setTimeout(resolve, 1500);
+        });
+        google = (window as any).google;
+      }
+
       if (!google?.accounts?.id) {
         if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
         setIsProcessing(false);
-        setErrorMessage('Google Identity SDK is still initializing. Please try again or use email sign-in.');
+        setErrorMessage('Google Identity SDK failed to load. Please use Email Sign-In below.');
         return;
       }
+
+      // Ensure client is initialized
+      google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response: { credential: string }) => {
+          setIsProcessing(true);
+          setErrorMessage(null);
+          try {
+            await loginWithGoogle({ credential: response.credential });
+          } catch (err: any) {
+            setErrorMessage(err?.message || 'Google authentication failed');
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
 
       google.accounts.id.prompt((notification: any) => {
         if (watchdogTimerRef.current) clearTimeout(watchdogTimerRef.current);
@@ -184,12 +225,12 @@ export function AuthModal() {
 
           if (reason === 'unrecognized_origin') {
             setErrorMessage(
-              `Origin "${window.location.origin}" is not authorized in Google Cloud Console. Please add it under "Authorized JavaScript origins" for Client ID ${googleClientId?.slice(0, 16)}...`
+              `Origin "${window.location.origin}" is not authorized in Google Cloud Console. Please use Email Sign-In below.`
             );
           } else if (reason === 'opt_out_or_no_session') {
-            setErrorMessage('No active Google session found. Please click the button below to sign in.');
+            setErrorMessage('No active Google session found. Please sign into Google or use Email Sign-In.');
           } else {
-            setErrorMessage(`Google Sign-In was not displayed (${reason}). Please use the official Google button.`);
+            setErrorMessage(`Google Sign-In prompt was not displayed (${reason}). Please use Email Sign-In.`);
           }
         } else if (notification.isSkippedMoment() || notification.isDismissedMoment()) {
           setIsProcessing(false);
@@ -200,7 +241,7 @@ export function AuthModal() {
       setIsProcessing(false);
       setErrorMessage(err?.message || 'Failed to initiate Google sign-in');
     }
-  }, [googleClientId]);
+  }, [googleClientId, loginWithGoogle]);
 
   // Step 1: Request 6-digit OTP code to email
   const handleRequestOtp = async (e: React.FormEvent) => {
