@@ -435,7 +435,7 @@ export async function sendAIChat(
   }
 
   // Nexus Deterministic Quant Engine (Offline Fallback)
-  const localResult = queryNexusDeterministicQuant(text, s, markets);
+  const localResult = queryNexusDeterministicQuant(text, s, markets, history);
   const context = buildStructuredMarketContext(s, markets);
   const rk = calculatePortfolioRisk(s, markets);
 
