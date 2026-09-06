@@ -34,6 +34,8 @@ export interface ServerConfig {
   BINANCE_API_SECRET?: string;
   UPSTOX_CLIENT_ID?: string;
   UPSTOX_CLIENT_SECRET?: string;
+  UPSTOX_API_KEY?: string;
+  UPSTOX_API_SECRET?: string;
   UPSTOX_REDIRECT_URI?: string;
   UPSTOX_ENV: 'sandbox' | 'production';
   UPSTOX_API_BASE_URL: string;
@@ -310,6 +312,8 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     RECONCILIATION_SLA_MS: z.coerce.number().positive().default(300_000),
     UPSTOX_CLIENT_ID: z.string().optional(),
     UPSTOX_CLIENT_SECRET: z.string().optional(),
+    UPSTOX_API_KEY: z.string().optional(),
+    UPSTOX_API_SECRET: z.string().optional(),
     UPSTOX_REDIRECT_URI: z.string().optional(),
     UPSTOX_ENV: z.enum(['sandbox', 'production']).optional(),
     UPSTOX_API_BASE_URL: z.string().optional(),
@@ -354,8 +358,8 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   const upstoxEnv = candidate.UPSTOX_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.UPSTOX_ENV : 'sandbox');
   const upstoxApiBaseUrl = candidate.UPSTOX_API_BASE_URL || (isDev || isTest ? DEV_TEST_FALLBACKS.UPSTOX_API_BASE_URL : 'https://api.upstox.com/v2');
   const upstoxLiveTradingEnabled = candidate.UPSTOX_LIVE_TRADING_ENABLED === true || candidate.UPSTOX_LIVE_TRADING_ENABLED === 'true';
-  const upstoxClientId = candidate.UPSTOX_CLIENT_ID || '';
-  const upstoxClientSecret = candidate.UPSTOX_CLIENT_SECRET || '';
+  const upstoxClientId = candidate.UPSTOX_CLIENT_ID || candidate.UPSTOX_API_KEY || '';
+  const upstoxClientSecret = candidate.UPSTOX_CLIENT_SECRET || candidate.UPSTOX_API_SECRET || '';
   const upstoxRedirectUri = candidate.UPSTOX_REDIRECT_URI || '';
   const upstoxStaticIp = candidate.UPSTOX_STATIC_IP || '';
   const upstoxSecondaryStaticIp = candidate.UPSTOX_SECONDARY_STATIC_IP || '';
@@ -528,8 +532,10 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     BINANCE_ENV: binanceEnv,
     BINANCE_API_KEY: candidate.BINANCE_API_KEY,
     BINANCE_API_SECRET: candidate.BINANCE_API_SECRET,
-    UPSTOX_CLIENT_ID: candidate.UPSTOX_CLIENT_ID,
-    UPSTOX_CLIENT_SECRET: candidate.UPSTOX_CLIENT_SECRET,
+    UPSTOX_CLIENT_ID: upstoxClientId,
+    UPSTOX_CLIENT_SECRET: upstoxClientSecret,
+    UPSTOX_API_KEY: upstoxClientId,
+    UPSTOX_API_SECRET: upstoxClientSecret,
     UPSTOX_REDIRECT_URI: candidate.UPSTOX_REDIRECT_URI,
     UPSTOX_ENV: upstoxEnv as 'sandbox' | 'production',
     UPSTOX_API_BASE_URL: upstoxApiBaseUrl,
