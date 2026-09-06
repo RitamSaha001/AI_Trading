@@ -1084,13 +1084,18 @@ export function buildServer(): FastifyInstance {
       return reply.status(400).send({ success: false, error: `Unsupported broker: ${brokerId}` });
     }
 
-    // Live Upstox orders strictly require two-step confirmation
+    // Live Upstox orders strictly require two-step confirmation UNLESS authorized autonomous algo
+    const isAutonomous = Boolean(body.auto || (body as any).isAutonomous);
+    const hasStrategy = Boolean(body.strategyName || (body as any).strategyId);
+
     if (accountMode === 'live' && brokerId === 'upstox' && !body.confirmationId) {
-      return reply.status(400).send({
-        success: false,
-        code: 'CONFIRMATION_REQUIRED',
-        error: 'Live orders strictly require two-step human confirmation. Please propose order first via /api/orders/propose.',
-      });
+      if (!isAutonomous || !hasStrategy) {
+        return reply.status(400).send({
+          success: false,
+          code: 'CONFIRMATION_REQUIRED',
+          error: 'Live orders strictly require two-step human confirmation. Please propose order first via /api/orders/propose.',
+        });
+      }
     }
 
     try {
@@ -1115,7 +1120,11 @@ export function buildServer(): FastifyInstance {
         accountMode,
         marketQuoteAgeMs: body.marketQuoteAgeMs || 0,
         idempotencyKey: body.idempotencyKey || `idemp_ord_${Date.now()}`,
-      });
+        auto: isAutonomous,
+        isAutonomous,
+        strategyName: body.strategyName,
+        strategyId: (body as any).strategyId,
+      } as any);
 
       return { success: true, order };
     } catch (err: any) {

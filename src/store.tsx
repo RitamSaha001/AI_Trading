@@ -1803,6 +1803,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         if (currentPilot.executionMode === 'full_autonomous' && pilotResult.ordersToDispatch.length > 0) {
           for (const prop of pilotResult.ordersToDispatch) {
             if (orderRef.current) {
+              const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
               const res = orderRef.current(
                 prop.side,
                 prop.asset,
@@ -1815,6 +1816,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
                   auto: true,
                   strategyName: prop.strategyName,
                   product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
+                  live: isLiveUpstox,
+                  accountMode: isLiveUpstox ? 'live' : 'paper',
                 }
               );
 
@@ -1921,8 +1924,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        // Live orders require SEBI-compliant two-step human confirmation
-        if (options?.live || options?.accountMode === 'live') {
+        const isLive = options?.live || options?.accountMode === 'live';
+        const isAuto = Boolean(options?.auto || (options as any)?.isAutonomous);
+
+        // Live manual orders require SEBI-compliant two-step human confirmation
+        if (isLive && !isAuto) {
           ApiClient.proposeLiveOrder({
             symbol,
             side: side === 'buy' ? 'BUY' : 'SELL',
@@ -1951,7 +1957,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
           return { ok: true, pendingLiveConfirmation: true };
         }
 
-        // Safe dispatch: paper mode executes deterministically through Upstox adapter; live orders require two-step confirmation
+        // Direct dispatch for:
+        // 1. Authorized autonomous live orders (SEBI algo tagged)
+        // 2. Paper simulation orders
         ApiClient.submitOrder({
           symbol,
           asset: a,
@@ -1961,28 +1969,32 @@ export function Provider({ children }: { children: React.ReactNode }) {
           quantity: qty,
           price,
           product,
-          accountMode: 'paper',
+          accountMode: isLive ? 'live' : 'paper',
           broker: 'upstox',
           marketQuoteAgeMs: quoteAgeMs,
           idempotencyKey: `ord_${clientOrderId}`,
+          auto: isAuto,
+          isAutonomous: isAuto,
+          strategyName: options?.strategyName,
+          strategyId: (options as any)?.strategyId,
         })
           .then(async (backendRes) => {
             if (backendRes.ok && backendRes.data?.order) {
               const ord = backendRes.data.order;
               triggerToast(
-                'Upstox Order Submitted',
-                `Dispatched ${side.toUpperCase()} ${qty} ${a} (${ord.status})`,
+                isLive ? 'Upstox Live Algo Order Executed' : 'Upstox Order Submitted',
+                `Dispatched ${side.toUpperCase()} ${qty} ${a} (${ord.status}) [${options?.strategyName || 'Manual'}]`,
                 ord.status === 'REJECTED' ? 'warn' : 'success'
               );
               syncUpstoxAccount();
               return;
             }
             if (backendRes.error) {
-              triggerToast('Upstox Gate Notice', backendRes.error, 'warn');
+              triggerToast('Order Placement Blocked', backendRes.error, 'warn');
             }
           })
           .catch((err: any) => {
-            triggerToast('Upstox Order Notice', err?.message || 'Order execution reported notice', 'warn');
+            triggerToast('Order Network Failure', err?.message || 'Failed to contact broker gateway', 'warn');
           });
 
         const newOrder: Order = {

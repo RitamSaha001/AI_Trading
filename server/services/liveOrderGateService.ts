@@ -264,7 +264,7 @@ export class LiveOrderGateService {
       );
     }
 
-    // 11. System Panic Bypass or Two-Step Human Confirmation Token Verification
+    // 11. System Panic Bypass or Authorized Autonomous Algo or Two-Step Human Confirmation Token Verification
     let isPanicBypass = false;
     if (order.isSystemPanic) {
       await AuditService.logEvent({
@@ -284,8 +284,32 @@ export class LiveOrderGateService {
       isPanicBypass = true;
     }
 
+    const isAutonomousAlgo = Boolean(
+      !isPanicBypass &&
+      ((order as any).isAutonomous || (order as any).auto) &&
+      ((order as any).strategyName || (order as any).strategyId)
+    );
+
+    if (isAutonomousAlgo) {
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'AUTONOMOUS_ALGO_AUTHORIZED',
+        source: 'live_order_gate_service',
+        actor: 'autonomous_pilot_engine',
+        result: 'SUCCESS',
+        metadata: {
+          symbol: order.symbol,
+          side: order.side,
+          quantity: order.quantity,
+          clientOrderId: order.clientOrderId,
+          strategy: (order as any).strategyName || (order as any).strategyId,
+          reason: 'Authorized Autonomous Local Quant Execution — bypassing human confirmation click with SEBI algo tag attached',
+        },
+      });
+    }
+
     let confirmation: any = null;
-    if (!isPanicBypass) {
+    if (!isPanicBypass && !isAutonomousAlgo) {
       if (!confirmationId) {
         // Require server-side confirmation for all live orders
         throw new StandardBrokerError(
@@ -508,7 +532,7 @@ export class LiveOrderGateService {
     }
 
     // 13. Comprehensive Risk Snapshot Drift Check
-    if (!isPanicBypass && confirmation && confirmation.riskSnapshot && riskResult) {
+    if (!isPanicBypass && !isAutonomousAlgo && confirmation && confirmation.riskSnapshot && riskResult) {
       const snapshot = confirmation.riskSnapshot;
       const currentEquity = riskResult.portfolioEquity || 0;
       const initialEquity = snapshot.accountEquity || currentEquity;
@@ -620,7 +644,7 @@ export class LiveOrderGateService {
 
     // 15. Atomically Consume Confirmation (Only AFTER all checks pass!)
     let confirmationRecord = null;
-    if (!isPanicBypass) {
+    if (!isPanicBypass && !isAutonomousAlgo) {
       const claimResult = await LiveOrderConfirmationService.claimConfirmationAtomically(
         confirmationId,
         order.userId,

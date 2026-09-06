@@ -308,7 +308,7 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     BINANCE_ENV: z.enum(['testnet', 'mainnet']).default(isProd ? 'mainnet' : 'testnet'),
     BINANCE_API_KEY: z.string().optional(),
     BINANCE_API_SECRET: z.string().optional(),
-    ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000'),
+    ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,https://ritamsaha001.github.io,https://87.76.191.49.nip.io'),
     RECONCILIATION_SLA_MS: z.coerce.number().positive().default(300_000),
     UPSTOX_CLIENT_ID: z.string().optional(),
     UPSTOX_CLIENT_SECRET: z.string().optional(),
@@ -543,7 +543,7 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     UPSTOX_STATIC_IP: candidate.UPSTOX_STATIC_IP,
     UPSTOX_SECONDARY_STATIC_IP: candidate.UPSTOX_SECONDARY_STATIC_IP,
     UPSTOX_LIVE_TRADING_ENABLED: upstoxLiveTradingEnabled,
-    ALLOWED_ORIGINS: candidate.ALLOWED_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000',
+    ALLOWED_ORIGINS: candidate.ALLOWED_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,https://ritamsaha001.github.io,https://87.76.191.49.nip.io',
     RECONCILIATION_SLA_MS: candidate.RECONCILIATION_SLA_MS ? Number(candidate.RECONCILIATION_SLA_MS) : 300_000,
   };
 

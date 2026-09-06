@@ -320,6 +320,28 @@ describe('Phase 4B: Server-Authoritative Live Order Gate', () => {
     ).rejects.toThrow(/Order parameters do not match|ORDER_PARAMETER_TAMPERING/i);
   });
 
+  it('authorizes autonomous algo orders without human confirmation token (Safety Gate 11 Algo Exemption)', async () => {
+    const algoOrderReq: BrokerOrderRequest = {
+      userId: testUserId,
+      broker: 'upstox',
+      symbol: 'RELIANCE',
+      side: 'BUY',
+      type: 'LIMIT',
+      quantity: 1,
+      price: 2800.0,
+      product: 'CNC',
+      idempotencyKey: 'idemp_algo_test',
+      accountMode: 'live',
+      auto: true,
+      strategyName: 'Hurst Trend Rider',
+    } as any;
+
+    const result = await LiveOrderGateService.verifyLiveOrderPreSubmission(algoOrderReq);
+    expect(result).toBeDefined();
+    expect(result.credentials.accessToken).toBeDefined();
+    expect(result.reservedCashMinor).toBe(280000n); // ₹2800.00 in paise
+  });
+
   it('blocks live order when liquid cash is insufficient (Safety Gate 14)', async () => {
     // Propose order requiring ₹28,000 (10 shares @ ₹2800)
     const proposal = await LiveOrderConfirmationService.proposeLiveOrder({

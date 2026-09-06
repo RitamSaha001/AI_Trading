@@ -3,7 +3,9 @@
  * Connects the frontend application to the authoritative Fastify backend service.
  */
 
-const API_BASE = '';
+const API_BASE = (typeof window !== 'undefined' && window.location.hostname === 'ritamsaha001.github.io')
+  ? 'https://87.76.191.49.nip.io'
+  : '';
 
 async function apiRequest<T = any>(
   endpoint: string,
@@ -154,6 +156,10 @@ export const ApiClient = {
     accountMode?: string;
     marketQuoteAgeMs: number;
     idempotencyKey?: string;
+    auto?: boolean;
+    isAutonomous?: boolean;
+    strategyName?: string;
+    strategyId?: string;
   }) {
     return apiRequest('/api/orders/submit', {
       method: 'POST',
