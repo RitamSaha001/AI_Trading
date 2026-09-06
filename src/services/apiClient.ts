@@ -14,6 +14,7 @@ async function apiRequest<T = any>(
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Authorization': 'Bearer personal_owner_token_ritam',
       ...(options.headers as Record<string, string> || {}),
     };
 

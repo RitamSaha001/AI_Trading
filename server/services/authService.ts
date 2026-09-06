@@ -578,4 +578,66 @@ export class ServerAuthService {
       result: 'SUCCESS',
     });
   }
+
+  /**
+   * Retrieves or provisions the owner user for personal single-user mode.
+   * Ensures ADMIN role and Tier 2 verified KYC status.
+   */
+  static async getOwnerUser(email = 'ritamvarieties@gmail.com'): Promise<AuthenticatedUser> {
+    const cleanEmail = email.trim().toLowerCase();
+    try {
+      const db = getDb();
+      let user = await db.queryOne<any>(`SELECT * FROM users WHERE email = ?`, [cleanEmail]);
+      if (!user) {
+        user = await this.getOrCreateUser({
+          email: cleanEmail,
+          displayName: 'Ritam Saha',
+          provider: 'email',
+          providerId: `email_${crypto.createHash('sha256').update(cleanEmail).digest('hex').slice(0, 16)}`,
+        });
+      }
+
+      await db.execute(
+        `UPDATE users SET role = 'ADMIN', display_name = 'Ritam Saha' WHERE id = ?`,
+        [user.id]
+      );
+      await db.execute(
+        `UPDATE kyc_records SET tier = 'tier2_verified', status = 'verified' WHERE user_id = ?`,
+        [user.id]
+      );
+
+      const kyc = await db.queryOne<any>(`SELECT * FROM kyc_records WHERE user_id = ?`, [user.id]);
+      const limits = await db.queryOne<any>(`SELECT * FROM account_limits WHERE user_id = ?`, [user.id]);
+
+      return {
+        id: user.id,
+        email: user.email,
+        displayName: 'Ritam Saha',
+        photoUrl: user.photo_url,
+        provider: user.provider,
+        providerId: user.provider_id,
+        role: 'ADMIN',
+        kycTier: 'tier2_verified',
+        kycStatus: 'verified',
+        accountMode: limits?.account_mode || 'live',
+        isEmergencyFrozen: Boolean(limits?.is_emergency_frozen),
+        createdAt: Number(user.created_at || Date.now()),
+      };
+    } catch {
+      const fallbackId = `usr_ema_${crypto.createHash('sha256').update(cleanEmail).digest('hex').slice(0, 16)}`;
+      return {
+        id: fallbackId,
+        email: cleanEmail,
+        displayName: 'Ritam Saha',
+        provider: 'email',
+        providerId: `email_${fallbackId.slice(-8)}`,
+        role: 'ADMIN',
+        kycTier: 'tier2_verified',
+        kycStatus: 'verified',
+        accountMode: 'live',
+        isEmergencyFrozen: false,
+        createdAt: 1772800000000,
+      };
+    }
+  }
 }

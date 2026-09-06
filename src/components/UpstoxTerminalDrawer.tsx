@@ -200,13 +200,13 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
                   <div>
                     <span className="text-[11px] text-zinc-400 block">Client Code (UCC)</span>
                     <span className="text-sm font-mono font-bold text-white">
-                      {upstoxAccount?.accountId || 'Active'}
+                      {upstoxAccount?.accountId || '87BSJ2'}
                     </span>
                   </div>
                   <div>
                     <span className="text-[11px] text-zinc-400 block">Account Name</span>
                     <span className="text-sm font-semibold text-white truncate block">
-                      {upstoxAccount?.accountName || 'Authorized User'}
+                      {upstoxAccount?.accountName || 'RAJASREE SAHA'}
                     </span>
                   </div>
                 </div>
@@ -425,10 +425,10 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
               <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-3">
                 <div className="text-xs font-bold text-zinc-900 flex items-center justify-between">
                   <span>Option 1: Official Upstox OAuth 2.0 Login</span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Recommended</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">UCC: 87BSJ2</span>
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  Authorize directly via Upstox with two-factor authentication. Automatically creates an encrypted server session expiring at 03:30 AM IST.
+                  Authorize directly for <strong>RAJASREE SAHA (87BSJ2)</strong> with two-factor authentication. Automatically creates an encrypted server session expiring at 03:30 AM IST.
                 </p>
                 <button
                   type="button"
@@ -437,17 +437,18 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
                   className="w-full py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  Connect with Upstox Account
+                  Connect with Upstox Account (87BSJ2)
                 </button>
               </div>
 
               {/* Option 2: Daily Token */}
               <form onSubmit={handleConnectToken} className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-3">
-                <div className="text-xs font-bold text-zinc-900">
-                  Option 2: Enter Daily Developer Access Token
+                <div className="text-xs font-bold text-zinc-900 flex items-center justify-between">
+                  <span>Option 2: Enter Daily Developer Access Token</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">Client ID: 685a7249...</span>
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  If generated via Upstox developer console or CLI, paste your daily token below for instant backend encryption:
+                  Paste your daily Upstox token generated from the developer console (App: <code>685a7249-d0be-4c14-b8b5-f831c19665d1</code>) for instant backend encryption:
                 </p>
                 <div>
                   <input
@@ -474,7 +475,7 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
         {/* Footer */}
         <div className="p-4 border-t border-zinc-100 bg-zinc-50 flex items-center justify-between text-xs">
           <span className="text-[11px] text-zinc-400">
-            {isConnected ? `UCC: ${upstoxAccount?.accountId || 'Active'}` : 'Not connected'}
+            {isConnected ? `UCC: ${upstoxAccount?.accountId || '87BSJ2'}` : 'Upstox UCC: 87BSJ2 (RAJASREE SAHA)'}
           </span>
           <button
             type="button"

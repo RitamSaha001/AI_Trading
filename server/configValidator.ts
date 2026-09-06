@@ -45,6 +45,8 @@ export interface ServerConfig {
   UPSTOX_LIVE_TRADING_ENABLED: boolean;
   ALLOWED_ORIGINS: string;
   RECONCILIATION_SLA_MS: number;
+  SINGLE_USER_MODE: boolean;
+  OWNER_EMAIL: string;
 }
 
 export interface SecurityConfigAuditResult {
@@ -321,6 +323,8 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     UPSTOX_STATIC_IP: z.string().optional(),
     UPSTOX_SECONDARY_STATIC_IP: z.string().optional(),
     UPSTOX_LIVE_TRADING_ENABLED: z.union([z.boolean(), z.string()]).optional(),
+    SINGLE_USER_MODE: z.union([z.boolean(), z.string()]).optional(),
+    OWNER_EMAIL: z.string().optional(),
   });
 
   const parsedBase = baseSchema.safeParse(rawEnv);
@@ -363,6 +367,8 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   const upstoxRedirectUri = candidate.UPSTOX_REDIRECT_URI || '';
   const upstoxStaticIp = candidate.UPSTOX_STATIC_IP || '';
   const upstoxSecondaryStaticIp = candidate.UPSTOX_SECONDARY_STATIC_IP || '';
+  const singleUserMode = candidate.SINGLE_USER_MODE === true || candidate.SINGLE_USER_MODE === 'true';
+  const ownerEmail = (candidate.OWNER_EMAIL || 'ritamvarieties@gmail.com').trim().toLowerCase();
 
   // IPv4 format validation for registered static IPs
   const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -545,6 +551,8 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     UPSTOX_LIVE_TRADING_ENABLED: upstoxLiveTradingEnabled,
     ALLOWED_ORIGINS: candidate.ALLOWED_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,https://ritamsaha001.github.io,https://87.76.191.49.nip.io,http://87.76.191.49.nip.io,http://87.76.191.49,https://87.76.191.49',
     RECONCILIATION_SLA_MS: candidate.RECONCILIATION_SLA_MS ? Number(candidate.RECONCILIATION_SLA_MS) : 300_000,
+    SINGLE_USER_MODE: singleUserMode,
+    OWNER_EMAIL: ownerEmail,
   };
 
   return {

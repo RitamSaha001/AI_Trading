@@ -19,6 +19,9 @@ import { ApiClient } from '../services/apiClient';
 type AuthMode = 'social' | 'email_request' | 'email_verify';
 
 export function AuthModal() {
+  // Single-user personal mode: Suppress auth modal unconditionally
+  return null;
+
   const {
     authModalOpen,
     closeAuthModal,
@@ -430,7 +433,7 @@ export function AuthModal() {
               </div>
               <button
                 type="button"
-                onClick={() => setOtpInput(devTestCode)}
+                onClick={() => setOtpInput(devTestCode || '')}
                 className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-white px-2 py-1 rounded-md border border-indigo-200 shadow-2xs"
               >
                 Auto-fill

@@ -85,11 +85,11 @@ export function UserProfileDrawer() {
                 )}
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <h2 className="text-base font-extrabold text-zinc-900">{user.displayName}</h2>
+                    <h2 className="text-base font-extrabold text-zinc-900">{user.displayName || 'Ritam Saha'}</h2>
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   </div>
                   <p className="text-xs text-zinc-500 font-mono">
-                    {user.email && user.email !== user.displayName ? user.email : 'Primary Demat Account'}
+                    {user.email || 'ritamvarieties@gmail.com'}
                   </p>
                 </div>
               </div>
@@ -125,15 +125,15 @@ export function UserProfileDrawer() {
                     Investor Verification
                   </span>
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold uppercase">
-                    {user.kycTier === 'tier2_verified' ? 'Tier 2 Verified' : 'Tier 1 Basic'}
+                    Tier 2 Verified
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="p-2.5 rounded-xl bg-white border border-zinc-100">
-                    <div className="text-[10px] text-zinc-400 font-semibold uppercase">Provider</div>
+                    <div className="text-[10px] text-zinc-400 font-semibold uppercase">Account Owner</div>
                     <div className="font-bold text-zinc-800 capitalize flex items-center gap-1 mt-0.5">
-                      <span>{user.provider}</span>
+                      <span>Ritam Saha</span>
                     </div>
                   </div>
 
@@ -143,16 +143,16 @@ export function UserProfileDrawer() {
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-white border border-zinc-100">
-                    <div className="text-[10px] text-zinc-400 font-semibold uppercase">PAN / Tax ID</div>
-                    <div className="font-mono font-bold text-zinc-800 mt-0.5">
-                      {user.panNumberMasked || 'ABCDE****F'}
+                    <div className="text-[10px] text-zinc-400 font-semibold uppercase">Upstox Demat UCC</div>
+                    <div className="font-mono font-bold text-orange-600 mt-0.5">
+                      87BSJ2
                     </div>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-white border border-zinc-100">
-                    <div className="text-[10px] text-zinc-400 font-semibold uppercase">Registered Phone</div>
-                    <div className="font-mono font-bold text-zinc-800 mt-0.5">
-                      {user.phoneMasked || '+91 98765*****'}
+                    <div className="text-[10px] text-zinc-400 font-semibold uppercase">Registered Name</div>
+                    <div className="font-bold text-zinc-800 mt-0.5">
+                      RAJASREE SAHA
                     </div>
                   </div>
                 </div>
@@ -254,11 +254,13 @@ export function UserProfileDrawer() {
 
             <button
               type="button"
-              onClick={logout}
+              onClick={() => {
+                triggerToast('Personal Profile Active', 'Running in dedicated private mode for Ritam Saha (Upstox UCC: 87BSJ2).', 'info');
+              }}
               className="w-full py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-xs"
             >
-              <LogOut className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Secure Sign Out</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Personal Cockpit Active (Ritam Saha)</span>
             </button>
           </div>
 
