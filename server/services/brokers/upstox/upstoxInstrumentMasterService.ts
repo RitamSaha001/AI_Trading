@@ -35,6 +35,7 @@ export class UpstoxInstrumentMasterService {
   private static activeSnapshot: InstrumentMasterSnapshot | null = null;
   private static instrumentKeyMap: Map<string, AuthoritativeInstrument> = new Map();
   private static symbolMap: Map<string, AuthoritativeInstrument> = new Map();
+  private static isinMap: Map<string, AuthoritativeInstrument> = new Map();
   private static readonly MAX_FRESHNESS_MS = 24 * 60 * 60 * 1000; // 24 hours
 
   /**
@@ -72,14 +73,19 @@ export class UpstoxInstrumentMasterService {
 
     const keyMap = new Map<string, AuthoritativeInstrument>();
     const symMap = new Map<string, AuthoritativeInstrument>();
+    const isinMap = new Map<string, AuthoritativeInstrument>();
 
     for (const inst of snapshot.instruments) {
       keyMap.set(inst.instrumentKey.toUpperCase(), inst);
       symMap.set(inst.tradingSymbol.toUpperCase(), inst);
+      if (inst.isin) {
+        isinMap.set(inst.isin.toUpperCase(), inst);
+      }
     }
 
     this.instrumentKeyMap = keyMap;
     this.symbolMap = symMap;
+    this.isinMap = isinMap;
     this.activeSnapshot = snapshot;
   }
 
@@ -133,17 +139,29 @@ export class UpstoxInstrumentMasterService {
           'upstox'
         );
       }
-      if (status.source === 'SYNTHETIC_FALLBACK' && config.NODE_ENV === 'production') {
+      if (status.source === 'SYNTHETIC_FALLBACK' && (config.NODE_ENV === 'production' || process.env.UPSTOX_REQUIRE_AUTHORITATIVE_BOD === 'true')) {
         throw new StandardBrokerError(
           'INSTRUMENT_MASTER_UNAVAILABLE',
-          'Live trading blocked: Authoritative BOD instrument master has not been ingested. Synthetic fallback rejected in production.',
+          'Live trading blocked: Authoritative BOD instrument master has not been ingested. Synthetic fallback rejected for live trading.',
           'upstox'
         );
       }
     }
 
     const clean = keyOrSymbol.trim().toUpperCase();
-    return this.instrumentKeyMap.get(clean) || this.symbolMap.get(clean) || null;
+    let found = this.instrumentKeyMap.get(clean) || this.symbolMap.get(clean) || this.isinMap.get(clean);
+    if (found) return found;
+
+    // Handle formats with prefix or ISIN extraction (e.g. NSE:TCS, NSE_EQ|INE467B01029)
+    let extracted = clean;
+    if (clean.includes(':')) {
+      extracted = clean.split(':')[1];
+    } else if (clean.includes('|')) {
+      extracted = clean.split('|')[1];
+    }
+
+    found = this.symbolMap.get(extracted) || this.instrumentKeyMap.get(extracted) || this.isinMap.get(extracted);
+    return found || null;
   }
 
   /**
@@ -182,6 +200,7 @@ export class UpstoxInstrumentMasterService {
     this.activeSnapshot = null;
     this.instrumentKeyMap.clear();
     this.symbolMap.clear();
+    this.isinMap.clear();
   }
 
   private static computeChecksum(instruments: AuthoritativeInstrument[]): string {

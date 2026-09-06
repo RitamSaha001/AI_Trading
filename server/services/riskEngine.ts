@@ -26,13 +26,13 @@ export interface RiskDecision {
   approved: boolean;
   rejectReason?: string;
   requiredCashReserve: number;
-  notionalUsd: number;
-  portfolioEquityUsd: number;
+  notionalNative: number;
+  portfolioEquityNative: number;
+  /** @deprecated Use notionalNative */ notionalUsd: number;
+  /** @deprecated Use portfolioEquityNative */ portfolioEquityUsd: number;
   notional?: number;
-  notionalNative?: number;
   notionalInr?: number;
   portfolioEquity?: number;
-  portfolioEquityNative?: number;
   portfolioEquityInr?: number;
   availableCash?: number;
   currency?: string;
@@ -74,7 +74,9 @@ export class ServerRiskEngine {
         rejectReason: 'Trading blocked: Account is under emergency freeze.',
         requiredCashReserve: 0,
         notionalUsd: 0,
+        notionalNative: 0,
         portfolioEquityUsd: 0,
+        portfolioEquityNative: 0,
         notional: 0,
         portfolioEquity: 0,
         currency: quoteAsset,
@@ -92,7 +94,9 @@ export class ServerRiskEngine {
         rejectReason: reason,
         requiredCashReserve: 0,
         notionalUsd: 0,
+        notionalNative: 0,
         portfolioEquityUsd: 0,
+        portfolioEquityNative: 0,
         notional: 0,
         portfolioEquity: 0,
         currency: quoteAsset,
@@ -111,7 +115,9 @@ export class ServerRiskEngine {
         rejectReason: 'Quantity and price must be positive non-zero numbers.',
         requiredCashReserve: 0,
         notionalUsd: 0,
+        notionalNative: 0,
         portfolioEquityUsd: 0,
+        portfolioEquityNative: 0,
         notional: 0,
         portfolioEquity: 0,
         currency: quoteAsset,
@@ -121,22 +127,26 @@ export class ServerRiskEngine {
       };
     }
 
-    const notionalDec = qtyDec.mul(priceDec);
+    const sym = req.symbol || req.asset || '';
+    let inst = null;
+    if (isUpstox || assetClass === 'EQUITY' || assetClass === 'FUTURE' || assetClass === 'OPTION') {
+      inst = UpstoxInstrumentMasterService.getInstrument(sym, req.accountMode === 'live') || UpstoxInstrumentRegistry.get(sym);
+    }
+
+    // Apply contract multiplier for derivatives (P0-9)
+    const contractMultiplier = (assetClass === 'FUTURE' || assetClass === 'OPTION') ? 
+      (inst?.contractMultiplier || 1) : 1;
+    const notionalDec = qtyDec.mul(priceDec).mul(ExactDecimal.from(contractMultiplier));
+
     const notionalAmount = notionalDec.toDisplayNumber();
     const notionalUsd = notionalAmount; // retained for backward compatibility
     const notionalNative = notionalAmount;
     const notionalInr = quoteAsset === 'INR' ? notionalAmount : undefined;
 
     // Derivative and Equity Contract Constraint Validation (P0-9 & P0-10)
-    if (isUpstox || assetClass === 'EQUITY' || assetClass === 'FUTURE' || assetClass === 'OPTION') {
-      const sym = req.symbol || req.asset || '';
-      const inst =
-        UpstoxInstrumentMasterService.getInstrument(sym, req.accountMode === 'live') ||
-        UpstoxInstrumentRegistry.get(sym);
-
-      if (inst) {
-        const qtyNum = qtyDec.toDisplayNumber();
-        const priceNum = priceDec.toDisplayNumber();
+    if (inst) {
+      const qtyNum = qtyDec.toDisplayNumber();
+      const priceNum = priceDec.toDisplayNumber();
 
         // Lot size divisibility check (P0-9)
         const lotSize = inst.lotSize || 1;
@@ -147,6 +157,7 @@ export class ServerRiskEngine {
             requiredCashReserve: 0,
             notionalUsd,
             portfolioEquityUsd: 0,
+            portfolioEquityNative: 0,
             notional: notionalAmount,
             notionalNative,
             notionalInr,
@@ -166,6 +177,7 @@ export class ServerRiskEngine {
             requiredCashReserve: 0,
             notionalUsd,
             portfolioEquityUsd: 0,
+            portfolioEquityNative: 0,
             notional: notionalAmount,
             notionalNative,
             notionalInr,
@@ -185,6 +197,7 @@ export class ServerRiskEngine {
             requiredCashReserve: 0,
             notionalUsd,
             portfolioEquityUsd: 0,
+            portfolioEquityNative: 0,
             notional: notionalAmount,
             notionalNative,
             notionalInr,
@@ -202,6 +215,7 @@ export class ServerRiskEngine {
             requiredCashReserve: 0,
             notionalUsd,
             portfolioEquityUsd: 0,
+            portfolioEquityNative: 0,
             notional: notionalAmount,
             notionalNative,
             notionalInr,
@@ -213,7 +227,6 @@ export class ServerRiskEngine {
           };
         }
       }
-    }
 
     const rawAsset = req.asset || (req.symbol ? req.symbol.replace(quoteAsset, '').replace('NSE:', '').replace('BSE:', '') : 'UNKNOWN');
     const asset = rawAsset.trim().toUpperCase();
@@ -233,7 +246,9 @@ export class ServerRiskEngine {
         rejectReason: `Duplicate order rate-limit breached: active ${req.side} order on ${req.symbol || asset} placed within last 5s.`,
         requiredCashReserve: 0,
         notionalUsd,
+        notionalNative,
         portfolioEquityUsd: 0,
+        portfolioEquityNative: 0,
         notional: notionalAmount,
         portfolioEquity: 0,
         currency: quoteAsset,
@@ -256,7 +271,9 @@ export class ServerRiskEngine {
         rejectReason: 'Rate limit exceeded: Maximum 12 orders per minute reached.',
         requiredCashReserve: 0,
         notionalUsd,
+        notionalNative,
         portfolioEquityUsd: 0,
+        portfolioEquityNative: 0,
         notional: notionalAmount,
         portfolioEquity: 0,
         currency: quoteAsset,
@@ -282,21 +299,24 @@ export class ServerRiskEngine {
       const balMinor = BigInt(bal.balance || 0);
       if (balMinor <= 0n) continue;
 
-      if (assetClass === 'EQUITY') {
-        // Indian equities: check equity_holdings and asset_holdings (0 decimals for whole shares)
-        if (key.startsWith('equity_holdings:') || key.startsWith('asset_holdings:')) {
+      if (assetClass === 'EQUITY' || assetClass === 'FUTURE' || assetClass === 'OPTION') {
+        // Indian equities, futures, options: check equity_holdings and asset_holdings (0 decimals)
+        if (key.startsWith('equity_holdings:') || key.startsWith('asset_holdings:') || key.startsWith('derivative_positions:')) {
           const holdingSymbol = key.split(':')[1]?.toUpperCase();
           const balDec = ExactDecimal.fromMinor(balMinor, 0);
           let holdingPriceDec = ExactDecimal.zero();
+          const authInst = UpstoxInstrumentMasterService.getInstrument(holdingSymbol || '') || UpstoxInstrumentRegistry.get(holdingSymbol || '');
           if (holdingSymbol === asset) {
             holdingPriceDec = priceDec;
           } else {
-            const authInst = UpstoxInstrumentRegistry.get(holdingSymbol);
             if (authInst?.lastPrice) {
               holdingPriceDec = ExactDecimal.from(authInst.lastPrice);
             }
           }
-          portfolioEquityDec = portfolioEquityDec.add(balDec.mul(holdingPriceDec));
+          // Apply contract multiplier for derivatives
+          const multiplier = (assetClass === 'FUTURE' || assetClass === 'OPTION') ? 
+            (authInst?.contractMultiplier || 1) : 1;
+          portfolioEquityDec = portfolioEquityDec.add(balDec.mul(holdingPriceDec).mul(ExactDecimal.from(multiplier)));
         }
       } else {
         // Crypto assets: check crypto_holdings (8 decimals for standard crypto)
@@ -320,6 +340,7 @@ export class ServerRiskEngine {
 
     const portfolioEquityAmount = portfolioEquityDec.toDisplayNumber();
     const portfolioEquityUsd = portfolioEquityAmount;
+    const portfolioEquityNative = portfolioEquityAmount;
 
     // Check cash availability for live BUY orders
     if (req.accountMode !== 'paper' && req.side === 'BUY' && tradingCashDec.lte(ExactDecimal.zero())) {
@@ -328,7 +349,9 @@ export class ServerRiskEngine {
         rejectReason: `Insufficient funds: Available cash balance is ${currencySymbol}0.00. Please deposit ${quoteAsset} before live trading.`,
         requiredCashReserve: 0,
         notionalUsd,
+        notionalNative,
         portfolioEquityUsd: 0,
+        portfolioEquityNative: 0,
         notional: notionalAmount,
         portfolioEquity: 0,
         currency: quoteAsset,
@@ -348,7 +371,9 @@ export class ServerRiskEngine {
         rejectReason: `Single order size (${currencySymbol}${notionalAmount.toFixed(2)}) is ${(singleOrderPct * 100).toFixed(1)}% of portfolio, exceeding maximum allowed limit of ${(maxSingleOrderPct * 100).toFixed(0)}%.`,
         requiredCashReserve: 0,
         notionalUsd,
+        notionalNative,
         portfolioEquityUsd,
+        portfolioEquityNative,
         notional: notionalAmount,
         portfolioEquity: portfolioEquityAmount,
         currency: quoteAsset,
@@ -371,7 +396,9 @@ export class ServerRiskEngine {
           rejectReason: `Order would violate minimum liquid cash reserve of ${(minReservePct * 100).toFixed(0)}% (${currencySymbol}${requiredCashReserve.toFixed(2)}). Projected remaining cash: ${currencySymbol}${remainingCashDec.toFixed(2)}.`,
           requiredCashReserve,
           notionalUsd,
+          notionalNative,
           portfolioEquityUsd,
+          portfolioEquityNative,
           notional: notionalAmount,
           portfolioEquity: portfolioEquityAmount,
           currency: quoteAsset,
@@ -385,10 +412,11 @@ export class ServerRiskEngine {
     // 8. Max Asset Concentration (50% policy)
     let currentAssetMinor = 0n;
     let assetHoldingsDecimals = 8;
-    if (assetClass === 'EQUITY') {
+    if (assetClass === 'EQUITY' || assetClass === 'FUTURE' || assetClass === 'OPTION') {
       currentAssetMinor = BigInt(
         balances[`equity_holdings:${asset}`]?.balance ??
           balances[`asset_holdings:${asset}`]?.balance ??
+          balances[`derivative_positions:${asset}`]?.balance ??
           0
       );
       assetHoldingsDecimals = 0;
@@ -412,7 +440,9 @@ export class ServerRiskEngine {
         rejectReason: `Projected ${asset} allocation (${(projectedConcentrationPct * 100).toFixed(1)}%) exceeds maximum asset concentration cap of ${(maxConcentrationPct * 100).toFixed(0)}%.`,
         requiredCashReserve,
         notionalUsd,
+        notionalNative,
         portfolioEquityUsd,
+        portfolioEquityNative,
         notional: notionalAmount,
         portfolioEquity: portfolioEquityAmount,
         currency: quoteAsset,

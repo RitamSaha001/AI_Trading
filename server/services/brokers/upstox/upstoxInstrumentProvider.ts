@@ -21,10 +21,8 @@ export class UpstoxInstrumentProvider implements InstrumentRulesProvider {
    * Resolves instrument definition from dynamic UpstoxInstrumentMasterService
    * with fallback to verified UpstoxInstrumentRegistry.
    */
-  public getInstrument(symbolOrKey: string): BrokerInstrument | null {
-    const authInst =
-      UpstoxInstrumentMasterService.getInstrument(symbolOrKey) ||
-      UpstoxInstrumentRegistry.get(symbolOrKey);
+  public getInstrument(symbolOrKey: string, isLive: boolean = false): BrokerInstrument | null {
+    const authInst = UpstoxInstrumentMasterService.getInstrument(symbolOrKey, isLive);
     if (!authInst) {
       return null;
     }
@@ -35,9 +33,7 @@ export class UpstoxInstrumentProvider implements InstrumentRulesProvider {
    * Retrieves estimated or reference base price for symbol.
    */
   public getEstimatedPrice(symbolOrKey: string): number {
-    const authInst =
-      UpstoxInstrumentMasterService.getInstrument(symbolOrKey) ||
-      UpstoxInstrumentRegistry.get(symbolOrKey);
+    const authInst = UpstoxInstrumentMasterService.getInstrument(symbolOrKey);
     if (authInst?.basePrice && authInst.basePrice > 0) {
       return authInst.basePrice;
     }
@@ -96,7 +92,7 @@ export class UpstoxInstrumentProvider implements InstrumentRulesProvider {
     }
 
     // Freeze quantity check
-    const authInst = UpstoxInstrumentRegistry.get(order.symbol);
+    const authInst = UpstoxInstrumentMasterService.getInstrument(order.symbol);
     if (authInst?.freezeQuantity && qtyNum > authInst.freezeQuantity && !order.slice) {
       return {
         isValid: false,

@@ -11,6 +11,36 @@ import { RateLimitTracker } from './rateLimitTracker';
 import { config } from '../config';
 import crypto from 'node:crypto';
 
+/**
+ * Resolves the active broker for a user. Never falls back silently.
+ * @throws if broker identity cannot be determined.
+ */
+async function resolveUserBroker(userId: string): Promise<string> {
+  const db = getDb();
+  // Check recent order broker
+  const orderRow = await db.queryOne<{ broker: string }>(
+    `SELECT broker FROM exchange_orders WHERE user_id = ? AND broker IS NOT NULL ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  if (orderRow?.broker) return orderRow.broker;
+  
+  // Check credentials
+  const credRow = await db.queryOne<{ broker: string }>(
+    `SELECT broker FROM broker_credentials WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1`,
+    [userId]
+  );
+  if (credRow?.broker) return credRow.broker;
+
+  // Check Binance exchange_accounts
+  const exRow = await db.queryOne<{ id?: string }>(
+    `SELECT 1 FROM exchange_accounts WHERE user_id = ? LIMIT 1`,
+    [userId]
+  );
+  if (exRow) return 'binance';
+  
+  throw new Error(`Cannot determine broker for user ${userId}. No orders or credentials found.`);
+}
+
 export interface ReconciliationResult {
   runId: string;
   status: 'SUCCESS' | 'MISMATCH_DETECTED' | 'FAILED' | 'SKIPPED' | 'LOCKED';
@@ -189,7 +219,16 @@ export class ReconciliationWorker {
       for (const ord of unknownOrders) {
         ordersChecked++;
         try {
-          const broker = BrokerRegistry.get(ord.broker || 'binance');
+          let activeBroker = ord.broker;
+          if (!activeBroker) {
+            try {
+              activeBroker = await resolveUserBroker(ord.user_id);
+            } catch (err: any) {
+              logger.warn(`[ReconciliationWorker] Skipping unknown order ${ord.client_order_id}: ${err.message}`);
+              continue;
+            }
+          }
+          const broker = BrokerRegistry.get(activeBroker);
           const recOrder = await broker.reconcileUnknownOrder(ord.client_order_id);
           if (recOrder.status === 'UNKNOWN') {
             // Indeterminate state: could not confirm on exchange and remains UNKNOWN
@@ -325,7 +364,7 @@ export class ReconciliationWorker {
             `SELECT DISTINCT symbol FROM exchange_orders WHERE user_id = ?`,
             [userId]
           );
-          const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : ['BTCUSDT'];
+          const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : [];
           let tradesSucceeded = true;
           for (const sym of symbols) {
             const tradeResult = await this.reconcileTrades(userId, runId, sym);
@@ -415,7 +454,7 @@ export class ReconciliationWorker {
               `SELECT DISTINCT symbol FROM exchange_orders WHERE user_id = ?`,
               [uId]
             );
-            const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : ['BTCUSDT'];
+            const symbols = symbolRows.length > 0 ? symbolRows.map((r: any) => r.symbol) : [];
             let userTradesSucceeded = true;
             for (const sym of symbols) {
               const tradeResult = await this.reconcileTrades(uId, runId, sym);
@@ -558,7 +597,7 @@ export class ReconciliationWorker {
   static async reconcileTrades(
     userId: string,
     runId: string = `rec_run_${Date.now()}`,
-    symbol: string = 'BTCUSDT',
+    symbol: string,
     mockVenueTrades?: any[]
   ): Promise<ReconciliationStepResult> {
     let mismatches = 0;
@@ -580,103 +619,52 @@ export class ReconciliationWorker {
       }
     }
 
-    const userBrokerRow = await db.queryOne<{ broker: string }>(
-      `SELECT broker FROM exchange_orders WHERE user_id = ? AND symbol = ? ORDER BY created_at DESC LIMIT 1`,
-      [userId, symbol]
-    );
-    const orderBrokerRow = !userBrokerRow ? await db.queryOne<{ broker: string }>(
-      `SELECT broker FROM broker_credentials WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1`,
-      [userId]
-    ) : null;
-    const activeBroker = userBrokerRow?.broker || orderBrokerRow?.broker || 'binance';
-
-    if (!venueTrades && activeBroker === 'upstox') {
-      const upstoxBroker = BrokerRegistry.get('upstox');
-      try {
-        const upstoxTrades = await (upstoxBroker as any).getTrades(userId, symbol);
-        venueTrades = (upstoxTrades || []).map((t: any) => ({
-          id: t.tradeId,
-          orderId: t.orderId,
-          symbol: t.symbol,
-          price: t.price,
-          qty: t.qty,
-          commission: '0',
-          commissionAsset: 'INR',
-          commissionStatus: 'UNRESOLVED',
-          isBuyer: t.side === 'BUY',
-          time: t.time,
-        }));
-      } catch (err: any) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: `Upstox trade fetch failed: ${err.message}`,
-        };
-      }
+    let activeBroker: string;
+    try {
+      activeBroker = await resolveUserBroker(userId);
+    } catch (err: any) {
+      return {
+        success: false,
+        mismatches: 0,
+        error: err.message,
+      };
     }
 
     if (!venueTrades) {
-      const broker = BrokerRegistry.get('binance');
-      const creds = await (broker as any).getCredentials?.(userId);
-      if (!creds?.apiKey) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: `No exchange credentials found for user ${userId}`,
-        };
-      }
-
-      if (
-        config.NODE_ENV === 'test' &&
-        (creds.apiKey.startsWith('mock_') || creds.apiKey.startsWith('test_')) &&
-        !creds.apiKey.startsWith('mock_fail')
-      ) {
-        venueTrades = [];
-      } else if (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_fail')) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: 'Simulated failure: mock_fail API key',
-        };
-      } else {
-        try {
-          const baseUrl =
-            creds.environment === 'mainnet' ? 'https://api.binance.com' : 'https://testnet.binance.vision';
-          const startTime = Date.now() - 3600_000; // 1 hour overlap window
-          const timestamp = ClockSyncService.getExchangeTime();
-          const queryString = `symbol=${symbol}&startTime=${startTime}&timestamp=${timestamp}&recvWindow=5000`;
-          const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
-
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 8000);
-
-          const response = await fetch(`${baseUrl}/api/v3/myTrades?${queryString}&signature=${signature}`, {
-            headers: { 'X-MBX-APIKEY': creds.apiKey },
-            signal: controller.signal,
-          });
-          clearTimeout(timer);
-
-          RateLimitTracker.recordResponse(response.headers, response.status);
-
-          if (!response.ok) {
-            const errorBody = await response.text().catch(() => '');
-            logger.warn(`[ReconciliationWorker] Failed to query venue trades for ${symbol} (${response.status}): ${errorBody}`);
+      const broker = BrokerRegistry.get(activeBroker);
+      try {
+        if (activeBroker === 'upstox') {
+          const upstoxTrades = await (broker as any).getTrades(userId, symbol);
+          venueTrades = (upstoxTrades || []).map((t: any) => ({
+            id: t.tradeId,
+            orderId: t.orderId,
+            symbol: t.symbol,
+            price: t.price,
+            qty: t.qty,
+            commission: '0',
+            commissionAsset: 'INR',
+            commissionStatus: 'UNRESOLVED',
+            isBuyer: t.side === 'BUY',
+            time: t.time,
+          }));
+        } else {
+          if (typeof (broker as any).getTrades === 'function') {
+            venueTrades = await (broker as any).getTrades(userId, symbol) || [];
+          } else {
             return {
               success: false,
               mismatches: 0,
-              error: `Binance myTrades API Error ${response.status}: ${errorBody || response.statusText}`,
+              error: `Broker adapter ${activeBroker} does not support getTrades`,
             };
           }
-
-          venueTrades = (await response.json()) as any[];
-        } catch (err: any) {
-          logger.warn(`[ReconciliationWorker] Network error querying venue trades for ${symbol}: ${err.message}`);
-          return {
-            success: false,
-            mismatches: 0,
-            error: `Network error querying Binance myTrades: ${err.message}`,
-          };
         }
+      } catch (err: any) {
+        logger.warn(`[ReconciliationWorker] Network error querying venue trades for ${symbol}: ${err.message}`);
+        return {
+          success: false,
+          mismatches: 0,
+          error: `Network error querying ${activeBroker} trades: ${err.message}`,
+        };
       }
     }
 
@@ -689,7 +677,7 @@ export class ReconciliationWorker {
     }
 
     for (const trade of venueTrades) {
-      const tradeId = String(trade.id);
+      const tradeId = String(trade.id || trade.tradeId || '');
       const canonicalFillKey = `${activeBroker}:${userId}:${symbol}:${tradeId}`;
 
       const existingFill = await db.queryOne<any>(
@@ -941,7 +929,7 @@ export class ReconciliationWorker {
 
   /**
    * Reconciles open orders against exchange open orders.
-   * Identifies orphaned exchange orders (orders on Binance missing locally) and missing local orders.
+   * Identifies orphaned exchange orders (orders on exchange missing locally) and missing local orders.
    */
   static async reconcileOpenOrders(
     userId: string,
@@ -967,99 +955,49 @@ export class ReconciliationWorker {
       }
     }
 
-    const orderBrokerRow = await db.queryOne<{ broker: string }>(
-      `SELECT broker FROM exchange_orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
-      [userId]
-    );
-    const credBrokerRow = !orderBrokerRow ? await db.queryOne<{ broker: string }>(
-      `SELECT broker FROM broker_credentials WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1`,
-      [userId]
-    ) : null;
-    const activeBroker = orderBrokerRow?.broker || credBrokerRow?.broker || 'binance';
-
-    if (!venueOpenOrders && activeBroker === 'upstox') {
-      const upstoxBroker = BrokerRegistry.get('upstox');
-      try {
-        const openOrders = await upstoxBroker.getOpenOrders(userId);
-        venueOpenOrders = (openOrders || []).map((o) => ({
-          orderId: o.exchangeOrderId || o.clientOrderId,
-          clientOrderId: o.clientOrderId,
-          symbol: o.symbol,
-          status: o.status,
-          price: String(o.price),
-          origQty: String(o.origQty),
-          executedQty: String(o.executedQty),
-        }));
-      } catch (err: any) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: `Upstox open orders fetch failed: ${err.message}`,
-        };
-      }
+    let activeBroker: string;
+    try {
+      activeBroker = await resolveUserBroker(userId);
+    } catch (err: any) {
+      return {
+        success: false,
+        mismatches: 0,
+        error: err.message,
+      };
     }
 
     if (!venueOpenOrders) {
-      const broker = BrokerRegistry.get('binance');
-      const creds = await (broker as any).getCredentials?.(userId);
-      if (!creds?.apiKey) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: `No exchange credentials found for user ${userId}`,
-        };
-      }
-
-      if (
-        config.NODE_ENV === 'test' &&
-        (creds.apiKey.startsWith('mock_') || creds.apiKey.startsWith('test_')) &&
-        !creds.apiKey.startsWith('mock_fail')
-      ) {
-        venueOpenOrders = [];
-      } else if (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_fail')) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: 'Simulated failure: mock_fail API key',
-        };
-      } else {
-        try {
-          const baseUrl =
-            creds.environment === 'mainnet' ? 'https://api.binance.com' : 'https://testnet.binance.vision';
-          const timestamp = ClockSyncService.getExchangeTime();
-          const queryString = `timestamp=${timestamp}&recvWindow=5000`;
-          const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
-
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 8000);
-
-          const response = await fetch(`${baseUrl}/api/v3/openOrders?${queryString}&signature=${signature}`, {
-            headers: { 'X-MBX-APIKEY': creds.apiKey },
-            signal: controller.signal,
-          });
-          clearTimeout(timer);
-
-          RateLimitTracker.recordResponse(response.headers, response.status);
-
-          if (!response.ok) {
-            const errorBody = await response.text().catch(() => '');
-            logger.warn(`[ReconciliationWorker] Failed to query venue open orders (${response.status}): ${errorBody}`);
+      const broker = BrokerRegistry.get(activeBroker);
+      try {
+        if (activeBroker === 'upstox') {
+          const openOrders = await broker.getOpenOrders(userId);
+          venueOpenOrders = (openOrders || []).map((o) => ({
+            orderId: o.exchangeOrderId || o.clientOrderId,
+            clientOrderId: o.clientOrderId,
+            symbol: o.symbol,
+            status: o.status,
+            price: String(o.price),
+            origQty: String(o.origQty),
+            executedQty: String(o.executedQty),
+          }));
+        } else {
+          if (typeof broker.getOpenOrders === 'function') {
+            venueOpenOrders = await broker.getOpenOrders(userId) || [];
+          } else {
             return {
               success: false,
               mismatches: 0,
-              error: `Binance openOrders API Error ${response.status}: ${errorBody || response.statusText}`,
+              error: `Broker adapter ${activeBroker} does not support getOpenOrders`,
             };
           }
-
-          venueOpenOrders = (await response.json()) as any[];
-        } catch (err: any) {
-          logger.warn(`[ReconciliationWorker] Network error querying venue open orders: ${err.message}`);
-          return {
-            success: false,
-            mismatches: 0,
-            error: `Network error querying Binance openOrders: ${err.message}`,
-          };
         }
+      } catch (err: any) {
+        logger.warn(`[ReconciliationWorker] Network error querying venue open orders for broker ${activeBroker}: ${err.message}`);
+        return {
+          success: false,
+          mismatches: 0,
+          error: `Network error querying ${activeBroker} openOrders: ${err.message}`,
+        };
       }
     }
 
@@ -1142,112 +1080,52 @@ export class ReconciliationWorker {
     }
 
     const db = getDb();
-    const credBrokerRow = await db.queryOne<{ broker: string }>(
-      `SELECT broker FROM broker_credentials WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1`,
-      [userId]
-    );
-    const activeBroker = credBrokerRow?.broker || 'binance';
-
-    if (!exchangeBalances && activeBroker === 'upstox') {
-      const upstoxBroker = BrokerRegistry.get('upstox');
-      try {
-        const account = await upstoxBroker.getAccount(userId);
-        exchangeBalances = {};
-        exchangeLocked = {};
-        for (const [asset, b] of Object.entries(account.balances || {})) {
-          exchangeBalances[asset] = String(b.free);
-          if (b.locked) exchangeLocked[asset] = String(b.locked);
-        }
-      } catch (err: any) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: `Upstox account balance fetch failed: ${err.message}`,
-        };
-      }
+    let activeBroker: string;
+    try {
+      activeBroker = await resolveUserBroker(userId);
+    } catch (err: any) {
+      return {
+        success: false,
+        mismatches: 0,
+        error: err.message,
+      };
     }
 
     if (!exchangeBalances) {
-      const broker = BrokerRegistry.get('binance');
-      const creds = await (broker as any).getCredentials?.(userId);
-      if (!creds?.apiKey) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: `No exchange credentials found for user ${userId}`,
-        };
-      }
-
-      if (
-        config.NODE_ENV === 'test' &&
-        (creds.apiKey.startsWith('mock_') || creds.apiKey.startsWith('test_')) &&
-        !creds.apiKey.startsWith('mock_fail')
-      ) {
-        const cashAsset = localProjection.cash.currency || 'USDT';
-        exchangeBalances = {
-          [cashAsset]: ExactDecimal.fromMinor(localProjection.cash.availableMinor, 2).toString(),
-        };
-        const positions = localProjection.positions || {};
-        for (const [asset, pos] of Object.entries(positions)) {
-          exchangeBalances[asset] = ExactDecimal.fromMinor(pos.availableQuantityMinor, 8).toString();
-        }
-        exchangeLocked = {};
-      } else if (config.NODE_ENV === 'test' && creds.apiKey.startsWith('mock_fail')) {
-        return {
-          success: false,
-          mismatches: 0,
-          error: 'Simulated failure: mock_fail API key',
-        };
-      } else {
-        try {
-          const baseUrl =
-            creds.environment === 'mainnet' ? 'https://api.binance.com' : 'https://testnet.binance.vision';
-          const timestamp = ClockSyncService.getExchangeTime();
-          const queryString = `timestamp=${timestamp}&recvWindow=5000`;
-          const signature = crypto.createHmac('sha256', creds.apiSecret).update(queryString).digest('hex');
-
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 8000);
-
-          const response = await fetch(`${baseUrl}/api/v3/account?${queryString}&signature=${signature}`, {
-            headers: { 'X-MBX-APIKEY': creds.apiKey },
-            signal: controller.signal,
-          });
-          clearTimeout(timer);
-
-          RateLimitTracker.recordResponse(response.headers, response.status);
-
-          if (!response.ok) {
-            const errorBody = await response.text().catch(() => '');
-            logger.warn(`[ReconciliationWorker] Failed to query Binance account balances (${response.status}): ${errorBody}`);
+      const broker = BrokerRegistry.get(activeBroker);
+      try {
+        if (activeBroker === 'upstox') {
+          const account = await broker.getAccount(userId);
+          exchangeBalances = {};
+          exchangeLocked = {};
+          for (const [asset, b] of Object.entries(account.balances || {})) {
+            exchangeBalances[asset] = String(b.free);
+            if (b.locked) exchangeLocked[asset] = String(b.locked);
+          }
+        } else {
+          if (typeof broker.getAccount === 'function') {
+            const account = await broker.getAccount(userId);
+            exchangeBalances = {};
+            exchangeLocked = {};
+            for (const [asset, b] of Object.entries(account.balances || {})) {
+              exchangeBalances[asset] = String(b.free);
+              if (b.locked) exchangeLocked[asset] = String(b.locked);
+            }
+          } else {
             return {
               success: false,
               mismatches: 0,
-              error: `Binance account API Error ${response.status}: ${errorBody || response.statusText}`,
+              error: `Broker adapter ${activeBroker} does not support getAccount`,
             };
           }
-
-          const data = (await response.json()) as any;
-          exchangeBalances = {};
-          exchangeLocked = {};
-          for (const b of data.balances || []) {
-            const freeDec = ExactDecimal.from(b.free || '0');
-            const lockedDec = ExactDecimal.from(b.locked || '0');
-            if (freeDec.gt(ExactDecimal.zero())) {
-              exchangeBalances[b.asset] = b.free;
-            }
-            if (lockedDec.gt(ExactDecimal.zero())) {
-              exchangeLocked[b.asset] = b.locked;
-            }
-          }
-        } catch (e: any) {
-          logger.warn(`[ReconciliationWorker] Network error querying Binance account balances: ${e.message}`);
-          return {
-            success: false,
-            mismatches: 0,
-            error: `Network error querying Binance account balances: ${e.message}`,
-          };
         }
+      } catch (err: any) {
+        logger.warn(`[ReconciliationWorker] Network error querying venue account balances for broker ${activeBroker}: ${err.message}`);
+        return {
+          success: false,
+          mismatches: 0,
+          error: `Network error querying ${activeBroker} account balances: ${err.message}`,
+        };
       }
     }
 

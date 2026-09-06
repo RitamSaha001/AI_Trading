@@ -100,12 +100,25 @@ export class ReadinessService {
 
     // 3. UPSTOX_AUTH_READY
     const upstoxConfigured = Boolean(config.UPSTOX_API_KEY && config.UPSTOX_API_SECRET);
+    let hasActiveSession = false;
+    try {
+      const db = getDb();
+      const credRow = await db.queryOne<{ access_token: string; updated_at: number }>(
+        `SELECT access_token, updated_at FROM broker_credentials WHERE broker = 'upstox' ORDER BY updated_at DESC LIMIT 1`
+      );
+      // Session is active if token exists and was updated within last 24 hours
+      hasActiveSession = Boolean(credRow?.access_token && (Date.now() - (credRow?.updated_at || 0)) < 86400000);
+    } catch {
+      // DB not available — auth not ready
+    }
     const upstoxAuthReady: ReadinessDimensionStatus = {
-      ready: upstoxConfigured,
-      status: upstoxConfigured ? 'READY' : 'DEGRADED',
-      detail: upstoxConfigured
-        ? 'Upstox API key and secret configured'
-        : 'Upstox API credentials not fully configured in environment',
+      ready: upstoxConfigured && hasActiveSession,
+      status: hasActiveSession ? 'READY' : (upstoxConfigured ? 'DEGRADED' : 'NOT_CONFIGURED'),
+      detail: hasActiveSession
+        ? 'Upstox OAuth session active'
+        : upstoxConfigured
+          ? 'API credentials configured but no active OAuth session'
+          : 'Upstox API credentials not configured',
     };
 
     // 4. INSTRUMENTS_READY
@@ -121,10 +134,15 @@ export class ReadinessService {
 
     // 5. QUOTE_SERVICE_READY
     const upstoxBroker = BrokerRegistry.get('upstox');
+    const quoteReady = Boolean(upstoxBroker) && hasActiveSession;
     const quoteServiceReady: ReadinessDimensionStatus = {
-      ready: Boolean(upstoxBroker),
-      status: upstoxBroker ? 'READY' : 'DEGRADED',
-      detail: upstoxBroker ? 'Broker quote adapter registered' : 'No broker registered in BrokerRegistry',
+      ready: quoteReady,
+      status: quoteReady ? 'READY' : (upstoxBroker ? 'DEGRADED' : 'UNAVAILABLE'),
+      detail: quoteReady
+        ? 'Broker quote adapter registered with active session'
+        : upstoxBroker
+          ? 'Broker registered but no active OAuth session for quote retrieval'
+          : 'No broker registered in BrokerRegistry',
     };
 
     // 6. STATIC_IP_READY
@@ -184,7 +202,7 @@ export class ReadinessService {
     if (overallReady) {
       if (liveExecutionReady.ready) {
         operationalState = 'LIVE_TRADING_READY';
-      } else if (quoteServiceReady.ready && upstoxAuthReady.ready) {
+      } else if (quoteServiceReady.ready && upstoxAuthReady.ready && instrumentsReady.ready) {
         operationalState = 'BROKER_READY';
       } else {
         operationalState = 'READY';

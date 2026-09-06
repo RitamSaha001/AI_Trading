@@ -152,7 +152,7 @@ export const UpstoxHoldingSchema = z.object({
 
 export interface UpstoxPlaceOrderPayload {
   quantity: number;
-  product: 'I' | 'D';
+  product: 'I' | 'D' | 'M';
   validity: 'DAY' | 'IOC';
   price: number;
   tag?: string;

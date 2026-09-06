@@ -113,6 +113,7 @@ describe('Phase 4B: Panic & Emergency Execution Controls', () => {
     const adapter = BrokerRegistry.get('upstox') as UpstoxAdapter;
 
     // Seed mock transport returning 2 open orders
+    const cancelledIds = new Set<string>();
     UpstoxClient.setTransport(async (url: string) => {
       if (url.includes('/order/retrieve-all')) {
         return {
@@ -121,18 +122,20 @@ describe('Phase 4B: Panic & Emergency Execution Controls', () => {
           json: async () => ({
             status: 'success',
             data: [
-              { order_id: 'upstox_ord_1', tag: 'client_ord_1', status: 'open', instrument_token: 'NSE_EQ|INE002A01018' },
-              { order_id: 'upstox_ord_2', tag: 'client_ord_2', status: 'open', instrument_token: 'NSE_EQ|INE467B01029' },
+              { order_id: 'upstox_ord_1', tag: 'client_ord_1', status: cancelledIds.has('upstox_ord_1') ? 'cancelled' : 'open', instrument_token: 'NSE_EQ|INE002A01018' },
+              { order_id: 'upstox_ord_2', tag: 'client_ord_2', status: cancelledIds.has('upstox_ord_2') ? 'cancelled' : 'open', instrument_token: 'NSE_EQ|INE467B01029' },
             ],
           }),
           text: async () => '',
         };
       }
       if (url.includes('/order/cancel')) {
+        const orderIdParam = new URL(url).searchParams.get('order_id') || 'upstox_ord_1';
+        cancelledIds.add(orderIdParam);
         return {
           status: 200,
           ok: true,
-          json: async () => ({ status: 'success', data: { order_id: 'upstox_ord_1' } }),
+          json: async () => ({ status: 'success', data: { order_id: orderIdParam } }),
           text: async () => '',
         };
       }

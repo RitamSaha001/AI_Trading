@@ -119,4 +119,30 @@ export class UpstoxProductMatrix {
       wireProduct: this.toWireProduct(normalized),
     };
   }
+
+  /**
+   * Resolves and validates product against segment, returning null if invalid.
+   */
+  public static resolveProduct(segment: string, rawProduct?: string): { product: UpstoxProductCode; wireProduct: UpstoxWireProduct } | null {
+    const cleanSegment = (segment || 'NSE_EQ').toUpperCase();
+    const rule = this.RULES[cleanSegment];
+    if (!rule) return null;
+
+    const normalized = this.normalizeProduct(rawProduct);
+    if (!normalized || !rule.allowedProducts.includes(normalized)) return null;
+
+    return {
+      product: normalized,
+      wireProduct: this.toWireProduct(normalized)
+    };
+  }
+
+  /**
+   * Returns allowed products for a given segment.
+   */
+  public static getAllowedProducts(segment: string): UpstoxProductCode[] | null {
+    const cleanSegment = (segment || 'NSE_EQ').toUpperCase();
+    const rule = this.RULES[cleanSegment];
+    return rule ? rule.allowedProducts : null;
+  }
 }

@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { getDb } from '../../../db';
 import { config } from '../../../config';
 import { ExactDecimal } from '../../precision';
-import { AuditService } from '../../auditService';
+import { AuditService, logger } from '../../auditService';
 import { LedgerService } from '../../ledgerService';
 import { RiskEngine } from '../../riskEngine';
 import { InstrumentRulesService } from '../../instrumentRules';
@@ -42,6 +42,7 @@ import {
   UpstoxPlaceOrderPayload,
   UpstoxTradeItem,
 } from './upstoxTypes';
+import { UpstoxProductMatrix } from './upstoxProductMatrix';
 import {
   calculateNextUpstoxExpiry,
   getTokenHealth,
@@ -557,18 +558,19 @@ export class UpstoxAdapter implements BrokerGateway {
       ]
     );
 
-    // Dynamic Product Selection (Finding 3)
-    let product: 'D' | 'I' | 'MTF' = 'D';
-    if (order.product) {
-      const p = String(order.product).toUpperCase().trim();
-      if (p === 'I' || p === 'MIS' || p === 'INTRADAY') {
-        product = 'I';
-      } else if (p === 'MTF') {
-        product = 'MTF';
-      } else {
-        product = 'D'; // CNC / DELIVERY / D default
-      }
+    // Dynamic Product Selection via UpstoxProductMatrix (P0-3 Wire Fix)
+    const segment = instrument.segment || (instrument.exchange === 'NSE' ? 
+      (instrument.instrumentType === 'FUT' || instrument.instrumentType === 'OPT' ? 'NSE_FO' : 'NSE_EQ') :
+      (instrument.instrumentType === 'FUT' || instrument.instrumentType === 'OPT' ? 'BSE_FO' : 'BSE_EQ'));
+    const productResolution = UpstoxProductMatrix.resolveProduct(segment, order.product);
+    if (!productResolution) {
+      throw new StandardBrokerError(
+        'ORDER_REJECTED',
+        `Unsupported product '${order.product}' for segment '${segment}'. Allowed: ${UpstoxProductMatrix.getAllowedProducts(segment)?.join(', ') || 'none'}.`,
+        'upstox'
+      );
     }
+    const product: 'D' | 'I' | 'M' = productResolution.wireProduct;
 
     // Expanded Order Intent (Finding 10)
     const validity: 'DAY' | 'IOC' = (String(order.validity).toUpperCase() === 'IOC') ? 'IOC' : 'DAY';
@@ -867,7 +869,6 @@ export class UpstoxAdapter implements BrokerGateway {
     const reconcileRes = await this.reconcileUnknownOrder(clientOrderId, order.symbol, userId).catch(() => null);
 
     if (reconcileRes?.status === 'FILLED') {
-      // Order filled before cancel was processed!
       const updated = await db.queryOne<any>(
         `SELECT * FROM exchange_orders WHERE client_order_id = ?`,
         [clientOrderId]
@@ -875,12 +876,33 @@ export class UpstoxAdapter implements BrokerGateway {
       return this.mapOrderRecord(updated);
     }
 
-    const finalStatus = (reconcileRes?.executedQty || 0) > 0 ? 'PARTIALLY_FILLED' : 'CANCELED';
-
-    // Safely release unused reservations only upon authoritative venue cancellation
-    if (order.side === 'BUY' && order.reserved_cash > 0) {
-      await LedgerService.releaseCashReservation(userId, `res_${clientOrderId}`, 'live').catch(() => {});
+    // Broker-authoritative state determination (P0-5 fix)
+    let finalStatus: string;
+    if (!reconcileRes || reconcileRes.status === 'UNKNOWN') {
+      // Reconciliation failed or inconclusive — MUST NOT become terminal CANCELED
+      finalStatus = 'UNKNOWN';
+    } else if (reconcileRes.status === 'CANCELED' || reconcileRes.status === 'REJECTED') {
+      finalStatus = reconcileRes.status;
+    } else if ((reconcileRes.executedQty || 0) > 0) {
+      finalStatus = 'PARTIALLY_FILLED';
+    } else {
+      finalStatus = 'CANCELED';
     }
+
+    // Only release reservations when authoritatively CANCELED (not UNKNOWN)
+    if (finalStatus === 'CANCELED' || finalStatus === 'REJECTED') {
+      if (order.side === 'BUY' && order.reserved_cash > 0) {
+        await LedgerService.releaseCashReservation(userId, `res_${clientOrderId}`, 'live').catch(() => {});
+      }
+    } else if (finalStatus === 'PARTIALLY_FILLED') {
+      // For partial fills, release only the unfilled portion
+      const filledNotional = (reconcileRes?.executedQty || 0) * (reconcileRes?.avgPrice || 0);
+      const remainingReserve = Math.max(0, Number(order.reserved_cash || 0) - filledNotional);
+      if (order.side === 'BUY' && remainingReserve > 0) {
+        await LedgerService.releaseCashReservation(userId, `res_${clientOrderId}`, 'live').catch(() => {});
+      }
+    }
+    // UNKNOWN: do NOT release reservations
 
     await db.execute(
       `UPDATE exchange_orders SET status = ?, updated_at = ? WHERE client_order_id = ?`,
@@ -970,7 +992,7 @@ export class UpstoxAdapter implements BrokerGateway {
             'upstox'
           );
         }
-        await LedgerService.reserveCash(order.user_id, `mod_res_${order.client_order_id}_${Date.now()}`, cashDelta, 'live').catch(() => {});
+        await LedgerService.reserveCash(order.user_id, `mod_res_${order.client_order_id}`, cashDelta, 'live').catch(() => {});
         additionalReservationCreated = true;
       }
     }
@@ -980,8 +1002,10 @@ export class UpstoxAdapter implements BrokerGateway {
         order_id: venueOrderId,
         price,
         quantity,
-        order_type: order.type === 'MARKET' ? 'MARKET' : 'LIMIT',
-        validity: 'DAY',
+        order_type: updates.type || (order.type === 'MARKET' ? 'MARKET' : order.type === 'STOP_LOSS' || order.type === 'SL-M' || order.type === 'SL_M' ? 'SL-M' : order.type === 'STOP_LOSS_LIMIT' || order.type === 'SL' ? 'SL' : 'LIMIT'),
+        validity: updates.validity || order.validity || 'DAY',
+        trigger_price: updates.triggerPrice ?? (order.trigger_price ? Number(order.trigger_price) : undefined),
+        disclosed_quantity: updates.disclosedQuantity ?? (order.disclosed_qty ? Number(order.disclosed_qty) : undefined),
       });
     } catch (brokerErr: any) {
       if (additionalReservationCreated && cashDelta > 0) {
@@ -1010,13 +1034,60 @@ export class UpstoxAdapter implements BrokerGateway {
    * Retrieves active open orders for user.
    */
   async getOpenOrders(userId: string, symbol?: string): Promise<BrokerOrder[]> {
+    const ordersMap = new Map<string, BrokerOrder>();
+
+    // 1. Query local DB for known active orders
     const db = getDb();
     const query = symbol
       ? `SELECT * FROM exchange_orders WHERE user_id = ? AND broker = 'upstox' AND symbol = ? AND status IN ('OPEN', 'PARTIALLY_FILLED', 'SUBMITTING')`
       : `SELECT * FROM exchange_orders WHERE user_id = ? AND broker = 'upstox' AND status IN ('OPEN', 'PARTIALLY_FILLED', 'SUBMITTING')`;
     const params = symbol ? [userId, symbol] : [userId];
     const rows = await db.query<any>(query, params);
-    return rows.map((r) => this.mapOrderRecord(r));
+    for (const r of rows) {
+      const bo = this.mapOrderRecord(r);
+      ordersMap.set(bo.clientOrderId, bo);
+    }
+
+    // 2. Query venue API for authoritative broker-side orders
+    try {
+      const creds = await this.getCredentials(userId);
+      if (creds?.accessToken) {
+        const orderBook = await UpstoxClient.getOrderBook(creds.accessToken);
+        const openStatuses = ['open', 'pending', 'trigger pending', 'not cancelled', 'partially filled', 'after market order req received'];
+        let venueOrders = orderBook.filter((o: any) => 
+          openStatuses.includes(String(o.status).toLowerCase())
+        );
+        if (symbol) {
+          venueOrders = venueOrders.filter((o: any) => 
+            o.trading_symbol?.toUpperCase() === symbol.toUpperCase() ||
+            o.instrument_token?.toUpperCase().includes(symbol.toUpperCase())
+          );
+        }
+        for (const o of venueOrders) {
+          const clientOrderId = o.tag || o.order_id || '';
+          ordersMap.set(clientOrderId, {
+            id: o.order_id || '',
+            clientOrderId,
+            exchangeOrderId: o.order_id,
+            symbol: o.trading_symbol || '',
+            side: o.transaction_type as 'BUY' | 'SELL',
+            type: o.order_type || 'LIMIT',
+            status: this.normalizeOrderStatus(o.status),
+            quantity: Number(o.quantity || 0),
+            executedQty: Number(o.filled_quantity || 0),
+            price: Number(o.price || 0),
+            avgPrice: Number(o.average_price || 0),
+            broker: 'upstox' as const,
+            createdAt: o.order_timestamp ? new Date(o.order_timestamp).getTime() : Date.now(),
+            updatedAt: o.exchange_timestamp ? new Date(o.exchange_timestamp).getTime() : Date.now(),
+          });
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`[UpstoxAdapter] Failed to query venue for open orders: ${err.message}`);
+    }
+
+    return Array.from(ordersMap.values());
   }
 
   /**
@@ -1098,6 +1169,7 @@ export class UpstoxAdapter implements BrokerGateway {
       let allFilled = true;
       let allCanceled = true;
       let anyOpen = false;
+      let missingChildren = 0;
 
       for (const child of childRecords) {
         const matchingVenue = orderBook.find((o) => o.order_id === child.venue_order_id);
@@ -1124,15 +1196,25 @@ export class UpstoxAdapter implements BrokerGateway {
             const childFills = await this.fetchOrderFills(uid, matchingVenue.trading_symbol, matchingVenue.order_id, clientOrderId);
             allFills.push(...childFills);
           }
+        } else {
+          missingChildren++;
         }
       }
 
       const aggregateAvgPrice = totalExecuted > 0 ? totalWeightedPrice / totalExecuted : 0;
       let aggregatedStatus: string = 'OPEN';
-      if (allFilled) aggregatedStatus = 'FILLED';
-      else if (totalExecuted > 0 && (allCanceled || !anyOpen)) aggregatedStatus = 'PARTIALLY_FILLED';
-      else if (allCanceled) aggregatedStatus = 'CANCELED';
-      else if (anyOpen) aggregatedStatus = totalExecuted > 0 ? 'PARTIALLY_FILLED' : 'OPEN';
+      
+      if (missingChildren > 0) {
+        aggregatedStatus = 'UNKNOWN';
+      } else if (allFilled) {
+        aggregatedStatus = 'FILLED';
+      } else if (totalExecuted > 0 && (allCanceled || !anyOpen)) {
+        aggregatedStatus = 'PARTIALLY_FILLED';
+      } else if (allCanceled) {
+        aggregatedStatus = 'CANCELED';
+      } else if (anyOpen) {
+        aggregatedStatus = totalExecuted > 0 ? 'PARTIALLY_FILLED' : 'OPEN';
+      }
 
       if (aggregatedStatus === 'CANCELED' || aggregatedStatus === 'REJECTED') {
         await LedgerService.releaseOrderReservation(clientOrderId).catch(() => {});

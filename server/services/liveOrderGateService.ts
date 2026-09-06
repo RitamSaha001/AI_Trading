@@ -231,6 +231,7 @@ export class LiveOrderGateService {
     }
 
     // 11. System Panic Bypass or Two-Step Human Confirmation Token Verification
+    let isPanicBypass = false;
     if (order.isSystemPanic) {
       await AuditService.logEvent({
         userId: order.userId,
@@ -243,97 +244,95 @@ export class LiveOrderGateService {
           side: order.side,
           quantity: order.quantity,
           clientOrderId: order.clientOrderId,
-          reason: 'Emergency Panic Square-Off bypass of human confirmation token',
+          reason: 'Emergency Panic Square-Off — bypassing human confirmation and risk drift',
         },
       });
-
-      return {
-        passed: true,
-        instrument,
-        credentials: { accessToken, accountId: credRow.account_id },
-      };
+      isPanicBypass = true;
     }
 
-    if (!confirmationId) {
-      // Require server-side confirmation for all live orders
-      throw new StandardBrokerError(
-        'CONFIRMATION_REQUIRED',
-        'Live orders strictly require a valid two-step human confirmation token. Please propose order first via /api/orders/propose.',
-        brokerId
-      );
-    }
+    let confirmation: any = null;
+    if (!isPanicBypass) {
+      if (!confirmationId) {
+        // Require server-side confirmation for all live orders
+        throw new StandardBrokerError(
+          'CONFIRMATION_REQUIRED',
+          'Live orders strictly require a valid two-step human confirmation token. Please propose order first via /api/orders/propose.',
+          brokerId
+        );
+      }
 
-    // Inspect pending confirmation record
-    const confirmation = await LiveOrderConfirmationService.getConfirmation(confirmationId, order.userId);
-    if (!confirmation) {
-      throw new StandardBrokerError(
-        'CONFIRMATION_NOT_FOUND',
-        'Live order confirmation not found or unauthorized.',
-        brokerId
-      );
-    }
+      // Inspect pending confirmation record
+      confirmation = await LiveOrderConfirmationService.getConfirmation(confirmationId, order.userId);
+      if (!confirmation) {
+        throw new StandardBrokerError(
+          'CONFIRMATION_NOT_FOUND',
+          'Live order confirmation not found or unauthorized.',
+          brokerId
+        );
+      }
 
-    if (confirmation.status === 'CONSUMED') {
-      throw new StandardBrokerError(
-        'CONFIRMATION_ALREADY_CONSUMED',
-        'Live order confirmation has already been consumed.',
-        brokerId
-      );
-    }
+      if (confirmation.status === 'CONSUMED') {
+        throw new StandardBrokerError(
+          'CONFIRMATION_ALREADY_CONSUMED',
+          'Live order confirmation has already been consumed.',
+          brokerId
+        );
+      }
 
-    if (confirmation.status === 'EXPIRED' || confirmation.expiresAt <= Date.now()) {
-      throw new StandardBrokerError(
-        'CONFIRMATION_EXPIRED',
-        'Live order confirmation has expired. Please propose order again.',
-        brokerId
-      );
-    }
+      if (confirmation.status === 'EXPIRED' || confirmation.expiresAt <= Date.now()) {
+        throw new StandardBrokerError(
+          'CONFIRMATION_EXPIRED',
+          'Live order confirmation has expired. Please propose order again.',
+          brokerId
+        );
+      }
 
-    if (confirmation.status !== 'PENDING') {
-      throw new StandardBrokerError(
-        'CONFIRMATION_INVALID',
-        `Live order confirmation is not in PENDING state (status: ${confirmation.status}).`,
-        brokerId
-      );
-    }
+      if (confirmation.status !== 'PENDING') {
+        throw new StandardBrokerError(
+          'CONFIRMATION_INVALID',
+          `Live order confirmation is not in PENDING state (status: ${confirmation.status}).`,
+          brokerId
+        );
+      }
 
-    // Anti-Tampering Hash Verification (includes disclosedQuantity and slice)
-    const submittedHash = LiveOrderConfirmationService.computeOrderHash({
-      userId: order.userId,
-      broker: brokerId,
-      symbol: order.symbol,
-      side: order.side,
-      type: order.type,
-      quantity: Number(order.quantity),
-      price: order.price ? Number(order.price) : undefined,
-      triggerPrice: order.triggerPrice ? Number(order.triggerPrice) : undefined,
-      product: rawProduct,
-      validity: order.validity,
-      disclosedQuantity: order.disclosedQuantity,
-      slice: order.slice,
-    });
-
-    if (submittedHash !== confirmation.orderHash) {
-      // Mark confirmation as rejected due to tampering
-      await db.execute(
-        `UPDATE live_order_confirmations SET status = 'REJECTED', rejection_reason = 'Order parameters tampered' WHERE id = ?`,
-        [confirmationId]
-      );
-
-      await AuditService.logEvent({
+      // Anti-Tampering Hash Verification (includes disclosedQuantity and slice)
+      const submittedHash = LiveOrderConfirmationService.computeOrderHash({
         userId: order.userId,
-        eventType: 'ORDER_REJECTED',
-        source: 'live_order_gate_service',
-        actor: 'anti_tampering_guard',
-        result: 'BLOCKED',
-        metadata: { confirmationId, reason: 'PARAMETER_TAMPERING' },
+        broker: brokerId,
+        symbol: order.symbol,
+        side: order.side,
+        type: order.type,
+        quantity: Number(order.quantity),
+        price: order.price ? Number(order.price) : undefined,
+        triggerPrice: order.triggerPrice ? Number(order.triggerPrice) : undefined,
+        product: rawProduct,
+        validity: order.validity,
+        disclosedQuantity: order.disclosedQuantity,
+        slice: order.slice,
       });
 
-      throw new StandardBrokerError(
-        'ORDER_PARAMETER_TAMPERING',
-        'Order parameters do not match confirmed proposal. A new confirmation is required.',
-        brokerId
-      );
+      if (submittedHash !== confirmation.orderHash) {
+        // Mark confirmation as rejected due to tampering
+        await db.execute(
+          `UPDATE live_order_confirmations SET status = 'REJECTED', rejection_reason = 'Order parameters tampered' WHERE id = ?`,
+          [confirmationId]
+        );
+
+        await AuditService.logEvent({
+          userId: order.userId,
+          eventType: 'ORDER_REJECTED',
+          source: 'live_order_gate_service',
+          actor: 'anti_tampering_guard',
+          result: 'BLOCKED',
+          metadata: { confirmationId, reason: 'PARAMETER_TAMPERING' },
+        });
+
+        throw new StandardBrokerError(
+          'ORDER_PARAMETER_TAMPERING',
+          'Order parameters do not match confirmed proposal. A new confirmation is required.',
+          brokerId
+        );
+      }
     }
 
     // 12. Final Pre-Submission Risk Engine Revalidation (Section 8 & 13)
@@ -446,7 +445,7 @@ export class LiveOrderGateService {
     }
 
     // 13. Comprehensive Risk Snapshot Drift Check
-    if (confirmation.riskSnapshot) {
+    if (!isPanicBypass && confirmation && confirmation.riskSnapshot) {
       const snapshot = confirmation.riskSnapshot;
       const currentEquity = riskResult.portfolioEquity || 0;
       const initialEquity = snapshot.accountEquity || currentEquity;
@@ -503,78 +502,85 @@ export class LiveOrderGateService {
     const reservedCashMinor = order.side === 'BUY' ? notional.toMinor(2) : 0n;
     const reservedQtyMinor = order.side === 'SELL' ? ExactDecimal.from(order.quantity).toMinor(0) : 0n;
 
-    if (order.side === 'BUY' && reservedCashMinor > 0n) {
-      const cashAcc = await db.queryOne<any>(
-        `SELECT balance_minor, reserved_minor FROM ledger_accounts
-         WHERE user_id = ? AND account_mode = 'live' AND account_type = 'trading_allocated' AND asset_or_currency = 'INR'`,
-        [order.userId]
-      );
-      const availableMinor = cashAcc ? BigInt(cashAcc.balance_minor || 0) - BigInt(cashAcc.reserved_minor || 0) : 0n;
-      if (availableMinor < reservedCashMinor) {
-        throw new StandardBrokerError(
-          'INSUFFICIENT_FUNDS',
-          `Insufficient liquid INR cash for live order. Required: ₹${notional.toFixed(2)}, Available: ₹${(Number(availableMinor) / 100).toFixed(2)}`,
-          brokerId
+    if (!isPanicBypass) {
+      if (order.side === 'BUY' && reservedCashMinor > 0n) {
+        const cashAcc = await db.queryOne<any>(
+          `SELECT balance_minor, reserved_minor FROM ledger_accounts
+           WHERE user_id = ? AND account_mode = 'live' AND account_type = 'trading_allocated' AND asset_or_currency = 'INR'`,
+          [order.userId]
         );
-      }
-    } else if (order.side === 'SELL' && reservedQtyMinor > 0n) {
-      const baseAsset = instrument.baseAsset || order.symbol;
-      const holdingAcc = await db.queryOne<any>(
-        `SELECT balance_minor, reserved_minor FROM ledger_accounts
-         WHERE user_id = ? AND account_mode = 'live' AND account_type = 'equity_holdings' AND asset_or_currency = ?`,
-        [order.userId, baseAsset]
-      );
-      const availableQtyMinor = holdingAcc ? BigInt(holdingAcc.balance_minor || 0) - BigInt(holdingAcc.reserved_minor || 0) : 0n;
-      if (availableQtyMinor < reservedQtyMinor) {
-        throw new StandardBrokerError(
-          'INSUFFICIENT_HOLDINGS',
-          `Insufficient sellable equity shares for ${baseAsset}. Required: ${order.quantity} shares, Available: ${availableQtyMinor} shares`,
-          brokerId
+        const availableMinor = cashAcc ? BigInt(cashAcc.balance_minor || 0) - BigInt(cashAcc.reserved_minor || 0) : 0n;
+        if (availableMinor < reservedCashMinor) {
+          throw new StandardBrokerError(
+            'INSUFFICIENT_FUNDS',
+            `Insufficient liquid INR cash for live order. Required: ₹${notional.toFixed(2)}, Available: ₹${(Number(availableMinor) / 100).toFixed(2)}`,
+            brokerId
+          );
+        }
+      } else if (order.side === 'SELL' && reservedQtyMinor > 0n) {
+        const baseAsset = instrument.baseAsset || order.symbol;
+        const holdingAcc = await db.queryOne<any>(
+          `SELECT balance_minor, reserved_minor FROM ledger_accounts
+           WHERE user_id = ? AND account_mode = 'live' AND account_type = 'equity_holdings' AND asset_or_currency = ?`,
+          [order.userId, baseAsset]
         );
+        const availableQtyMinor = holdingAcc ? BigInt(holdingAcc.balance_minor || 0) - BigInt(holdingAcc.reserved_minor || 0) : 0n;
+        if (availableQtyMinor < reservedQtyMinor) {
+          throw new StandardBrokerError(
+            'INSUFFICIENT_HOLDINGS',
+            `Insufficient sellable equity shares for ${baseAsset}. Required: ${order.quantity} shares, Available: ${availableQtyMinor} shares`,
+            brokerId
+          );
+        }
       }
     }
 
     // 15. Atomically Consume Confirmation (Only AFTER all checks pass!)
-    const claimResult = await LiveOrderConfirmationService.claimConfirmationAtomically(confirmationId, order.userId);
-    if (!claimResult.claimed) {
-      throw new StandardBrokerError(
-        claimResult.reason || 'CONFIRMATION_INVALID',
-        `Live order confirmation check failed: ${claimResult.reason}`,
-        brokerId
-      );
-    }
-    const confirmationRecord = claimResult.record;
+    let confirmationRecord = null;
+    if (!isPanicBypass) {
+      const claimResult = await LiveOrderConfirmationService.claimConfirmationAtomically(confirmationId, order.userId);
+      if (!claimResult.claimed) {
+        throw new StandardBrokerError(
+          'CONFIRMATION_INVALID',
+          `Live order confirmation token ${confirmationId} invalid, expired, or already claimed.`,
+          brokerId
+        );
+      }
+      confirmationRecord = claimResult.record;
 
-    await AuditService.logEvent({
-      userId: order.userId,
-      eventType: 'ORDER_CONFIRMED',
-      source: 'live_order_gate_service',
-      actor: 'human_operator',
-      externalId: confirmationId,
-      result: 'SUCCESS',
-      metadata: { confirmationId, symbol: order.symbol, quantity: order.quantity },
-    });
+      await AuditService.logEvent({
+        userId: order.userId,
+        eventType: 'ORDER_CONFIRMED',
+        source: 'live_order_gate_service',
+        actor: 'human_operator',
+        externalId: confirmationId,
+        result: 'SUCCESS',
+        metadata: { confirmationId, symbol: order.symbol, quantity: order.quantity },
+      });
+    }
 
     // 16. Atomic Ledger Reservation (Cash for BUY, Equity Shares for SELL)
-    const clientOrderId = order.clientOrderId || order.idempotencyKey;
-    if (order.side === 'BUY' && reservedCashMinor > 0n) {
-      await LedgerService.reserveOrderFunds({
-        userId: order.userId,
-        orderId: clientOrderId,
-        accountMode: 'live',
-        accountType: 'trading_allocated',
-        assetOrCurrency: instrument.quoteAsset || 'INR',
-        amountMinor: reservedCashMinor,
-      });
-    } else if (order.side === 'SELL' && reservedQtyMinor > 0n) {
-      await LedgerService.reserveOrderFunds({
-        userId: order.userId,
-        orderId: clientOrderId,
-        accountMode: 'live',
-        accountType: 'equity_holdings',
-        assetOrCurrency: instrument.baseAsset || order.symbol,
-        amountMinor: reservedQtyMinor,
-      });
+    if (!isPanicBypass) {
+      const clientOrderId = order.clientOrderId || order.idempotencyKey;
+      if (order.side === 'BUY' && reservedCashMinor > 0n) {
+        await LedgerService.reserveOrderFunds({
+          userId: order.userId,
+          orderId: clientOrderId,
+          accountMode: 'live',
+          accountType: 'trading_allocated',
+          assetOrCurrency: instrument.quoteAsset || 'INR',
+          amountMinor: reservedCashMinor,
+        });
+      } else if (order.side === 'SELL' && reservedQtyMinor > 0n) {
+        await LedgerService.reserveOrderFunds({
+          userId: order.userId,
+          orderId: clientOrderId,
+          accountMode: 'live',
+          accountType: 'equity_holdings',
+          assetOrCurrency: instrument.baseAsset || order.symbol,
+          amountMinor: reservedQtyMinor,
+        });
+      }
     }
 
     return {
