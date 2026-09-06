@@ -68,14 +68,14 @@ export class OperationalSafetyService {
         await tx.execute(
           `INSERT INTO operational_kill_switches (
             id, scope, target, is_frozen, freeze_reason, frozen_by, frozen_at
-          ) VALUES (?, ?, ?, 1, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, TRUE, ?, ?, ?)`,
           [id, scope, target, reason, frozenBy, now]
         );
 
         // Synchronize with account_limits for backward compatibility if account scope
         if (scope === 'ACCOUNT') {
           await tx.execute(
-            `UPDATE account_limits SET is_emergency_frozen = 1, freeze_reason = ?, updated_at = ? WHERE user_id = ?`,
+            `UPDATE account_limits SET is_emergency_frozen = TRUE, freeze_reason = ?, updated_at = ? WHERE user_id = ?`,
             [reason, now, target]
           );
         }
@@ -114,15 +114,15 @@ export class OperationalSafetyService {
       await db.transaction(async (tx) => {
         await tx.execute(
           `UPDATE operational_kill_switches
-           SET is_frozen = 0, unfrozen_at = ?
-           WHERE scope = ? AND target = ? AND is_frozen = 1`,
+           SET is_frozen = FALSE, unfrozen_at = ?
+           WHERE scope = ? AND target = ? AND is_frozen = TRUE`,
           [now, scope, target]
         );
 
         // Synchronize with account_limits if account scope
         if (scope === 'ACCOUNT') {
           await tx.execute(
-            `UPDATE account_limits SET is_emergency_frozen = 0, freeze_reason = NULL, updated_at = ? WHERE user_id = ?`,
+            `UPDATE account_limits SET is_emergency_frozen = FALSE, freeze_reason = NULL, updated_at = ? WHERE user_id = ?`,
             [now, target]
           );
         }

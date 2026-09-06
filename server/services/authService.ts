@@ -434,7 +434,7 @@ export class ServerAuthService {
         const limitsId = `lim_${crypto.randomBytes(8).toString('hex')}`;
         await tx.execute(
           `INSERT INTO account_limits (id, user_id, account_mode, is_emergency_frozen, updated_at)
-           VALUES (?, ?, 'paper', 0, ?)`,
+           VALUES (?, ?, 'paper', FALSE, ?)`,
           [limitsId, userId, now]
         );
 
@@ -563,7 +563,7 @@ export class ServerAuthService {
 
     await db.transaction(async (tx) => {
       await tx.execute(
-        `UPDATE account_limits SET is_emergency_frozen = 1, frozen_at = ?, freeze_reason = ?, updated_at = ? WHERE user_id = ?`,
+        `UPDATE account_limits SET is_emergency_frozen = TRUE, frozen_at = ?, freeze_reason = ?, updated_at = ? WHERE user_id = ?`,
         [now, reason, now, userId]
       );
       await tx.execute(`UPDATE sessions SET revoked_at = ? WHERE user_id = ?`, [now, userId]);
