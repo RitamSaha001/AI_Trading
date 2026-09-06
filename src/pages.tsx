@@ -461,6 +461,7 @@ export function Dashboard() {
               candles={m?.candles || []}
               height={290}
               positive={(m?.change24h || 0) >= 0}
+              isINR={isIndianAsset(selectedAsset)}
             />
           </div>
 
