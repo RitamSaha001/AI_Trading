@@ -247,5 +247,136 @@ describe('LocalQuantLLM High-Benchmark Fallback Engine', () => {
     expect(res.reply).toContain('Kyle\'s Lambda');
     expect(res.reply).toContain('Order Flow Imbalance');
   });
+
+  // ==========================================================================
+  // ENHANCED 1-CLICK QUANT TOOLS & SLASH COMMANDS TESTS
+  // ==========================================================================
+  it('executes /audit and audit instantly with Sentinel risk, HHI, and liquid cash check', () => {
+    const resSlash = queryLocalQuantLLM('/audit', mockState, mockMarkets);
+    expect(resSlash.reply).toContain('Sentinel Portfolio Danger & Risk Audit');
+    expect(resSlash.reply).toContain('Herfindahl Index (HHI)');
+    expect(resSlash.reply).toContain('\\text{Danger}');
+    expect(resSlash.reply).toContain('Total Portfolio Equity');
+
+    const resWord = queryLocalQuantLLM('audit', mockState, mockMarkets);
+    expect(resWord.reply).toContain('Sentinel Portfolio Danger & Risk Audit');
+  });
+
+  it('executes /scan and scan with Multi-Asset Alpha Radar and asymmetric R:R setups', () => {
+    const res = queryLocalQuantLLM('/scan', mockState, mockMarkets);
+    expect(res.reply).toContain('Multi-Asset Alpha Radar Scanner');
+    expect(res.reply).toContain('Factor Matrix & Alpha Rankings');
+    expect(res.reply).toContain('Alpha Score');
+    expect(res.reply).toContain('Reward-to-Risk');
+    expect(res.actionProposal).toBeDefined();
+    expect(res.actionProposal?.type).toBe('order');
+    expect(res.actionProposal?.side).toBe('buy');
+  });
+
+  it('executes /scan nse with Indian Equities and enforces integer shares and ₹0.05 tick size', () => {
+    const upstoxState: AppState = {
+      ...mockState,
+      accountMode: 'upstox',
+      cash: 25000,
+      selectedAsset: 'RELIANCE',
+    };
+    const res = queryLocalQuantLLM('/scan nse', upstoxState, mockMarkets);
+    expect(res.reply).toContain('Multi-Asset Alpha Radar Scanner');
+    expect(res.reply).toContain('Top 10 NSE Indian Bluechips');
+    expect(res.reply).toContain('₹');
+    expect(res.reply).toContain('Integer equity delivery shares');
+
+    expect(res.actionProposal).toBeDefined();
+    if (res.actionProposal) {
+      expect(Number.isInteger(res.actionProposal.amount)).toBe(true);
+      expect((res.actionProposal.amount || 0) >= 1).toBe(true);
+      if (res.actionProposal.limitPrice) {
+        // Must align to 0.05 tick
+        const rem = Math.round((res.actionProposal.limitPrice % 0.05) * 100) / 100;
+        expect(rem === 0 || rem === 0.05).toBe(true);
+      }
+    }
+  });
+
+  it('executes /bot and synthesizes institutional strategy bot with dynamic ATR brackets', () => {
+    const res = queryLocalQuantLLM('/bot SOL', mockState, mockMarkets);
+    expect(res.reply).toContain('Strategy Bot Architecture');
+    expect(res.reply).toContain('Institutional VWAP Momentum Engine');
+    expect(res.reply).toContain('Normalized ATR Volatility');
+    expect(res.reply).toContain('Dynamic Take-Profit (TP)');
+    expect(res.reply).toContain('Trailing Stop-Loss (SL)');
+
+    expect(res.actionProposal).toBeDefined();
+    expect(res.actionProposal?.type).toBe('deploy_strategy');
+    expect(res.actionProposal?.strategyParams?.kind).toBe('vwap_trend');
+    expect(res.actionProposal?.strategyParams?.targetProfitPct).toBeGreaterThan(0);
+  });
+
+  it('executes /dca and formulates Smart Value-Weighted DCA plan with dip multipliers', () => {
+    const res = queryLocalQuantLLM('/dca BTC', mockState, mockMarkets);
+    expect(res.reply).toContain('Smart Value-Weighted DCA Accumulator');
+    expect(res.reply).toContain('Dynamic Accumulation Matrix');
+    expect(res.reply).toContain('Deep Oversold Dip');
+    expect(res.reply).toContain('1.60x');
+    expect(res.reply).toContain('Euphoria Circuit Breaker');
+
+    expect(res.actionProposal).toBeDefined();
+    expect(res.actionProposal?.type).toBe('smart_dca');
+    expect(res.actionProposal?.dcaPlan?.oversoldMultiplier).toBe(1.6);
+  });
+
+  it('executes /rebalance and computes Quarter-Kelly two-stage rebalancing plan', () => {
+    const res = queryLocalQuantLLM('/rebalance', mockState, mockMarkets);
+    expect(res.reply).toContain('Fractional Kelly Portfolio Rebalancing');
+    expect(res.reply).toContain('Quarter-Kelly Optimal');
+    expect(res.reply).toContain('Two-Stage Execution Schedule');
+    expect(res.actionProposal).toBeDefined();
+    expect(res.actionProposal?.type).toBe('rebalance');
+  });
+
+  it('executes /stress and simulates portfolio flash crashes, rate hikes, and 95% VaR', () => {
+    const res = queryLocalQuantLLM('/stress', mockState, mockMarkets);
+    expect(res.reply).toContain('Quantitative Portfolio Stress-Test & Crisis Simulation');
+    expect(res.reply).toContain('Crisis Simulation Matrix');
+    expect(res.reply).toContain('95% Parametric VaR');
+    expect(res.reply).toContain('Survivability Rating');
+    expect(res.actionProposal).toBeDefined();
+    expect(res.actionProposal?.type).toBe('stress_test');
+  });
+
+  it('executes /help and displays interactive quant commands cheatsheet', () => {
+    const res = queryLocalQuantLLM('/help', mockState, mockMarkets);
+    expect(res.reply).toContain('Nexus Deterministic Quant Tools & Slash Commands');
+    expect(res.reply).toContain('/audit');
+    expect(res.reply).toContain('/scan');
+    expect(res.reply).toContain('/bot');
+    expect(res.reply).toContain('/dca');
+    expect(res.reply).toContain('/rebalance');
+    expect(res.reply).toContain('/stress');
+    expect(res.reply).toContain('Native Indian Equities (Upstox) Invariants');
+  });
+
+  it('provides native Upstox NSE equity deep quant analysis with integer shares and ₹2,000 cash floor defense', () => {
+    const upstoxState: AppState = {
+      ...mockState,
+      accountMode: 'upstox',
+      cash: 15000,
+      selectedAsset: 'RELIANCE',
+    };
+    const res = queryLocalQuantLLM('analyze RELIANCE', upstoxState, mockMarkets);
+    expect(res.reply).toContain('Quantitative NSE Equity Analysis: RELIANCE');
+    expect(res.reply).toContain('₹');
+    expect(res.reply).toContain('₹0.05 NSE Compliant');
+    expect(res.reply).toContain('Upstox Order Formulation & Safety Directives');
+
+    expect(res.actionProposal).toBeDefined();
+    if (res.actionProposal) {
+      expect(res.actionProposal.asset).toBe('RELIANCE');
+      expect(Number.isInteger(res.actionProposal.amount)).toBe(true);
+      // Verify cash floor: cash - notional must be >= 2000
+      const notional = (res.actionProposal.amount || 0) * (res.actionProposal.limitPrice || 2800);
+      expect(upstoxState.cash - notional).toBeGreaterThanOrEqual(2000);
+    }
+  });
 });
 

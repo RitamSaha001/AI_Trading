@@ -404,37 +404,44 @@ export async function sendAIChat(
   markets: Record<Asset, Market | undefined>,
   history: { role: 'user' | 'assistant'; text: string }[]
 ): Promise<ChatResponse> {
-  const key = await resolveApiKey(s.settings.geminiApiKey);
+  const trimmed = text.trim();
+  const isSlash = trimmed.startsWith('/');
 
-  if (key) {
-    try {
-      const model = resolveGemini3Model(s.settings.geminiModel);
-      const provider = new GeminiLLMProvider();
+  // If user invokes a slash command (e.g. /audit, /scan, /bot, /dca, /rebalance, /stress, /help),
+  // immediately bypass external cloud LLM to run the 100% deterministic local quant engine in <1ms!
+  if (!isSlash) {
+    const key = await resolveApiKey(s.settings.geminiApiKey);
 
-      const result = await runAgentLoop({
-        query: text,
-        state: s,
-        markets,
-        history,
-        provider,
-        model,
-        apiKey: key,
-        maxIterations: 5,
-      });
+    if (key) {
+      try {
+        const model = resolveGemini3Model(s.settings.geminiModel);
+        const provider = new GeminiLLMProvider();
 
-      return {
-        reply: result.reply,
-        actionProposal: result.actionProposal,
-        engine: result.engine,
-        telemetry: result.telemetry,
-        decision: result.decision,
-      };
-    } catch (err: any) {
-      console.warn('Frontier LLM Agent execution encountered error; engaging Deterministic Quant Fallback:', err);
+        const result = await runAgentLoop({
+          query: text,
+          state: s,
+          markets,
+          history,
+          provider,
+          model,
+          apiKey: key,
+          maxIterations: 5,
+        });
+
+        return {
+          reply: result.reply,
+          actionProposal: result.actionProposal,
+          engine: result.engine,
+          telemetry: result.telemetry,
+          decision: result.decision,
+        };
+      } catch (err: any) {
+        console.warn('Frontier LLM Agent execution encountered error; engaging Deterministic Quant Fallback:', err);
+      }
     }
   }
 
-  // Nexus Deterministic Quant Engine (Offline Fallback)
+  // Nexus Deterministic Quant Engine (Offline Fallback & Instant Slash Commands)
   const localResult = queryNexusDeterministicQuant(text, s, markets, history);
   const context = buildStructuredMarketContext(s, markets);
   const rk = calculatePortfolioRisk(s, markets);

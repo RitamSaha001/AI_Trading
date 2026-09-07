@@ -743,6 +743,34 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
   const isIndian = isIndianAsset(state.selectedAsset) || state.accountMode === 'upstox';
 
+  const quantTools = useMemo(() => [
+    { id: 'audit', label: 'Risk Audit', command: '/audit', icon: ShieldAlert, color: 'text-rose-600 bg-rose-50/80 hover:bg-rose-100 border-rose-200/80', badge: 'HHI' },
+    { id: 'scan', label: isIndian ? 'NSE Radar' : 'Alpha Radar', command: isIndian ? '/scan nse' : '/scan', icon: Compass, color: 'text-violet-600 bg-violet-50/80 hover:bg-violet-100 border-violet-200/80', badge: 'R:R' },
+    { id: 'bot', label: 'Strategy Bot', command: `/bot ${state.selectedAsset}`, icon: Zap, color: 'text-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 border-indigo-200/80', badge: 'ATR' },
+    { id: 'dca', label: 'Smart DCA', command: `/dca ${state.selectedAsset}`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50/80 hover:bg-emerald-100 border-emerald-200/80', badge: 'RSI' },
+    { id: 'rebalance', label: 'Rebalance', command: '/rebalance', icon: Scale, color: 'text-blue-600 bg-blue-50/80 hover:bg-blue-100 border-blue-200/80', badge: 'Kelly' },
+    { id: 'stress', label: 'Stress Test', command: '/stress', icon: Activity, color: 'text-amber-600 bg-amber-50/80 hover:bg-amber-100 border-amber-200/80', badge: 'VaR' },
+  ], [isIndian, state.selectedAsset]);
+
+  const slashCommands = useMemo(() => [
+    { name: '/audit', title: 'Sentinel Risk & HHI Audit', desc: 'Concentration, liquidation, drawdown & cash reserve checks', icon: ShieldAlert },
+    { name: isIndian ? '/scan nse' : '/scan', title: isIndian ? 'NSE Bluechips Alpha Radar' : 'Alpha Radar Multi-Asset Scan', desc: 'Scan asymmetric setups with >=2.5:1 R:R', icon: Compass },
+    { name: `/bot ${state.selectedAsset}`, title: `Synthesize Bot (${state.selectedAsset})`, desc: 'Institutional VWAP momentum bot with ATR brackets', icon: Zap },
+    { name: `/dca ${state.selectedAsset}`, title: `Smart DCA Plan (${state.selectedAsset})`, desc: 'Value-weighted accumulation with dip multipliers', icon: TrendingUp },
+    { name: '/rebalance', title: 'Fractional Kelly Rebalance', desc: 'Two-stage cash-feasible risk parity optimization', icon: Scale },
+    { name: '/stress', title: 'Portfolio Stress Test', desc: 'Simulate flash crashes, rate hikes, and 95% VaR', icon: Activity },
+    { name: '/help', title: 'Quant Tools Cheat Sheet', desc: 'Interactive guide of all deterministic math tools', icon: Sparkles },
+  ], [isIndian, state.selectedAsset]);
+
+  const showSlashMenu = text.startsWith('/');
+  const filteredSlashCommands = useMemo(() => {
+    if (!showSlashMenu) return [];
+    const query = text.toLowerCase();
+    return slashCommands.filter(
+      (cmd) => cmd.name.toLowerCase().includes(query) || cmd.title.toLowerCase().includes(query.slice(1))
+    );
+  }, [showSlashMenu, text, slashCommands]);
+
   const quickPrompts = isIndian
     ? [
         { label: 'Sentinel Danger Audit', prompt: 'Sense market danger across my Indian equities portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
@@ -1060,18 +1088,93 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         )}
 
         {/* Quick Action Prompt Chips */}
-        {!capabilitiesOpen && (
-          <div className="px-4 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        {!capabilitiesOpen && !showSlashMenu && (
+          <div className="px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             {quickPrompts.map((q, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => handleSend(q.prompt)}
-                className="flex-shrink-0 px-3 py-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200/80 rounded-full transition-all active:scale-[0.98]"
+                className="flex-shrink-0 px-2.5 py-0.5 text-[10.5px] font-medium text-zinc-500 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200/80 rounded-full transition-all active:scale-[0.98]"
               >
                 {q.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* 1-Click Instant Quant Tools Action Bar */}
+        <div className="px-4 py-1.5 border-t border-zinc-100 bg-zinc-50/70 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider pl-0.5 pr-1 flex-shrink-0">
+            <Zap className="w-3 h-3 text-indigo-500 fill-indigo-500" />
+            <span>Quant</span>
+          </div>
+          {quantTools.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => handleSend(t.command)}
+                className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 ${t.color}`}
+                title={`Instant 1-click execution: ${t.command}`}
+              >
+                <Icon className="w-3 h-3" />
+                <span>{t.label}</span>
+                <span className="text-[9px] font-mono px-1 rounded-sm bg-white/80 font-bold opacity-90 shadow-2xs">
+                  {t.badge}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Slash Command Autocomplete Popover */}
+        {showSlashMenu && (
+          <div className="mx-4 mb-2 p-2 bg-white/95 backdrop-blur-md rounded-2xl border border-zinc-200/90 shadow-xl space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-150 z-20">
+            <div className="px-2 py-1 flex items-center justify-between text-[11px] font-semibold text-zinc-500 border-b border-zinc-100 mb-1">
+              <span className="flex items-center gap-1.5 text-zinc-800">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                Deterministic Quant Tools
+              </span>
+              <span className="text-[10px] text-zinc-400 font-mono">0-latency offline</span>
+            </div>
+            {filteredSlashCommands.length > 0 ? (
+              <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                {filteredSlashCommands.map((cmd) => {
+                  const Icon = cmd.icon;
+                  return (
+                    <button
+                      key={cmd.name}
+                      type="button"
+                      onClick={() => handleSend(cmd.name)}
+                      className="w-full px-2.5 py-1.5 rounded-xl hover:bg-zinc-100/90 flex items-center justify-between text-left group transition-all"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-md bg-zinc-100 border border-zinc-200/80 flex items-center justify-center text-zinc-700 group-hover:text-indigo-600">
+                          <Icon className="w-3 h-3" />
+                        </div>
+                        <div>
+                          <span className="font-mono text-xs font-bold text-indigo-600 group-hover:text-indigo-700">
+                            {cmd.name}
+                          </span>
+                          <span className="text-xs text-zinc-700 font-medium ml-2">
+                            {cmd.title}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 font-normal line-clamp-1 ml-2">
+                        {cmd.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="px-3 py-2 text-xs text-zinc-400 italic">
+                No matching slash command. Type /help to see all available tools.
+              </div>
+            )}
           </div>
         )}
 
@@ -1101,7 +1204,11 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 type="text"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Ask Nexus: analysis, stress-tests, bots..."
+                placeholder={
+                  isIndian
+                    ? 'Ask Nexus: /audit, /scan nse, /bot RELIANCE, /dca...'
+                    : 'Ask Nexus: /audit, /scan, /bot BTC, /stress...'
+                }
                 className="flex-1 bg-transparent border-none outline-none text-xs text-zinc-900 placeholder:text-zinc-400 px-3 py-1 font-normal"
               />
               <button
