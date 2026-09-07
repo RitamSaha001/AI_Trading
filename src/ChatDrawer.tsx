@@ -848,12 +848,12 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                   </div>
                 )}
 
-                <div className="max-w-[88%] space-y-2.5">
+                <div className={`${isUser ? 'max-w-[85%]' : 'w-full max-w-[94%]'} space-y-2.5`}>
                   <div
-                    className={`p-4 text-[13px] leading-relaxed shadow-2xs ${
+                    className={`text-[13px] leading-relaxed ${
                       isUser
-                        ? 'bg-zinc-900 text-white rounded-2xl rounded-tr-xs ml-auto font-normal'
-                        : 'bg-zinc-50/70 border border-zinc-200/70 text-zinc-800 rounded-2xl rounded-tl-xs'
+                        ? 'p-3.5 bg-zinc-900 text-white rounded-2xl rounded-tr-xs ml-auto font-normal shadow-xs'
+                        : 'p-4 sm:p-5 bg-white border border-zinc-200/90 text-zinc-800 rounded-2xl rounded-tl-xs shadow-[0_2px_12px_rgba(0,0,0,0.03)]'
                     }`}
                   >
                     {isUser ? (

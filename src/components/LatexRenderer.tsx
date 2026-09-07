@@ -1,6 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import katex from 'katex';
-import { Copy, Check, Sparkles, ChevronDown, Compass, ShieldCheck, Scale, AlertTriangle, Activity, Cpu } from 'lucide-react';
+import {
+  Copy,
+  Check,
+  Sparkles,
+  ChevronDown,
+  Compass,
+  ShieldCheck,
+  Scale,
+  AlertTriangle,
+  Cpu,
+  Info,
+  ShieldAlert,
+} from 'lucide-react';
 
 interface LatexRendererProps {
   content: string;
@@ -165,161 +177,164 @@ function ThinkingBlock({ thought }: { thought: string }) {
 }
 
 /**
- * Tokenizes and renders text containing inline ($...$) and block ($$...$$ or \[...\]) LaTeX formulas
- * alongside standard markdown features (bold, bullets, code blocks, tables).
+ * Parses markdown table rows by splitting on unescaped pipe (|) characters
  */
-export const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }) => {
-  const renderedElements = useMemo(() => {
-    if (!content) return null;
+function parseTableRow(rowStr: string): string[] {
+  let trimmed = rowStr.trim();
+  if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
 
-    // Check for <thinking>...</thinking> block
-    const thinkingMatch = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
-    let thinkingText = '';
-    let bodyContent = content;
-    if (thinkingMatch) {
-      thinkingText = thinkingMatch[1].trim();
-      bodyContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim();
+  const cells: string[] = [];
+  let current = '';
+  let escaped = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (char === '\\' && !escaped) {
+      escaped = true;
+      current += char;
+    } else if (char === '|' && !escaped) {
+      cells.push(current.trim());
+      current = '';
+    } else {
+      escaped = false;
+      current += char;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+/**
+ * Checks whether a line matches a markdown table separator (e.g. | :--- | :---: | ---: |)
+ */
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|') || !trimmed.includes('-')) return false;
+  return /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(trimmed);
+}
+
+/**
+ * Parses column alignments from a separator line
+ */
+function parseAlignments(sepStr: string): ('left' | 'center' | 'right')[] {
+  const cells = parseTableRow(sepStr);
+  return cells.map((cell) => {
+    const hasLeft = cell.startsWith(':');
+    const hasRight = cell.endsWith(':');
+    if (hasLeft && hasRight) return 'center';
+    if (hasRight) return 'right';
+    return 'left';
+  });
+}
+
+function TableBlock({
+  headers,
+  alignments,
+  rows,
+}: {
+  headers: string[];
+  alignments: ('left' | 'center' | 'right')[];
+  rows: string[][];
+}) {
+  return (
+    <div className="my-3 overflow-hidden rounded-xl border border-zinc-200/90 bg-white shadow-2xs">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs border-collapse">
+          <thead className="bg-zinc-50/90 border-b border-zinc-200/90 text-[11px] font-semibold text-zinc-700 select-none">
+            <tr>
+              {headers.map((h, hIdx) => {
+                const align = alignments[hIdx] || 'left';
+                const alignCls =
+                  align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
+                return (
+                  <th
+                    key={hIdx}
+                    className={`px-3.5 py-2.5 font-semibold text-zinc-600 uppercase text-[10.5px] tracking-wider ${alignCls}`}
+                  >
+                    {renderInlineLatexAndFormatting(h)}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100 bg-white">
+            {rows.map((row, rIdx) => (
+              <tr key={rIdx} className="hover:bg-zinc-50/70 transition-colors group">
+                {row.map((cell, cIdx) => {
+                  const align = alignments[cIdx] || 'left';
+                  const alignCls =
+                    align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
+                  return (
+                    <td
+                      key={cIdx}
+                      className={`px-3.5 py-2 text-zinc-800 text-[12px] leading-relaxed font-normal ${alignCls}`}
+                    >
+                      {renderInlineLatexAndFormatting(cell)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CalloutBlock({ lines }: { lines: string[] }) {
+  const fullText = lines.join('\n').trim();
+
+  // Check for GitHub style alert syntax: [!NOTE], [!WARNING], [!TIP], [!IMPORTANT], [!CAUTION]
+  const alertMatch = fullText.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*([\s\S]*)$/i);
+
+  if (alertMatch) {
+    const type = alertMatch[1].toUpperCase();
+    const body = alertMatch[2].trim();
+
+    let borderClass = 'border-indigo-200/80 bg-indigo-50/60 text-indigo-950';
+    let icon = <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />;
+    let title = 'Note';
+    let titleClass = 'text-indigo-900';
+
+    if (type === 'WARNING' || type === 'CAUTION') {
+      borderClass = 'border-amber-200/80 bg-amber-50/60 text-amber-950';
+      icon = <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />;
+      title = type === 'WARNING' ? 'Warning' : 'Caution';
+      titleClass = 'text-amber-900';
+    } else if (type === 'TIP') {
+      borderClass = 'border-emerald-200/80 bg-emerald-50/60 text-emerald-950';
+      icon = <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />;
+      title = 'Pro Tip';
+      titleClass = 'text-emerald-900';
+    } else if (type === 'IMPORTANT') {
+      borderClass = 'border-purple-200/80 bg-purple-50/60 text-purple-950';
+      icon = <ShieldAlert className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />;
+      title = 'Important';
+      titleClass = 'text-purple-900';
     }
 
-    // Split text into lines/blocks
-    const lines = bodyContent.split('\n');
-    const elements: React.ReactNode[] = [];
-
-    if (thinkingText) {
-      elements.push(
-        <ThinkingBlock key="thinking-block" thought={thinkingText} />
-      );
-    }
-
-    let inCodeBlock = false;
-    let codeBlockLang = '';
-    let codeBlockLines: string[] = [];
-
-    lines.forEach((line, lineIdx) => {
-      // Handle Code Block start/end
-      if (line.trim().startsWith('```')) {
-        if (!inCodeBlock) {
-          inCodeBlock = true;
-          codeBlockLang = line.trim().replace(/^```/, '');
-          codeBlockLines = [];
-        } else {
-          inCodeBlock = false;
-          const codeText = codeBlockLines.join('\n');
-          elements.push(
-            <CodeBlock key={`code-${lineIdx}`} code={codeText} lang={codeBlockLang} />
-          );
-          codeBlockLines = [];
-        }
-        return;
-      }
-
-      if (inCodeBlock) {
-        codeBlockLines.push(line);
-        return;
-      }
-
-      // Check if line is block LaTeX: $$ ... $$ or \[ ... \]
-      const trimmed = line.trim();
-      if ((trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 3) ||
-          (trimmed.startsWith('\\[') && trimmed.endsWith('\\]'))) {
-        const formula = trimmed.replace(/^(\$\$|\\\[)/, '').replace(/(\$\$|\\\])$/, '').trim();
-        try {
-          const html = katex.renderToString(formula, { displayMode: true, throwOnError: false, trust: false, strict: 'error' });
-          elements.push(
-            <div
-              key={`block-math-${lineIdx}`}
-              className="my-3 py-2 px-3 bg-zinc-50 border border-zinc-200/80 rounded-xl overflow-x-auto text-center shadow-xs"
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
-          );
-          return;
-        } catch {
-          // fallback to plain text
-        }
-      }
-
-      // Headers
-      if (line.startsWith('### ')) {
-        elements.push(
-          <h4 key={`h3-${lineIdx}`} className="text-sm font-bold text-zinc-900 mt-2.5 mb-1 flex items-center gap-1.5">
-            {renderInlineMarkdown(line.slice(4))}
-          </h4>
-        );
-        return;
-      }
-      if (line.startsWith('## ')) {
-        elements.push(
-          <h3 key={`h2-${lineIdx}`} className="text-sm font-extrabold text-zinc-900 mt-3 mb-1.5">
-            {renderInlineMarkdown(line.slice(3))}
-          </h3>
-        );
-        return;
-      }
-      if (line.startsWith('# ')) {
-        elements.push(
-          <h2 key={`h1-${lineIdx}`} className="text-base font-bold text-zinc-900 mt-3 mb-2">
-            {renderInlineMarkdown(line.slice(2))}
-          </h2>
-        );
-        return;
-      }
-
-      // Bullet points
-      if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-        const bulletText = line.trim().replace(/^[-*]\s+/, '');
-        elements.push(
-          <div key={`bullet-${lineIdx}`} className="flex items-start gap-2 my-1 pl-1">
-            <span className="text-indigo-500 font-bold leading-relaxed text-sm select-none">•</span>
-            <span className="flex-1 text-[13px] leading-relaxed text-zinc-800">
-              {renderInlineLatexAndFormatting(bulletText)}
-            </span>
+    return (
+      <div className={`my-2.5 p-3 rounded-xl border ${borderClass} shadow-2xs flex items-start gap-2.5 text-xs`}>
+        {icon}
+        <div className="flex-1 space-y-0.5">
+          <div className={`font-semibold text-[11.5px] ${titleClass}`}>{title}</div>
+          <div className="leading-relaxed font-sans text-zinc-800 text-[12px]">
+            {renderInlineLatexAndFormatting(body)}
           </div>
-        );
-        return;
-      }
+        </div>
+      </div>
+    );
+  }
 
-      // Numbered lists (1. 2. etc)
-      const numMatch = line.trim().match(/^(\d+)\.\s+(.*)$/);
-      if (numMatch) {
-        elements.push(
-          <div key={`num-${lineIdx}`} className="flex items-start gap-2 my-1 pl-1">
-            <span className="text-indigo-600 font-semibold text-xs min-w-4 text-right select-none pt-0.5">
-              {numMatch[1]}.
-            </span>
-            <span className="flex-1 text-[13px] leading-relaxed text-zinc-800">
-              {renderInlineLatexAndFormatting(numMatch[2])}
-            </span>
-          </div>
-        );
-        return;
-      }
-
-      // Empty line
-      if (!line.trim()) {
-        elements.push(<div key={`spacer-${lineIdx}`} className="h-2" />);
-        return;
-      }
-
-      // Regular paragraph line
-      elements.push(
-        <p key={`p-${lineIdx}`} className="text-[13px] leading-relaxed text-zinc-800 my-0.5">
-          {renderInlineLatexAndFormatting(line)}
-        </p>
-      );
-    });
-
-    // If code block remains unclosed
-    if (inCodeBlock && codeBlockLines.length > 0) {
-      elements.push(
-        <CodeBlock key="unclosed-code" code={codeBlockLines.join('\n')} lang={codeBlockLang} />
-      );
-    }
-
-    return elements;
-  }, [content]);
-
-  return <div className={`latex-markdown-container space-y-0.5 ${className}`}>{renderedElements}</div>;
-};
+  // Standard blockquote
+  return (
+    <div className="my-2.5 pl-3.5 pr-3 py-2 border-l-2 border-indigo-500 bg-zinc-50/70 rounded-r-xl text-zinc-700 text-[12.5px] leading-relaxed shadow-2xs italic">
+      {renderInlineLatexAndFormatting(fullText)}
+    </div>
+  );
+}
 
 function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   const [copied, setCopied] = React.useState(false);
@@ -351,12 +366,263 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   );
 }
 
+function renderBlockMath(formula: string, keyId: number | string): React.ReactNode {
+  try {
+    const html = katex.renderToString(formula, {
+      displayMode: true,
+      throwOnError: false,
+      trust: false,
+      strict: 'ignore',
+    });
+    return (
+      <div
+        key={`block-math-${keyId}`}
+        className="my-3 py-2.5 px-3.5 bg-zinc-50 border border-zinc-200/80 rounded-xl overflow-x-auto text-center shadow-2xs"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  } catch {
+    return (
+      <div
+        key={`block-math-fallback-${keyId}`}
+        className="my-3 py-2 px-3 bg-zinc-50 border border-zinc-200/80 rounded-xl font-mono text-xs text-center"
+      >
+        {formula}
+      </div>
+    );
+  }
+}
+
+/**
+ * Tokenizes and renders text containing inline ($...$) and block ($$...$$ or \[...\]) LaTeX formulas
+ * alongside standard markdown features (bold, bullets, code blocks, tables, callouts).
+ */
+export const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className = '' }) => {
+  const renderedElements = useMemo(() => {
+    if (!content) return null;
+
+    // Check for <thinking>...</thinking> block
+    const thinkingMatch = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
+    let thinkingText = '';
+    let bodyContent = content;
+    if (thinkingMatch) {
+      thinkingText = thinkingMatch[1].trim();
+      bodyContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim();
+    }
+
+    const lines = bodyContent.split('\n');
+    const elements: React.ReactNode[] = [];
+
+    if (thinkingText) {
+      elements.push(<ThinkingBlock key="thinking-block" thought={thinkingText} />);
+    }
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // 1. Code Block start
+      if (trimmed.startsWith('```')) {
+        const lang = trimmed.replace(/^```/, '').trim();
+        const codeBlockLines: string[] = [];
+        i++;
+        while (i < lines.length && !lines[i].trim().startsWith('```')) {
+          codeBlockLines.push(lines[i]);
+          i++;
+        }
+        if (i < lines.length) i++; // consume closing ```
+        elements.push(
+          <CodeBlock key={`code-${i}`} code={codeBlockLines.join('\n')} lang={lang} />
+        );
+        continue;
+      }
+
+      // 2. Multi-line LaTeX display block: $$ on its own line or \[
+      if (trimmed === '$$' || trimmed === '\\[') {
+        const closing = trimmed === '$$' ? '$$' : '\\]';
+        const mathLines: string[] = [];
+        i++;
+        while (i < lines.length && lines[i].trim() !== closing) {
+          mathLines.push(lines[i]);
+          i++;
+        }
+        if (i < lines.length) i++; // consume closing
+        const formula = mathLines.join('\n').trim();
+        elements.push(renderBlockMath(formula, i));
+        continue;
+      }
+
+      // 3. Single-line LaTeX display block: $$ ... $$ or \[ ... \]
+      if (
+        (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 3) ||
+        (trimmed.startsWith('\\[') && trimmed.endsWith('\\]') && trimmed.length > 3)
+      ) {
+        const formula = trimmed.replace(/^(\$\$|\\\[)/, '').replace(/(\$\$|\\\])$/, '').trim();
+        elements.push(renderBlockMath(formula, i));
+        i++;
+        continue;
+      }
+
+      // 4. Markdown Table: header row followed by separator row
+      if (
+        trimmed.includes('|') &&
+        i + 1 < lines.length &&
+        isTableSeparator(lines[i + 1])
+      ) {
+        const headerLine = line;
+        const separatorLine = lines[i + 1];
+        const headers = parseTableRow(headerLine);
+        const alignments = parseAlignments(separatorLine);
+        const rows: string[][] = [];
+
+        i += 2; // skip header and separator
+        while (
+          i < lines.length &&
+          lines[i].trim().includes('|') &&
+          lines[i].trim().length > 0 &&
+          !isTableSeparator(lines[i])
+        ) {
+          rows.push(parseTableRow(lines[i]));
+          i++;
+        }
+
+        elements.push(
+          <TableBlock
+            key={`table-${i}`}
+            headers={headers}
+            alignments={alignments}
+            rows={rows}
+          />
+        );
+        continue;
+      }
+
+      // 5. Blockquote / Callouts (> ...)
+      if (trimmed.startsWith('>')) {
+        const quoteLines: string[] = [];
+        while (i < lines.length && lines[i].trim().startsWith('>')) {
+          quoteLines.push(lines[i].trim().replace(/^>\s?/, ''));
+          i++;
+        }
+        elements.push(<CalloutBlock key={`callout-${i}`} lines={quoteLines} />);
+        continue;
+      }
+
+      // 6. Horizontal Rule: ---, ***, ___
+      if (/^(\*{3,}|-{3,}|_{3,})$/.test(trimmed)) {
+        elements.push(<hr key={`hr-${i}`} className="my-3 border-t border-zinc-200/80" />);
+        i++;
+        continue;
+      }
+
+      // 7. Headers (# through #####)
+      if (line.startsWith('##### ')) {
+        elements.push(
+          <h6 key={`h5-${i}`} className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 mt-2 mb-0.5">
+            {renderInlineLatexAndFormatting(line.slice(6))}
+          </h6>
+        );
+        i++;
+        continue;
+      }
+      if (line.startsWith('#### ')) {
+        elements.push(
+          <h5 key={`h4-${i}`} className="text-xs font-bold uppercase tracking-wider text-zinc-700 mt-2.5 mb-1 flex items-center gap-1.5">
+            {renderInlineLatexAndFormatting(line.slice(5))}
+          </h5>
+        );
+        i++;
+        continue;
+      }
+      if (line.startsWith('### ')) {
+        elements.push(
+          <h4 key={`h3-${i}`} className="text-sm font-bold text-zinc-900 mt-3 mb-1 flex items-center gap-1.5">
+            {renderInlineLatexAndFormatting(line.slice(4))}
+          </h4>
+        );
+        i++;
+        continue;
+      }
+      if (line.startsWith('## ')) {
+        elements.push(
+          <h3 key={`h2-${i}`} className="text-[15px] font-extrabold text-zinc-950 mt-3.5 mb-1.5">
+            {renderInlineLatexAndFormatting(line.slice(3))}
+          </h3>
+        );
+        i++;
+        continue;
+      }
+      if (line.startsWith('# ')) {
+        elements.push(
+          <h2 key={`h1-${i}`} className="text-base font-extrabold text-zinc-950 mt-4 mb-2">
+            {renderInlineLatexAndFormatting(line.slice(2))}
+          </h2>
+        );
+        i++;
+        continue;
+      }
+
+      // 8. Bullet points (- or *)
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const bulletText = trimmed.replace(/^[-*]\s+/, '');
+        elements.push(
+          <div key={`bullet-${i}`} className="flex items-start gap-2 my-1 pl-1">
+            <span className="text-indigo-500 font-bold leading-relaxed text-sm select-none">•</span>
+            <span className="flex-1 text-[13px] leading-relaxed text-zinc-800">
+              {renderInlineLatexAndFormatting(bulletText)}
+            </span>
+          </div>
+        );
+        i++;
+        continue;
+      }
+
+      // 9. Numbered lists (1. 2. etc)
+      const numMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+      if (numMatch) {
+        elements.push(
+          <div key={`num-${i}`} className="flex items-start gap-2 my-1 pl-1">
+            <span className="text-indigo-600 font-semibold text-xs min-w-4 text-right select-none pt-0.5">
+              {numMatch[1]}.
+            </span>
+            <span className="flex-1 text-[13px] leading-relaxed text-zinc-800">
+              {renderInlineLatexAndFormatting(numMatch[2])}
+            </span>
+          </div>
+        );
+        i++;
+        continue;
+      }
+
+      // 10. Empty line / spacer
+      if (!trimmed) {
+        elements.push(<div key={`spacer-${i}`} className="h-2" />);
+        i++;
+        continue;
+      }
+
+      // 11. Regular paragraph line
+      elements.push(
+        <p key={`p-${i}`} className="text-[13px] leading-relaxed text-zinc-800 my-0.5">
+          {renderInlineLatexAndFormatting(line)}
+        </p>
+      );
+      i++;
+    }
+
+    return elements;
+  }, [content]);
+
+  return <div className={`latex-markdown-container space-y-0.5 ${className}`}>{renderedElements}</div>;
+};
+
 /**
  * Parses inline LaTeX formulas ($...$ or \(...\)) and inline markdown (**bold**, `code`, etc.)
  */
-function renderInlineLatexAndFormatting(text: string): React.ReactNode[] {
-  // Regex splitting by math ($...$ or \(...\))
-  const mathRegex = /(\$[^$]+\$|\\\([^\\]+\\\))/g;
+export function renderInlineLatexAndFormatting(text: string): React.ReactNode[] {
+  // Matches inline LaTeX ($formula$ where opening $ is not followed by whitespace, and closing $ is not preceded by whitespace) or \(formula\)
+  const mathRegex = /(\$(?:[^\s$](?:[^$]*[^\s$])?)\$|\\\([^\\]+\\\))/g;
   const parts = text.split(mathRegex);
 
   return parts.map((part, idx) => {
@@ -365,32 +631,43 @@ function renderInlineLatexAndFormatting(text: string): React.ReactNode[] {
     if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
       const formula = part.slice(1, -1);
       try {
-        const html = katex.renderToString(formula, { displayMode: false, throwOnError: false, trust: false, strict: 'error' });
+        const html = katex.renderToString(formula, {
+          displayMode: false,
+          throwOnError: true,
+          trust: false,
+          strict: 'ignore',
+        });
         return (
           <span
             key={`math-${idx}`}
-            className="inline-math px-1 py-0.5 mx-0.5 rounded bg-indigo-50/50 text-indigo-950 font-serif"
+            className="inline-math px-1 py-0.5 mx-0.5 rounded bg-indigo-50/60 text-indigo-950 font-serif"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         );
       } catch {
-        return <code key={`math-err-${idx}`}>{part}</code>;
+        // Not valid LaTeX math; fall back gracefully to inline formatting
+        return renderInlineMarkdown(part, idx);
       }
     }
 
     if (part.startsWith('\\(') && part.endsWith('\\)')) {
       const formula = part.slice(2, -2);
       try {
-        const html = katex.renderToString(formula, { displayMode: false, throwOnError: false, trust: false, strict: 'error' });
+        const html = katex.renderToString(formula, {
+          displayMode: false,
+          throwOnError: true,
+          trust: false,
+          strict: 'ignore',
+        });
         return (
           <span
             key={`math-${idx}`}
-            className="inline-math px-1 py-0.5 mx-0.5 rounded bg-indigo-50/50 text-indigo-950 font-serif"
+            className="inline-math px-1 py-0.5 mx-0.5 rounded bg-indigo-50/60 text-indigo-950 font-serif"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         );
       } catch {
-        return <code key={`math-err-${idx}`}>{part}</code>;
+        return renderInlineMarkdown(part, idx);
       }
     }
 
@@ -399,9 +676,9 @@ function renderInlineLatexAndFormatting(text: string): React.ReactNode[] {
 }
 
 /**
- * Handles inline bold (**text**), inline code (`code`), and italics (*text*)
+ * Handles inline bold (**text**), inline code (`code`), italics (*text* or _text_), and links ([text](url))
  */
-function renderInlineMarkdown(text: string, baseKey: number | string = 0): React.ReactNode {
+export function renderInlineMarkdown(text: string, baseKey: number | string = 0): React.ReactNode {
   // Parse `code`
   const codeParts = text.split(/(`[^`]+`)/g);
 
@@ -412,26 +689,58 @@ function renderInlineMarkdown(text: string, baseKey: number | string = 0): React
           return (
             <code
               key={`c-${sIdx}`}
-              className="px-1.5 py-0.5 mx-0.5 bg-zinc-100 border border-zinc-200/80 rounded font-mono text-[11.5px] text-indigo-600 font-semibold"
+              className="px-1.5 py-0.5 mx-0.5 bg-zinc-100 border border-zinc-200/80 rounded font-mono text-[11.5px] text-indigo-700 font-medium"
             >
               {sub.slice(1, -1)}
             </code>
           );
         }
 
-        // Parse **bold**
-        const boldParts = sub.split(/(\*\*[^*]+\*\*)/g);
-        return boldParts.map((bSub, bIdx) => {
-          if (bSub.startsWith('**') && bSub.endsWith('**') && bSub.length > 4) {
+        // Parse markdown links [text](url)
+        const linkParts = sub.split(/(\[[^\]]+\]\([^)]+\))/g);
+        return linkParts.map((lSub, lIdx) => {
+          const linkMatch = lSub.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+          if (linkMatch) {
             return (
-              <strong key={`b-${sIdx}-${bIdx}`} className="font-semibold text-zinc-900">
-                {bSub.slice(2, -2)}
-              </strong>
+              <a
+                key={`lnk-${sIdx}-${lIdx}`}
+                href={linkMatch[2]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 hover:text-indigo-800 underline underline-offset-2 font-medium transition-colors"
+              >
+                {linkMatch[1]}
+              </a>
             );
           }
-          return bSub;
+
+          // Parse **bold**
+          const boldParts = lSub.split(/(\*\*[^*]+\*\*)/g);
+          return boldParts.map((bSub, bIdx) => {
+            if (bSub.startsWith('**') && bSub.endsWith('**') && bSub.length > 4) {
+              return (
+                <strong key={`b-${sIdx}-${lIdx}-${bIdx}`} className="font-semibold text-zinc-900">
+                  {bSub.slice(2, -2)}
+                </strong>
+              );
+            }
+
+            // Parse *italic*
+            const italicParts = bSub.split(/(\*[^*]+\*)/g);
+            return italicParts.map((iSub, iIdx) => {
+              if (iSub.startsWith('*') && iSub.endsWith('*') && iSub.length > 2) {
+                return (
+                  <em key={`i-${sIdx}-${lIdx}-${bIdx}-${iIdx}`} className="italic text-zinc-800">
+                    {iSub.slice(1, -1)}
+                  </em>
+                );
+              }
+              return iSub;
+            });
+          });
         });
       })}
     </React.Fragment>
   );
 }
+
