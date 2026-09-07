@@ -58,6 +58,7 @@ export function WalletPage() {
     authSession,
     upstoxAccount,
     openUpstoxDrawer,
+    syncUpstoxAccount,
   } = useLumen();
 
   // Modals state
@@ -169,9 +170,12 @@ export function WalletPage() {
   const deposit24h = get24hVolume(nativeWallet.transactions, 'deposit');
 
   const isUpstox = accountMode === 'upstox';
-  const upstoxCash = upstoxAccount?.funds?.availableCash ?? state.cash;
-  const upstoxTotalEquity = upstoxAccount?.funds?.totalEquity ?? state.cash;
-  const upstoxUsedMargin = upstoxAccount?.funds?.usedMargin ?? 0;
+  const upstoxCash = upstoxAccount?.funds?.availableCash 
+    ?? (upstoxAccount?.balances?.INR?.free !== undefined ? Number(upstoxAccount.balances.INR.free) : state.cash);
+  const upstoxTotalEquity = upstoxAccount?.funds?.totalEquity 
+    ?? (upstoxAccount?.balances?.INR?.total !== undefined ? Number(upstoxAccount.balances.INR.total) : upstoxCash);
+  const upstoxUsedMargin = upstoxAccount?.funds?.usedMargin 
+    ?? (upstoxAccount?.balances?.INR?.locked !== undefined ? Number(upstoxAccount.balances.INR.locked) : 0);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-in fade-in duration-200">
@@ -184,15 +188,31 @@ export function WalletPage() {
               Wallet &amp; Capital Treasury
             </h1>
             {isUpstox ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
+              <button
+                type="button"
+                onClick={() => setAccountMode('paper')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 border border-emerald-500/20 transition-all cursor-pointer"
+                title="Click to toggle to Paper Sandbox"
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Upstox Live Desk
-              </span>
+              </button>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-700 border border-amber-500/20">
+              <button
+                type="button"
+                onClick={() => {
+                  if (upstoxAccount?.connected) {
+                    setAccountMode('upstox');
+                  } else {
+                    openUpstoxDrawer();
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-500/20 transition-all cursor-pointer"
+                title={upstoxAccount?.connected ? 'Click to switch to Upstox Live Desk' : 'Click to connect Upstox'}
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                Paper Sandbox
-              </span>
+                Paper Sandbox {upstoxAccount?.connected ? '(Click to switch to Upstox Live)' : ''}
+              </button>
             )}
           </div>
           <p className="text-xs text-zinc-500 mt-1">
@@ -229,6 +249,29 @@ export function WalletPage() {
                 $ USD
               </button>
             </div>
+          )}
+
+          {!isUpstox && upstoxAccount?.connected && (
+            <button
+              type="button"
+              onClick={() => setAccountMode('upstox')}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              <span>Switch to Upstox Live (₹30,000)</span>
+            </button>
+          )}
+
+          {isUpstox && (
+            <button
+              type="button"
+              onClick={() => syncUpstoxAccount()}
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 border border-black/[0.08] text-zinc-700 text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Refresh Upstox Demat margin balances"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-zinc-500" />
+              <span>Sync Margins</span>
+            </button>
           )}
 
           {isUpstox && !upstoxAccount?.connected && (

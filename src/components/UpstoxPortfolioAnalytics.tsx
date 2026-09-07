@@ -376,9 +376,12 @@ export function UpstoxPortfolioAnalytics() {
 
   // Upstox Funds & Demat Margins
   const upstoxFunds = upstoxAccount?.funds;
-  const availableMargin = upstoxFunds?.availableCash || liquidCash;
-  const usedMargin = upstoxFunds?.usedMargin || 0;
-  const totalEquity = upstoxFunds?.totalEquity || pv;
+  const availableMargin = upstoxFunds?.availableCash 
+    ?? (upstoxAccount?.balances?.INR?.free !== undefined ? Number(upstoxAccount.balances.INR.free) : liquidCash);
+  const usedMargin = upstoxFunds?.usedMargin 
+    ?? (upstoxAccount?.balances?.INR?.locked !== undefined ? Number(upstoxAccount.balances.INR.locked) : 0);
+  const totalEquity = upstoxFunds?.totalEquity 
+    ?? (upstoxAccount?.balances?.INR?.total !== undefined ? Number(upstoxAccount.balances.INR.total) : (availableMargin || pv));
   const marginUtilizationPct = totalEquity > 0 ? Math.min(100, (usedMargin / totalEquity) * 100) : 0;
   const cashReservePct = totalEquity > 0 ? Math.min(100, (availableMargin / totalEquity) * 100) : 0;
 

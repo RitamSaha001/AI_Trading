@@ -576,6 +576,21 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }));
 
       const isConn = Boolean(accData?.connected);
+      const fallbackInr = accData?.balances?.INR;
+      const rawAvail = fundsData?.availableCash !== undefined 
+        ? fundsData.availableCash 
+        : (fallbackInr?.free !== undefined ? fallbackInr.free : undefined);
+      const rawUsed = fundsData?.usedMargin !== undefined 
+        ? fundsData.usedMargin 
+        : (fallbackInr?.locked !== undefined ? fallbackInr.locked : 0);
+      const rawTotal = fundsData?.totalEquity !== undefined 
+        ? fundsData.totalEquity 
+        : (fallbackInr?.total !== undefined ? fallbackInr.total : rawAvail);
+
+      const resolvedAvailableCash = rawAvail !== undefined ? Number(rawAvail) : undefined;
+      const resolvedUsedMargin = rawUsed !== undefined ? Number(rawUsed) : 0;
+      const resolvedTotalEquity = rawTotal !== undefined ? Number(rawTotal) : (resolvedAvailableCash || 0);
+      const hasFunds = resolvedAvailableCash !== undefined;
 
       if (isConn || accData || fundsData) {
         const updated: UpstoxAccountInfo = {
@@ -585,11 +600,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
           accountName: accData?.accountName,
           canTrade: Boolean(accData?.canTrade),
           tokenHealth: healthData || accData?.tokenHealth,
-          funds: fundsData ? {
+          funds: hasFunds ? {
             currency: 'INR',
-            availableCash: Number(fundsData.availableCash) || 0,
-            usedMargin: Number(fundsData.usedMargin) || 0,
-            totalEquity: Number(fundsData.totalEquity) || 0,
+            availableCash: resolvedAvailableCash || 0,
+            usedMargin: resolvedUsedMargin || 0,
+            totalEquity: resolvedTotalEquity || 0,
           } : undefined,
           holdings: Array.isArray(hldData) ? hldData : [],
           positions: Array.isArray(posData) ? posData : [],
@@ -601,12 +616,14 @@ export function Provider({ children }: { children: React.ReactNode }) {
         setUpstoxAccount(updated);
         setState((s) => {
           const isUpstoxActive = s.accountMode === 'upstox';
+          const isInitialUpstoxConnect = isConn && !s.upstoxAccount?.connected && s.accountMode === 'paper';
+          const shouldBeUpstox = isUpstoxActive || isInitialUpstoxConnect;
 
           let nextPositions = s.positions;
           let nextAvgBuyPrice = s.avgBuyPrice;
           let nextCash = s.cash;
 
-          if (isUpstoxActive && isConn) {
+          if ((isUpstoxActive || shouldBeUpstox) && isConn) {
             const upstoxPositions: Record<Asset, number> = {} as Record<Asset, number>;
             const upstoxAvgBuyPrice: Record<Asset, number> = {} as Record<Asset, number>;
 
@@ -638,8 +655,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
             nextPositions = upstoxPositions;
             nextAvgBuyPrice = upstoxAvgBuyPrice;
-            if (updated.funds?.availableCash !== undefined) {
-              nextCash = Number(updated.funds.availableCash) || 0;
+            if (resolvedAvailableCash !== undefined) {
+              nextCash = resolvedAvailableCash;
             }
           }
 
@@ -660,13 +677,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
           return {
             ...s,
             upstoxAccount: updated,
-            ...(isConn && !s.upstoxAccount?.connected && s.accountMode === 'paper' ? { accountMode: 'upstox' } : {}),
-            orders: nextOrders,
-            ...(isUpstoxActive && isConn ? {
+            ...(shouldBeUpstox && isConn ? {
+              accountMode: 'upstox',
               positions: nextPositions,
               avgBuyPrice: nextAvgBuyPrice,
               cash: nextCash,
             } : {}),
+            orders: nextOrders,
           };
         });
       }
@@ -810,7 +827,17 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const closeWeb3Drawer = useCallback(() => setWeb3DrawerOpen(false), []);
 
   const setAccountMode = useCallback((mode: AccountMode) => {
-    setState((s) => ({ ...s, accountMode: mode }));
+    setState((s) => {
+      let nextCash = s.cash;
+      if (mode === 'upstox') {
+        const upstoxCash = s.upstoxAccount?.funds?.availableCash 
+          ?? (s.upstoxAccount?.balances?.INR ? Number(s.upstoxAccount.balances.INR.free) : undefined);
+        if (upstoxCash !== undefined) {
+          nextCash = upstoxCash;
+        }
+      }
+      return { ...s, accountMode: mode, cash: nextCash };
+    });
     triggerToast(
       'Desk Switched',
       `Active Trading Desk: ${

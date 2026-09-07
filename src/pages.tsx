@@ -1343,13 +1343,13 @@ export function Portfolio() {
                   </h3>
                   <span
                     className={`text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center gap-1.5 ${
-                      upstoxAccount?.tokenHealth?.status === 'HEALTHY'
+                      upstoxAccount?.tokenHealth?.status === 'HEALTHY' || upstoxAccount?.tokenHealth?.status === 'ACTIVE'
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                         : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                     }`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${upstoxAccount?.tokenHealth?.status === 'HEALTHY' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                    <span>{upstoxAccount?.tokenHealth?.status === 'HEALTHY' ? 'Live Synced' : 'Token Expired'}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${upstoxAccount?.tokenHealth?.status === 'HEALTHY' || upstoxAccount?.tokenHealth?.status === 'ACTIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                    <span>{upstoxAccount?.tokenHealth?.status === 'HEALTHY' || upstoxAccount?.tokenHealth?.status === 'ACTIVE' ? 'Live Synced' : 'Token Expired'}</span>
                   </span>
                   {upstoxAccount?.latencyMs !== undefined && (
                     <span className="text-[10px] font-mono text-zinc-400">
@@ -1394,19 +1394,19 @@ export function Portfolio() {
             <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
               <span className="text-[11px] text-zinc-400 font-medium block">Available Margin (Cash)</span>
               <span className="text-lg font-bold font-mono text-emerald-400 mt-1 block">
-                {moneyINR(upstoxAccount?.funds?.availableCash || 0)}
+                {moneyINR(upstoxAccount?.funds?.availableCash ?? (upstoxAccount?.balances?.INR?.free ? Number(upstoxAccount.balances.INR.free) : 0))}
               </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
               <span className="text-[11px] text-zinc-400 font-medium block">Used Margin (Positions)</span>
               <span className="text-lg font-bold font-mono text-amber-400 mt-1 block">
-                {moneyINR(upstoxAccount?.funds?.usedMargin || 0)}
+                {moneyINR(upstoxAccount?.funds?.usedMargin ?? (upstoxAccount?.balances?.INR?.locked ? Number(upstoxAccount.balances.INR.locked) : 0))}
               </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
               <span className="text-[11px] text-zinc-400 font-medium block">Total Account Equity</span>
               <span className="text-lg font-bold font-mono text-white mt-1 block">
-                {moneyINR(upstoxAccount?.funds?.totalEquity || 0)}
+                {moneyINR(upstoxAccount?.funds?.totalEquity ?? (upstoxAccount?.balances?.INR?.total ? Number(upstoxAccount.balances.INR.total) : (upstoxAccount?.funds?.availableCash ?? (upstoxAccount?.balances?.INR?.free ? Number(upstoxAccount.balances.INR.free) : 0))))}
               </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
@@ -1960,7 +1960,9 @@ export function Orders() {
   const estTotal = numAmount * estPrice;
   const estFee = estTotal * 0.0008;
 
-  const upstoxAvailableCash = upstoxAccount?.funds?.availableCash || 0;
+  const upstoxAvailableCash =
+    upstoxAccount?.funds?.availableCash ??
+    (upstoxAccount?.balances?.INR?.free !== undefined ? Number(upstoxAccount.balances.INR.free) : 0);
   const availableCash =
     currentDeskMode === 'upstox'
       ? (upstoxAvailableCash > 0 ? upstoxAvailableCash : state.cash)

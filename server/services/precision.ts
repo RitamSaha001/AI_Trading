@@ -326,6 +326,13 @@ export class ExactDecimal {
   toNumber(): number {
     return Number(this.toString());
   }
+
+  /**
+   * Enables seamless JSON.stringify serialization without throwing BigInt errors.
+   */
+  toJSON(): string {
+    return this.toString();
+  }
 }
 
 // ============================================================================

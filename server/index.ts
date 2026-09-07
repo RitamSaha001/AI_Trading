@@ -956,7 +956,26 @@ export function buildServer(): FastifyInstance {
       const brokerParam = (req.query as any)?.broker || 'upstox';
       const broker = BrokerRegistry.get(brokerParam);
       const funds = broker.getFunds ? await broker.getFunds(req.user!.id) : null;
-      return { success: true, funds };
+      if (!funds) {
+        return { success: true, funds: null };
+      }
+      const toNum = (val: any) => {
+        if (typeof val === 'number') return val;
+        if (val && typeof val.toNumber === 'function') return val.toNumber();
+        if (val && typeof val.toString === 'function') return Number(val.toString()) || 0;
+        return Number(val) || 0;
+      };
+      return {
+        success: true,
+        funds: {
+          broker: funds.broker,
+          currency: funds.currency,
+          availableCash: toNum(funds.availableCash),
+          usedMargin: toNum(funds.usedMargin),
+          totalEquity: toNum(funds.totalEquity),
+          updatedAt: funds.updatedAt,
+        },
+      };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });
     }

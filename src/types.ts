@@ -345,7 +345,7 @@ export type AISafetyValidation = {
 export type AccountMode = 'paper' | 'upstox' | (string & {});
 
 export type UpstoxTokenHealthInfo = {
-  status: 'HEALTHY' | 'EXPIRING_SOON' | 'EXPIRED' | 'UNCONFIGURED';
+  status: 'HEALTHY' | 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | 'UNCONFIGURED' | (string & {});
   expiresAt: number | null;
   timeRemainingMs: number;
   timeRemainingHuman: string;
@@ -392,6 +392,7 @@ export type UpstoxAccountInfo = {
   canWithdraw?: boolean;
   isSafe?: boolean;
   tokenHealth?: UpstoxTokenHealthInfo;
+  balances?: Record<string, { asset: string; free: number | string; locked: number | string; total?: number | string }>;
   funds?: {
     currency: 'INR';
     availableCash: number;
