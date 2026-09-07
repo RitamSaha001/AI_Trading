@@ -5,3 +5,14 @@ dist/
 !.env.example
 .DS_Store
 *.log
+
+# Android & Native Build Output
+*.apk
+*.aab
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml

@@ -15,9 +15,13 @@
     "audit": "tsx scripts/auditCodebase.ts",
     "benchmark": "tsx scripts/benchmarkLLMs.ts",
     "verify:upstox-ip": "tsx scripts/verifyUpstoxEgressIp.ts",
-    "verify:upstox-connectivity": "tsx scripts/verifyUpstoxConnectivity.ts"
+    "verify:upstox-connectivity": "tsx scripts/verifyUpstoxConnectivity.ts",
+    "build:android": "vite build && npx cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "@fastify/cookie": "^11.1.2",
     "@fastify/cors": "^11.3.0",
     "@fastify/sensible": "^6.0.5",

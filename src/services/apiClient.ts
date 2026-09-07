@@ -3,7 +3,13 @@
  * Connects the frontend application to the authoritative Fastify backend service.
  */
 
-const API_BASE = (typeof window !== 'undefined' && window.location.hostname === 'ritamsaha001.github.io')
+const isMobileNative = typeof window !== 'undefined' && (
+  Boolean((window as any)?.Capacitor) ||
+  window.location.protocol === 'capacitor:' ||
+  (window.location.hostname === 'localhost' && window.location.port === '')
+);
+
+const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'ritamsaha001.github.io' || isMobileNative))
   ? 'https://87.76.191.49.nip.io'
   : '';
 

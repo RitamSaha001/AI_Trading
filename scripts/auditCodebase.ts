@@ -21,7 +21,7 @@ function scanDirectory(dir: string): { file: string; line: number; content: stri
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
       if (entry.isDirectory()) {
-        if (['node_modules', '.git', 'dist', '.next', 'scripts'].includes(entry.name)) continue;
+        if (['node_modules', '.git', 'dist', '.next', 'scripts', 'android'].includes(entry.name)) continue;
         walk(fullPath);
       } else if (SCAN_EXTENSIONS.some(ext => entry.name.endsWith(ext))) {
         const content = fs.readFileSync(fullPath, 'utf8');
