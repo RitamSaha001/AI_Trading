@@ -18,7 +18,7 @@ import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
 import { ExactDecimal } from './services/precision';
 import { BinanceGateway } from './services/binanceGateway';
-import { BrokerRegistry, BrokerGateway, UpstoxClient, UpstoxConnectivityValidator, UpstoxInstrumentRegistry, UpstoxAdapter } from './services/brokers';
+import { BrokerRegistry, BrokerGateway, UpstoxClient, UpstoxConnectivityValidator, UpstoxInstrumentRegistry, UpstoxAdapter, UpstoxCandleService } from './services/brokers';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
 import { OrderRecoveryService } from './services/orderRecoveryService';
@@ -927,6 +927,47 @@ export function buildServer(): FastifyInstance {
     );
 
     return { success: true, quotes };
+  });
+
+  server.get('/api/market/candles/upstox', async (req: FastifyRequest) => {
+    const query = (req.query as any) || {};
+    const symbol = (query.symbol as string || 'RELIANCE').toUpperCase().trim();
+    const timeframe = (query.timeframe as string || '1D').toUpperCase().trim();
+
+    let accessToken: string | undefined;
+    const token = extractSessionToken(req);
+    let userId: string | undefined;
+    if (token) {
+      try {
+        const user = await ServerAuthService.validateSession(token);
+        if (user) userId = user.id;
+      } catch {}
+    }
+
+    const db = getDb();
+    let credRow: any;
+    if (userId) {
+      credRow = await db.queryOne<{ access_token_encrypted: string }>(
+        `SELECT access_token_encrypted FROM broker_credentials WHERE user_id = $1 AND broker = 'upstox' AND access_token_encrypted IS NOT NULL LIMIT 1`,
+        [userId]
+      );
+    }
+    if (!credRow) {
+      credRow = await db.queryOne<{ access_token_encrypted: string }>(
+        `SELECT access_token_encrypted FROM broker_credentials WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL ORDER BY updated_at DESC LIMIT 1`
+      );
+    }
+
+    if (credRow?.access_token_encrypted) {
+      try {
+        accessToken = UpstoxAdapter.decryptSecret(credRow.access_token_encrypted);
+      } catch (err: any) {
+        logger.warn(`[UpstoxCandles] Failed to decrypt access token: ${err.message}`);
+      }
+    }
+
+    const candles = await UpstoxCandleService.getCandles(symbol, timeframe, accessToken);
+    return { success: true, symbol, timeframe, count: candles.length, candles };
   });
 
   server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {

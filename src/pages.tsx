@@ -335,12 +335,18 @@ export function Dashboard() {
         <div className="flex items-center justify-between px-1">
           <h2 className="text-sm font-semibold tracking-tight text-zinc-900">Watchlist &amp; Market Stream</h2>
           <button type="button" onClick={() => go('/markets')} className="text-xs text-indigo-600 hover:underline font-medium">
-            All Markets ({ASSETS.length}) →
+            All Markets ({state.accountMode === 'upstox' ? INDIAN_ASSETS.length : ASSETS.length}) →
           </button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {state.watchlist.map((a) => {
+          {(state.accountMode === 'upstox'
+            ? (state.watchlist.filter(isIndianAsset).length > 0
+                ? (state.watchlist.filter(isIndianAsset) as Asset[])
+                : (['RELIANCE', 'TCS', 'INFY', 'HDFCBANK'] as Asset[]))
+            : state.watchlist
+          ).map((rawA) => {
+            const a = rawA as Asset;
             const item = markets[a];
             const isSelected = a === selectedAsset;
             const isPositive = (item?.change24h || 0) >= 0;
@@ -400,12 +406,12 @@ export function Dashboard() {
                     {META[selectedAsset]?.name} ({selectedAsset}{isIndianAsset(selectedAsset) ? ' • NSE' : '/USD'})
                   </h3>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/[0.04] text-zinc-500 font-medium">
-                    {m?.source || (isIndianAsset(selectedAsset) ? 'Upstox' : 'Exchange')}
+                    {state.accountMode === 'upstox' ? 'Upstox REST (Live)' : (m?.source || (isIndianAsset(selectedAsset) ? 'Upstox' : 'Exchange'))}
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2 mt-0.5">
                   <span className="text-xl font-bold font-mono text-zinc-950">
-                    {m ? (isIndianAsset(selectedAsset) ? moneyINR(m.price) : money(m.price)) : '—'}
+                    {m ? ((isIndianAsset(selectedAsset) || state.accountMode === 'upstox') ? moneyINR(m.price) : money(m.price)) : '—'}
                   </span>
                   <span
                     className={`text-xs font-semibold ${
@@ -468,7 +474,8 @@ export function Dashboard() {
               candles={m?.candles || []}
               height={290}
               positive={(m?.change24h || 0) >= 0}
-              isINR={isIndianAsset(selectedAsset)}
+              isINR={isIndianAsset(selectedAsset) || state.accountMode === 'upstox'}
+              currency={isIndianAsset(selectedAsset) || state.accountMode === 'upstox' ? 'INR' : 'USD'}
             />
           </div>
 
@@ -477,19 +484,23 @@ export function Dashboard() {
             <div className="p-2.5 rounded-2xl bg-black/[0.02]">
               <span className="text-[11px] text-zinc-400 block">24h High</span>
               <strong className="text-xs font-mono font-semibold text-zinc-800">
-                {m ? money(m.high24h) : '—'}
+                {m ? ((isIndianAsset(selectedAsset) || state.accountMode === 'upstox') ? moneyINR(m.high24h) : money(m.high24h)) : '—'}
               </strong>
             </div>
             <div className="p-2.5 rounded-2xl bg-black/[0.02]">
               <span className="text-[11px] text-zinc-400 block">24h Low</span>
               <strong className="text-xs font-mono font-semibold text-zinc-800">
-                {m ? money(m.low24h) : '—'}
+                {m ? ((isIndianAsset(selectedAsset) || state.accountMode === 'upstox') ? moneyINR(m.low24h) : money(m.low24h)) : '—'}
               </strong>
             </div>
             <div className="p-2.5 rounded-2xl bg-black/[0.02]">
               <span className="text-[11px] text-zinc-400 block">24h Volume</span>
               <strong className="text-xs font-mono font-semibold text-zinc-800">
-                {m ? money(m.volume24h, 0, 0) : '—'}
+                {m
+                  ? ((isIndianAsset(selectedAsset) || state.accountMode === 'upstox')
+                      ? `${(m.volume24h || 0).toLocaleString('en-IN')} shares`
+                      : money(m.volume24h, 0, 0))
+                  : '—'}
               </strong>
             </div>
           </div>
@@ -597,10 +608,14 @@ export function Dashboard() {
           className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
         >
           <div className="w-8 h-8 rounded-xl bg-zinc-900 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <DollarSign className="w-4 h-4" />
+            {state.accountMode === 'upstox' ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <DollarSign className="w-4 h-4" />}
           </div>
-          <strong className="text-xs font-bold text-zinc-900 block">Paper Trading Terminal</strong>
-          <span className="text-[11px] text-zinc-500">Market &amp; limit execution with stop-loss</span>
+          <strong className="text-xs font-bold text-zinc-900 block">
+            {state.accountMode === 'upstox' ? 'NSE / BSE Execution Desk' : 'Paper Trading Terminal'}
+          </strong>
+          <span className="text-[11px] text-zinc-500">
+            {state.accountMode === 'upstox' ? 'Direct Upstox market & limit orders' : 'Market & limit execution with stop-loss'}
+          </span>
         </button>
 
         {state.accountMode === 'upstox' ? (
@@ -1288,9 +1303,9 @@ export function Portfolio() {
   const riskProfile = calculatePortfolioRisk(state, markets);
   const danger = senseMarketDanger(state, markets);
 
-  const activeHoldings = Object.keys(state.positions).filter(
-    (a) => (state.positions[a as Asset] || 0) > 0
-  ) as Asset[];
+  const activeHoldings = Object.keys(state.positions)
+    .filter((a) => (state.positions[a as Asset] || 0) > 0)
+    .filter((a) => accountMode !== 'upstox' || isIndianAsset(a)) as Asset[];
   const [onlyActive, setOnlyActive] = useState(true);
 
   return (
@@ -1902,7 +1917,11 @@ export function Orders() {
     triggerToast,
     autonomousPilot,
   } = useLumen();
-  const [selectedAsset, setSelectedAsset] = useState<Asset>(state.selectedAsset);
+  const currentDeskMode = accountMode || 'paper';
+  const initialAsset = (currentDeskMode === 'upstox' && !isIndianAsset(state.selectedAsset))
+    ? 'RELIANCE'
+    : state.selectedAsset;
+  const [selectedAsset, setSelectedAsset] = useState<Asset>(initialAsset);
   const [side, setSide] = useState<Side>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [amountStr, setAmountStr] = useState('1');
@@ -1913,7 +1932,14 @@ export function Orders() {
   const [showLiveConfirmModal, setShowLiveConfirmModal] = useState(false);
   const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'filled' | 'buy' | 'sell'>('all');
 
-  const currentDeskMode = accountMode || 'paper';
+  useEffect(() => {
+    if (currentDeskMode === 'upstox' && !isIndianAsset(state.selectedAsset)) {
+      setSelectedAsset('RELIANCE');
+    } else if (state.selectedAsset) {
+      setSelectedAsset(state.selectedAsset);
+    }
+  }, [state.selectedAsset, currentDeskMode]);
+
   const isIndian = isIndianAsset(selectedAsset) || currentDeskMode === 'upstox';
   const formatMoney = (val: number) => moneyINR(val);
 
@@ -2127,7 +2153,7 @@ export function Orders() {
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-zinc-700">Contract / Equity ({INDIAN_ASSETS.length} available)</label>
               <select
-                value={selectedAsset}
+                value={isIndianAsset(selectedAsset) ? selectedAsset : 'RELIANCE'}
                 onChange={(e) => {
                   const a = e.target.value as Asset;
                   setSelectedAsset(a);

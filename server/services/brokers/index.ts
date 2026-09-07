@@ -25,3 +25,4 @@ export * from './upstox/upstoxInstrumentProvider';
 export * from './upstox/upstoxInstrumentRegistry';
 export * from './upstox/indianMarketCalendar';
 export * from './upstox/upstoxConnectivityValidator';
+export * from './upstox/upstoxCandleService';

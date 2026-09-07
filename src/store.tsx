@@ -682,6 +682,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
               positions: nextPositions,
               avgBuyPrice: nextAvgBuyPrice,
               cash: nextCash,
+              ...(!isIndianAsset(s.selectedAsset) ? { selectedAsset: 'RELIANCE' as Asset } : {}),
+              watchlist: s.watchlist.some((w) => isIndianAsset(w))
+                ? s.watchlist.filter((w) => isIndianAsset(w))
+                : ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK'],
             } : {}),
             orders: nextOrders,
           };
@@ -829,14 +833,28 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const setAccountMode = useCallback((mode: AccountMode) => {
     setState((s) => {
       let nextCash = s.cash;
+      let nextSelectedAsset = s.selectedAsset;
+      let nextWatchlist = s.watchlist;
+
       if (mode === 'upstox') {
         const upstoxCash = s.upstoxAccount?.funds?.availableCash 
           ?? (s.upstoxAccount?.balances?.INR ? Number(s.upstoxAccount.balances.INR.free) : undefined);
         if (upstoxCash !== undefined) {
           nextCash = upstoxCash;
         }
+        if (!isIndianAsset(nextSelectedAsset)) {
+          nextSelectedAsset = 'RELIANCE';
+        }
+        const indianWatch = nextWatchlist.filter((w) => isIndianAsset(w));
+        nextWatchlist = indianWatch.length > 0 ? indianWatch : ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK'];
       }
-      return { ...s, accountMode: mode, cash: nextCash };
+      return {
+        ...s,
+        accountMode: mode,
+        cash: nextCash,
+        selectedAsset: nextSelectedAsset,
+        watchlist: nextWatchlist,
+      };
     });
     triggerToast(
       'Desk Switched',

@@ -454,8 +454,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
             >
               <Wallet className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
               <span className="font-mono font-semibold text-zinc-900 text-[11px] sm:text-xs">
-                {accountMode === 'upstox' && upstoxAccount?.funds
-                  ? moneyINR(upstoxAccount.funds.availableCash)
+                {accountMode === 'upstox'
+                  ? moneyINR(
+                      upstoxAccount?.funds?.availableCash ??
+                        (upstoxAccount?.balances?.INR?.free !== undefined
+                          ? Number(upstoxAccount.balances.INR.free)
+                          : state.cash)
+                    )
                   : moneyINR(state.cash)}
               </span>
             </button>

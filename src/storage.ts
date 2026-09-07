@@ -1,5 +1,5 @@
 import { AppState, ASSETS, Asset, StrategyConfig } from './types';
-import { META } from './domain/portfolio';
+import { META, isIndianAsset } from './domain/portfolio';
 import { createDefaultWallet } from './domain/wallet';
 import { createDefaultAutonomousPilotState } from './domain/autonomousPilot';
 
@@ -307,10 +307,12 @@ export function migrateState(rawState: any): AppState {
 
   const base = freshState();
 
+  const targetMode = rawState.accountMode === 'upstox' ? 'upstox' : (rawState.accountMode === 'exchange' ? 'exchange' : (rawState.accountMode === 'web3' ? 'web3' : 'paper'));
+
   const migrated: AppState = {
     ...base,
     schemaVersion: SCHEMA_VERSION,
-    accountMode: rawState.accountMode === 'upstox' ? 'upstox' : (rawState.accountMode === 'exchange' ? 'exchange' : (rawState.accountMode === 'web3' ? 'web3' : 'paper')),
+    accountMode: targetMode,
     upstoxAccount: rawState.upstoxAccount || undefined,
     exchangeAccount: rawState.exchangeAccount || undefined,
     exchangeOrders: Array.isArray(rawState.exchangeOrders) ? rawState.exchangeOrders : [],
@@ -334,7 +336,13 @@ export function migrateState(rawState: any): AppState {
     totalFees: typeof rawState.totalFees === 'number' ? rawState.totalFees : 0,
     positions: { ...base.positions, ...(rawState.positions || {}) },
     avgBuyPrice: { ...(rawState.avgBuyPrice || {}) },
-    watchlist: Array.isArray(rawState.watchlist) && rawState.watchlist.length > 0 ? rawState.watchlist : base.watchlist,
+    watchlist: (() => {
+      if (targetMode === 'upstox') {
+        const indianWatch = Array.isArray(rawState.watchlist) ? rawState.watchlist.filter((a: any) => isIndianAsset(a)) : [];
+        return indianWatch.length > 0 ? indianWatch : ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK'];
+      }
+      return Array.isArray(rawState.watchlist) && rawState.watchlist.length > 0 ? rawState.watchlist : base.watchlist;
+    })(),
     orders: Array.isArray(rawState.orders) ? rawState.orders.slice(0, 300) : [],
     alerts: Array.isArray(rawState.alerts)
       ? rawState.alerts.map((a: any) => ({
@@ -395,7 +403,12 @@ export function migrateState(rawState: any): AppState {
       return notifs;
     })(),
     timeframe: rawState.timeframe ?? '1D',
-    selectedAsset: ASSETS.includes(rawState.selectedAsset) ? rawState.selectedAsset : 'BTC',
+    selectedAsset: (() => {
+      if (targetMode === 'upstox') {
+        return isIndianAsset(rawState.selectedAsset) ? rawState.selectedAsset : 'RELIANCE';
+      }
+      return ASSETS.includes(rawState.selectedAsset) ? rawState.selectedAsset : 'BTC';
+    })(),
     authSession: rawState.authSession || undefined,
     grievanceTickets: Array.isArray(rawState.grievanceTickets) ? rawState.grievanceTickets : [],
     ledgerHistory: Array.isArray(rawState.ledgerHistory) ? rawState.ledgerHistory : [],

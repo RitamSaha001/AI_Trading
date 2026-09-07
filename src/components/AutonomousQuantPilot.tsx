@@ -66,8 +66,11 @@ export function AutonomousQuantPilot() {
   const actionLogs = autonomousPilot?.actionLogs || [];
 
   const pv = portfolioValue(state, markets);
-  const currentCash = state.accountMode === 'upstox' && state.upstoxAccount?.funds
-    ? state.upstoxAccount.funds.availableCash
+  const currentCash = state.accountMode === 'upstox'
+    ? (state.upstoxAccount?.funds?.availableCash ??
+        (state.upstoxAccount?.balances?.INR?.free !== undefined
+          ? Number(state.upstoxAccount.balances.INR.free)
+          : state.cash))
     : state.cash;
   const minCashFloorPct = Math.max(15, profileConfig.targetCashBufferPct);
   const minRequiredCash = pv * (minCashFloorPct / 100);

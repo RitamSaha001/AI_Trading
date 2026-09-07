@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { UpstoxInstrumentRegistry } from '../services/brokers/upstox/upstoxInstrumentRegistry';
+import { UpstoxCandleService } from '../services/brokers/upstox/upstoxCandleService';
 import { calculateNextUpstoxExpiry, getTokenHealth } from '../services/brokers/upstox/upstoxExpiry';
 import { config } from '../config';
 import { moneyINR, isIndianAsset, formatCurrency } from '../../src/domain/portfolio';
@@ -109,6 +110,35 @@ describe('Upstox Primary Indian Equities & Desk Upgrade Suite', () => {
   describe('Upstox Production Live Safety Invariant', () => {
     it('strictly maintains UPSTOX_LIVE_TRADING_ENABLED=false as safety default', () => {
       expect(config.UPSTOX_LIVE_TRADING_ENABLED).toBe(false);
+    });
+  });
+
+  describe('Upstox Candle Service', () => {
+    it('returns candles in chronological order with valid OHLCV metrics', async () => {
+      const candles = await UpstoxCandleService.getCandles('RELIANCE', '1D');
+      expect(candles).toBeDefined();
+      expect(candles.length).toBeGreaterThan(0);
+
+      // Verify chronological sorting (oldest first)
+      for (let i = 1; i < candles.length; i++) {
+        expect(candles[i].time).toBeGreaterThanOrEqual(candles[i - 1].time);
+      }
+
+      // Verify OHLC integrity
+      for (const c of candles) {
+        expect(c.open).toBeGreaterThan(0);
+        expect(c.high).toBeGreaterThanOrEqual(c.low);
+        expect(c.high).toBeGreaterThanOrEqual(c.open);
+        expect(c.high).toBeGreaterThanOrEqual(c.close);
+        expect(c.low).toBeLessThanOrEqual(c.open);
+        expect(c.low).toBeLessThanOrEqual(c.close);
+        expect(c.volume).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('gracefully handles unknown symbols by returning empty array', async () => {
+      const candles = await UpstoxCandleService.getCandles('UNKNOWN_EQUITY_XYZ');
+      expect(candles).toEqual([]);
     });
   });
 });

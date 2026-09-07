@@ -1,5 +1,5 @@
 import { ASSETS, INDIAN_ASSETS, Asset, Candle, DataSource, Market, Timeframe } from '../types';
-import { META } from '../domain/portfolio';
+import { META, isIndianAsset } from '../domain/portfolio';
 import { ApiClient } from './apiClient';
 
 const BINANCE_REST = 'https://api.binance.com';
@@ -178,9 +178,12 @@ async function fetchCoinbaseAsset(asset: Asset, tf: Timeframe): Promise<Market> 
  * Robust asset fetch cascading: Binance REST -> Coinbase REST -> Heuristic Simulator.
  */
 export async function fetchMarket(asset: Asset, tf: Timeframe): Promise<Market> {
-  if (META[asset]?.category === 'Indian Equities') {
+  if (isIndianAsset(asset) || META[asset]?.category === 'Indian Equities') {
     try {
-      const upstoxRes = await ApiClient.getUpstoxMarketQuotes([asset]);
+      const [upstoxRes, candleRes] = await Promise.all([
+        ApiClient.getUpstoxMarketQuotes([asset]),
+        ApiClient.getUpstoxCandles(asset, tf),
+      ]);
       const uq = upstoxRes?.data?.quotes?.[asset];
       if (uq && (uq.price > 0 || uq.lastPrice > 0)) {
         const meta = META[asset];
@@ -189,34 +192,40 @@ export async function fetchMarket(asset: Asset, tf: Timeframe): Promise<Market> 
         const high24h = +(uq.upperCircuitLimit || price * 1.05);
         const low24h = +(uq.lowerCircuitLimit || price * 0.95);
         const volume24h = +(uq.volume || 100000);
-        const cfg = tfMap[tf];
-        const count = cfg.count;
         const now = Date.now();
-        const openPrice = price / (1 + change24h / 100);
-        const range = high24h - low24h || price * 0.03;
-        const candles: Candle[] = [];
-        const seed = asset.charCodeAt(0) * 11 + asset.charCodeAt(asset.length - 1);
-        let prev = openPrice;
-        for (let i = 0; i < count; i++) {
-          const time = now - (count - i) * cfg.stepMs;
-          const progress = i / Math.max(count - 1, 1);
-          const trend = openPrice + progress * (price - openPrice);
-          const wave =
-            Math.sin((i + seed) * 0.42) * (range * 0.18) +
-            Math.cos((i + seed * 2) * 0.22) * (range * 0.08);
-          const closeVal = Math.max(low24h * 0.995, Math.min(high24h * 1.005, trend + wave));
-          const openVal = i === 0 ? openPrice : prev;
-          candles.push({
-            time,
-            open: openVal,
-            high: Math.max(openVal, closeVal) * 1.002,
-            low: Math.min(openVal, closeVal) * 0.998,
-            close: closeVal,
-            volume: (volume24h || 100000) / count,
-          });
-          prev = closeVal;
+
+        let candles: Candle[] = [];
+        if (candleRes?.data?.candles && candleRes.data.candles.length > 0) {
+          candles = candleRes.data.candles;
+        } else {
+          const cfg = tfMap[tf];
+          const count = cfg.count;
+          const openPrice = price / (1 + change24h / 100);
+          const range = high24h - low24h || price * 0.03;
+          const seed = asset.charCodeAt(0) * 11 + asset.charCodeAt(asset.length - 1);
+          let prev = openPrice;
+          for (let i = 0; i < count; i++) {
+            const time = now - (count - i) * cfg.stepMs;
+            const progress = i / Math.max(count - 1, 1);
+            const trend = openPrice + progress * (price - openPrice);
+            const wave =
+              Math.sin((i + seed) * 0.42) * (range * 0.18) +
+              Math.cos((i + seed * 2) * 0.22) * (range * 0.08);
+            const closeVal = Math.max(low24h * 0.995, Math.min(high24h * 1.005, trend + wave));
+            const openVal = i === 0 ? openPrice : prev;
+            candles.push({
+              time,
+              open: openVal,
+              high: Math.max(openVal, closeVal) * 1.002,
+              low: Math.min(openVal, closeVal) * 0.998,
+              close: closeVal,
+              volume: (volume24h || 100000) / count,
+            });
+            prev = closeVal;
+          }
+          candles[candles.length - 1].close = price;
         }
-        candles[candles.length - 1].close = price;
+
         return {
           asset,
           name: meta.name,
@@ -228,7 +237,7 @@ export async function fetchMarket(asset: Asset, tf: Timeframe): Promise<Market> 
           volume24h,
           history: candles.map((c) => c.close),
           candles,
-          source: uq.source || 'Upstox API',
+          source: uq.source || 'Upstox REST (Live)',
           isSynthetic: Boolean(uq.isSynthetic),
           lastUpdated: now,
           category: meta.category,
@@ -270,25 +279,34 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
       }
     } catch {}
 
-    const activeAsset = focusAsset || 'BTC';
+    const activeAsset = focusAsset || 'RELIANCE';
     let focusCandles: Candle[] | null = null;
-    try {
-      const sym = META[activeAsset].symbol;
-      const rows = await safeFetch<any[]>(
-        `${BINANCE_REST}/api/v3/klines?symbol=${sym}&interval=${tfMap[tf].bin}&limit=${tfMap[tf].count}`
-      );
-      if (Array.isArray(rows)) {
-        focusCandles = rows.map((x) => ({
-          time: x[0],
-          open: +x[1],
-          high: +x[2],
-          low: +x[3],
-          close: +x[4],
-          volume: +x[5],
-        }));
+    if (isIndianAsset(activeAsset)) {
+      try {
+        const cRes = await ApiClient.getUpstoxCandles(activeAsset, tf);
+        if (cRes?.data?.candles && cRes.data.candles.length > 0) {
+          focusCandles = cRes.data.candles;
+        }
+      } catch {}
+    } else {
+      try {
+        const sym = META[activeAsset].symbol;
+        const rows = await safeFetch<any[]>(
+          `${BINANCE_REST}/api/v3/klines?symbol=${sym}&interval=${tfMap[tf].bin}&limit=${tfMap[tf].count}`
+        );
+        if (Array.isArray(rows)) {
+          focusCandles = rows.map((x) => ({
+            time: x[0],
+            open: +x[1],
+            high: +x[2],
+            low: +x[3],
+            close: +x[4],
+            volume: +x[5],
+          }));
+        }
+      } catch {
+        // ignore, focusCandles will remain null
       }
-    } catch {
-      // ignore, focusCandles will remain null
     }
 
     const now = Date.now();
@@ -306,37 +324,45 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
         const low24h = +(uq.lowerCircuitLimit || price * 0.95);
         const volume24h = +(uq.volume || 100000);
 
-        const cfg = tfMap[tf];
-        const count = cfg.count;
-        const openPrice = price / (1 + change24h / 100);
-        const range = high24h - low24h || price * 0.03;
-        const candles: Candle[] = [];
-        const seed = a.charCodeAt(0) * 11 + a.charCodeAt(a.length - 1);
-        let prev = openPrice;
+        let candles: Candle[];
+        let history: number[];
 
-        for (let i = 0; i < count; i++) {
-          const time = now - (count - i) * cfg.stepMs;
-          const progress = i / Math.max(count - 1, 1);
-          const trend = openPrice + progress * (price - openPrice);
-          const wave =
-            Math.sin((i + seed) * 0.42) * (range * 0.18) +
-            Math.cos((i + seed * 2) * 0.22) * (range * 0.08);
-          const closeVal = Math.max(low24h * 0.995, Math.min(high24h * 1.005, trend + wave));
-          const openVal = i === 0 ? openPrice : prev;
-          const hVal = Math.max(openVal, closeVal) * 1.002;
-          const lVal = Math.min(openVal, closeVal) * 0.998;
-          candles.push({
-            time,
-            open: openVal,
-            high: hVal,
-            low: lVal,
-            close: closeVal,
-            volume: (volume24h || 100000) / count,
-          });
-          prev = closeVal;
+        if (a === activeAsset && focusCandles && focusCandles.length > 0) {
+          candles = focusCandles;
+          history = candles.map((c) => c.close);
+        } else {
+          const cfg = tfMap[tf];
+          const count = cfg.count;
+          const openPrice = price / (1 + change24h / 100);
+          const range = high24h - low24h || price * 0.03;
+          candles = [];
+          const seed = a.charCodeAt(0) * 11 + a.charCodeAt(a.length - 1);
+          let prev = openPrice;
+
+          for (let i = 0; i < count; i++) {
+            const time = now - (count - i) * cfg.stepMs;
+            const progress = i / Math.max(count - 1, 1);
+            const trend = openPrice + progress * (price - openPrice);
+            const wave =
+              Math.sin((i + seed) * 0.42) * (range * 0.18) +
+              Math.cos((i + seed * 2) * 0.22) * (range * 0.08);
+            const closeVal = Math.max(low24h * 0.995, Math.min(high24h * 1.005, trend + wave));
+            const openVal = i === 0 ? openPrice : prev;
+            const hVal = Math.max(openVal, closeVal) * 1.002;
+            const lVal = Math.min(openVal, closeVal) * 0.998;
+            candles.push({
+              time,
+              open: openVal,
+              high: hVal,
+              low: lVal,
+              close: closeVal,
+              volume: (volume24h || 100000) / count,
+            });
+            prev = closeVal;
+          }
+          candles[candles.length - 1].close = price;
+          history = candles.map((c) => c.close);
         }
-        candles[candles.length - 1].close = price;
-        const history = candles.map((c) => c.close);
 
         result[a] = {
           asset: a,
@@ -349,7 +375,7 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
           volume24h,
           history,
           candles,
-          source: uq.source || 'Upstox API',
+          source: uq.source || 'Upstox REST (Live)',
           isSynthetic: Boolean(uq.isSynthetic),
           lastUpdated: now,
           category: meta.category,

@@ -3,6 +3,8 @@
  * Connects the frontend application to the authoritative Fastify backend service.
  */
 
+import type { Candle } from '../types';
+
 const isMobileNative = typeof window !== 'undefined' && (
   Boolean((window as any)?.Capacitor) ||
   window.location.protocol === 'capacitor:' ||
@@ -319,6 +321,12 @@ export const ApiClient = {
   async getUpstoxMarketQuotes(symbols?: string[]) {
     const q = symbols && symbols.length > 0 ? `?symbols=${encodeURIComponent(symbols.join(','))}` : '';
     return apiRequest<{ success: boolean; quotes: Record<string, any> }>(`/api/market/quotes/upstox${q}`);
+  },
+
+  async getUpstoxCandles(symbol: string, timeframe: string = '1D') {
+    return apiRequest<{ success: boolean; symbol: string; timeframe: string; count: number; candles: Candle[] }>(
+      `/api/market/candles/upstox?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`
+    );
   },
 
   async getBrokerFunds(broker: string = 'upstox') {
