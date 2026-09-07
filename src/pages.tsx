@@ -119,6 +119,7 @@ export function Dashboard() {
     order,
     openChat,
     openUpstoxDrawer,
+    upstoxAccount,
   } = useLumen();
 
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -129,6 +130,12 @@ export function Dashboard() {
   const selectedAsset = state.selectedAsset;
   const m = markets[selectedAsset];
   const ind = m ? indicators(m.history) : null;
+  const effectiveCash = state.accountMode === 'upstox'
+    ? (upstoxAccount?.funds?.availableCash ??
+        (upstoxAccount?.balances?.INR?.free !== undefined
+          ? Number(upstoxAccount.balances.INR.free)
+          : state.cash))
+    : state.cash;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -225,9 +232,9 @@ export function Dashboard() {
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center justify-between text-xs text-zinc-500">
-            <span>Liquid Cash: {moneyINR(state.cash)}</span>
+            <span>Liquid Cash: {moneyINR(effectiveCash)}</span>
             <span className="font-medium text-zinc-800">
-              {((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}% Liquid
+              {((effectiveCash / Math.max(pv, 1)) * 100).toFixed(1)}% Liquid
             </span>
           </div>
         </GlassCard>
@@ -1308,6 +1315,16 @@ export function Portfolio() {
     .filter((a) => accountMode !== 'upstox' || isIndianAsset(a)) as Asset[];
   const [onlyActive, setOnlyActive] = useState(true);
 
+  const effectiveCash = accountMode === 'upstox'
+    ? (upstoxAccount?.funds?.availableCash ??
+        (upstoxAccount?.balances?.INR?.free !== undefined
+          ? Number(upstoxAccount.balances.INR.free)
+          : state.cash))
+    : state.cash;
+  const effectiveRealizedPnl = accountMode === 'upstox'
+    ? (upstoxAccount?.funds?.realizedPnl || 0)
+    : state.realizedPnl;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
@@ -1481,7 +1498,9 @@ export function Portfolio() {
             type="button"
             onClick={() =>
               openChat(
-                'Run a portfolio stress test simulating a 20% Bitcoin flash crash and tell me my projected loss and survivability rating.'
+                accountMode === 'upstox'
+                  ? 'Run an Indian portfolio stress test simulating a 10% Nifty 50 selloff and sector rotation, and tell me my projected loss and survivability rating.'
+                  : 'Run a portfolio stress test simulating a 20% Bitcoin flash crash and tell me my projected loss and survivability rating.'
               )
             }
             className="px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white/80 hover:bg-white border border-black/[0.08] rounded-xl shadow-2xs transition-all flex items-center gap-1.5 active:scale-95"
@@ -1654,22 +1673,22 @@ export function Portfolio() {
           <span className="text-xs font-medium text-zinc-500">Realized P&amp;L</span>
           <div
             className={`text-2xl font-bold font-mono mt-1 ${
-              state.realizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
+              effectiveRealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
             }`}
           >
-            {state.realizedPnl >= 0 ? '+' : ''}
-            {moneyINR(state.realizedPnl)}
+            {effectiveRealizedPnl >= 0 ? '+' : ''}
+            {moneyINR(effectiveRealizedPnl)}
           </div>
           <span className="text-xs text-zinc-500 mt-1 inline-block">
-            Fees Paid: {moneyINR(state.totalFees || 0)}
+            {accountMode === 'upstox' ? 'Broker Mark-to-Market Realized' : `Fees Paid: ${moneyINR(state.totalFees || 0)}`}
           </span>
         </GlassCard>
 
         <GlassCard>
           <span className="text-xs font-medium text-zinc-500">Liquid Cash</span>
-          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{moneyINR(state.cash)}</div>
+          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{moneyINR(effectiveCash)}</div>
           <span className="text-xs text-zinc-500 mt-1 inline-block">
-            {((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}% of total capital
+            {((effectiveCash / Math.max(pv, 1)) * 100).toFixed(1)}% of total capital
           </span>
         </GlassCard>
 
@@ -1700,14 +1719,14 @@ export function Portfolio() {
         <GlassCard className="space-y-3">
           <div className="flex items-center justify-between text-xs font-semibold text-zinc-800">
             <span>Capital Allocation Breakdown</span>
-            <span>Cash: {((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}%</span>
+            <span>Cash: {((effectiveCash / Math.max(pv, 1)) * 100).toFixed(1)}%</span>
           </div>
           <div className="w-full h-3 rounded-full overflow-hidden flex bg-black/[0.04]">
             {/* Cash slice */}
             <div
               className="h-full bg-zinc-300"
-              style={{ width: `${(state.cash / Math.max(pv, 1)) * 100}%` }}
-              title={`Cash: ${moneyINR(state.cash)}`}
+              style={{ width: `${(effectiveCash / Math.max(pv, 1)) * 100}%` }}
+              title={`Cash: ${moneyINR(effectiveCash)}`}
             />
             {activeHoldings.map((a) => {
               const val = (state.positions[a] || 0) * (markets[a]?.price || 0);
@@ -1882,7 +1901,11 @@ export function Portfolio() {
                 <tr>
                   <td colSpan={8} className="p-12 text-center text-xs text-zinc-400">
                     <div className="space-y-2 max-w-sm mx-auto">
-                      <p>You have no active token positions yet (100% Liquid Cash).</p>
+                      <p>
+                        {accountMode === 'upstox'
+                          ? 'You have no open equity holdings or F&O positions in Upstox yet (100% Liquid Demat Margin).'
+                          : 'You have no active positions yet (100% Liquid Cash).'}
+                      </p>
                       <button
                         type="button"
                         onClick={() => go('/orders')}

@@ -356,7 +356,7 @@ export function positionPnl(
  * and totalPnl === realizedPnl + unrealizedPnl.
  */
 export function totalPortfolioPnl(
-  state: Pick<AppState, 'cash' | 'positions' | 'avgBuyPrice' | 'startingEquity' | 'realizedPnl'>,
+  state: Pick<AppState, 'cash' | 'positions' | 'avgBuyPrice' | 'startingEquity' | 'realizedPnl'> & Partial<Pick<AppState, 'accountMode' | 'upstoxAccount'>>,
   markets: Record<Asset, Market | undefined>
 ): {
   totalValue: number;
@@ -368,6 +368,56 @@ export function totalPortfolioPnl(
   startingEquity: number;
 } {
   const totalVal = portfolioValue(state, markets);
+
+  if (state.accountMode === 'upstox' && state.upstoxAccount) {
+    const funds = state.upstoxAccount.funds;
+    const realized = Number(funds?.realizedPnl) || 0;
+
+    let unrealized = 0;
+    let totalCostBasis = 0;
+
+    if (state.upstoxAccount.holdings) {
+      for (const h of state.upstoxAccount.holdings) {
+        const qty = Number(h.quantity) || 0;
+        const avg = Number(h.averagePrice) || 0;
+        const sym = (h.symbol || '').toUpperCase() as Asset;
+        const cur = markets[sym]?.price || Number(h.currentPrice) || avg;
+        if (qty > 0 && cur > 0) {
+          unrealized += qty * (cur - avg);
+          totalCostBasis += qty * avg;
+        }
+      }
+    }
+
+    if (state.upstoxAccount.positions) {
+      for (const p of state.upstoxAccount.positions) {
+        const qty = Number(p.quantity) || 0;
+        const avg = Number(p.averagePrice) || 0;
+        const sym = (p.symbol || '').toUpperCase() as Asset;
+        const cur = markets[sym]?.price || Number(p.currentPrice) || avg;
+        if (qty > 0 && cur > 0) {
+          unrealized += qty * (cur - avg);
+          totalCostBasis += qty * avg;
+        }
+      }
+    }
+
+    const totalPnl = realized + unrealized;
+    // If no active holdings or trades have occurred, starting equity strictly matches current cash/equity
+    const startingEquity = totalCostBasis > 0 ? Math.max(1, totalVal - totalPnl) : totalVal;
+    const pct = totalCostBasis > 0 && startingEquity > 0 ? (totalPnl / startingEquity) * 100 : 0;
+
+    return {
+      totalValue: totalVal,
+      realizedPnl: realized,
+      unrealizedPnl: unrealized,
+      totalPnl,
+      amount: totalPnl,
+      pct,
+      startingEquity,
+    };
+  }
+
   const realized = Number.isFinite(state.realizedPnl) ? state.realizedPnl : 0;
 
   let unrealized = 0;

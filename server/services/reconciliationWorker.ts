@@ -353,8 +353,10 @@ export class ReconciliationWorker {
       // 4. Reconcile Local Authoritative Account State vs Exchange State
       if (userId) {
         const hasExchangeAccount = await db.queryOne<any>(
-          `SELECT 1 FROM exchange_accounts WHERE user_id = ?`,
-          [userId]
+          `SELECT 1 FROM exchange_accounts WHERE user_id = ?
+           UNION
+           SELECT 1 FROM broker_credentials WHERE user_id = ? AND access_token_encrypted IS NOT NULL`,
+          [userId, userId]
         );
 
         if (hasExchangeAccount) {
@@ -442,10 +444,12 @@ export class ReconciliationWorker {
       } else {
         // Global scheduled run: Enumerate and reconcile EVERY registered user with exchange credentials
         const registeredUsers = await db.query<any>(
-          `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = TRUE`
+          `SELECT DISTINCT user_id FROM exchange_accounts WHERE can_trade = TRUE
+           UNION
+           SELECT DISTINCT user_id FROM broker_credentials WHERE access_token_encrypted IS NOT NULL`
         );
 
-        let allUsersTransportSucceeded = registeredUsers.length > 0;
+        let allUsersTransportSucceeded = true;
 
         for (const userRow of registeredUsers) {
           const uId = userRow.user_id;

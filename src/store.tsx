@@ -258,6 +258,7 @@ type Ctx = {
   scanPilotOpportunities: () => void;
   executePilotRecommendation: (opp: QuantitativeOpportunity) => { ok: boolean; error?: string };
   resetPilotCircuitBreaker: () => void;
+  clearNotifications: () => void;
   liveOrderProposal: LiveOrderProposalData | null;
   liveOrderConfirmationOpen: boolean;
   openLiveOrderConfirmation: (proposal: LiveOrderProposalData) => void;
@@ -312,8 +313,8 @@ function getEffectivePilotState(state: AppState): AppState {
     return state;
   }
 
-  const effectivePositions: Record<Asset, number> = { ...state.positions };
-  const effectiveAvgBuyPrice: Record<Asset, number> = { ...state.avgBuyPrice };
+  const effectivePositions: Record<Asset, number> = createPositionsRecord();
+  const effectiveAvgBuyPrice: Record<Asset, number> = {} as Record<Asset, number>;
 
   if (state.upstoxAccount.holdings) {
     for (const h of state.upstoxAccount.holdings) {
@@ -682,10 +683,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
               positions: nextPositions,
               avgBuyPrice: nextAvgBuyPrice,
               cash: nextCash,
+              startingEquity: resolvedTotalEquity || nextCash,
+              realizedPnl: 0,
               ...(!isIndianAsset(s.selectedAsset) ? { selectedAsset: 'RELIANCE' as Asset } : {}),
               watchlist: s.watchlist.some((w) => isIndianAsset(w))
                 ? s.watchlist.filter((w) => isIndianAsset(w))
                 : ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK'],
+              notifications: s.notifications.filter(
+                (n) => !n.body.match(/SOL|BTC|ETH|BNB|XRP|DOGE|USDT|USDC/i) && !n.title.match(/SOL|BTC|ETH|BNB|XRP|DOGE/i)
+              ),
             } : {}),
             orders: nextOrders,
           };
@@ -845,8 +851,19 @@ export function Provider({ children }: { children: React.ReactNode }) {
         if (!isIndianAsset(nextSelectedAsset)) {
           nextSelectedAsset = 'RELIANCE';
         }
-        const indianWatch = nextWatchlist.filter((w) => isIndianAsset(w));
-        nextWatchlist = indianWatch.length > 0 ? indianWatch : ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK'];
+        const cleanNotifs = s.notifications.filter(
+          (n) => !n.body.match(/SOL|BTC|ETH|BNB|XRP|DOGE|USDT|USDC/i) && !n.title.match(/SOL|BTC|ETH|BNB|XRP|DOGE/i)
+        );
+        return {
+          ...s,
+          accountMode: mode,
+          cash: nextCash,
+          startingEquity: upstoxCash ?? nextCash,
+          realizedPnl: 0,
+          selectedAsset: nextSelectedAsset,
+          watchlist: nextWatchlist,
+          notifications: cleanNotifs,
+        };
       }
       return {
         ...s,
@@ -1902,7 +1919,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
       if (orderResults.filledOrders.length > 0) {
         for (const order of orderResults.filledOrders) {
-          const msg = `Order Executed: ${order.side.toUpperCase()} ${order.amount} ${order.asset} @ ${money(order.price)}`;
+          if (initialState.accountMode === 'upstox' && !isIndianAsset(order.asset)) continue;
+          const msg = `Order Executed: ${order.side.toUpperCase()} ${order.amount} ${order.asset} @ ${isIndianAsset(order.asset) ? moneyINR(order.price) : money(order.price)}`;
           newNotifications.push({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
             ts: Date.now(),
@@ -1929,6 +1947,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
       if (orderResults.rejectedOrders.length > 0) {
         for (const order of orderResults.rejectedOrders) {
+          if (initialState.accountMode === 'upstox' && !isIndianAsset(order.asset)) continue;
           const msg = `Order Rejected: ${order.side.toUpperCase()} ${order.amount} ${order.asset} (${order.rejectReason || 'Validation failed'})`;
           newNotifications.push({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
@@ -1942,6 +1961,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
       if (orderResults.triggeredBrackets.length > 0) {
         for (const bracket of orderResults.triggeredBrackets) {
+          if (initialState.accountMode === 'upstox' && !isIndianAsset(bracket.order.asset)) continue;
           const msg = `${bracket.order.asset} Bracket Triggered: ${bracket.reason}`;
           newNotifications.push({
             id: 'notif_' + Math.random().toString(36).substring(2, 8),
@@ -1971,6 +1991,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
       // 2. Evaluate Alerts
       for (const rule of snapshot.alerts) {
+        if (initialState.accountMode === 'upstox' && !isIndianAsset(rule.asset)) continue;
         const trigger = evaluateAlert(rule, m[rule.asset]);
         if (trigger) {
           newNotifications.push({
@@ -1986,20 +2007,22 @@ export function Provider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 3. Evaluate Automated Strategies
-      for (const strat of snapshot.strategies) {
-        const stratResult = evaluateStrategy(strat, snapshot, m);
-        if (stratResult.executed && stratResult.message) {
-          newNotifications.push({
-            id: 'notif_' + Math.random().toString(36).substring(2, 8),
-            ts: Date.now(),
-            title: strat.name,
-            body: stratResult.message,
-            type: 'strategy',
-          });
-          if (snapshot.settings.soundEnabled) playChime('trade');
-          triggerToast(strat.name, stratResult.message, stratResult.type === 'buy' ? 'success' : 'info');
-          changed = true;
+      // 3. Evaluate Automated Strategies (strictly bypassed in Upstox live desk to prevent paper crypto trades)
+      if (initialState.accountMode !== 'upstox') {
+        for (const strat of snapshot.strategies) {
+          const stratResult = evaluateStrategy(strat, snapshot, m);
+          if (stratResult.executed && stratResult.message) {
+            newNotifications.push({
+              id: 'notif_' + Math.random().toString(36).substring(2, 8),
+              ts: Date.now(),
+              title: strat.name,
+              body: stratResult.message,
+              type: 'strategy',
+            });
+            if (snapshot.settings.soundEnabled) playChime('trade');
+            triggerToast(strat.name, stratResult.message, stratResult.type === 'buy' ? 'success' : 'info');
+            changed = true;
+          }
         }
       }
 
@@ -2036,7 +2059,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         }
 
         const mutations: TickMutations = {
-          cashDelta: snapshot.cash - initialState.cash,
+          cashDelta: initialState.accountMode === 'upstox' ? 0 : (snapshot.cash - initialState.cash),
           positionDeltas,
           avgBuyPriceUpdates,
           updatedOrders,
@@ -2054,9 +2077,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
                 orig.circuitBreakerTriggered !== s.circuitBreakerTriggered)
             );
           }),
-          totalFeesDelta: (snapshot.totalFees || 0) - (initialState.totalFees || 0),
-          realizedPnlDelta: (snapshot.realizedPnl || 0) - (initialState.realizedPnl || 0),
-          notifications: newNotifications,
+          totalFeesDelta: initialState.accountMode === 'upstox' ? 0 : ((snapshot.totalFees || 0) - (initialState.totalFees || 0)),
+          realizedPnlDelta: initialState.accountMode === 'upstox' ? 0 : ((snapshot.realizedPnl || 0) - (initialState.realizedPnl || 0)),
+          notifications: initialState.accountMode === 'upstox'
+            ? newNotifications.filter((n) => !n.body.match(/SOL|BTC|ETH|BNB|XRP|DOGE|USDT|USDC/i) && !n.title.match(/SOL|BTC|ETH|BNB|XRP|DOGE/i))
+            : newNotifications,
           newPilotLogs,
         };
 
@@ -3540,6 +3565,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
     });
   }, [markets]);
 
+  const clearNotifications = useCallback(() => {
+    setState((s) => ({ ...s, notifications: [] }));
+  }, []);
+
   const resetPilotCircuitBreaker = useCallback(() => {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
@@ -3749,6 +3778,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       scanPilotOpportunities,
       executePilotRecommendation,
       resetPilotCircuitBreaker,
+      clearNotifications,
       liveOrderProposal,
       liveOrderConfirmationOpen,
       openLiveOrderConfirmation,
@@ -3864,6 +3894,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       scanPilotOpportunities,
       executePilotRecommendation,
       resetPilotCircuitBreaker,
+      clearNotifications,
       liveOrderProposal,
       liveOrderConfirmationOpen,
       openLiveOrderConfirmation,

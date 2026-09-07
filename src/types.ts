@@ -398,6 +398,8 @@ export type UpstoxAccountInfo = {
     availableCash: number;
     usedMargin: number;
     totalEquity: number;
+    realizedPnl?: number;
+    unrealizedPnl?: number;
   };
   holdings?: UpstoxHoldingInfo[];
   positions?: UpstoxPositionInfo[];

@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useLumen } from '../store';
-import { ASSETS, Asset, Market } from '../types';
-import { META, money } from '../trading';
+import { ASSETS, INDIAN_ASSETS, Asset, Market } from '../types';
+import { META, money, moneyINR } from '../trading';
+import { isIndianAsset } from '../domain/portfolio';
 import { go } from '../Shell';
 import {
   TrendingUp,
@@ -122,6 +123,9 @@ export function MarketHeatmap({
   const [hoveredAsset, setHoveredAsset] = useState<Asset | null>(null);
   const [showAll, setShowAll] = useState(false);
 
+  const isUpstox = store.accountMode === 'upstox';
+  const targetAssets: readonly Asset[] = isUpstox ? (INDIAN_ASSETS as readonly Asset[]) : ASSETS;
+
   // Compute market performance summary
   const summary = useMemo(() => {
     let totalChange = 0;
@@ -131,7 +135,7 @@ export function MarketHeatmap({
     let topLoser: { asset: Asset; change: number } | null = null;
     let totalVolume = 0;
 
-    for (const a of ASSETS) {
+    for (const a of targetAssets) {
       const m = markets[a];
       const chg = m?.change24h || 0;
       totalChange += chg;
@@ -148,13 +152,13 @@ export function MarketHeatmap({
       }
     }
 
-    const avgChange = ASSETS.length > 0 ? totalChange / ASSETS.length : 0;
+    const avgChange = targetAssets.length > 0 ? totalChange / targetAssets.length : 0;
     return { avgChange, gainers, losers, topGainer, topLoser, totalVolume };
-  }, [markets]);
+  }, [markets, targetAssets]);
 
   // Filter and sort assets
   const visibleAssets = useMemo(() => {
-    const list = ASSETS.filter((a) => {
+    const list = targetAssets.filter((a) => {
       const m = markets[a];
       const chg = m?.change24h || 0;
       if (filter === 'gainers') return chg >= 0;
@@ -172,8 +176,8 @@ export function MarketHeatmap({
       // Or by 24h change
       return (mb?.change24h || 0) - (ma?.change24h || 0);
     });
-    return showAll ? list : list.slice(0, 24);
-  }, [markets, filter, layout, showAll]);
+    return showAll || isUpstox ? list : list.slice(0, 24);
+  }, [markets, filter, layout, showAll, targetAssets, isUpstox]);
 
   const handleTileClick = (asset: Asset) => {
     onSelectAsset(asset);
@@ -454,7 +458,7 @@ export function MarketHeatmap({
                 {/* Price Display */}
                 <div className="mt-3.5">
                   <div className="text-xl md:text-2xl font-bold font-mono tracking-tight text-zinc-950">
-                    {m ? money(m.price) : '—'}
+                    {m ? (isIndianAsset(asset) || isUpstox ? moneyINR(m.price) : money(m.price)) : '—'}
                   </div>
                 </div>
               </div>
@@ -467,7 +471,7 @@ export function MarketHeatmap({
                       Vol: <strong className="text-zinc-700 font-mono">{m.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong>
                     </span>
                   ) : (
-                    <span>Range: L {m ? money(m.low24h) : '—'}</span>
+                    <span>Range: L {m ? (isIndianAsset(asset) || isUpstox ? moneyINR(m.low24h) : money(m.low24h)) : '—'}</span>
                   )}
                 </div>
 
@@ -498,16 +502,18 @@ export function MarketHeatmap({
         })}
       </div>
 
-      {/* Expand/Collapse 108 Markets Toggle */}
-      <div className="mt-4 flex justify-center">
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          className="px-4 py-1.5 text-xs font-semibold rounded-xl border border-black/[0.08] bg-white hover:bg-black/[0.03] text-zinc-700 shadow-xs transition-all flex items-center gap-1.5"
-        >
-          <span>{showAll ? 'Show Top 24 Leading Markets' : `Expand Full Heatmap (All ${ASSETS.length} Markets)`}</span>
-        </button>
-      </div>
+      {/* Expand/Collapse Markets Toggle */}
+      {!isUpstox && (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="px-4 py-1.5 text-xs font-semibold rounded-xl border border-black/[0.08] bg-white hover:bg-black/[0.03] text-zinc-700 shadow-xs transition-all flex items-center gap-1.5"
+          >
+            <span>{showAll ? 'Show Top 24 Leading Markets' : `Expand Full Heatmap (All ${ASSETS.length} Markets)`}</span>
+          </button>
+        </div>
+      )}
 
       {/* Heatmap Legend */}
       <div className="mt-5 pt-4 border-t border-black/[0.05] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500">

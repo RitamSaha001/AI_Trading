@@ -6,6 +6,7 @@ import { CircuitBreakerService } from './circuitBreakerService';
 import { SymbolRulesService } from './symbolRules';
 import { ReconciliationWorker } from './reconciliationWorker';
 import { UserDataStreamManager } from './userDataStreamManager';
+import { UpstoxUserStreamTransport } from './brokers/upstox/upstoxUserStreamTransport';
 import { config } from '../config';
 import crypto from 'node:crypto';
 
@@ -220,6 +221,7 @@ export class OperationalSafetyService {
     };
 
     let reconciliation: { lastSyncAt: number; restHealth: string; isFresh: boolean } | undefined = undefined;
+    let userStream: { status: string; lastKeepAliveAt: number } | undefined = undefined;
 
     if (userId) {
       const userRow = await db.queryOne<any>(
@@ -234,20 +236,26 @@ export class OperationalSafetyService {
         restHealth: userRestHealth,
         isFresh: isUserFresh,
       };
-    } else {
-      reconciliation = globalReconciliation;
-    }
 
-    // Query user stream status if userId provided
-    let userStream: { status: string; lastKeepAliveAt: number } | undefined = undefined;
-    if (userId) {
+      // Query user stream status if userId provided
       const session = UserDataStreamManager.getSession(userId);
       if (session) {
         userStream = {
           status: session.status,
           lastKeepAliveAt: session.lastKeepAliveAt,
         };
+      } else {
+        const upstoxStream = UpstoxUserStreamTransport.get(userId);
+        if (upstoxStream) {
+          const health = upstoxStream.getStreamHealth();
+          userStream = {
+            status: health === 'HEALTHY' ? 'ACTIVE' : health === 'DEGRADED' ? 'RECONNECTING' : 'STANDBY',
+            lastKeepAliveAt: upstoxStream.getLastEventTime() || Date.now(),
+          };
+        }
       }
+    } else {
+      reconciliation = globalReconciliation;
     }
 
     // Determine overall state

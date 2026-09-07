@@ -117,6 +117,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     openUpstoxDrawer,
     closeUpstoxDrawer,
     syncUpstoxAccount,
+    clearNotifications,
     triggerToast,
     liveOrderProposal,
     liveOrderConfirmationOpen,
@@ -199,6 +200,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
+
+  const effectiveCash = accountMode === 'upstox'
+    ? (upstoxAccount?.funds?.availableCash ??
+        (upstoxAccount?.balances?.INR?.free !== undefined
+          ? Number(upstoxAccount.balances.INR.free)
+          : state.cash))
+    : state.cash;
+
+  const visibleNotifications = accountMode === 'upstox'
+    ? state.notifications.filter(
+        (n) => !n.body.match(/SOL|BTC|ETH|BNB|XRP|DOGE|USDT|USDC/i) && !n.title.match(/SOL|BTC|ETH|BNB|XRP|DOGE/i)
+      )
+    : state.notifications;
 
   const baseNav = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -325,7 +339,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               {moneyINR(pv)}
             </div>
             <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-1">
-              <span>Cash: {moneyINR(state.cash)}</span>
+              <span>Cash: {moneyINR(effectiveCash)}</span>
               <span className="text-[10px] font-semibold text-indigo-600">{accountMode === 'upstox' ? 'NSE Live' : 'Sandbox'}</span>
             </div>
           </div>
@@ -454,14 +468,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             >
               <Wallet className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
               <span className="font-mono font-semibold text-zinc-900 text-[11px] sm:text-xs">
-                {accountMode === 'upstox'
-                  ? moneyINR(
-                      upstoxAccount?.funds?.availableCash ??
-                        (upstoxAccount?.balances?.INR?.free !== undefined
-                          ? Number(upstoxAccount.balances.INR.free)
-                          : state.cash)
-                    )
-                  : moneyINR(state.cash)}
+                {moneyINR(effectiveCash)}
               </span>
             </button>
 
@@ -479,7 +486,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 title="Notifications & Execution Signals"
               >
                 <Bell className="w-4 h-4" />
-                {state.notifications.length > 0 && (
+                {visibleNotifications.length > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
                 )}
               </button>
@@ -487,12 +494,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
               {notifOpen && (
                 <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white/95 backdrop-blur-2xl border border-black/[0.08] rounded-2xl shadow-xl p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-black/[0.05]">
-                    <span className="text-xs font-semibold text-zinc-900">Activity &amp; Signals</span>
-                    <span className="text-[10px] text-zinc-400">{state.notifications.length} logged</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-zinc-900">Activity &amp; Signals</span>
+                      <span className="text-[10px] text-zinc-400">{visibleNotifications.length} logged</span>
+                    </div>
+                    {visibleNotifications.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => clearNotifications()}
+                        className="text-[10px] font-semibold text-zinc-400 hover:text-rose-600 transition-colors"
+                      >
+                        Clear All
+                      </button>
+                    )}
                   </div>
                   <div className="max-h-72 overflow-y-auto divide-y divide-black/[0.04]">
-                    {state.notifications.length > 0 ? (
-                      state.notifications.slice(0, 10).map((n) => (
+                    {visibleNotifications.length > 0 ? (
+                      visibleNotifications.slice(0, 10).map((n) => (
                         <div key={n.id} className="p-2.5 text-xs hover:bg-black/[0.02] rounded-xl transition-all">
                           <div className="font-semibold text-zinc-800">{n.title}</div>
                           <p className="text-zinc-500 text-[11px] mt-0.5 leading-tight">{n.body}</p>
