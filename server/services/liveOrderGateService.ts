@@ -184,7 +184,7 @@ export class LiveOrderGateService {
 
     // 7. Authoritative Outbound Egress IP Verification
     const ipCheck = await UpstoxClient.checkOutboundIp(false, accessToken);
-    if (ipCheck.status === 'FAIL' || ipCheck.authoritativeSource === 'NONE') {
+    if (ipCheck.status === 'FAIL' || (config.NODE_ENV === 'production' && ipCheck.authoritativeSource === 'NONE')) {
       throw new StandardBrokerError(
         'STATIC_IP_MISMATCH',
         `Upstox live order blocked: outbound IP does not match registered static IP. ${ipCheck.error || ''}`,
