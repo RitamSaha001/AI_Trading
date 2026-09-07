@@ -39,6 +39,7 @@ import {
   PILOT_PROFILES,
   createDefaultAutonomousPilotState,
   tickAutonomousPilot,
+  isMarketSessionOpen,
 } from './domain/autonomousPilot';
 import {
   createDefaultWallet,
@@ -851,6 +852,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
         if (!isIndianAsset(nextSelectedAsset)) {
           nextSelectedAsset = 'RELIANCE';
         }
+        const indianWatchlist = s.watchlist.filter(isIndianAsset);
+        nextWatchlist = indianWatchlist.length > 0
+          ? (indianWatchlist as Asset[])
+          : (['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL', 'ITC'] as Asset[]);
         const cleanNotifs = s.notifications.filter(
           (n) => !n.body.match(/SOL|BTC|ETH|BNB|XRP|DOGE|USDT|USDC/i) && !n.title.match(/SOL|BTC|ETH|BNB|XRP|DOGE/i)
         );
@@ -3589,6 +3594,18 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
   const executePilotRecommendation = useCallback(
     (opp: QuantitativeOpportunity) => {
+      if (state.accountMode === 'upstox') {
+        const session = isMarketSessionOpen();
+        if (!session.isOpen) {
+          triggerToast(
+            'Market Closed',
+            'Indian markets (NSE/BSE) are currently closed (09:15 - 15:30 IST). Live orders cannot be placed.',
+            'warn'
+          );
+          return { ok: false, error: 'NSE/BSE Market Closed. Live execution opens tomorrow at 09:15 AM IST.' };
+        }
+      }
+
       const pv = portfolioValue(state, markets);
       const cbCheck = checkPilotCircuitBreaker(state, pv, state.autonomousPilot?.profile || 'conservative');
       if (cbCheck.tripped) {

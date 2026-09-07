@@ -75,6 +75,7 @@ export function AutonomousQuantPilot() {
   const minCashFloorPct = Math.max(15, profileConfig.targetCashBufferPct);
   const minRequiredCash = pv * (minCashFloorPct / 100);
   const marketSession = isMarketSessionOpen();
+  const isLiveUpstox = state.accountMode === 'upstox';
 
   // Periodic scan to keep telemetry fresh
   useEffect(() => {
@@ -227,12 +228,14 @@ export function AutonomousQuantPilot() {
             onClick={toggleAutonomousPilot}
             className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all apple-btn-tactile flex items-center gap-2 shadow-xs ${
               isEnabled
-                ? 'bg-emerald-600 text-white shadow-emerald-500/25 hover:bg-emerald-700 ring-2 ring-emerald-600/30'
+                ? (isLiveUpstox && !marketSession.isOpen
+                    ? 'bg-blue-600 text-white shadow-blue-500/25 hover:bg-blue-700 ring-2 ring-blue-600/30'
+                    : 'bg-emerald-600 text-white shadow-emerald-500/25 hover:bg-emerald-700 ring-2 ring-emerald-600/30')
                 : 'bg-zinc-900 text-white hover:bg-zinc-800'
             }`}
           >
-            <Zap className={`w-3.5 h-3.5 ${isEnabled ? 'text-emerald-200 animate-pulse' : 'text-zinc-400'}`} />
-            <span>{isEnabled ? 'Pilot Engaged' : 'Engage Pilot'}</span>
+            <Zap className={`w-3.5 h-3.5 ${isEnabled ? (isLiveUpstox && !marketSession.isOpen ? 'text-blue-200' : 'text-emerald-200 animate-pulse') : 'text-zinc-400'}`} />
+            <span>{isEnabled ? (isLiveUpstox && !marketSession.isOpen ? 'Pilot Armed (Standby)' : 'Pilot Engaged') : 'Engage Pilot'}</span>
           </button>
 
           {/* Emergency Disarm Button */}
@@ -250,7 +253,7 @@ export function AutonomousQuantPilot() {
         </div>
       </div>
 
-      {/* Pilot Standby Guidance Banner */}
+      {/* Pilot Standby Guidance Banner (When Disarmed) */}
       {!isEnabled && (
         <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5">
@@ -267,6 +270,30 @@ export function AutonomousQuantPilot() {
             <Zap className="w-3.5 h-3.5 text-emerald-200" />
             <span>Engage Pilot</span>
           </button>
+        </div>
+      )}
+
+      {/* Pilot Armed (Awaiting Market Open) Banner (When Armed but Market Closed) */}
+      {isEnabled && isLiveUpstox && !marketSession.isOpen && (
+        <div className="p-4 rounded-2xl bg-blue-50/90 border border-blue-200/90 text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-blue-600/10 text-blue-700 flex items-center justify-center shrink-0 border border-blue-600/20">
+              <Clock className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-blue-900">
+                Autopilot Armed &amp; Capital Safeguarded (Standby)
+              </h4>
+              <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">
+                Indian markets (NSE/BSE) are currently closed. All 20 quantitative bluechip models, Half-Kelly sizing algorithms, and capital defense circuits are armed in standby. No live orders will be placed tonight. Autonomous trading will seamlessly activate at <strong>09:15 AM IST tomorrow</strong>.
+              </p>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <span className="text-[11px] font-mono font-bold px-2.5 py-1 bg-blue-100 text-blue-800 rounded-lg inline-block border border-blue-200/60">
+              Opens: 09:15 AM IST
+            </span>
+          </div>
         </div>
       )}
 
@@ -734,10 +761,16 @@ export function AutonomousQuantPilot() {
 
                       <button
                         type="button"
+                        disabled={isLiveUpstox && !marketSession.isOpen}
                         onClick={() => handleExecute(opp)}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs apple-btn-tactile shrink-0"
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs apple-btn-tactile shrink-0 ${
+                          isLiveUpstox && !marketSession.isOpen
+                            ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }`}
+                        title={isLiveUpstox && !marketSession.isOpen ? 'Indian markets are closed (09:15 - 15:30 IST). Live orders cannot be placed.' : 'Execute setup'}
                       >
-                        <span>Execute</span>
+                        <span>{isLiveUpstox && !marketSession.isOpen ? 'Market Closed' : 'Execute'}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>

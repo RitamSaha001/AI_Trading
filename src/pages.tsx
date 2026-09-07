@@ -7,7 +7,7 @@ import { MarketHeatmap } from './components/MarketHeatmap';
 import { AutonomousQuantPilot } from './components/AutonomousQuantPilot';
 import { UpstoxTradeAnalytics } from './components/UpstoxTradeAnalytics';
 import { UpstoxPortfolioAnalytics } from './components/UpstoxPortfolioAnalytics';
-import { evaluateMarketOpportunity } from './domain/autonomousPilot';
+import { evaluateMarketOpportunity, isMarketSessionOpen } from './domain/autonomousPilot';
 import {
   indicators,
   money,
@@ -64,6 +64,7 @@ import {
   Key,
   Cpu,
   Lock,
+  Clock,
   Check,
   Building2,
   Star,
@@ -290,7 +291,11 @@ export function Dashboard() {
               </div>
               <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 mt-1 flex items-center gap-2">
                 {state.autonomousPilot?.enabled ? (
-                  <span className="text-emerald-600">Active Sentinel</span>
+                  !isMarketSessionOpen().isOpen ? (
+                    <span className="text-blue-600">Armed (Standby)</span>
+                  ) : (
+                    <span className="text-emerald-600">Active Sentinel</span>
+                  )
                 ) : (
                   <span className="text-zinc-600">Standby</span>
                 )}
@@ -299,7 +304,9 @@ export function Dashboard() {
                 </span>
               </div>
               <p className="text-xs text-zinc-500 mt-2">
-                Strict SEBI Personal Algo Mode: Autonomous signal execution, dynamic position sizing, and volatility stops.
+                {state.autonomousPilot?.enabled && !isMarketSessionOpen().isOpen
+                  ? 'NSE/BSE is closed (09:15-15:30 IST). Quantitative models armed in standby for 09:15 AM IST open.'
+                  : 'Strict SEBI Personal Algo Mode: Autonomous signal execution, dynamic position sizing, and volatility stops.'}
               </p>
             </div>
           ) : (
@@ -1232,7 +1239,11 @@ export function Markets() {
                     type="button"
                     onClick={() => {
                       setSelectedAsset(a);
-                      openChat(`Run an Alpha Radar comparison evaluating ${a} vs BTC and ETH on Sharpe, volatility, and momentum.`);
+                      openChat(
+                        accountMode === 'upstox' || isIndianAsset(a)
+                          ? `Run an Alpha Radar comparison evaluating ${a} vs Nifty 50 peers (RELIANCE, HDFCBANK, TCS) on Sharpe ratio, volatility, and momentum.`
+                          : `Run an Alpha Radar comparison evaluating ${a} vs benchmark peers on Sharpe, volatility, and momentum.`
+                      );
                     }}
                     className="px-2 py-1.5 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all flex items-center gap-1 active:scale-95"
                     title={`Compare ${a} on Alpha Radar`}
@@ -1594,7 +1605,7 @@ export function Portfolio() {
             <span className="text-[11px] font-semibold text-zinc-500 block">Data Freshness</span>
             <div className="flex items-center gap-1.5 mt-1">
               {(() => {
-                const activeAssets = ASSETS.filter((a) => (state.positions[a] || 0) > 0);
+                const activeAssets = (accountMode === 'upstox' ? INDIAN_ASSETS : ASSETS).filter((a) => (state.positions[a] || 0) > 0);
                 const checkAssets = activeAssets.length > 0 ? activeAssets : [state.selectedAsset];
                 const maxAge = Math.max(
                   ...checkAssets.map((a) => {
@@ -1749,7 +1760,7 @@ export function Portfolio() {
           <div className="flex flex-wrap items-center gap-4 pt-2 text-xs">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-zinc-300" />
-              <span className="text-zinc-600">Cash ({((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}%)</span>
+              <span className="text-zinc-600">Cash ({((effectiveCash / Math.max(pv, 1)) * 100).toFixed(1)}%)</span>
             </div>
             {activeHoldings.map((a) => {
               const val = (state.positions[a] || 0) * (markets[a]?.price || 0);
@@ -2054,6 +2065,14 @@ export function Orders() {
   };
 
   const executeOrder = () => {
+    if (currentDeskMode === 'upstox' && !isMarketSessionOpen().isOpen) {
+      triggerToast(
+        'NSE/BSE Market Closed',
+        'Indian equity markets are currently closed (09:15 - 15:30 IST). Live orders can only be placed during active market hours.',
+        'warn'
+      );
+      return;
+    }
     const isLive = currentDeskMode === 'upstox' && Boolean(upstoxAccount?.connected);
     order(side, selectedAsset, numAmount, {
       type: orderType,
@@ -2077,7 +2096,12 @@ export function Orders() {
   };
 
   const filteredOrders = state.orders.filter((o) => {
-    if ((o.accountMode || 'paper') !== currentDeskMode) return false;
+    const isUpstoxOrder = o.accountMode === 'upstox' || o.accountMode === 'live' || o.broker === 'upstox';
+    if (currentDeskMode === 'upstox') {
+      if (!isUpstoxOrder) return false;
+    } else {
+      if (isUpstoxOrder || (o.accountMode && o.accountMode !== currentDeskMode)) return false;
+    }
     if (orderFilter === 'pending') return o.status === 'pending';
     if (orderFilter === 'filled') return o.status === 'filled' || !o.status;
     if (orderFilter === 'buy') return o.side === 'buy';
@@ -2085,9 +2109,11 @@ export function Orders() {
     return true;
   });
 
-  const pendingCount = state.orders.filter(
-    (o) => (o.accountMode || 'paper') === currentDeskMode && o.status === 'pending'
-  ).length;
+  const pendingCount = state.orders.filter((o) => {
+    const isUpstoxOrder = o.accountMode === 'upstox' || o.accountMode === 'live' || o.broker === 'upstox';
+    const matchesDesk = currentDeskMode === 'upstox' ? isUpstoxOrder : (!isUpstoxOrder && (o.accountMode || 'paper') === currentDeskMode);
+    return matchesDesk && o.status === 'pending';
+  }).length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -2377,6 +2403,15 @@ export function Orders() {
               </div>
             </div>
 
+            {currentDeskMode === 'upstox' && !isMarketSessionOpen().isOpen && (
+              <div className="p-3 rounded-xl bg-blue-50/90 border border-blue-200/80 text-blue-950 text-xs flex items-center gap-2.5">
+                <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>
+                  <strong>NSE/BSE Market Closed:</strong> Regular session opens tomorrow at <strong>09:15 AM IST</strong>.
+                </span>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={numAmount <= 0}
@@ -2644,24 +2679,41 @@ export function Strategies() {
   const [newTp, setNewTp] = useState(6.0);
   const [newSl, setNewSl] = useState(2.0);
 
-  // Aggregate Metrics across all strategies
-  const totalTrades = state.strategies.reduce((acc, s) => acc + (s.tradesExecuted || 0), 0);
-  const totalStratPnl = state.strategies.reduce((acc, s) => acc + (s.realizedPnl || s.totalPnl || 0), 0);
-  const totalWins = state.strategies.reduce((acc, s) => acc + (s.winCount || 0), 0);
-  const totalLosses = state.strategies.reduce((acc, s) => acc + (s.lossCount || 0), 0);
+  const isUpstox = accountMode === 'upstox';
+  const effectiveCash = isUpstox
+    ? (state.upstoxAccount?.funds?.availableCash ??
+        (state.upstoxAccount?.balances?.INR?.free !== undefined
+          ? Number(state.upstoxAccount.balances.INR.free)
+          : state.cash))
+    : state.cash;
+
+  const formatCur = (v: number) => (isUpstox ? moneyINR(v) : money(v));
+
+  // Filter strategies strictly: Indian assets for Upstox mode, non-Indian for paper/crypto
+  const relevantStrategies = state.strategies.filter((s) =>
+    isUpstox ? isIndianAsset(s.asset) : !isIndianAsset(s.asset)
+  );
+
+  // Aggregate Metrics across relevant strategies
+  const totalTrades = relevantStrategies.reduce((acc, s) => acc + (s.tradesExecuted || 0), 0);
+  const totalStratPnl = isUpstox
+    ? (state.upstoxAccount?.funds?.realizedPnl || 0)
+    : relevantStrategies.reduce((acc, s) => acc + (s.realizedPnl || s.totalPnl || 0), 0);
+  const totalWins = relevantStrategies.reduce((acc, s) => acc + (s.winCount || 0), 0);
+  const totalLosses = relevantStrategies.reduce((acc, s) => acc + (s.lossCount || 0), 0);
   const totalDecided = totalWins + totalLosses;
-  const overallWinRate = totalDecided > 0 ? ((totalWins / totalDecided) * 100).toFixed(0) : '82';
-  const activeCount = state.strategies.filter((s) => s.enabled).length;
-  const trippedBreakersCount = state.strategies.filter((s) => s.circuitBreakerTriggered).length;
+  const overallWinRate = totalDecided > 0 ? ((totalWins / totalDecided) * 100).toFixed(0) : (isUpstox ? '0' : '82');
+  const activeCount = relevantStrategies.filter((s) => s.enabled).length;
+  const trippedBreakersCount = relevantStrategies.filter((s) => s.circuitBreakerTriggered).length;
 
   const pv = portfolioValue(state, markets);
-  const cashBufferPct = ((state.cash / Math.max(1, pv)) * 100).toFixed(1);
+  const cashBufferPct = ((effectiveCash / Math.max(1, pv)) * 100).toFixed(1);
   const isCashFloorSafe = Number(cashBufferPct) >= 15;
 
   // Active markets with strategies attached
-  const uniqueMarketAssets = Array.from(new Set(state.strategies.map((s) => s.asset))) as Asset[];
+  const uniqueMarketAssets = Array.from(new Set(relevantStrategies.map((s) => s.asset))) as Asset[];
 
-  const filteredStrategies = state.strategies.filter((s) => {
+  const filteredStrategies = relevantStrategies.filter((s) => {
     if (activeTab === 'active') return s.enabled;
     if (activeTab === 'quantum') return s.kind === 'titan_quantum';
     if (activeTab === 'titan') return s.kind === 'titan_adaptive';
@@ -2733,6 +2785,13 @@ export function Strategies() {
           </div>
         }
       />
+
+      {/* Upstox Autonomous Quant Pilot (Master Execution Gateway) */}
+      {isUpstox && (
+        <div id="autonomous-pilot" className="space-y-4">
+          <AutonomousQuantPilot />
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 1. CAPITAL DEFENSE & LOSS SENTINEL COMMAND STRIP */}
@@ -2845,7 +2904,7 @@ export function Strategies() {
                 totalStratPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
               }`}
             >
-              {totalStratPnl >= 0 ? `+${money(totalStratPnl)}` : `-${money(Math.abs(totalStratPnl))}`}
+              {totalStratPnl >= 0 ? `+${formatCur(totalStratPnl)}` : `-${formatCur(Math.abs(totalStratPnl))}`}
             </span>
           </div>
           <span className="text-[11px] text-zinc-500 font-medium mt-1">Locked via ATR profit targets</span>
@@ -2921,7 +2980,7 @@ export function Strategies() {
                         <span className="text-[10px] text-zinc-400 font-mono">({asset})</span>
                       </div>
                       <div className="text-xs font-mono font-semibold text-zinc-800">
-                        {m ? money(m.price) : '...'}
+                        {m ? formatCur(m.price) : '...'}
                         {m && (
                           <span
                             className={`ml-1 text-[10px] ${
@@ -3276,7 +3335,7 @@ export function Strategies() {
                       <div className="bg-white px-2 py-1 rounded-lg border border-zinc-200 flex justify-between items-center">
                         <span className="text-zinc-500">VWAP</span>
                         <span className="font-mono font-bold text-zinc-900">
-                          {ind.vwap ? money(ind.vwap.vwap) : 'N/A'}
+                          {ind.vwap ? formatCur(ind.vwap.vwap) : 'N/A'}
                         </span>
                       </div>
                       <div className="bg-white px-2 py-1 rounded-lg border border-zinc-200 flex justify-between items-center">
@@ -3351,8 +3410,8 @@ export function Strategies() {
                       }`}
                     >
                       {(s.realizedPnl || s.totalPnl || 0) >= 0
-                        ? `+${money(s.realizedPnl || s.totalPnl || 0)}`
-                        : `-${money(Math.abs(s.realizedPnl || s.totalPnl || 0))}`}
+                        ? `+${formatCur(s.realizedPnl || s.totalPnl || 0)}`
+                        : `-${formatCur(Math.abs(s.realizedPnl || s.totalPnl || 0))}`}
                     </strong>
                   </div>
                   <div className="p-2.5 rounded-2xl bg-zinc-50 border border-zinc-200">
@@ -3805,11 +3864,13 @@ export function Alerts() {
                         {al.type === 'changeDown' && '24h Loss >'}
                       </span>
                       <strong className="text-xs font-mono font-semibold text-zinc-950">
-                        {al.type.includes('change') ? `${al.value}%` : money(al.value)}
+                        {al.type.includes('change')
+                          ? `${al.value}%`
+                          : (isIndianAsset(al.asset) || state.accountMode === 'upstox' ? moneyINR(al.value) : money(al.value))}
                       </strong>
                     </div>
                     <div className="text-[11px] text-zinc-400 mt-0.5">
-                      Current: {money(p)} ·{' '}
+                      Current: {isIndianAsset(al.asset) || state.accountMode === 'upstox' ? moneyINR(p) : money(p)} ·{' '}
                       {Math.abs(diffPct) > 0 && (
                         <span className="text-zinc-600 font-medium">
                           {diffPct > 0 ? `+${diffPct.toFixed(1)}%` : `${diffPct.toFixed(1)}%`} away
