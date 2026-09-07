@@ -3540,25 +3540,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
       const effState = getEffectivePilotState(prev);
-      const opps = scanAllMarkets(effState, markets, current.profile);
-      const pilotRes = tickAutonomousPilot(effState, markets);
+      const m = marketsRef.current;
+      const opps = scanAllMarkets(effState, m, current.profile);
+      const pilotRes = tickAutonomousPilot(effState, m);
 
-      const scanLogs = current.enabled
-        ? [
-            {
-              id: `scan_${Date.now()}`,
-              timestamp: Date.now(),
-              asset: 'NIFTY 10' as Asset,
-              action: 'ALPHA_SCAN' as const,
-              strategy: PILOT_PROFILES[current.profile].name,
-              detail: `Quantitative scan complete: ${opps.length} qualifying asymmetric setups identified under ${PILOT_PROFILES[current.profile].name} profile.`,
-              price: 0,
-              status: 'EXECUTED' as const,
-            },
-            ...pilotRes.newActionLogs,
-            ...(current.actionLogs || []),
-          ].slice(0, 50)
-        : current.actionLogs || [];
+      // Clean existing logs: filter out any legacy ALPHA_SCAN entries so execution audit log is high-signal
+      const filteredExisting = (current.actionLogs || []).filter((l) => l.action !== 'ALPHA_SCAN');
+      const updatedLogs = pilotRes.newActionLogs.length > 0
+        ? [...pilotRes.newActionLogs, ...filteredExisting].slice(0, 50)
+        : filteredExisting;
 
       return {
         ...prev,
@@ -3567,12 +3557,12 @@ export function Provider({ children }: { children: React.ReactNode }) {
           activeOpportunities: opps,
           activeFleet: pilotRes.updatedFleet,
           rateLimitStatus: pilotRes.updatedRateLimits,
-          actionLogs: scanLogs,
+          actionLogs: updatedLogs,
           lastScanAt: Date.now(),
         },
       };
     });
-  }, [markets]);
+  }, []);
 
   const clearNotifications = useCallback(() => {
     setState((s) => ({ ...s, notifications: [] }));
