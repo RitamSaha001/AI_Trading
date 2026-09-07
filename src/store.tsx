@@ -56,6 +56,7 @@ import {
   cancelOrder,
   portfolioValue,
   money,
+  moneyINR,
   calculatePortfolioRisk,
   getReservedCash,
 } from './trading';
@@ -357,6 +358,7 @@ export interface TickMutations {
   totalFeesDelta?: number;
   realizedPnlDelta?: number;
   notifications?: AppState['notifications'];
+  newPilotLogs?: PilotActionLog[];
 }
 
 /**
@@ -408,6 +410,15 @@ export function mergeTickResults(prev: AppState, mutations: TickMutations): AppS
 
   const finalNotifications = [...(mutations.notifications || []), ...prev.notifications].slice(0, 100);
 
+  let updatedPilot = prev.autonomousPilot;
+  if (mutations.newPilotLogs && mutations.newPilotLogs.length > 0) {
+    const currentP = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+    updatedPilot = {
+      ...currentP,
+      actionLogs: [...mutations.newPilotLogs, ...(currentP.actionLogs || [])].slice(0, 50),
+    };
+  }
+
   return {
     ...prev,
     cash: newCash,
@@ -417,6 +428,7 @@ export function mergeTickResults(prev: AppState, mutations: TickMutations): AppS
     alerts: finalAlerts,
     strategies: finalStrategies,
     notifications: finalNotifications,
+    autonomousPilot: updatedPilot,
     totalFees: Math.round(((prev.totalFees || 0) + (mutations.totalFeesDelta || 0)) * 1e8) / 1e8,
     realizedPnl: Math.round(((prev.realizedPnl || 0) + (mutations.realizedPnlDelta || 0)) * 1e8) / 1e8,
     reservedCash: getReservedCash({ ...prev, orders: finalOrders }),
@@ -1705,6 +1717,19 @@ export function Provider({ children }: { children: React.ReactNode }) {
             if (currentM && upd) {
               hasChange = true;
               const newHist = currentM.history.length > 0 ? [...currentM.history.slice(-99), upd.price] : [upd.price];
+              const candles = currentM.candles ? [...currentM.candles] : [];
+              if (candles.length > 0) {
+                const lastIdx = candles.length - 1;
+                const lastC = candles[lastIdx];
+                candles[lastIdx] = {
+                  ...lastC,
+                  close: upd.price,
+                  high: Math.max(lastC.high, upd.price),
+                  low: Math.min(lastC.low, upd.price),
+                };
+              }
+              const isIndian = isIndianAsset(a);
+              const source = currentM.source || (isIndian ? 'Upstox Heuristic Simulation' : 'Binance WebSocket (Live)');
               next[a] = {
                 ...currentM,
                 price: upd.price,
@@ -1713,8 +1738,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
                 volume24h: upd.volume,
                 change24h: upd.changePct,
                 history: newHist,
-                source: 'Upstox WebSocket (Live)',
-                isSynthetic: false,
+                candles,
+                source,
+                isSynthetic: currentM.isSynthetic ?? isIndian,
                 lastUpdated: now,
               };
             }
@@ -1813,6 +1839,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
       if (orderResults.changed) {
         changed = true;
       }
+      const newPilotLogs: PilotActionLog[] = [];
+
       if (orderResults.filledOrders.length > 0) {
         for (const order of orderResults.filledOrders) {
           const msg = `Order Executed: ${order.side.toUpperCase()} ${order.amount} ${order.asset} @ ${money(order.price)}`;
@@ -1825,6 +1853,19 @@ export function Provider({ children }: { children: React.ReactNode }) {
           });
           if (snapshot.settings.soundEnabled) playChime('trade');
           triggerToast(`Limit Order Filled`, msg, 'success');
+
+          if (order.auto) {
+            newPilotLogs.push({
+              id: `log_fill_${Date.now()}_${order.asset}`,
+              timestamp: Date.now(),
+              asset: order.asset,
+              action: order.side === 'buy' ? 'BUY_ENTRY' : 'TAKE_PROFIT',
+              strategy: order.strategyName || 'Auto-Pilot Execution',
+              detail: `Auto-Pilot limit order executed: ${order.side.toUpperCase()} ${order.amount} ${order.asset} @ ${isIndianAsset(order.asset) ? moneyINR(order.price) : money(order.price)}`,
+              price: order.price,
+              status: 'EXECUTED',
+            });
+          }
         }
       }
       if (orderResults.rejectedOrders.length > 0) {
@@ -1852,6 +1893,20 @@ export function Provider({ children }: { children: React.ReactNode }) {
           });
           if (snapshot.settings.soundEnabled) playChime('trade');
           triggerToast(`Bracket Triggered`, msg, 'info');
+
+          if (bracket.order.auto) {
+            const isTP = bracket.reason.includes('Take-Profit') || bracket.reason.includes('TP');
+            newPilotLogs.push({
+              id: `log_brk_${Date.now()}_${bracket.order.asset}`,
+              timestamp: Date.now(),
+              asset: bracket.order.asset,
+              action: isTP ? 'TAKE_PROFIT' : 'STOP_LOSS',
+              strategy: bracket.order.strategyName || 'Auto-Pilot Dynamic Guard',
+              detail: bracket.reason,
+              price: bracket.closeOrder?.price || bracket.order.price,
+              status: 'EXECUTED',
+            });
+          }
         }
       }
 
@@ -1943,6 +1998,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
           totalFeesDelta: (snapshot.totalFees || 0) - (initialState.totalFees || 0),
           realizedPnlDelta: (snapshot.realizedPnl || 0) - (initialState.realizedPnl || 0),
           notifications: newNotifications,
+          newPilotLogs,
         };
 
         // ATOMIC MERGE onto latest state
@@ -3216,6 +3272,56 @@ export function Provider({ children }: { children: React.ReactNode }) {
         const pilotRes = tickAutonomousPilot(effState, markets);
         updated.activeFleet = pilotRes.updatedFleet;
         updated.rateLimitStatus = pilotRes.updatedRateLimits;
+
+        const engageLog: PilotActionLog = {
+          id: `engage_${Date.now()}`,
+          timestamp: Date.now(),
+          asset: 'NIFTY 10' as Asset,
+          action: 'AUTONOMOUS_ENGAGED',
+          strategy: PILOT_PROFILES[updated.profile].name,
+          detail: `Autonomous Local Quant Pilot engaged (${updated.executionMode === 'full_autonomous' ? 'Full Auto' : 'Semi-Auto'}). Multi-factor fleet scanner active across 10 bluechips.`,
+          price: 0,
+          status: 'EXECUTED',
+        };
+
+        updated.actionLogs = [
+          ...pilotRes.newActionLogs,
+          engageLog,
+          ...(current.actionLogs || []),
+        ].slice(0, 50);
+
+        if (updated.executionMode === 'full_autonomous' && pilotRes.ordersToDispatch.length > 0) {
+          setTimeout(() => {
+            for (const prop of pilotRes.ordersToDispatch) {
+              if (orderRef.current) {
+                const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
+                orderRef.current(prop.side, prop.asset, prop.amount, {
+                  type: prop.type,
+                  limitPrice: prop.price,
+                  stopLoss: prop.stopLoss,
+                  takeProfit: prop.takeProfit,
+                  auto: true,
+                  strategyName: prop.strategyName,
+                  product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
+                  live: isLiveUpstox,
+                  accountMode: isLiveUpstox ? 'live' : 'paper',
+                });
+              }
+            }
+          }, 0);
+        }
+      } else {
+        const pauseLog: PilotActionLog = {
+          id: `pause_${Date.now()}`,
+          timestamp: Date.now(),
+          asset: 'NIFTY 10' as Asset,
+          action: 'DISARMED',
+          strategy: PILOT_PROFILES[updated.profile].name,
+          detail: 'Autonomous Local Quant Pilot paused. Automated fleet scanning suspended.',
+          price: 0,
+          status: 'BLOCKED',
+        };
+        updated.actionLogs = [pauseLog, ...(current.actionLogs || [])].slice(0, 50);
       }
       return { ...prev, autonomousPilot: updated };
     });
@@ -3226,7 +3332,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         : 'Autonomous quantitative trading scans paused.',
       'info'
     );
-  }, [markets, autonomousPilot.profile, triggerToast]);
+  }, [markets, autonomousPilot.profile, triggerToast, upstoxAccount?.connected]);
 
   const setPilotProfile = useCallback((profile: AutonomousPilotProfile) => {
     setState((prev) => {
@@ -3320,6 +3426,24 @@ export function Provider({ children }: { children: React.ReactNode }) {
       const effState = getEffectivePilotState(prev);
       const opps = scanAllMarkets(effState, markets, current.profile);
       const pilotRes = tickAutonomousPilot(effState, markets);
+
+      const scanLogs = current.enabled
+        ? [
+            {
+              id: `scan_${Date.now()}`,
+              timestamp: Date.now(),
+              asset: 'NIFTY 10' as Asset,
+              action: 'ALPHA_SCAN' as const,
+              strategy: PILOT_PROFILES[current.profile].name,
+              detail: `Quantitative scan complete: ${opps.length} qualifying asymmetric setups identified under ${PILOT_PROFILES[current.profile].name} profile.`,
+              price: 0,
+              status: 'EXECUTED' as const,
+            },
+            ...pilotRes.newActionLogs,
+            ...(current.actionLogs || []),
+          ].slice(0, 50)
+        : current.actionLogs || [];
+
       return {
         ...prev,
         autonomousPilot: {
@@ -3327,6 +3451,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
           activeOpportunities: opps,
           activeFleet: pilotRes.updatedFleet,
           rateLimitStatus: pilotRes.updatedRateLimits,
+          actionLogs: scanLogs,
           lastScanAt: Date.now(),
         },
       };

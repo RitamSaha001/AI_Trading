@@ -496,7 +496,7 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
   });
 
   describe('10. Smart Microstructure Limit Pullback Pricing', () => {
-    it('anchors limit orders to pullback support near VWAP rather than chasing candle highs', () => {
+    it('anchors limit orders to pullback support near VWAP rather than chasing candle highs when price > vwap', () => {
       const currentPrice = 950.00;
       const vwap = 942.00;
       const atr = 20.00;
@@ -507,6 +507,44 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       expect(limitPrice).toBeLessThan(currentPrice);
       expect(limitPrice).toBeGreaterThanOrEqual(vwap);
       expect(Math.round(limitPrice * 100) % 5).toBe(0);
+    });
+
+    it('prevents inverted limit pricing when currentPrice <= vwap (oversold/discount)', () => {
+      const currentPrice = 940.00;
+      const vwap = 955.00; // VWAP is higher than market price!
+      const atr = 18.00;
+
+      const limitPrice = calculateSmartLimitPrice(currentPrice, vwap, atr, 0.05);
+
+      // Limit price must strictly be <= currentPrice, NEVER bumped up to VWAP
+      expect(limitPrice).toBeLessThanOrEqual(currentPrice);
+      expect(limitPrice).toBeLessThan(vwap);
+      expect(Math.round(limitPrice * 100) % 5).toBe(0);
+
+      // Verify that calculating stop-loss from this limit price never creates an inverted stop loss above market price
+      const stopDistance = atr * 1.5;
+      const stopLossPrice = alignToTickSize(limitPrice - stopDistance, 'INFY');
+      expect(stopLossPrice).toBeLessThan(limitPrice);
+      expect(stopLossPrice).toBeLessThan(currentPrice);
+    });
+
+    it('handles currentPrice == vwap gracefully without exceeding market price', () => {
+      const currentPrice = 1000.00;
+      const vwap = 1000.00;
+      const atr = 15.00;
+
+      const limitPrice = calculateSmartLimitPrice(currentPrice, vwap, atr, 0.05);
+
+      expect(limitPrice).toBeLessThan(currentPrice);
+      expect(Math.round(limitPrice * 100) % 5).toBe(0);
+    });
+
+    it('strictly aligns to custom tick sizes (e.g., 0.01 or 0.05)', () => {
+      const p1 = calculateSmartLimitPrice(1234.56, 1230.00, 10.00, 0.05);
+      expect(Math.round(p1 * 100) % 5).toBe(0);
+
+      const p2 = calculateSmartLimitPrice(1234.56, 1230.00, 10.00, 0.01);
+      expect(Math.round(p2 * 100) % 1).toBe(0);
     });
   });
 });

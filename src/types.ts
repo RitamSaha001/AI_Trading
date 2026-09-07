@@ -654,7 +654,11 @@ export interface PilotActionLog {
     | 'PROFIT_HARVEST_T2'
     | 'CHANDELIER_EXIT'
     | 'SECTOR_CAP_DEFENSE'
-    | 'STAGNATION_EXIT';
+    | 'STAGNATION_EXIT'
+    | 'AUTONOMOUS_ENGAGED'
+    | 'DISARMED'
+    | 'ALPHA_SCAN'
+    | 'ORDER_FILLED';
   strategy: string;
   detail: string;
   price: number;

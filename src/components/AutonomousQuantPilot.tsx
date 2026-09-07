@@ -247,6 +247,26 @@ export function AutonomousQuantPilot() {
         </div>
       </div>
 
+      {/* Pilot Standby Guidance Banner */}
+      {!isEnabled && (
+        <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="text-xs">
+              <strong>Pilot on Standby:</strong> Quantitative multi-factor scanning is currently paused. Click <strong>"Engage Pilot"</strong> above to arm automated fleet scanning, limit order placement, and dynamic profit ratchets.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleAutonomousPilot}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs shrink-0 apple-btn-tactile flex items-center gap-1.5"
+          >
+            <Zap className="w-3.5 h-3.5 text-emerald-200" />
+            <span>Engage Pilot</span>
+          </button>
+        </div>
+      )}
+
       {/* 2. Safety & Operational Health Status Ribbon */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Rate Limiter Status */}
@@ -823,10 +843,26 @@ export function AutonomousQuantPilot() {
               <div className="w-10 h-10 rounded-2xl bg-zinc-100 text-zinc-400 flex items-center justify-center mx-auto">
                 <Clock className="w-5 h-5" />
               </div>
-              <h4 className="text-xs font-bold text-zinc-900">Activity Log Clean</h4>
+              <h4 className="text-xs font-bold text-zinc-900">
+                {isEnabled ? 'Monitoring Market Signals' : 'Pilot on Standby'}
+              </h4>
               <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                When the pilot undertakes entries, adjusts trailing ratchets, or paces orders against Upstox limits, events will appear here in real time.
+                {isEnabled
+                  ? 'Pilot is actively scanning the NIFTY 10 fleet every 2.5s. When setups qualify, order entries, trailing ratchets, and profit harvests will be recorded here in real time.'
+                  : 'Pilot is currently disengaged. Click "Engage Pilot" above to activate multi-factor quantitative scanning and autonomous execution.'}
               </p>
+              {!isEnabled && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={toggleAutonomousPilot}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs apple-btn-tactile inline-flex items-center gap-1.5"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-emerald-200" />
+                    <span>Engage Pilot Now</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -842,6 +878,10 @@ export function AutonomousQuantPilot() {
                 if (log.action === 'THROTTLED') badgeStyle = 'bg-amber-100 text-amber-800 font-bold';
                 if (log.action === 'SECTOR_CAP_DEFENSE') badgeStyle = 'bg-amber-100 text-amber-900 font-bold border border-amber-300';
                 if (log.action === 'STAGNATION_EXIT') badgeStyle = 'bg-zinc-200 text-zinc-800 font-bold';
+                if (log.action === 'AUTONOMOUS_ENGAGED') badgeStyle = 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
+                if (log.action === 'DISARMED') badgeStyle = 'bg-rose-100 text-rose-800 font-bold border border-rose-300';
+                if (log.action === 'ALPHA_SCAN') badgeStyle = 'bg-sky-100 text-sky-800 font-bold border border-sky-300';
+                if (log.action === 'SKIPPED') badgeStyle = 'bg-amber-50 text-amber-800 font-medium';
 
                 return (
                   <div

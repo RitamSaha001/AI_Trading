@@ -658,11 +658,20 @@ export function calculateSmartLimitPrice(
   tickSize: number = 0.05
 ): number {
   if (currentPrice <= 0) return 0;
-  // If price is extended well above VWAP, place limit at modest pullback discount (0.10% - 0.20% below LTP)
-  // but no lower than VWAP. If price is near VWAP, place at current tick.
+  // Modest pullback discount (0.10% - 0.20% below LTP or 15% of ATR)
   const pullbackBuffer = Math.min(atr * 0.15, currentPrice * 0.002);
-  const targetPrice = Math.max(vwap, currentPrice - pullbackBuffer);
-  // Align to tick size
-  return +(Math.round(targetPrice / tickSize) * tickSize).toFixed(2);
+  let targetPrice: number;
+
+  if (currentPrice > vwap && vwap > 0) {
+    // If price is extended above VWAP, anchor down towards VWAP, but never below VWAP or above currentPrice
+    targetPrice = Math.min(currentPrice, Math.max(vwap, currentPrice - pullbackBuffer));
+  } else {
+    // If price is at or below VWAP (oversold / discounted), set limit slightly below current price
+    targetPrice = Math.max(tickSize, currentPrice - pullbackBuffer);
+  }
+
+  // Align to tick size and guarantee targetPrice never exceeds currentPrice
+  const aligned = +(Math.round(targetPrice / tickSize) * tickSize).toFixed(2);
+  return Math.min(currentPrice, aligned > 0 ? aligned : currentPrice);
 }
 
