@@ -35,6 +35,7 @@ import { LiveOrderConfirmationService } from './services/liveOrderConfirmationSe
 import { EmergencyControlService } from './services/emergencyControlService';
 import { UpstoxTotpAuthService } from './services/brokers/upstox/upstoxTotpAuthService';
 import { IntradaySquareOffService } from './services/intradaySquareOffService';
+import { AutonomousPilotWorker } from './services/autonomousPilotWorker';
 
 let isShuttingDown = false;
 
@@ -59,6 +60,7 @@ export async function shutdownServer(server?: FastifyInstance): Promise<void> {
     UserDataStreamManager.stop();
     UpstoxTotpAuthService.stop();
     IntradaySquareOffService.stop();
+    AutonomousPilotWorker.stop();
   } catch (err: any) {
     logger.warn('Error stopping background workers:', err.message);
   }
@@ -1018,6 +1020,70 @@ export function buildServer(): FastifyInstance {
     return { success: true, timeframe, count: Object.keys(candleMap).length, candles: candleMap };
   });
 
+  // --- AUTONOMOUS QUANT PILOT DUAL-MODE DAEMON ENDPOINTS ---
+  async function resolveRequestUserId(req: FastifyRequest): Promise<string> {
+    const token = extractSessionToken(req);
+    if (token) {
+      try {
+        const user = await ServerAuthService.validateSession(token);
+        if (user) return user.id;
+      } catch {}
+    }
+    const db = getDb();
+    const anyCred = await db.queryOne<{ user_id: string }>(
+      `SELECT user_id FROM broker_credentials WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL ORDER BY updated_at DESC LIMIT 1`
+    );
+    if (anyCred?.user_id) return anyCred.user_id;
+
+    const anyUser = await db.queryOne<{ id: string }>(
+      `SELECT id FROM users ORDER BY created_at ASC LIMIT 1`
+    );
+    if (anyUser?.id) return anyUser.id;
+
+    return 'usr_owner_default';
+  }
+
+  server.get('/api/pilot/state', async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = await resolveRequestUserId(req);
+      const state = await AutonomousPilotWorker.getPilotState(userId);
+      return { success: true, ...state };
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  server.post('/api/pilot/config', async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = await resolveRequestUserId(req);
+      const body = (req.body as any) || {};
+      const updated = await AutonomousPilotWorker.updatePilotConfig(userId, body);
+      return { success: true, ...updated };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.post('/api/pilot/heartbeat', async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = await resolveRequestUserId(req);
+      const res = await AutonomousPilotWorker.recordClientHeartbeat(userId);
+      return { success: true, ...res };
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  server.post('/api/pilot/sweep', async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = await resolveRequestUserId(req);
+      const res = await AutonomousPilotWorker.runPilotSweep(userId);
+      return { success: true, sweep: res };
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
   server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const brokerParam = (req.query as any)?.broker || 'upstox';
@@ -1505,6 +1571,9 @@ if (isMain || process.env.START_SERVER === 'true') {
 
       console.log(`[IntradayEgress] Starting mandatory 15:15 IST intraday square-off scheduler...`);
       IntradaySquareOffService.startScheduler();
+
+      console.log(`[AutonomousPilot] Starting Autonomous Quant Pilot 5s background execution daemon...`);
+      AutonomousPilotWorker.startScheduler();
 
       const server = buildServer();
 

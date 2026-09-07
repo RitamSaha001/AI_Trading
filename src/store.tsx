@@ -188,6 +188,7 @@ type Ctx = {
   openUpstoxDrawer: () => void;
   closeUpstoxDrawer: () => void;
   syncUpstoxAccount: () => Promise<void>;
+  syncPilotState: () => Promise<void>;
   disconnectUpstox: () => Promise<void>;
   exchangeAccount: ExchangeAccountInfo | null;
   exchangeDrawerOpen: boolean;
@@ -525,10 +526,64 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const openUpstoxDrawer = useCallback(() => setUpstoxDrawerOpen(true), []);
   const closeUpstoxDrawer = useCallback(() => setUpstoxDrawerOpen(false), []);
 
+  const syncPilotState = useCallback(async () => {
+    try {
+      const res = await ApiClient.getPilotState();
+      if (res.ok && res.data?.success) {
+        const d = res.data;
+        setState((prev) => {
+          const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+
+          const serverLogs: PilotActionLog[] = (d.actionLogs || []).map((l: any) => ({
+            id: l.id,
+            timestamp: Number(l.timestamp),
+            asset: l.asset as Asset,
+            action: l.action,
+            strategy: l.strategy,
+            detail: l.detail,
+            price: Number(l.price),
+            status: l.status,
+          }));
+
+          const existingIds = new Set((current.actionLogs || []).map((l) => l.id));
+          const combinedLogs = [...(current.actionLogs || [])];
+          for (const sl of serverLogs) {
+            if (!existingIds.has(sl.id)) {
+              combinedLogs.unshift(sl);
+              existingIds.add(sl.id);
+            }
+          }
+          combinedLogs.sort((a, b) => b.timestamp - a.timestamp);
+
+          return {
+            ...prev,
+            autonomousPilot: {
+              ...current,
+              enabled: d.enabled !== undefined ? d.enabled : current.enabled,
+              profile: (d.profile as AutonomousPilotProfile) || current.profile,
+              executionMode: d.executionMode || current.executionMode,
+              dailyStartingValue: d.dailyStartingValue || current.dailyStartingValue,
+              riskPerTradePct: d.riskPerTradePct || current.riskPerTradePct,
+              circuitBreakerTripped: d.circuitBreakerTripped,
+              circuitBreakerReason: d.circuitBreakerReason,
+              activeFleet: d.activeFleet && Object.keys(d.activeFleet).length > 0 ? d.activeFleet : current.activeFleet,
+              actionLogs: combinedLogs.slice(0, 50),
+              cloudDaemonStatus: d.executionModeStatus,
+              lastCloudSyncAt: Date.now(),
+            },
+          };
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to sync autonomous pilot state:', err);
+    }
+  }, []);
+
   const syncUpstoxAccount = useCallback(async () => {
     if (isUpstoxSyncingRef.current) return;
     isUpstoxSyncingRef.current = true;
     try {
+      syncPilotState();
       const [accRes, fundsRes, posRes, hldRes, healthRes, diagRes, ordersRes] = await Promise.allSettled([
         ApiClient.getExchangeAccount('upstox'),
         ApiClient.getBrokerFunds('upstox'),
@@ -1895,6 +1950,43 @@ export function Provider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [state.accountMode, upstoxAccount?.connected, state.orders, syncUpstoxAccount]);
 
+  // Autonomous Pilot Dual-Mode Daemon Heartbeat & State Sync (5s interval)
+  useEffect(() => {
+    // 1. Send heartbeat every 5 seconds to notify cloud server daemon that the browser cockpit is active
+    const sendHeartbeat = () => {
+      ApiClient.sendPilotHeartbeat()
+        .then((res) => {
+          if (res.ok && res.data) {
+            setState((prev) => {
+              const current = prev.autonomousPilot;
+              if (!current || current.cloudDaemonStatus === 'BROWSER_LINKED') return prev;
+              return {
+                ...prev,
+                autonomousPilot: {
+                  ...current,
+                  cloudDaemonStatus: 'BROWSER_LINKED',
+                  lastCloudSyncAt: Date.now(),
+                },
+              };
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    sendHeartbeat();
+    const hbInterval = setInterval(sendHeartbeat, 5000);
+
+    // 2. Sync pilot state from server on mount and every 10 seconds
+    syncPilotState();
+    const syncInterval = setInterval(syncPilotState, 10000);
+
+    return () => {
+      clearInterval(hbInterval);
+      clearInterval(syncInterval);
+    };
+  }, [syncPilotState]);
+
   // Cross-tab synchronization
   useEffect(() => {
     return initCrossTabSync((newState) => {
@@ -2136,30 +2228,35 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
         // Dispatch queued orders (if in full_autonomous mode and within rate limits)
         if (currentPilot.executionMode === 'full_autonomous' && pilotResult.ordersToDispatch.length > 0) {
-          for (const prop of pilotResult.ordersToDispatch) {
-            if (orderRef.current) {
-              const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
-              const res = orderRef.current(
-                prop.side,
-                prop.asset,
-                prop.amount,
-                {
-                  type: prop.type,
-                  limitPrice: prop.price,
-                  stopLoss: prop.stopLoss,
-                  takeProfit: prop.takeProfit,
-                  auto: true,
-                  strategyName: prop.strategyName,
-                  product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
-                  live: isLiveUpstox,
-                  accountMode: isLiveUpstox ? 'live' : 'paper',
-                }
-              );
+          const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
+          if (isLiveUpstox) {
+            // Server daemon is authoritative executor; trigger server sweep
+            ApiClient.triggerPilotSweep().catch(() => {});
+          } else {
+            for (const prop of pilotResult.ordersToDispatch) {
+              if (orderRef.current) {
+                const res = orderRef.current(
+                  prop.side,
+                  prop.asset,
+                  prop.amount,
+                  {
+                    type: prop.type,
+                    limitPrice: prop.price,
+                    stopLoss: prop.stopLoss,
+                    takeProfit: prop.takeProfit,
+                    auto: true,
+                    strategyName: prop.strategyName,
+                    product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
+                    live: false,
+                    accountMode: 'paper',
+                  }
+                );
 
-              if (res && res.ok) {
-                const msg = `Auto-Pilot executed ${prop.side.toUpperCase()} ${prop.amount} ${prop.asset} @ ₹${prop.price.toFixed(2)} [${prop.strategyName}]`;
-                if (stateRef.current.settings.soundEnabled) playChime('trade');
-                triggerToast(`Auto-Pilot: ${prop.asset}`, msg, 'success');
+                if (res && res.ok) {
+                  const msg = `Auto-Pilot executed ${prop.side.toUpperCase()} ${prop.amount} ${prop.asset} @ ₹${prop.price.toFixed(2)} [${prop.strategyName}]`;
+                  if (stateRef.current.settings.soundEnabled) playChime('trade');
+                  triggerToast(`Auto-Pilot: ${prop.asset}`, msg, 'success');
+                }
               }
             }
           }
@@ -3424,24 +3521,28 @@ export function Provider({ children }: { children: React.ReactNode }) {
         ].slice(0, 50);
 
         if (updated.executionMode === 'full_autonomous' && pilotRes.ordersToDispatch.length > 0) {
-          setTimeout(() => {
-            for (const prop of pilotRes.ordersToDispatch) {
-              if (orderRef.current) {
-                const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
-                orderRef.current(prop.side, prop.asset, prop.amount, {
-                  type: prop.type,
-                  limitPrice: prop.price,
-                  stopLoss: prop.stopLoss,
-                  takeProfit: prop.takeProfit,
-                  auto: true,
-                  strategyName: prop.strategyName,
-                  product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
-                  live: isLiveUpstox,
-                  accountMode: isLiveUpstox ? 'live' : 'paper',
-                });
+          const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
+          if (isLiveUpstox) {
+            ApiClient.triggerPilotSweep().catch(() => {});
+          } else {
+            setTimeout(() => {
+              for (const prop of pilotRes.ordersToDispatch) {
+                if (orderRef.current) {
+                  orderRef.current(prop.side, prop.asset, prop.amount, {
+                    type: prop.type,
+                    limitPrice: prop.price,
+                    stopLoss: prop.stopLoss,
+                    takeProfit: prop.takeProfit,
+                    auto: true,
+                    strategyName: prop.strategyName,
+                    product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
+                    live: false,
+                    accountMode: 'paper',
+                  });
+                }
               }
-            }
-          }, 0);
+            }, 0);
+          }
         }
 
         if (updated.executionMode === 'full_autonomous' && pilotRes.ordersToCancel && pilotRes.ordersToCancel.length > 0) {
@@ -3468,14 +3569,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
       }
       return { ...prev, autonomousPilot: updated };
     });
-    triggerToast(
-      nextEnabled ? 'Auto-Pilot Engaged' : 'Auto-Pilot Paused',
-      nextEnabled
-        ? `Autonomous Local Quant Pilot active (${PILOT_PROFILES[autonomousPilot.profile].name}). Anti-loss controls armed.`
-        : 'Autonomous quantitative trading scans paused.',
-      'info'
-    );
-  }, [markets, autonomousPilot.profile, triggerToast, upstoxAccount?.connected]);
+      triggerToast(
+        nextEnabled ? 'Auto-Pilot Engaged' : 'Auto-Pilot Paused',
+        nextEnabled
+          ? `Autonomous Local Quant Pilot active (${PILOT_PROFILES[autonomousPilot.profile].name}). Anti-loss controls armed.`
+          : 'Autonomous quantitative trading scans paused.',
+        'info'
+      );
+      ApiClient.updatePilotConfig({ enabled: nextEnabled }).catch(() => {});
+    }, [markets, autonomousPilot.profile, triggerToast, upstoxAccount?.connected]);
 
   const setPilotProfile = useCallback((profile: AutonomousPilotProfile) => {
     setState((prev) => {
@@ -3494,6 +3596,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       return { ...prev, autonomousPilot: updated };
     });
     triggerToast('Pilot Profile Updated', `Active profile switched to ${PILOT_PROFILES[profile].name}.`, 'info');
+    ApiClient.updatePilotConfig({ profile }).catch(() => {});
   }, [markets, triggerToast]);
 
   const setPilotExecutionMode = useCallback((mode: 'full_autonomous' | 'semi_autonomous') => {
@@ -3514,6 +3617,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         : 'Semi-Autonomous: Pilot undertakes analysis and generates 1-click execution cards.',
       'info'
     );
+    ApiClient.updatePilotConfig({ executionMode: mode }).catch(() => {});
   }, [triggerToast]);
 
   const emergencyDisarmPilot = useCallback(() => {
@@ -3547,6 +3651,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       };
     });
     triggerToast('Auto-Pilot Disarmed', 'Emergency disarm engaged: all autonomous operations halted.', 'warn');
+    ApiClient.updatePilotConfig({ enabled: false }).catch(() => {});
   }, [triggerToast]);
 
   const clearPilotLogs = useCallback(() => {
@@ -3596,9 +3701,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetPilotCircuitBreaker = useCallback(() => {
+    let pv = 50000;
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
-      const pv = portfolioValue(prev, markets);
+      pv = portfolioValue(prev, markets);
       return {
         ...prev,
         autonomousPilot: {
@@ -3611,6 +3717,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       };
     });
     triggerToast('Circuit Breaker Reset', 'Autonomous Pilot drawdown limits reset with current portfolio valuation.', 'success');
+    ApiClient.updatePilotConfig({ resetCircuitBreaker: true, dailyStartingValue: pv }).catch(() => {});
   }, [markets, triggerToast]);
 
   const executePilotRecommendation = useCallback(
@@ -3757,6 +3864,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       openUpstoxDrawer,
       closeUpstoxDrawer,
       syncUpstoxAccount,
+      syncPilotState,
       disconnectUpstox,
       exchangeAccount,
       exchangeDrawerOpen,
@@ -3876,6 +3984,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       openUpstoxDrawer,
       closeUpstoxDrawer,
       syncUpstoxAccount,
+      syncPilotState,
       disconnectUpstox,
       exchangeAccount,
       exchangeDrawerOpen,

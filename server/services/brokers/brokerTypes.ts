@@ -165,6 +165,9 @@ export interface BrokerOrderRequest {
   isAmo?: boolean;
   confirmationId?: string;
   isSystemPanic?: boolean;
+  isAutonomous?: boolean;
+  strategyName?: string;
+  algoTag?: string;
   marketQuoteAgeMs?: number;
   idempotencyKey: string;
   clientOrderId?: string;

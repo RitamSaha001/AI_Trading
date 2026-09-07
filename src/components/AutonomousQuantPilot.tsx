@@ -262,6 +262,43 @@ export function AutonomousQuantPilot() {
         </div>
       </div>
 
+      {/* Cloud Daemon Dual-Mode Status Indicator */}
+      {isLiveUpstox && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="relative flex h-2.5 w-2.5">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                isEnabled ? 'bg-emerald-400' : 'bg-zinc-300'
+              }`} />
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                isEnabled ? 'bg-emerald-500' : 'bg-zinc-400'
+              }`} />
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-zinc-900">
+                Cloud Server Daemon:
+              </span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                isEnabled
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+              }`}>
+                {isEnabled ? 'ACTIVE • Safe to close browser tab' : 'STANDBY • Ready to arm'}
+              </span>
+            </div>
+          </div>
+          <div className="text-[11px] text-zinc-500 flex items-center gap-2 flex-wrap">
+            <span>
+              Mode: <strong className="text-zinc-800 font-semibold">{autonomousPilot?.cloudDaemonStatus || 'BROWSER_LINKED'}</strong>
+            </span>
+            <span>&bull;</span>
+            <span>
+              Host: <span className="font-mono text-zinc-700 font-medium">87.76.191.49</span>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Standby Banner when market is closed */}
       {isEnabled && isLiveUpstox && !marketSession.isOpen && (
         <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">

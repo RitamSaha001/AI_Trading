@@ -687,6 +687,8 @@ export interface AutonomousPilotState {
   tripReason?: string;
   totalAutopilotTradesExecuted: number;
   autoPilotProfitTotal: number;
+  cloudDaemonStatus?: 'BROWSER_LINKED' | 'CLOUD_HEADLESS';
+  lastCloudSyncAt?: number;
 }
 
 

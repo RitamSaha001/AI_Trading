@@ -380,4 +380,57 @@ export const ApiClient = {
       body: JSON.stringify({}),
     });
   },
+
+  // --- AUTONOMOUS QUANT PILOT DUAL-MODE DAEMON CLIENT ---
+  async getPilotState() {
+    return apiRequest<{
+      success: boolean;
+      enabled: boolean;
+      executionMode: 'full_autonomous' | 'semi_autonomous';
+      profile: string;
+      dailyStartingValue: number;
+      riskPerTradePct: number;
+      circuitBreakerTripped: boolean;
+      circuitBreakerReason?: string;
+      executionModeStatus: 'BROWSER_LINKED' | 'CLOUD_HEADLESS';
+      lastClientHeartbeatAt: number;
+      lastServerRunAt: number;
+      activeFleet: Record<string, any>;
+      actionLogs: any[];
+      isMarketOpen: boolean;
+      marketSession: string;
+      tokenStatus?: string;
+    }>('/api/pilot/state');
+  },
+
+  async updatePilotConfig(updates: {
+    enabled?: boolean;
+    executionMode?: 'full_autonomous' | 'semi_autonomous';
+    profile?: string;
+    dailyStartingValue?: number;
+    riskPerTradePct?: number;
+    resetCircuitBreaker?: boolean;
+  }) {
+    return apiRequest<{ success: boolean; [key: string]: any }>('/api/pilot/config', {
+      method: 'POST',
+      body: JSON.stringify(updates),
+    });
+  },
+
+  async sendPilotHeartbeat() {
+    return apiRequest<{ success: boolean; mode: 'BROWSER_LINKED'; lastHeartbeat: number }>(
+      '/api/pilot/heartbeat',
+      {
+        method: 'POST',
+        body: JSON.stringify({ active: true }),
+      }
+    );
+  },
+
+  async triggerPilotSweep() {
+    return apiRequest<{ success: boolean; sweep: any }>('/api/pilot/sweep', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
 };
