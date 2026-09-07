@@ -260,13 +260,13 @@ export function UpstoxTerminalDrawer({ open, onClose }: Props) {
                     <span>Daily Session Validity (IST Expiry)</span>
                   </div>
                   <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                    tokenHealth?.status === 'HEALTHY'
+                    tokenHealth?.status === 'HEALTHY' || tokenHealth?.status === 'ACTIVE'
                       ? 'bg-emerald-100 text-emerald-800'
                       : tokenHealth?.status === 'EXPIRING_SOON'
                       ? 'bg-amber-100 text-amber-800'
                       : 'bg-rose-100 text-rose-800'
                   }`}>
-                    {tokenHealth?.status || 'HEALTHY'}
+                    {tokenHealth?.status || 'ACTIVE'}
                   </span>
                 </div>
                 <div className="text-[11px] text-zinc-600 flex items-center justify-between">

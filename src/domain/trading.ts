@@ -4,6 +4,7 @@ import {
   money,
   formatQty,
   META,
+  isIndianAsset,
   getReservedCash,
   getAvailableCash,
   getReservedPosition,
@@ -88,6 +89,12 @@ export function executeOrder(
     return { ok: false, error: 'Trade quantity must be a positive number.' };
   }
 
+  if (isIndianAsset(asset)) {
+    if (!Number.isInteger(qty) || qty < 1) {
+      return { ok: false, error: `Indian equity orders require whole share quantities (minimum 1 share). Received: ${qty}` };
+    }
+  }
+
   const marketPrice = markets[asset]?.price || 0;
   if (!marketPrice || marketPrice <= 0) {
     return { ok: false, error: `Live quote for ${asset} is not yet available.` };
@@ -114,6 +121,13 @@ export function executeOrder(
     const limitPrice = options?.limitPrice;
     if (!limitPrice || limitPrice <= 0 || !Number.isFinite(limitPrice)) {
       return { ok: false, error: 'Please specify a valid positive limit price.' };
+    }
+
+    if (isIndianAsset(asset)) {
+      const rounded = Math.round(limitPrice * 20) / 20;
+      if (Math.abs(rounded - limitPrice) > 1e-4) {
+        return { ok: false, error: 'NSE/BSE equities require limit prices in multiples of ₹0.05 tick size.' };
+      }
     }
 
     const notional = limitPrice * qty;

@@ -1,5 +1,5 @@
 import { Asset, Market } from '../types';
-import { META, FEE_RATE } from './portfolio';
+import { META, FEE_RATE, isIndianAsset } from './portfolio';
 import { DEFAULT_RISK_POLICY, RiskPolicy } from './riskPolicy';
 import { indicators } from './indicators';
 
@@ -67,7 +67,8 @@ export function calculateRiskBasedPositionSize(
     };
   }
   const entry = req.entryPrice;
-  const decimals = META[req.asset]?.decimals ?? 4;
+  const isIndian = isIndianAsset(req.asset);
+  const decimals = isIndian ? 0 : (META[req.asset]?.decimals ?? 4);
 
   // Determine Stop Loss price if not provided
   let stop = req.stopPrice;
@@ -166,7 +167,10 @@ export function calculateRiskBasedPositionSize(
 
   // Round quantity to proper precision
   const factor = Math.pow(10, decimals);
-  const finalQty = Math.floor(boundedQty * factor) / factor;
+  let finalQty = Math.floor(boundedQty * factor) / factor;
+  if (isIndian && req.side === 'buy' && finalQty < 1) {
+    finalQty = 0;
+  }
   const finalNotional = +(finalQty * entry).toFixed(2);
   const portfolioPct = equity > 0 ? +((finalNotional / equity) * 100).toFixed(2) : 0;
   const theoreticalMaxLoss = +(finalQty * unitRisk).toFixed(2);

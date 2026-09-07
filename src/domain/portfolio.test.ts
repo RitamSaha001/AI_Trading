@@ -116,5 +116,7 @@ describe('Domain: Portfolio Valuation and Calculations', () => {
     expect(money(0.005)).toBe('$0.0050');
     expect(money(-1200)).toBe('$-1,200.00');
     expect(formatQty(0.12345678, 'BTC')).toBe('0.12346');
+    expect(formatQty(10, 'RELIANCE')).toBe('10');
+    expect(formatQty(25, 'TCS')).toBe('25');
   });
 });

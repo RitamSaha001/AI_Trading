@@ -1656,7 +1656,7 @@ export function Portfolio() {
             </div>
             <span className="text-[10px] text-zinc-400 mt-0.5 block">
               {accountMode === 'upstox'
-                ? upstoxAccount?.tokenHealth?.status === 'HEALTHY'
+                ? upstoxAccount?.tokenHealth?.status === 'HEALTHY' || upstoxAccount?.tokenHealth?.status === 'ACTIVE'
                   ? 'Upstox Demat margin verified'
                   : 'Upstox live connected'
                 : 'Simulated desk balance verified'}
@@ -2054,13 +2054,17 @@ export function Orders() {
 
   const handleQuickPercent = (pct: number) => {
     if (!estPrice) return;
+    const dec = isIndian ? 0 : (META[selectedAsset]?.decimals ?? 4);
+    const factor = Math.pow(10, dec);
     if (side === 'buy') {
       const budget = (availableCash * pct) / 100;
-      const qty = budget / (estPrice * 1.001);
-      setAmountStr(qty > 0 ? Math.floor(qty).toString() : '0');
+      const rawQty = budget / (estPrice * 1.001);
+      const qty = Math.floor(rawQty * factor) / factor;
+      setAmountStr(qty > 0 ? qty.toString() : '0');
     } else {
-      const qty = (availableHolding * pct) / 100;
-      setAmountStr(Math.floor(qty).toString());
+      const rawQty = (availableHolding * pct) / 100;
+      const qty = Math.floor(rawQty * factor) / factor;
+      setAmountStr(qty > 0 ? qty.toString() : '0');
     }
   };
 

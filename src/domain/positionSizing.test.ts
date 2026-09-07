@@ -229,4 +229,25 @@ describe('Domain: Risk-Based Position Sizing Engine', () => {
     });
     expect(res.quantity).toBe(0);
   });
+
+  it('enforces whole share sizing for Indian equities (e.g. RELIANCE, TCS)', () => {
+    // Equity: ₹30,000, 2% risk budget = ₹600.
+    // RELIANCE Entry: ₹2,800, Stop: ₹2,650 -> Unit risk: ₹150.
+    // Raw Quantity: 600 / 150 = 4 shares.
+    const res = calculateRiskBasedPositionSize({
+      asset: 'RELIANCE',
+      side: 'buy',
+      entryPrice: 2800,
+      stopPrice: 2650,
+      targetPrice: 3200,
+      portfolioEquity: 30000,
+      availableCash: 30000,
+      currentHolding: 0,
+      currentHoldingNotional: 0,
+    });
+
+    expect(Number.isInteger(res.quantity)).toBe(true);
+    expect(res.quantity).toBe(4);
+    expect(res.notional).toBe(11200);
+  });
 });

@@ -331,5 +331,50 @@ describe('Domain: Paper Trading Engine Execution', () => {
       expect(strat.consecutiveLosses).toBe(0);
       expect(strat.quarantineActive).toBe(false);
     });
+
+    it('rejects fractional quantities for Indian equities', () => {
+      const state = createFreshState(30000);
+      const indianMarkets: any = {
+        RELIANCE: createMockMarket('RELIANCE', 2800),
+      };
+
+      const res = executeOrder(state, indianMarkets, 'buy', 'RELIANCE', 2.5);
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('whole share quantities');
+    });
+
+    it('accepts integer share quantities for Indian equities', () => {
+      const state = createFreshState(30000);
+      const indianMarkets: any = {
+        RELIANCE: createMockMarket('RELIANCE', 2800),
+      };
+
+      const res = executeOrder(state, indianMarkets, 'buy', 'RELIANCE', 5);
+      expect(res.ok).toBe(true);
+      expect(res.order?.amount).toBe(5);
+    });
+
+    it('enforces ₹0.05 tick size for Indian equities limit orders', () => {
+      const state = createFreshState(30000);
+      const indianMarkets: any = {
+        RELIANCE: createMockMarket('RELIANCE', 2800),
+      };
+
+      // Invalid tick: 2800.12
+      const invalidRes = executeOrder(state, indianMarkets, 'buy', 'RELIANCE', 2, {
+        type: 'limit',
+        limitPrice: 2800.12,
+      });
+      expect(invalidRes.ok).toBe(false);
+      expect(invalidRes.error).toContain('0.05 tick size');
+
+      // Valid tick: 2800.15
+      const validRes = executeOrder(state, indianMarkets, 'buy', 'RELIANCE', 2, {
+        type: 'limit',
+        limitPrice: 2800.15,
+      });
+      expect(validRes.ok).toBe(true);
+      expect(validRes.order?.limitPrice).toBe(2800.15);
+    });
   });
 });

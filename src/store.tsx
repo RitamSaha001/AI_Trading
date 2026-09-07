@@ -655,6 +655,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
               }
             }
 
+            for (const sym of Object.keys(upstoxPositions) as Asset[]) {
+              if ((upstoxPositions[sym] ?? 0) <= 0) {
+                delete upstoxPositions[sym];
+                delete upstoxAvgBuyPrice[sym];
+              }
+            }
+
             nextPositions = upstoxPositions;
             nextAvgBuyPrice = upstoxAvgBuyPrice;
             if (resolvedAvailableCash !== undefined) {
@@ -868,6 +875,22 @@ export function Provider({ children }: { children: React.ReactNode }) {
           selectedAsset: nextSelectedAsset,
           watchlist: nextWatchlist,
           notifications: cleanNotifs,
+        };
+      } else if (mode === 'paper') {
+        if (isIndianAsset(nextSelectedAsset)) {
+          nextSelectedAsset = 'BTC';
+        }
+        const cryptoWatchlist = s.watchlist.filter((w) => !isIndianAsset(w));
+        nextWatchlist = cryptoWatchlist.length > 0
+          ? (cryptoWatchlist as Asset[])
+          : (['BTC', 'ETH', 'SOL', 'AVAX'] as Asset[]);
+        return {
+          ...s,
+          accountMode: mode,
+          cash: s.initialCash || 50000,
+          startingEquity: s.initialCash || 50000,
+          selectedAsset: nextSelectedAsset,
+          watchlist: nextWatchlist,
         };
       }
       return {
@@ -2245,7 +2268,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        const isLive = options?.live ?? (options?.accountMode ? options.accountMode === 'live' : Boolean(stateRef.current.upstoxAccount?.connected));
+        const isLive = options?.live ?? (
+          options?.accountMode
+            ? (options.accountMode === 'live' || options.accountMode === 'upstox')
+            : (stateRef.current.accountMode === 'upstox' && Boolean(stateRef.current.upstoxAccount?.connected))
+        );
         const isAuto = Boolean(options?.auto || (options as any)?.isAutonomous);
 
         // Live manual orders require SEBI-compliant two-step human confirmation
