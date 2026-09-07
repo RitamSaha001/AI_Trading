@@ -300,7 +300,7 @@ export class UpstoxAdapter implements BrokerGateway {
         id, user_id, broker, environment, auth_type, access_token_encrypted,
         token_expires_at, account_id, account_name, can_trade, can_withdraw, is_safe,
         last_sync_at, created_at, updated_at
-      ) VALUES (?, ?, 'upstox', ?, 'oauth2', ?, ?, ?, ?, 1, 0, 1, ?, ?, ?)
+      ) VALUES (?, ?, 'upstox', ?, 'oauth2', ?, ?, ?, ?, TRUE, FALSE, TRUE, ?, ?, ?)
       ON CONFLICT(user_id, broker, environment) DO UPDATE SET
         access_token_encrypted = excluded.access_token_encrypted,
         token_expires_at = excluded.token_expires_at,

@@ -103,11 +103,11 @@ export class ReadinessService {
     let hasActiveSession = false;
     try {
       const db = getDb();
-      const credRow = await db.queryOne<{ access_token: string; updated_at: number }>(
-        `SELECT access_token, updated_at FROM broker_credentials WHERE broker = 'upstox' ORDER BY updated_at DESC LIMIT 1`
+      const credRow = await db.queryOne<{ access_token_encrypted: string; updated_at: number }>(
+        `SELECT access_token_encrypted, updated_at FROM broker_credentials WHERE broker = 'upstox' ORDER BY updated_at DESC LIMIT 1`
       );
       // Session is active if token exists and was updated within last 24 hours
-      hasActiveSession = Boolean(credRow?.access_token && (Date.now() - (credRow?.updated_at || 0)) < 86400000);
+      hasActiveSession = Boolean(credRow?.access_token_encrypted && (Date.now() - (credRow?.updated_at || 0)) < 86400000);
     } catch {
       // DB not available — auth not ready
     }
@@ -122,6 +122,9 @@ export class ReadinessService {
     };
 
     // 4. INSTRUMENTS_READY
+    if (!UpstoxInstrumentMasterService.getMasterStatus().isFresh) {
+      UpstoxInstrumentMasterService.initialize();
+    }
     const instrumentStatus = UpstoxInstrumentMasterService.getMasterStatus();
     const instrumentFresh = instrumentStatus.isFresh;
     const instrumentsReady: ReadinessDimensionStatus = {
