@@ -649,22 +649,35 @@ export function calculateCrossSectionalAlphaRanking(
 
 /**
  * Calculates optimal limit entry price anchoring to microstructure support (VWAP/EMA pullback)
- * to avoid chasing market ask and eliminate slippage.
+ * to avoid chasing market ask, eliminate slippage, and optimize fill probability based on alpha conviction.
  */
 export function calculateSmartLimitPrice(
   currentPrice: number,
   vwap: number,
   atr: number,
-  tickSize: number = 0.05
+  tickSize: number = 0.05,
+  alphaConviction?: number
 ): number {
   if (currentPrice <= 0) return 0;
-  // Modest pullback discount (0.10% - 0.20% below LTP or 15% of ATR)
-  const pullbackBuffer = Math.min(atr * 0.15, currentPrice * 0.002);
+
+  // Adaptive pullback buffer: In high-conviction momentum expansions (alphaConviction >= 80),
+  // pullbacks are shallow. We bid 1-2 ticks below LTP to guarantee high fill probability without paying the full spread.
+  // In moderate setups (< 80), we demand a deeper discount (0.10% - 0.20% or 15% of ATR) to ensure favorable risk/reward.
+  const isHighConviction = alphaConviction !== undefined && alphaConviction >= 80;
+  const pullbackBuffer = isHighConviction
+    ? Math.max(tickSize, Math.min(atr * 0.05, currentPrice * 0.0008))
+    : Math.min(atr * 0.15, currentPrice * 0.002);
+
   let targetPrice: number;
 
   if (currentPrice > vwap && vwap > 0) {
-    // If price is extended above VWAP, anchor down towards VWAP, but never below VWAP or above currentPrice
-    targetPrice = Math.min(currentPrice, Math.max(vwap, currentPrice - pullbackBuffer));
+    if (isHighConviction) {
+      // In high-conviction expansions, don't anchor down to distant VWAP which might never fill
+      targetPrice = Math.min(currentPrice, currentPrice - pullbackBuffer);
+    } else {
+      // Extended above VWAP: anchor down towards VWAP, but never below VWAP or above currentPrice
+      targetPrice = Math.min(currentPrice, Math.max(vwap, currentPrice - pullbackBuffer));
+    }
   } else {
     // If price is at or below VWAP (oversold / discounted), set limit slightly below current price
     targetPrice = Math.max(tickSize, currentPrice - pullbackBuffer);

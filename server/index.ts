@@ -1255,9 +1255,9 @@ export function buildServer(): FastifyInstance {
     }
     try {
       const db = getDb();
-      const existing = await db.queryOne<{ broker: string }>(
-        `SELECT broker FROM exchange_orders WHERE user_id = ? AND client_order_id = ?`,
-        [req.user!.id, body.clientOrderId]
+      const existing = await db.queryOne<{ broker: string; client_order_id: string }>(
+        `SELECT broker, client_order_id FROM exchange_orders WHERE user_id = ? AND (client_order_id = ? OR id = ? OR exchange_order_id = ?)`,
+        [req.user!.id, body.clientOrderId, body.clientOrderId, body.clientOrderId]
       );
       if (!existing) {
         return reply.status(404).send({
@@ -1266,7 +1266,7 @@ export function buildServer(): FastifyInstance {
         });
       }
       const broker = BrokerRegistry.get(existing.broker);
-      const order = await broker.cancelOrder(req.user!.id, body.clientOrderId);
+      const order = await broker.cancelOrder(req.user!.id, existing.client_order_id);
       return { success: true, order };
     } catch (err: any) {
       return reply.status(400).send({ success: false, error: err.message });

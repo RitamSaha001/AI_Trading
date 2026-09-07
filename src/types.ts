@@ -25,7 +25,7 @@ export type Asset = typeof ASSETS[number];
 
 export type Side = 'buy' | 'sell';
 export type OrderType = 'market' | 'limit' | 'stop_loss' | 'take_profit';
-export type OrderStatus = 'pending' | 'filled' | 'cancelled' | 'rejected';
+export type OrderStatus = 'pending' | 'filled' | 'cancelled' | 'rejected' | 'partially_filled';
 export type Timeframe = '1H' | '1D' | '1W' | '1M' | '1Y';
 
 export type DataSource =
@@ -81,6 +81,7 @@ export type Order = {
   type: OrderType;
   asset: Asset;
   amount: number;
+  executedAmount?: number;
   price: number; // For market orders: executed price. For limit: target limit price
   limitPrice?: number;
   stopPrice?: number;
@@ -658,7 +659,8 @@ export interface PilotActionLog {
     | 'AUTONOMOUS_ENGAGED'
     | 'DISARMED'
     | 'ALPHA_SCAN'
-    | 'ORDER_FILLED';
+    | 'ORDER_FILLED'
+    | 'STALE_ORDER_CANCELLED';
   strategy: string;
   detail: string;
   price: number;

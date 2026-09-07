@@ -501,6 +501,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const marketsRef = useRef(markets);
   const toastTimeoutRef = useRef<any>(null);
   const orderRef = useRef<any>(null);
+  const cancelRef = useRef<any>(null);
 
   const triggerToast = useCallback((title: string, message: string, type: 'success' | 'info' | 'warn' = 'info') => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -551,6 +552,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
         type: (row.type?.toLowerCase() as OrderType) || 'market',
         asset: row.symbol as Asset,
         amount: Number(row.orig_qty || row.quantity || 0),
+        executedAmount: Number(row.executed_qty || 0),
         price: Number(row.avg_price || row.price || 0),
         limitPrice: row.type?.toUpperCase() === 'LIMIT' ? Number(row.price || 0) : undefined,
         stopPrice: row.trigger_price ? Number(row.trigger_price) : undefined,
@@ -558,7 +560,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
         notional: Number(row.notional || 0),
         auto: Boolean(row.is_autonomous || row.auto),
         strategyName: row.strategy_name || (row.broker === 'upstox' ? 'Upstox Live Order' : undefined),
-        status: row.status === 'FILLED' ? 'filled' : (row.status === 'REJECTED' ? 'rejected' : (row.status === 'CANCELLED' ? 'cancelled' : 'pending')),
+        status: row.status === 'FILLED'
+          ? 'filled'
+          : (row.status === 'PARTIALLY_FILLED'
+            ? 'partially_filled'
+            : (row.status === 'REJECTED'
+              ? 'rejected'
+              : (row.status === 'CANCELLED'
+                ? 'cancelled'
+                : 'pending'))),
         product: row.product,
         validity: row.validity,
         broker: row.broker,
@@ -1778,14 +1788,18 @@ export function Provider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, [syncUpstoxAccount]);
 
-  // Periodic Upstox background sync (15s interval)
+  // Periodic Upstox background sync (adaptive: 4s when orders are open/partially filled, 15s when idle)
   useEffect(() => {
     if (state.accountMode !== 'upstox' && !upstoxAccount?.connected) return;
+    const hasOpenOrders = state.orders.some(
+      (o) => o.status === 'pending' || o.status === 'partially_filled'
+    );
+    const intervalMs = hasOpenOrders ? 4000 : 15000;
     const interval = setInterval(() => {
       syncUpstoxAccount();
-    }, 15000);
+    }, intervalMs);
     return () => clearInterval(interval);
-  }, [state.accountMode, upstoxAccount?.connected, syncUpstoxAccount]);
+  }, [state.accountMode, upstoxAccount?.connected, state.orders, syncUpstoxAccount]);
 
   // Cross-tab synchronization
   useEffect(() => {
@@ -2049,6 +2063,15 @@ export function Provider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Cancel any stale/stagnant orders identified by the Autonomous Pilot
+        if (pilotResult.ordersToCancel && pilotResult.ordersToCancel.length > 0) {
+          for (const cancelId of pilotResult.ordersToCancel) {
+            if (cancelRef.current) {
+              cancelRef.current(cancelId);
+            }
+          }
+        }
+
         // Update state with refreshed fleet telemetry, rate limit meters, and action logs
         setState((prev) => {
           const p = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
@@ -2211,6 +2234,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
                 ord.status === 'REJECTED' ? 'warn' : 'success'
               );
               syncUpstoxAccount();
+              setTimeout(() => syncUpstoxAccount(), 2000);
+              setTimeout(() => syncUpstoxAccount(), 5000);
               return;
             }
             if (backendRes.error) {
@@ -2561,6 +2586,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
             );
             if (isUpstox) {
               syncUpstoxAccount();
+              setTimeout(() => syncUpstoxAccount(), 2000);
             } else {
               syncExchangeBalances();
             }
@@ -2600,6 +2626,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
     },
     [triggerToast, syncExchangeBalances, syncUpstoxAccount]
   );
+  cancelRef.current = cancelPendingOrder;
 
   const toggleStrategy = useCallback((id: string) => {
     setState((s) => ({
@@ -3306,6 +3333,16 @@ export function Provider({ children }: { children: React.ReactNode }) {
                   live: isLiveUpstox,
                   accountMode: isLiveUpstox ? 'live' : 'paper',
                 });
+              }
+            }
+          }, 0);
+        }
+
+        if (updated.executionMode === 'full_autonomous' && pilotRes.ordersToCancel && pilotRes.ordersToCancel.length > 0) {
+          setTimeout(() => {
+            for (const cancelId of pilotRes.ordersToCancel) {
+              if (cancelRef.current) {
+                cancelRef.current(cancelId);
               }
             }
           }, 0);

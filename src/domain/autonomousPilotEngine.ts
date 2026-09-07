@@ -68,6 +68,7 @@ export interface AutonomousPilotTickResult {
   updatedRateLimits: PilotRateLimitStatus;
   newActionLogs: PilotActionLog[];
   ordersToDispatch: AutonomousPilotOrderProposal[];
+  ordersToCancel: string[];
   circuitBreakerTripped: boolean;
   tripReason?: string;
 }
@@ -324,6 +325,7 @@ export function tickAutonomousPilot(
         },
       ],
       ordersToDispatch: [],
+      ordersToCancel: [],
       circuitBreakerTripped: true,
       tripReason: cbCheck.reason,
     };
@@ -357,6 +359,7 @@ export function tickAutonomousPilot(
       updatedRateLimits: rateLimits,
       newActionLogs: [],
       ordersToDispatch: [],
+      ordersToCancel: [],
       circuitBreakerTripped: false,
     };
   }
@@ -372,6 +375,7 @@ export function tickAutonomousPilot(
       updatedRateLimits: rateLimits,
       newActionLogs: [],
       ordersToDispatch: [],
+      ordersToCancel: [],
       circuitBreakerTripped: false,
     };
   }
@@ -385,10 +389,43 @@ export function tickAutonomousPilot(
   const minRequiredCash = pv * (minCashFloorPct / 100);
   let allocatableCash = Math.max(0, currentCash - minRequiredCash);
 
-  // Set of assets with active pending BUY orders (prevent duplicate submissions)
+  const ordersToCancel: string[] = [];
+
+  // STALE LIMIT ORDER SWEEPER (Capital Velocity Protection)
+  // If an auto limit buy order has been open > 20 minutes AND current market price has rallied > 1.2%
+  // above the limit price, the entry setup has expired. We cancel the order to release reserved cash
+  // back into allocatable capital for higher-alpha opportunities.
+  const STALE_ORDER_MAX_AGE_MS = 20 * 60 * 1000;
+  for (const o of state.orders) {
+    if (o.auto && o.side === 'buy' && (o.status === 'pending' || o.status === 'partially_filled')) {
+      const m = markets[o.asset];
+      const ageMs = now - (o.ts || now);
+      const limitP = o.limitPrice || o.price;
+      if (m && m.price > 0 && limitP > 0 && ageMs >= STALE_ORDER_MAX_AGE_MS) {
+        const driftPct = ((m.price - limitP) / limitP) * 100;
+        if (driftPct >= 1.2) {
+          ordersToCancel.push(o.id);
+          newActionLogs.push({
+            id: `stale_cancel_${o.id}_${now}`,
+            timestamp: now,
+            asset: o.asset,
+            action: 'STALE_ORDER_CANCELLED',
+            strategy: o.strategyName || 'Auto-Pilot Sweeper',
+            detail: `Stale limit buy on ${o.asset} @ ₹${limitP.toFixed(2)} timed out after ${Math.round(ageMs / 60000)}m (LTP ₹${m.price.toFixed(2)}, +${driftPct.toFixed(1)}% away). Unlocking capital for higher-alpha opportunities.`,
+            price: m.price,
+            status: 'EXECUTED',
+          });
+        }
+      }
+    }
+  }
+
+  const cancelledOrderIds = new Set(ordersToCancel);
+
+  // Set of assets with active pending BUY orders (excluding newly swept orders)
   const pendingBuyAssets = new Set(
     state.orders
-      .filter((o) => o.status === 'pending' && o.side === 'buy')
+      .filter((o) => (o.status === 'pending' || o.status === 'partially_filled') && o.side === 'buy' && !cancelledOrderIds.has(o.id))
       .map((o) => o.asset)
   );
 
@@ -829,8 +866,14 @@ export function tickAutonomousPilot(
       continue;
     }
 
-    // Smart Limit Pullback Pricing (Avoids chasing ask/top of candle)
-    const limitPrice = calculateSmartLimitPrice(price, cand.vwap, atr, isIndianAsset(asset) ? 0.05 : 0.01);
+    // Smart Limit Pullback Pricing (Avoids chasing ask/top of candle, adaptively tightened on high conviction)
+    const limitPrice = calculateSmartLimitPrice(
+      price,
+      cand.vwap,
+      atr,
+      isIndianAsset(asset) ? 0.05 : 0.01,
+      ranked?.alphaConvictionIndex
+    );
 
     // Stop and Target Brackets
     const stopLossDist = Math.max(limitPrice * 0.008, atr * profile.stopLossAtrMultiplier);
@@ -969,6 +1012,7 @@ export function tickAutonomousPilot(
     updatedRateLimits: rateLimits,
     newActionLogs,
     ordersToDispatch,
+    ordersToCancel,
     circuitBreakerTripped: false,
   };
 }

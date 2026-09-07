@@ -546,6 +546,145 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       const p2 = calculateSmartLimitPrice(1234.56, 1230.00, 10.00, 0.01);
       expect(Math.round(p2 * 100) % 1).toBe(0);
     });
+
+    it('calculates tighter adaptive pullback for high-conviction momentum expansion (alphaConviction >= 80)', () => {
+      const currentPrice = 1000.00;
+      const vwap = 980.00;
+      const atr = 25.00;
+
+      // High conviction (e.g. 85): bids close to LTP (within 0.08% or 1-2 ticks) to ensure execution on breakouts
+      const highConvictionLimit = calculateSmartLimitPrice(currentPrice, vwap, atr, 0.05, 85);
+      // Moderate conviction (e.g. 60): demands deeper discount towards VWAP
+      const moderateConvictionLimit = calculateSmartLimitPrice(currentPrice, vwap, atr, 0.05, 60);
+
+      expect(highConvictionLimit).toBeGreaterThan(moderateConvictionLimit);
+      expect(highConvictionLimit).toBeLessThanOrEqual(currentPrice);
+      expect(highConvictionLimit).toBeGreaterThanOrEqual(currentPrice * 0.999);
+      expect(Math.round(highConvictionLimit * 100) % 5).toBe(0);
+    });
+  });
+
+  describe('11. Stale Limit Order Sweeper & Capital Velocity Protection', () => {
+    it('sweeps and queues cancellation for auto buy orders older than 20 minutes with > 1.2% price drift', () => {
+      const state = create10kState('balanced');
+      const orderTs = regularMarketTime - 25 * 60 * 1000; // 25 minutes ago
+      state.orders = [
+        {
+          id: 'ord_stale_rel_1',
+          ts: orderTs,
+          side: 'buy',
+          type: 'limit',
+          asset: 'RELIANCE',
+          amount: 2,
+          price: 2400.00,
+          limitPrice: 2400.00,
+          fee: 5,
+          notional: 4800,
+          auto: true,
+          strategyName: 'Kalman Mean Reversion',
+          status: 'pending',
+        },
+      ];
+
+      // RELIANCE has drifted up to ₹2,440 (+1.67% drift above ₹2,400 limit price)
+      const relianceHistory = Array.from({ length: 30 }, (_, i) => 2400 + i * 1.5);
+      const markets: any = {
+        RELIANCE: createMockMarket('RELIANCE', 2440.00, relianceHistory),
+      };
+
+      const res = tickAutonomousPilot(state, markets, regularMarketTime);
+
+      expect(res.ordersToCancel).toContain('ord_stale_rel_1');
+      const cancelLog = res.newActionLogs.find(
+        (l) => l.action === 'STALE_ORDER_CANCELLED' && l.asset === 'RELIANCE'
+      );
+      expect(cancelLog).toBeDefined();
+      expect(cancelLog?.detail).toContain('timed out after 25m');
+      expect(cancelLog?.detail).toContain('Unlocking capital');
+    });
+
+    it('retains recent orders (< 20m) or orders near limit price (< 1.2% drift)', () => {
+      const state = create10kState('balanced');
+      const recentOrderTs = regularMarketTime - 5 * 60 * 1000; // 5 minutes ago
+      const staleOrderNearPriceTs = regularMarketTime - 30 * 60 * 1000; // 30 minutes ago, but price only drifted +0.4%
+
+      state.orders = [
+        {
+          id: 'ord_recent_infy',
+          ts: recentOrderTs,
+          side: 'buy',
+          type: 'limit',
+          asset: 'INFY',
+          amount: 3,
+          price: 1500.00,
+          limitPrice: 1500.00,
+          fee: 3,
+          notional: 4500,
+          auto: true,
+          strategyName: 'VWAP Momentum',
+          status: 'pending',
+        },
+        {
+          id: 'ord_stale_near_tcs',
+          ts: staleOrderNearPriceTs,
+          side: 'buy',
+          type: 'limit',
+          asset: 'TCS',
+          amount: 1,
+          price: 3500.00,
+          limitPrice: 3500.00,
+          fee: 3,
+          notional: 3500,
+          auto: true,
+          strategyName: 'Hurst Squeeze Expansion',
+          status: 'pending',
+        },
+      ];
+
+      const markets: any = {
+        INFY: createMockMarket('INFY', 1530.00, Array.from({ length: 30 }, (_, i) => 1500 + i)), // Drift +2% but only 5m old
+        TCS: createMockMarket('TCS', 3510.00, Array.from({ length: 30 }, (_, i) => 3500 + i * 0.3)), // 30m old but only +0.28% drift
+      };
+
+      const res = tickAutonomousPilot(state, markets, regularMarketTime);
+
+      expect(res.ordersToCancel).not.toContain('ord_recent_infy');
+      expect(res.ordersToCancel).not.toContain('ord_stale_near_tcs');
+      expect(res.ordersToCancel).toHaveLength(0);
+    });
+
+    it('sweeps partially_filled orders when stale and runaway', () => {
+      const state = create10kState('balanced');
+      const orderTs = regularMarketTime - 22 * 60 * 1000; // 22 minutes ago
+      state.orders = [
+        {
+          id: 'ord_partially_filled_1',
+          ts: orderTs,
+          side: 'buy',
+          type: 'limit',
+          asset: 'HDFCBANK',
+          amount: 5,
+          executedAmount: 2,
+          price: 1600.00,
+          limitPrice: 1600.00,
+          fee: 5,
+          notional: 8000,
+          auto: true,
+          strategyName: 'Ornstein-Uhlenbeck Reversion',
+          status: 'partially_filled',
+        },
+      ];
+
+      // HDFCBANK surged to ₹1,630 (+1.875% drift)
+      const hdfcHistory = Array.from({ length: 30 }, (_, i) => 1600 + i);
+      const markets: any = {
+        HDFCBANK: createMockMarket('HDFCBANK', 1630.00, hdfcHistory),
+      };
+
+      const res = tickAutonomousPilot(state, markets, regularMarketTime);
+
+      expect(res.ordersToCancel).toContain('ord_partially_filled_1');
+    });
   });
 });
 
