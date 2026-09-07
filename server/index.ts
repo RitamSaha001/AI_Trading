@@ -970,6 +970,54 @@ export function buildServer(): FastifyInstance {
     return { success: true, symbol, timeframe, count: candles.length, candles };
   });
 
+  server.get('/api/market/candles/upstox/batch', async (req: FastifyRequest) => {
+    const query = (req.query as any) || {};
+    const symbolsParam = (query.symbols as string || '').toUpperCase().trim();
+    const timeframe = (query.timeframe as string || '1D').toUpperCase().trim();
+    const defaultSymbols = [
+      'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK',
+      'SBIN', 'BHARTIARTL', 'ITC', 'LT', 'TATAMOTORS'
+    ];
+    const symbols = symbolsParam
+      ? symbolsParam.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : defaultSymbols;
+
+    let accessToken: string | undefined;
+    const token = extractSessionToken(req);
+    let userId: string | undefined;
+    if (token) {
+      try {
+        const user = await ServerAuthService.validateSession(token);
+        if (user) userId = user.id;
+      } catch {}
+    }
+
+    const db = getDb();
+    let credRow: any;
+    if (userId) {
+      credRow = await db.queryOne<{ access_token_encrypted: string }>(
+        `SELECT access_token_encrypted FROM broker_credentials WHERE user_id = $1 AND broker = 'upstox' AND access_token_encrypted IS NOT NULL LIMIT 1`,
+        [userId]
+      );
+    }
+    if (!credRow) {
+      credRow = await db.queryOne<{ access_token_encrypted: string }>(
+        `SELECT access_token_encrypted FROM broker_credentials WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL ORDER BY updated_at DESC LIMIT 1`
+      );
+    }
+
+    if (credRow?.access_token_encrypted) {
+      try {
+        accessToken = UpstoxAdapter.decryptSecret(credRow.access_token_encrypted);
+      } catch (err: any) {
+        logger.warn(`[UpstoxCandlesBatch] Failed to decrypt access token: ${err.message}`);
+      }
+    }
+
+    const candleMap = await UpstoxCandleService.getCandlesBatch(symbols, timeframe, accessToken);
+    return { success: true, timeframe, count: Object.keys(candleMap).length, candles: candleMap };
+  });
+
   server.post('/api/exchange/disconnect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const brokerParam = (req.query as any)?.broker || 'upstox';

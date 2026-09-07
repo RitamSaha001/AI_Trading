@@ -57,6 +57,30 @@ export class UpstoxCandleService {
     return this.generateFallbackCandles(inst.lastPrice || 1000, timeframe);
   }
 
+  /**
+   * Fetches authoritative candles for multiple Indian equities in parallel.
+   */
+  public static async getCandlesBatch(
+    symbols: string[],
+    timeframe: string = '1D',
+    accessToken?: string
+  ): Promise<Record<string, UpstoxCandle[]>> {
+    const results: Record<string, UpstoxCandle[]> = {};
+    await Promise.all(
+      symbols.map(async (sym) => {
+        try {
+          const c = await this.getCandles(sym, timeframe, accessToken);
+          if (c && c.length > 0) {
+            results[sym.toUpperCase().trim()] = c;
+          }
+        } catch (err: any) {
+          logger.warn(`[UpstoxCandleService] Batch candle fetch error for ${sym}: ${err.message}`);
+        }
+      })
+    );
+    return results;
+  }
+
   private static async fetchFromUpstox(
     instrumentKey: string,
     timeframe: string,

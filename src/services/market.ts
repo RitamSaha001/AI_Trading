@@ -272,22 +272,33 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
     }
 
     let upstoxQuotes: Record<string, any> = {};
+    let upstoxBatchCandles: Record<string, Candle[]> = {};
     try {
-      const upstoxRes = await ApiClient.getUpstoxMarketQuotes();
+      const [upstoxRes, batchRes] = await Promise.all([
+        ApiClient.getUpstoxMarketQuotes(),
+        ApiClient.getUpstoxCandlesBatch(INDIAN_ASSETS as any, tf),
+      ]);
       if (upstoxRes?.data?.quotes) {
         upstoxQuotes = upstoxRes.data.quotes;
+      }
+      if (batchRes?.data?.candles) {
+        upstoxBatchCandles = batchRes.data.candles;
       }
     } catch {}
 
     const activeAsset = focusAsset || 'RELIANCE';
     let focusCandles: Candle[] | null = null;
     if (isIndianAsset(activeAsset)) {
-      try {
-        const cRes = await ApiClient.getUpstoxCandles(activeAsset, tf);
-        if (cRes?.data?.candles && cRes.data.candles.length > 0) {
-          focusCandles = cRes.data.candles;
-        }
-      } catch {}
+      if (upstoxBatchCandles[activeAsset] && upstoxBatchCandles[activeAsset].length > 0) {
+        focusCandles = upstoxBatchCandles[activeAsset];
+      } else {
+        try {
+          const cRes = await ApiClient.getUpstoxCandles(activeAsset, tf);
+          if (cRes?.data?.candles && cRes.data.candles.length > 0) {
+            focusCandles = cRes.data.candles;
+          }
+        } catch {}
+      }
     } else {
       try {
         const sym = META[activeAsset].symbol;
@@ -329,6 +340,9 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
 
         if (a === activeAsset && focusCandles && focusCandles.length > 0) {
           candles = focusCandles;
+          history = candles.map((c) => c.close);
+        } else if (upstoxBatchCandles[a] && upstoxBatchCandles[a].length > 0) {
+          candles = upstoxBatchCandles[a];
           history = candles.map((c) => c.close);
         } else {
           const cfg = tfMap[tf];
@@ -466,8 +480,6 @@ export class MarketStreamService {
   private onTickCallback: ((updates: Partial<Record<Asset, { price: number; high: number; low: number; volume: number; changePct: number }>>) => void) | null = null;
   private onStatusChange: ((status: DataSource) => void) | null = null;
   private reconnectTimer: any = null;
-  private simTickerTimer: any = null;
-  private simulatedPrices: Partial<Record<Asset, { price: number; high: number; low: number; base: number; volume: number }>> = {};
   private isDestroyed = false;
 
   constructor(
@@ -476,64 +488,7 @@ export class MarketStreamService {
   ) {
     this.onTickCallback = onTick;
     this.onStatusChange = onStatusChange || null;
-    this.initSimulatedPrices();
     this.connect();
-    this.startSimulatedTickLoop();
-  }
-
-  private initSimulatedPrices() {
-    for (const a of INDIAN_ASSETS) {
-      const meta = META[a];
-      const base = meta?.basePrice || 1000;
-      this.simulatedPrices[a] = {
-        price: base,
-        high: +(base * 1.015).toFixed(2),
-        low: +(base * 0.985).toFixed(2),
-        base,
-        volume: 1000000,
-      };
-    }
-  }
-
-  private startSimulatedTickLoop() {
-    this.simTickerTimer = setInterval(() => {
-      if (this.isDestroyed || !this.onTickCallback) return;
-      const updates: Partial<Record<Asset, { price: number; high: number; low: number; volume: number; changePct: number }>> = {};
-
-      for (const a of INDIAN_ASSETS) {
-        const item = this.simulatedPrices[a];
-        if (!item) continue;
-
-        // Subtle realistic Brownian motion tick (+/- 0.04% - 0.10%)
-        const deltaPct = (Math.random() - 0.495) * 0.002;
-        let newPrice = item.price * (1 + deltaPct);
-        // Constrain within daily +/- 3.5% corridor of base price
-        const minBound = item.base * 0.965;
-        const maxBound = item.base * 1.035;
-        newPrice = Math.max(minBound, Math.min(maxBound, newPrice));
-        // Align to NSE 0.05 tick size
-        newPrice = +(Math.round(newPrice / 0.05) * 0.05).toFixed(2);
-
-        item.price = newPrice;
-        item.high = Math.max(item.high, newPrice);
-        item.low = Math.min(item.low, newPrice);
-        item.volume += Math.floor(Math.random() * 500 + 50);
-
-        const changePct = item.base > 0 ? +(((newPrice - item.base) / item.base) * 100).toFixed(2) : 0;
-
-        updates[a] = {
-          price: newPrice,
-          high: item.high,
-          low: item.low,
-          volume: item.volume,
-          changePct,
-        };
-      }
-
-      if (Object.keys(updates).length > 0 && this.onTickCallback) {
-        this.onTickCallback(updates);
-      }
-    }, 2000);
   }
 
   private connect() {
@@ -596,7 +551,6 @@ export class MarketStreamService {
   public destroy() {
     this.isDestroyed = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    if (this.simTickerTimer) clearInterval(this.simTickerTimer);
     if (this.ws) {
       try {
         this.ws.close();

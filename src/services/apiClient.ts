@@ -329,6 +329,13 @@ export const ApiClient = {
     );
   },
 
+  async getUpstoxCandlesBatch(symbols?: string[], timeframe: string = '1D') {
+    const q = symbols && symbols.length > 0 ? `?symbols=${encodeURIComponent(symbols.join(','))}&timeframe=${encodeURIComponent(timeframe)}` : `?timeframe=${encodeURIComponent(timeframe)}`;
+    return apiRequest<{ success: boolean; timeframe: string; count: number; candles: Record<string, Candle[]> }>(
+      `/api/market/candles/upstox/batch${q}`
+    );
+  },
+
   async getBrokerFunds(broker: string = 'upstox') {
     return apiRequest<{ funds: any }>(`/api/exchange/funds?broker=${encodeURIComponent(broker)}`);
   },

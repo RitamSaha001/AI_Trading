@@ -6,19 +6,15 @@ import {
   ShieldAlert,
   TrendingUp,
   RefreshCw,
-  Sliders,
   Scale,
-  Lock,
   ArrowRight,
-  CheckCircle2,
-  Activity,
   Clock,
-  Flame,
   Octagon,
   Trash2,
   AlertTriangle,
   Layers,
-  Radio,
+  Activity,
+  CheckCircle2,
 } from 'lucide-react';
 import { useLumen } from '../store';
 import {
@@ -31,7 +27,6 @@ import {
 import {
   AutonomousPilotProfile,
   QuantitativeOpportunity,
-  Asset,
   FleetAssetLifecycle,
 } from '../types';
 import { isIndianAsset, moneyINR, META, portfolioValue } from '../domain/portfolio';
@@ -100,37 +95,37 @@ export function AutonomousQuantPilot() {
     switch (lifecycleState) {
       case 'TRAILING_PROFIT':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-            Zero-Risk Trailing
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Trailing SL
           </span>
         );
       case 'IN_POSITION':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
             In Position
           </span>
         );
       case 'ORDER_PENDING':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-ping" />
-            Pacing Queue
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+            Order Queued
           </span>
         );
       case 'COOLDOWN':
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-300">
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
             Cooldown
           </span>
         );
       case 'MONITORING':
       default:
         return (
-          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200">
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 border border-zinc-200/80">
             <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
-            Monitoring Edge
+            Monitoring
           </span>
         );
     }
@@ -139,112 +134,126 @@ export function AutonomousQuantPilot() {
   const getStrategyBadge = (strat?: string) => {
     switch (strat) {
       case 'Hurst Trend Rider':
-        return 'bg-sky-50 text-sky-700 border-sky-200';
+        return 'bg-sky-50 text-sky-700 border-sky-200/70';
       case 'OU Mean Reversion':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200/70';
       case 'Value Accumulator':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
+        return 'bg-amber-50 text-amber-700 border-amber-200/70';
       case 'Titan Alpha Sentinel':
       default:
-        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+        return 'bg-indigo-50 text-indigo-700 border-indigo-200/70';
     }
   };
 
   return (
     <div className="w-full liquid-glass rounded-3xl p-5 sm:p-6 border border-white/80 shadow-xs space-y-5 transition-all">
-      {/* 1. Master Cockpit Header Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
+      {/* 1. Sleek Minimalist Header Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-1">
+        <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-950 via-indigo-800 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/25">
-              <Cpu className="w-6 h-6 text-indigo-100" />
+            <div className="w-10 h-10 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-sm">
+              <Cpu className="w-5 h-5 text-zinc-100" />
             </div>
             {isEnabled && !isTripped && (
-              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white animate-pulse" />
+              <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                isLiveUpstox && !marketSession.isOpen ? 'bg-blue-500' : 'bg-emerald-500 animate-pulse'
+              }`} />
             )}
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-bold tracking-tight text-zinc-950">
-                Autonomous Local Quant Cockpit
+              <h2 className="text-base font-bold tracking-tight text-zinc-950">
+                Autonomous Quantitative Desk
               </h2>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1 shadow-2xs">
-                <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                100% Offline Local Quant &bull; Zero Gemini
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 border border-zinc-200">
+                10 Nifty Bluechips
               </span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                NIFTY 10 Fleet
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                isEnabled
+                  ? (isLiveUpstox && !marketSession.isOpen
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200')
+                  : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  isEnabled
+                    ? (isLiveUpstox && !marketSession.isOpen ? 'bg-blue-500' : 'bg-emerald-500')
+                    : 'bg-zinc-400'
+                }`} />
+                {isEnabled
+                  ? (isLiveUpstox && !marketSession.isOpen ? 'Armed (Standby • 09:15 Open)' : 'Active (Autonomous)')
+                  : 'Standby (Disarmed)'}
               </span>
             </div>
             <p className="text-xs text-zinc-500 mt-0.5">
-              Multi-Asset Quantitative Fleet &bull; Upstox Rate-Paced Orders &bull; Dynamic Trailing Ratchets &bull; 15% Liquidity Floor
+              100% Deterministic Local Quant &bull; Half-Kelly Capital Sizing &bull; Dynamic Stop-Loss &amp; Profit Harvest Brackets
             </p>
           </div>
         </div>
 
-        {/* Master Control Matrix */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Master Control Action Group */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={handleScanClick}
             disabled={isScanning}
-            className="p-2.5 rounded-xl text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04] transition-all apple-btn-tactile border border-black/[0.05]"
-            title="Force refresh quantitative scans"
+            className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.04] transition-all border border-black/[0.06] apple-btn-tactile"
+            title="Scan market for qualified quantitative setups"
           >
-            <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin text-indigo-600' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
 
-          {/* Execution Mode Selector: Full Autonomous vs Semi-Autonomous */}
-          <div className="apple-segmented-track p-1 bg-black/[0.04] rounded-xl flex items-center">
+          {/* Mode Switcher */}
+          <div className="apple-segmented-track p-0.5 bg-black/[0.04] rounded-xl flex items-center text-xs">
             <button
               type="button"
               onClick={() => setPilotExecutionMode('full_autonomous')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              className={`px-3 py-1.5 font-semibold rounded-lg transition-all ${
                 executionMode === 'full_autonomous'
-                  ? 'bg-white text-indigo-950 shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-800'
+                  ? 'bg-white text-zinc-950 shadow-xs'
+                  : 'text-zinc-500 hover:text-zinc-900'
               }`}
-              title="Autonomous system undertakes all strategies and executes orders without manual intervention"
+              title="Full Autonomous: Automatically routes limit orders when setups qualify"
             >
               Full Auto
             </button>
             <button
               type="button"
               onClick={() => setPilotExecutionMode('semi_autonomous')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              className={`px-3 py-1.5 font-semibold rounded-lg transition-all ${
                 executionMode === 'semi_autonomous'
-                  ? 'bg-white text-indigo-950 shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-800'
+                  ? 'bg-white text-zinc-950 shadow-xs'
+                  : 'text-zinc-500 hover:text-zinc-900'
               }`}
-              title="System analyzes and proposes setups, requiring 1-click execution"
+              title="Semi-Auto: Scans setups and requires 1-click execution"
             >
               Semi-Auto
             </button>
           </div>
 
-          {/* Master Pilot Toggle */}
+          {/* Master Toggle */}
           <button
             type="button"
             onClick={toggleAutonomousPilot}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all apple-btn-tactile flex items-center gap-2 shadow-xs ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all apple-btn-tactile flex items-center gap-1.5 shadow-xs ${
               isEnabled
                 ? (isLiveUpstox && !marketSession.isOpen
-                    ? 'bg-blue-600 text-white shadow-blue-500/25 hover:bg-blue-700 ring-2 ring-blue-600/30'
-                    : 'bg-emerald-600 text-white shadow-emerald-500/25 hover:bg-emerald-700 ring-2 ring-emerald-600/30')
-                : 'bg-zinc-900 text-white hover:bg-zinc-800'
+                    ? 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-700'
+                    : 'bg-emerald-600 text-white shadow-emerald-500/20 hover:bg-emerald-700')
+                : 'bg-zinc-950 text-white hover:bg-zinc-800'
             }`}
           >
             <Zap className={`w-3.5 h-3.5 ${isEnabled ? (isLiveUpstox && !marketSession.isOpen ? 'text-blue-200' : 'text-emerald-200 animate-pulse') : 'text-zinc-400'}`} />
-            <span>{isEnabled ? (isLiveUpstox && !marketSession.isOpen ? 'Pilot Armed (Standby)' : 'Pilot Engaged') : 'Engage Pilot'}</span>
+            <span>{isEnabled ? (isLiveUpstox && !marketSession.isOpen ? 'Armed (Standby)' : 'Pilot Active') : 'Engage Autopilot'}</span>
           </button>
 
-          {/* Emergency Disarm Button */}
+          {/* Emergency Disarm */}
           {isEnabled && (
             <button
               type="button"
               onClick={emergencyDisarmPilot}
-              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-xl transition-all apple-btn-tactile flex items-center gap-1.5 shrink-0"
-              title="Instant emergency disarm and order cancel"
+              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-xl transition-all apple-btn-tactile flex items-center gap-1 shrink-0"
+              title="Instant emergency disarm and cancel open orders"
             >
               <Octagon className="w-3.5 h-3.5 text-rose-600" />
               <span>Disarm</span>
@@ -253,122 +262,99 @@ export function AutonomousQuantPilot() {
         </div>
       </div>
 
-      {/* Pilot Standby Guidance Banner (When Disarmed) */}
-      {!isEnabled && (
-        <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+      {/* Standby Banner when market is closed */}
+      {isEnabled && isLiveUpstox && !marketSession.isOpen && (
+        <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <span className="text-xs">
-              <strong>Pilot on Standby:</strong> Quantitative multi-factor scanning is currently paused. Click <strong>"Engage Pilot"</strong> above to arm automated fleet scanning, limit order placement, and dynamic profit ratchets.
+            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 border border-blue-200">
+              <Clock className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-blue-900">
+                Armed in Standby &bull; Capital Safeguarded
+              </span>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Indian markets (NSE) are closed. All 10 bluechip models and Half-Kelly sizing circuits are armed in standby. No live orders will be routed tonight. Execution begins at <strong>09:15 AM IST tomorrow</strong>.
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono font-bold px-2.5 py-1 bg-blue-100 text-blue-800 rounded-lg inline-block border border-blue-200/60 shrink-0">
+            Opens 09:15 AM IST
+          </span>
+        </div>
+      )}
+
+      {/* Disarmed Notice Banner */}
+      {!isEnabled && (
+        <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-zinc-500 shrink-0" />
+            <span className="text-xs text-zinc-600">
+              <strong>Autopilot on Standby:</strong> Local quantitative multi-factor scanning is idle. Click <strong>"Engage Autopilot"</strong> to arm automated model scanning and limit order routing.
             </span>
           </div>
           <button
             type="button"
             onClick={toggleAutonomousPilot}
-            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs shrink-0 apple-btn-tactile flex items-center gap-1.5"
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs shrink-0 apple-btn-tactile flex items-center gap-1"
           >
-            <Zap className="w-3.5 h-3.5 text-emerald-200" />
-            <span>Engage Pilot</span>
+            <Zap className="w-3 h-3 text-emerald-200" />
+            <span>Engage</span>
           </button>
         </div>
       )}
 
-      {/* Pilot Armed (Awaiting Market Open) Banner (When Armed but Market Closed) */}
-      {isEnabled && isLiveUpstox && !marketSession.isOpen && (
-        <div className="p-4 rounded-2xl bg-blue-50/90 border border-blue-200/90 text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs animate-in fade-in">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-blue-600/10 text-blue-700 flex items-center justify-center shrink-0 border border-blue-600/20">
-              <Clock className="w-4 h-4 text-blue-600" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-blue-900">
-                Autopilot Armed &amp; Capital Safeguarded (Standby)
-              </h4>
-              <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">
-                Indian markets (NSE/BSE) are currently closed. All 20 quantitative bluechip models, Half-Kelly sizing algorithms, and capital defense circuits are armed in standby. No live orders will be placed tonight. Autonomous trading will seamlessly activate at <strong>09:15 AM IST tomorrow</strong>.
-              </p>
-            </div>
-          </div>
-          <div className="text-right shrink-0">
-            <span className="text-[11px] font-mono font-bold px-2.5 py-1 bg-blue-100 text-blue-800 rounded-lg inline-block border border-blue-200/60">
-              Opens: 09:15 AM IST
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Safety & Operational Health Status Ribbon */}
+      {/* 2. Executive Metrics Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {/* Rate Limiter Status */}
+        {/* Available Capital */}
         <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
           <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span className="flex items-center gap-1 font-medium">
-              <Activity className="w-3.5 h-3.5 text-indigo-600" />
-              Upstox Rate Limit
-            </span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-              rateLimitStatus.isThrottled ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-            }`}>
-              {rateLimitStatus.isThrottled ? 'Paced' : 'Optimal'}
-            </span>
-          </div>
-          <div className="text-sm font-bold font-mono text-zinc-950">
-            {rateLimitStatus.requestsThisMinute} / {rateLimitStatus.maxPerMinute} <span className="text-[11px] font-normal text-zinc-500">orders/min</span>
-          </div>
-          <div className="text-[10px] text-zinc-400">
-            &ge;1,500ms pacing &bull; Rolling window
-          </div>
-        </div>
-
-        {/* Mandatory Cash Buffer */}
-        <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span className="flex items-center gap-1 font-medium">
+            <span className="font-medium flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              Cash Liquidity Floor
+              Available Capital
             </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
-              &ge;{minCashFloorPct}% Guard
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+              100% Cash
             </span>
           </div>
           <div className="text-sm font-bold font-mono text-zinc-950">
             {moneyINR(currentCash)}
           </div>
           <div className="text-[10px] text-zinc-400">
-            Floor: {moneyINR(minRequiredCash)} reserve
+            Reserve floor: {moneyINR(minRequiredCash)}
           </div>
         </div>
 
-        {/* Market Session & NSE Hours */}
+        {/* Market Session */}
         <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
           <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span className="flex items-center gap-1 font-medium">
+            <span className="font-medium flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-blue-600" />
-              NSE Trading Session
+              NSE Session
             </span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-              marketSession.isOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-100 text-zinc-700'
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+              marketSession.isOpen ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200'
             }`}>
-              {marketSession.isOpen ? 'Session Active' : 'Closed'}
+              {marketSession.isOpen ? 'Live' : 'Closed'}
             </span>
           </div>
           <div className="text-xs font-bold text-zinc-900 truncate">
             {marketSession.sessionDescription}
           </div>
           <div className="text-[10px] text-zinc-400">
-            09:15 - 15:30 IST &bull; 15:00 MIS Cutoff
+            09:15 - 15:30 IST
           </div>
         </div>
 
-        {/* Drawdown Circuit Breaker */}
+        {/* Risk & Drawdown */}
         <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
           <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span className="flex items-center gap-1 font-medium">
+            <span className="font-medium flex items-center gap-1">
               <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-              Circuit Breaker
+              Drawdown Defense
             </span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-              isTripped ? 'bg-rose-100 text-rose-800' : 'bg-zinc-100 text-zinc-700'
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+              isTripped ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200'
             }`}>
               {isTripped ? 'TRIPPED' : 'ARMED'}
             </span>
@@ -377,22 +363,43 @@ export function AutonomousQuantPilot() {
             {(autonomousPilot?.dailyDrawdownPct || 0).toFixed(2)}% <span className="text-[11px] font-normal text-zinc-400">/ {profileConfig.maxDrawdownCircuitBreakerPct}%</span>
           </div>
           <div className="text-[10px] text-zinc-400">
-            Trades Executed: {autonomousPilot?.totalAutopilotTradesExecuted || 0}
+            Max loss cap: ₹{((currentCash * profileConfig.maxDrawdownCircuitBreakerPct) / 100).toFixed(0)}
+          </div>
+        </div>
+
+        {/* Order Pacing */}
+        <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-zinc-500">
+            <span className="font-medium flex items-center gap-1">
+              <Activity className="w-3.5 h-3.5 text-indigo-600" />
+              Order Rate Pacing
+            </span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+              rateLimitStatus.isThrottled ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            }`}>
+              {rateLimitStatus.isThrottled ? 'Paced' : 'Optimal'}
+            </span>
+          </div>
+          <div className="text-sm font-bold font-mono text-zinc-950">
+            {rateLimitStatus.requestsThisMinute} / {rateLimitStatus.maxPerMinute} <span className="text-[11px] font-normal text-zinc-500">orders/min</span>
+          </div>
+          <div className="text-[10px] text-zinc-400">
+            &ge;1,500ms safety interval
           </div>
         </div>
       </div>
 
-      {/* Circuit Breaker Alert Banner */}
+      {/* Circuit Breaker Alert */}
       {isTripped && (
         <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-3">
-            <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0" />
+            <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-rose-700">
                 Capital Protection Circuit Breaker Tripped
               </h4>
               <p className="text-xs text-rose-600">
-                {autonomousPilot?.tripReason || 'Daily drawdown limit reached. Trading halted to protect cash.'}
+                {autonomousPilot?.tripReason || 'Daily drawdown limit reached. Order routing halted to safeguard capital.'}
               </p>
             </div>
           </div>
@@ -406,7 +413,7 @@ export function AutonomousQuantPilot() {
         </div>
       )}
 
-      {/* 3. Strategy Profile Selection Cards */}
+      {/* 3. Strategy Profiles */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {(['conservative', 'balanced', 'momentum'] as AutonomousPilotProfile[]).map((pKey) => {
           const cfg = PILOT_PROFILES[pKey];
@@ -418,18 +425,18 @@ export function AutonomousQuantPilot() {
               onClick={() => setPilotProfile(pKey)}
               className={`p-3.5 rounded-2xl border text-left transition-all apple-btn-tactile ${
                 isSelected
-                  ? 'bg-white border-indigo-600/60 shadow-md shadow-indigo-500/5 ring-1 ring-indigo-600/30'
+                  ? 'bg-white border-zinc-900 shadow-sm ring-1 ring-zinc-900'
                   : 'bg-white/50 hover:bg-white border-black/[0.05] text-zinc-600'
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className={`text-xs font-bold flex items-center gap-1.5 ${isSelected ? 'text-indigo-950' : 'text-zinc-800'}`}>
+                <span className={`text-xs font-bold flex items-center gap-1.5 ${isSelected ? 'text-zinc-950' : 'text-zinc-800'}`}>
                   {pKey === 'conservative' && <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />}
                   {pKey === 'balanced' && <Scale className="w-3.5 h-3.5 text-emerald-600" />}
                   {pKey === 'momentum' && <TrendingUp className="w-3.5 h-3.5 text-blue-600" />}
                   <span>{cfg.name}</span>
                 </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-black/[0.04] text-zinc-600 font-semibold">
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-black/[0.04] text-zinc-600 font-semibold">
                   Min {cfg.minRiskReward}:1 R:R
                 </span>
               </div>
@@ -445,21 +452,21 @@ export function AutonomousQuantPilot() {
         })}
       </div>
 
-      {/* 4. Cockpit View Navigation Tabs */}
+      {/* 4. Streamlined Institutional Navigation Tabs */}
       <div className="flex items-center justify-between border-b border-black/[0.06] pb-2 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => setActiveTab('fleet')}
             className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
               activeTab === 'fleet'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-zinc-900 text-white shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04]'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Fleet Command Matrix</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 text-white font-mono">
+            <span>Active Model Fleet</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/20 text-white font-mono">
               10
             </span>
           </button>
@@ -469,13 +476,15 @@ export function AutonomousQuantPilot() {
             onClick={() => setActiveTab('opportunities')}
             className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
               activeTab === 'opportunities'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-zinc-900 text-white shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04]'
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
-            <span>Premier Setups</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 font-mono">
+            <span>Actionable Setups</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+              activeTab === 'opportunities' ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-700'
+            }`}>
               {opportunities.length}
             </span>
           </button>
@@ -485,14 +494,16 @@ export function AutonomousQuantPilot() {
             onClick={() => setActiveTab('logs')}
             className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
               activeTab === 'logs'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-zinc-900 text-white shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04]'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>Activity Audit Stream</span>
+            <span>Audit &amp; Execution Stream</span>
             {actionLogs.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-zinc-200 text-zinc-700 font-mono">
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+                activeTab === 'logs' ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-700'
+              }`}>
                 {actionLogs.length}
               </span>
             )}
@@ -530,17 +541,15 @@ export function AutonomousQuantPilot() {
         )}
       </div>
 
-      {/* 5. TAB CONTENT PANELS */}
-
-      {/* TAB 1: FLEET COMMAND MATRIX */}
+      {/* 5. TAB 1: ACTIVE MODEL FLEET */}
       {activeTab === 'fleet' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between text-xs text-zinc-500 px-1">
             <span>
-              Autonomous desk monitoring <strong>10 Indian Bluechips</strong> across 4 local quantitative strategies
+              Autonomous desk monitoring <strong>10 liquid Indian Bluechips</strong> via local statistical models
             </span>
             <span className="text-[11px] text-zinc-400">
-              Live IST Price Feed &bull; Upstox API Paced
+              Authoritative Upstox Quotes &bull; Zero Heuristic Jitter
             </span>
           </div>
 
@@ -549,12 +558,12 @@ export function AutonomousQuantPilot() {
               <thead>
                 <tr className="bg-black/[0.02] border-b border-black/[0.05] text-[11px] font-semibold text-zinc-500">
                   <th className="py-3 px-3.5">Asset / Company</th>
-                  <th className="py-3 px-3">Live Spot</th>
-                  <th className="py-3 px-3">Assigned Strategy</th>
-                  <th className="py-3 px-3">Regime / Hurst</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3">Targets (SL / TP)</th>
-                  <th className="py-3 px-3.5 text-right">Position &amp; P&amp;L</th>
+                  <th className="py-3 px-3">Spot Price</th>
+                  <th className="py-3 px-3">Assigned Model</th>
+                  <th className="py-3 px-3">Market Regime</th>
+                  <th className="py-3 px-3">Desk Status</th>
+                  <th className="py-3 px-3">Target Brackets (SL / TP)</th>
+                  <th className="py-3 px-3.5 text-right">Position &amp; Net P&amp;L</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/[0.04]">
@@ -571,7 +580,7 @@ export function AutonomousQuantPilot() {
                   const pnlPct = unitsHeld > 0 && avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0;
 
                   return (
-                    <tr key={asset} className="hover:bg-indigo-50/20 transition-colors">
+                    <tr key={asset} className="hover:bg-zinc-50/80 transition-colors">
                       {/* Asset & Name */}
                       <td className="py-3 px-3.5">
                         <div className="flex items-center gap-2.5">
@@ -589,14 +598,14 @@ export function AutonomousQuantPilot() {
                               </span>
                               <span className="text-[10px] text-zinc-400 font-normal">NSE</span>
                             </div>
-                            <div className="text-[10px] text-zinc-500 truncate max-w-[140px] flex items-center gap-1">
-                              <span>{meta?.name || asset}</span>
+                            <div className="text-[10px] text-zinc-500 truncate max-w-[140px]">
+                              {meta?.name || asset}
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Live Spot */}
+                      {/* Authoritative Live Spot */}
                       <td className="py-3 px-3">
                         <div className="font-mono font-bold text-zinc-900">
                           {moneyINR(price)}
@@ -608,7 +617,7 @@ export function AutonomousQuantPilot() {
                         </div>
                       </td>
 
-                      {/* Assigned Strategy */}
+                      {/* Assigned Quantitative Strategy */}
                       <td className="py-3 px-3">
                         <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-md border ${getStrategyBadge(strat)}`}>
                           {strat}
@@ -616,18 +625,18 @@ export function AutonomousQuantPilot() {
                         {fleetItem?.squeezeStatus === 'SQUEEZE_ON' && (
                           <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            Squeeze Alert
+                            Volatility Compression
                           </div>
                         )}
                         {fleetItem?.squeezeStatus === 'SQUEEZE_OFF' && (
                           <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200">
                             <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping" />
-                            Breakout Firing
+                            Expansion Breakout
                           </div>
                         )}
                       </td>
 
-                      {/* Regime / Hurst */}
+                      {/* Regime & Hurst */}
                       <td className="py-3 px-3">
                         <div className="text-zinc-800 font-medium text-[11px]">
                           {fleetItem?.regimeLabel || 'Calibrating'}
@@ -642,29 +651,20 @@ export function AutonomousQuantPilot() {
                         {getLifecycleBadge(fleetItem?.state)}
                       </td>
 
-                      {/* Stop-Loss & Multi-Tier Target Brackets */}
+                      {/* Targets */}
                       <td className="py-3 px-3 font-mono text-[11px]">
                         {unitsHeld > 0 && fleetItem?.stopLossPrice ? (
                           <div className="space-y-0.5">
                             <div className="text-rose-600 font-medium">
                               SL: {moneyINR(fleetItem.stopLossPrice)}
-                              {fleetItem.state === 'TRAILING_PROFIT' && (
-                                <span className="ml-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 rounded">RATCHET</span>
-                              )}
                             </div>
                             <div className="text-emerald-600 font-medium">
-                              {(fleetItem?.trancheStage || 0) >= 2 ? (
-                                <span>T3 Chandelier: {moneyINR(fleetItem.takeProfit3Price || price * 1.08)}</span>
-                              ) : (fleetItem?.trancheStage || 0) === 1 ? (
-                                <span>T2 Core: {moneyINR(fleetItem.takeProfit2Price || fleetItem.takeProfitPrice || price * 1.05)}</span>
-                              ) : (
-                                <span>T1 Scalp: {moneyINR(fleetItem.takeProfitPrice || price * 1.03)}</span>
-                              )}
+                              TP: {moneyINR(fleetItem.takeProfitPrice || price * 1.04)}
                             </div>
                           </div>
                         ) : (
-                          <div className="text-zinc-400 text-[10px] space-y-0.5">
-                            <div>Half-Kelly: <span className="font-semibold text-zinc-600">{(fleetItem?.kellyFraction || 1.0).toFixed(2)}x</span></div>
+                          <div className="text-zinc-400 text-[10px]">
+                            Half-Kelly: <span className="font-semibold text-zinc-600">{(fleetItem?.kellyFraction || 1.0).toFixed(2)}x</span>
                           </div>
                         )}
                       </td>
@@ -693,29 +693,28 @@ export function AutonomousQuantPilot() {
         </div>
       )}
 
-      {/* TAB 2: PREMIER QUANTITATIVE SETUPS */}
+      {/* 6. TAB 2: ACTIONABLE SETUPS */}
       {activeTab === 'opportunities' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1 text-xs text-zinc-500">
             <span>
-              High-conviction setups satisfying strict {profileConfig.minRiskReward}:1 reward-to-risk and local composite filters
+              High-conviction setups satisfying minimum {profileConfig.minRiskReward}:1 profit-to-risk threshold
             </span>
             {autonomousPilot?.lastScanAt && (
               <span className="text-[10px] text-zinc-400">
-                Scanned: {new Date(autonomousPilot.lastScanAt).toLocaleTimeString()}
+                Last scan: {new Date(autonomousPilot.lastScanAt).toLocaleTimeString()}
               </span>
             )}
           </div>
 
           {opportunities.length === 0 ? (
-            <div className="p-8 rounded-2xl bg-white/40 border border-black/[0.04] text-center space-y-2">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-                <ShieldCheck className="w-5 h-5" />
+            <div className="p-8 rounded-2xl bg-white/50 border border-black/[0.05] text-center space-y-2">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200/60">
+                <CheckCircle2 className="w-5 h-5" />
               </div>
-              <h4 className="text-xs font-bold text-zinc-900">Capital 100% Protected</h4>
+              <h4 className="text-xs font-bold text-zinc-900">Capital 100% Preserved</h4>
               <p className="text-xs text-zinc-500 max-w-md mx-auto leading-relaxed">
-                No markets currently satisfy your strict {profileConfig.minRiskReward}:1 profit-to-risk threshold and safety filters.
-                The Local Quant Engine holds liquid capital until an optimal asymmetric setup is verified.
+                No setups currently meet your minimum {profileConfig.minRiskReward}:1 risk-reward hurdle and liquidity filters. The engine holds liquid capital until an asymmetric edge is mathematically confirmed.
               </p>
             </div>
           ) : (
@@ -728,7 +727,7 @@ export function AutonomousQuantPilot() {
                 return (
                   <div
                     key={opp.id}
-                    className="p-4 rounded-2xl bg-white/90 border border-black/[0.06] shadow-xs space-y-3 hover:border-indigo-500/40 transition-all"
+                    className="p-4 rounded-2xl bg-white/90 border border-black/[0.06] shadow-2xs space-y-3 hover:border-zinc-400/60 transition-all"
                   >
                     {/* Card Header */}
                     <div className="flex items-start justify-between gap-3">
@@ -749,11 +748,11 @@ export function AutonomousQuantPilot() {
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 font-mono border border-emerald-200">
                               {opp.riskRewardRatio}:1 R:R
                             </span>
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
-                              {opp.confidenceLabel} CONVICTION ({opp.compositeScore}/100)
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              {opp.confidenceLabel} ({opp.compositeScore}/100)
                             </span>
                           </div>
                         </div>
@@ -766,60 +765,49 @@ export function AutonomousQuantPilot() {
                         className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs apple-btn-tactile shrink-0 ${
                           isLiveUpstox && !marketSession.isOpen
                             ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            : 'bg-zinc-900 hover:bg-zinc-800 text-white'
                         }`}
-                        title={isLiveUpstox && !marketSession.isOpen ? 'Indian markets are closed (09:15 - 15:30 IST). Live orders cannot be placed.' : 'Execute setup'}
+                        title={isLiveUpstox && !marketSession.isOpen ? 'Indian markets are closed (09:15 - 15:30 IST). Orders unlock tomorrow morning.' : 'Execute setup'}
                       >
-                        <span>{isLiveUpstox && !marketSession.isOpen ? 'Market Closed' : 'Execute'}</span>
+                        <span>{isLiveUpstox && !marketSession.isOpen ? 'Market Closed' : 'Execute Setup'}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
-                    {/* Body Content based on View Mode */}
+                    {/* Description based on View Mode */}
                     {viewMode === 'beginner' ? (
-                      <div className="space-y-2 text-xs">
-                        <div className="p-2.5 rounded-xl bg-indigo-50/50 border border-indigo-100/60 text-indigo-950">
-                          <span className="font-bold">Why Trade This: </span>
-                          <span className="text-zinc-600 leading-relaxed">
-                            {opp.beginnerExplanation.why}
-                          </span>
-                        </div>
-
-                        <div className="p-2.5 rounded-xl bg-emerald-50/40 border border-emerald-100/60 text-emerald-950">
-                          <span className="font-bold">Safety Guarantee: </span>
-                          <span className="text-zinc-600 leading-relaxed">
-                            {opp.beginnerExplanation.safeguardNotice}
-                          </span>
-                        </div>
+                      <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/70 text-xs text-zinc-700 leading-relaxed">
+                        <span className="font-bold text-zinc-900">Quantitative Edge: </span>
+                        {opp.beginnerExplanation.why}
                       </div>
                     ) : (
-                      <div className="space-y-2 text-xs">
+                      <div className="space-y-1 text-xs">
                         <p className="text-zinc-600 text-[11px] leading-relaxed">
                           {opp.plainEnglishRationale}
                         </p>
-                        <div className="grid grid-cols-4 gap-2 pt-1 font-mono text-[10px]">
-                          <div className="p-1.5 rounded-lg bg-black/[0.03]">
+                        <div className="grid grid-cols-4 gap-1.5 pt-1 font-mono text-[10px]">
+                          <div className="p-1 rounded-md bg-black/[0.02]">
                             <span className="text-zinc-400 block">RSI(14)</span>
                             <span className="font-semibold text-zinc-800">{opp.indicatorsSummary.rsi}</span>
                           </div>
-                          <div className="p-1.5 rounded-lg bg-black/[0.03]">
+                          <div className="p-1 rounded-md bg-black/[0.02]">
                             <span className="text-zinc-400 block">ATR</span>
                             <span className="font-semibold text-zinc-800">{opp.indicatorsSummary.atr}</span>
                           </div>
-                          <div className="p-1.5 rounded-lg bg-black/[0.03]">
+                          <div className="p-1 rounded-md bg-black/[0.02]">
                             <span className="text-zinc-400 block">Regime</span>
                             <span className="font-semibold text-zinc-800">{opp.regime.split('_')[0]}</span>
                           </div>
-                          <div className="p-1.5 rounded-lg bg-black/[0.03]">
-                            <span className="text-zinc-400 block">Vol</span>
+                          <div className="p-1 rounded-md bg-black/[0.02]">
+                            <span className="text-zinc-400 block">Volatility</span>
                             <span className="font-semibold text-zinc-800">{opp.indicatorsSummary.volatilityPct}%</span>
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Mathematical Levels Grid */}
-                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-black/[0.04] text-xs">
+                    {/* Mathematical Target Brackets Grid */}
+                    <div className="grid grid-cols-3 gap-2 pt-1 border-t border-black/[0.04] text-xs">
                       <div className="p-2 rounded-xl bg-black/[0.02]">
                         <span className="text-[10px] text-zinc-400 block">Entry Spot</span>
                         <span className="font-bold font-mono text-zinc-950">
@@ -827,14 +815,14 @@ export function AutonomousQuantPilot() {
                         </span>
                       </div>
 
-                      <div className="p-2 rounded-xl bg-rose-50/50 border border-rose-100/60">
+                      <div className="p-2 rounded-xl bg-rose-50/70 border border-rose-100">
                         <span className="text-[10px] text-rose-600 block font-medium">Stop-Loss (Capped)</span>
                         <span className="font-bold font-mono text-rose-700">
                           {currSym}{opp.stopLossPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
 
-                      <div className="p-2 rounded-xl bg-emerald-50/50 border border-emerald-100/60">
+                      <div className="p-2 rounded-xl bg-emerald-50/70 border border-emerald-100">
                         <span className="text-[10px] text-emerald-600 block font-medium">Target Profit</span>
                         <span className="font-bold font-mono text-emerald-700">
                           {currSym}{opp.takeProfitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -842,16 +830,16 @@ export function AutonomousQuantPilot() {
                       </div>
                     </div>
 
-                    {/* Risk Budget Summary */}
-                    <div className="flex items-center justify-between text-[11px] text-zinc-500 px-1 pt-1">
+                    {/* Capital Sizing Summary */}
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500 px-0.5 pt-0.5">
                       <span>
                         Size: <strong className="text-zinc-800">{opp.recommendedUnits} {isIndian ? 'shares' : 'units'}</strong>
                       </span>
                       <span>
-                        Max Loss: <strong className="text-rose-600">{currSym}{opp.projectedLoss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                        Max Risk: <strong className="text-rose-600">{currSym}{opp.projectedLoss.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                       </span>
                       <span>
-                        Target Gain: <strong className="text-emerald-600">+{currSym}{opp.projectedGain.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                        Target Return: <strong className="text-emerald-600">+{currSym}{opp.projectedGain.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                       </span>
                     </div>
                   </div>
@@ -862,30 +850,30 @@ export function AutonomousQuantPilot() {
         </div>
       )}
 
-      {/* TAB 3: AUTONOMOUS AUDIT & ACTIVITY STREAM */}
+      {/* 7. TAB 3: AUDIT & EXECUTION STREAM */}
       {activeTab === 'logs' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between text-xs text-zinc-500 px-1">
             <span>
-              Live chronological activity stream recorded by the Autonomous Local Quant Pilot
+              Deterministic execution &amp; safety invariant audit stream recorded in real time
             </span>
             <span className="text-[11px] text-zinc-400">
-              Deterministic Invariant Verification
+              SEBI Capital Protection Verifier
             </span>
           </div>
 
           {actionLogs.length === 0 ? (
-            <div className="p-8 rounded-2xl bg-white/40 border border-black/[0.04] text-center space-y-2">
-              <div className="w-10 h-10 rounded-2xl bg-zinc-100 text-zinc-400 flex items-center justify-center mx-auto">
-                <Clock className="w-5 h-5" />
+            <div className="p-8 rounded-2xl bg-white/50 border border-black/[0.05] text-center space-y-2">
+              <div className="w-9 h-9 rounded-xl bg-zinc-100 text-zinc-400 flex items-center justify-center mx-auto">
+                <Clock className="w-4 h-4" />
               </div>
               <h4 className="text-xs font-bold text-zinc-900">
-                {isEnabled ? 'Monitoring Market Signals' : 'Pilot on Standby'}
+                {isEnabled ? 'Monitoring Market Signals' : 'Desk on Standby'}
               </h4>
               <p className="text-xs text-zinc-500 max-w-sm mx-auto">
                 {isEnabled
-                  ? 'Pilot is actively scanning the NIFTY 10 fleet every 2.5s. When setups qualify, order entries, trailing ratchets, and profit harvests will be recorded here in real time.'
-                  : 'Pilot is currently disengaged. Click "Engage Pilot" above to activate multi-factor quantitative scanning and autonomous execution.'}
+                  ? 'The engine is scanning the 10 bluechip fleet. When market setups qualify, entries, trailing ratchets, and profit harvests will be recorded here.'
+                  : 'Autopilot is currently idle. Click "Engage Autopilot" to activate multi-factor quantitative scanning.'}
               </p>
               {!isEnabled && (
                 <div className="pt-2">
@@ -895,7 +883,7 @@ export function AutonomousQuantPilot() {
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs apple-btn-tactile inline-flex items-center gap-1.5"
                   >
                     <Zap className="w-3.5 h-3.5 text-emerald-200" />
-                    <span>Engage Pilot Now</span>
+                    <span>Engage Autopilot</span>
                   </button>
                 </div>
               )}
@@ -917,7 +905,7 @@ export function AutonomousQuantPilot() {
                 if (log.action === 'AUTONOMOUS_ENGAGED') badgeStyle = 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
                 if (log.action === 'DISARMED') badgeStyle = 'bg-rose-100 text-rose-800 font-bold border border-rose-300';
                 if (log.action === 'ALPHA_SCAN') badgeStyle = 'bg-sky-100 text-sky-800 font-bold border border-sky-300';
-                if (log.action === 'SKIPPED') badgeStyle = 'bg-amber-50 text-amber-800 font-medium';
+                if (log.action === 'SKIPPED') badgeStyle = 'bg-zinc-100 text-zinc-600 font-medium';
 
                 return (
                   <div

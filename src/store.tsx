@@ -1806,7 +1806,11 @@ export function Provider({ children }: { children: React.ReactNode }) {
                 };
               }
               const isIndian = isIndianAsset(a);
-              const source = currentM.source || (isIndian ? 'Upstox Heuristic Simulation' : 'Binance WebSocket (Live)');
+              if (isIndian) {
+                // Indian equities are exclusively serviced by authoritative Upstox quotes
+                continue;
+              }
+              const source = currentM.source || 'Binance WebSocket (Live)';
               next[a] = {
                 ...currentM,
                 price: upd.price,
@@ -1817,7 +1821,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
                 history: newHist,
                 candles,
                 source,
-                isSynthetic: currentM.isSynthetic ?? isIndian,
+                isSynthetic: false,
                 lastUpdated: now,
               };
             }
