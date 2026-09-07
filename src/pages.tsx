@@ -5,6 +5,7 @@ import { ASSETS, INDIAN_ASSETS, Asset, Timeframe, Side, OrderType, StrategyKind 
 import { LineChart, Sparkline } from './Chart';
 import { MarketHeatmap } from './components/MarketHeatmap';
 import { AutonomousQuantPilot } from './components/AutonomousQuantPilot';
+import { UpstoxTradeAnalytics } from './components/UpstoxTradeAnalytics';
 import { evaluateMarketOpportunity } from './domain/autonomousPilot';
 import {
   indicators,
@@ -182,6 +183,11 @@ export function Dashboard() {
           Launch Interactive Guide →
         </button>
       </div>
+
+      {/* Upstox Real-Money Live Trade Analytics Box (Active in Upstox mode) */}
+      {state.accountMode === 'upstox' && (
+        <UpstoxTradeAnalytics />
+      )}
 
       {/* Autonomous Local Quant AI Pilot (Capital Protection & 1-Click Execution) */}
       <AutonomousQuantPilot />
