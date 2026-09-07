@@ -6,6 +6,7 @@ import { LineChart, Sparkline } from './Chart';
 import { MarketHeatmap } from './components/MarketHeatmap';
 import { AutonomousQuantPilot } from './components/AutonomousQuantPilot';
 import { UpstoxTradeAnalytics } from './components/UpstoxTradeAnalytics';
+import { UpstoxPortfolioAnalytics } from './components/UpstoxPortfolioAnalytics';
 import { evaluateMarketOpportunity } from './domain/autonomousPilot';
 import {
   indicators,
@@ -1676,59 +1677,64 @@ export function Portfolio() {
         </GlassCard>
       </div>
 
-      {/* Asset Allocation Bar */}
-      <GlassCard className="space-y-3">
-        <div className="flex items-center justify-between text-xs font-semibold text-zinc-800">
-          <span>Capital Allocation Breakdown</span>
-          <span>Cash: {((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}%</span>
-        </div>
-        <div className="w-full h-3 rounded-full overflow-hidden flex bg-black/[0.04]">
-          {/* Cash slice */}
-          <div
-            className="h-full bg-zinc-300"
-            style={{ width: `${(state.cash / Math.max(pv, 1)) * 100}%` }}
-            title={`Cash: ${moneyINR(state.cash)}`}
-          />
-          {activeHoldings.map((a) => {
-            const val = (state.positions[a] || 0) * (markets[a]?.price || 0);
-            const pct = (val / Math.max(pv, 1)) * 100;
-            return (
-              <div
-                key={a}
-                className="h-full transition-all"
-                style={{
-                  width: `${pct}%`,
-                  backgroundColor: META[a]?.iconColor || '#4f46e5',
-                }}
-                title={`${a}: ${pct.toFixed(1)}% (${moneyINR(val)})`}
-              />
-            );
-          })}
-        </div>
-
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4 pt-2 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-zinc-300" />
-            <span className="text-zinc-600">Cash ({((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}%)</span>
+      {/* Upstox Mode Animated Analytics Suite OR Traditional Allocation Bar */}
+      {accountMode === 'upstox' || upstoxAccount?.connected ? (
+        <UpstoxPortfolioAnalytics />
+      ) : (
+        /* Asset Allocation Bar */
+        <GlassCard className="space-y-3">
+          <div className="flex items-center justify-between text-xs font-semibold text-zinc-800">
+            <span>Capital Allocation Breakdown</span>
+            <span>Cash: {((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}%</span>
           </div>
-          {activeHoldings.map((a) => {
-            const val = (state.positions[a] || 0) * (markets[a]?.price || 0);
-            const pct = (val / Math.max(pv, 1)) * 100;
-            return (
-              <div key={a} className="flex items-center gap-1.5">
-                <span
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: META[a]?.iconColor || '#4f46e5' }}
+          <div className="w-full h-3 rounded-full overflow-hidden flex bg-black/[0.04]">
+            {/* Cash slice */}
+            <div
+              className="h-full bg-zinc-300"
+              style={{ width: `${(state.cash / Math.max(pv, 1)) * 100}%` }}
+              title={`Cash: ${moneyINR(state.cash)}`}
+            />
+            {activeHoldings.map((a) => {
+              const val = (state.positions[a] || 0) * (markets[a]?.price || 0);
+              const pct = (val / Math.max(pv, 1)) * 100;
+              return (
+                <div
+                  key={a}
+                  className="h-full transition-all"
+                  style={{
+                    width: `${pct}%`,
+                    backgroundColor: META[a]?.iconColor || '#4f46e5',
+                  }}
+                  title={`${a}: ${pct.toFixed(1)}% (${moneyINR(val)})`}
                 />
-                <span className="text-zinc-600">
-                  {a} ({pct.toFixed(1)}%)
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </GlassCard>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-4 pt-2 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-zinc-300" />
+              <span className="text-zinc-600">Cash ({((state.cash / Math.max(pv, 1)) * 100).toFixed(1)}%)</span>
+            </div>
+            {activeHoldings.map((a) => {
+              const val = (state.positions[a] || 0) * (markets[a]?.price || 0);
+              const pct = (val / Math.max(pv, 1)) * 100;
+              return (
+                <div key={a} className="flex items-center gap-1.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: META[a]?.iconColor || '#4f46e5' }}
+                  />
+                  <span className="text-zinc-600">
+                    {a} ({pct.toFixed(1)}%)
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </GlassCard>
+      )}
 
       {/* Positions Table */}
       <GlassCard className="overflow-hidden p-0">
