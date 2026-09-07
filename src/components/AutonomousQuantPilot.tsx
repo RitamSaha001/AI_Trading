@@ -263,41 +263,59 @@ export function AutonomousQuantPilot() {
       </div>
 
       {/* Cloud Daemon Dual-Mode Status Indicator */}
-      {isLiveUpstox && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs">
-          <div className="flex items-center gap-2.5">
-            <div className="relative flex h-2.5 w-2.5">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                isEnabled ? 'bg-emerald-400' : 'bg-zinc-300'
-              }`} />
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                isEnabled ? 'bg-emerald-500' : 'bg-zinc-400'
-              }`} />
+      {isLiveUpstox && (() => {
+        const isCloudDaemonConfirmed = Boolean(
+          autonomousPilot?.cloudDaemonStatus &&
+          autonomousPilot?.lastCloudSyncAt &&
+          Date.now() - autonomousPilot.lastCloudSyncAt < 30_000
+        );
+
+        return (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="relative flex h-2.5 w-2.5">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  isEnabled
+                    ? (isCloudDaemonConfirmed ? 'bg-emerald-400' : 'bg-blue-400')
+                    : 'bg-zinc-300'
+                }`} />
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                  isEnabled
+                    ? (isCloudDaemonConfirmed ? 'bg-emerald-500' : 'bg-blue-500')
+                    : 'bg-zinc-400'
+                }`} />
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-zinc-900">
+                  Execution Master:
+                </span>
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                  isEnabled
+                    ? (isCloudDaemonConfirmed
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-blue-50 text-blue-700 border-blue-200')
+                    : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                }`}>
+                  {!isEnabled
+                    ? 'STANDBY • Ready to arm'
+                    : isCloudDaemonConfirmed
+                    ? 'CLOUD DAEMON ACTIVE • Safe to close browser tab'
+                    : 'BROWSER PILOT ACTIVE • Keep tab open (Local master)'}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-zinc-900">
-                Cloud Server Daemon:
+            <div className="text-[11px] text-zinc-500 flex items-center gap-2 flex-wrap">
+              <span>
+                Mode: <strong className="text-zinc-800 font-semibold">{isCloudDaemonConfirmed ? (autonomousPilot?.cloudDaemonStatus || 'BROWSER_LINKED') : 'BROWSER_LOCAL'}</strong>
               </span>
-              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
-                isEnabled
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-              }`}>
-                {isEnabled ? 'ACTIVE • Safe to close browser tab' : 'STANDBY • Ready to arm'}
+              <span>&bull;</span>
+              <span>
+                Host: <span className="font-mono text-zinc-700 font-medium">{isCloudDaemonConfirmed ? '87.76.191.49' : 'Local Browser Client'}</span>
               </span>
             </div>
           </div>
-          <div className="text-[11px] text-zinc-500 flex items-center gap-2 flex-wrap">
-            <span>
-              Mode: <strong className="text-zinc-800 font-semibold">{autonomousPilot?.cloudDaemonStatus || 'BROWSER_LINKED'}</strong>
-            </span>
-            <span>&bull;</span>
-            <span>
-              Host: <span className="font-mono text-zinc-700 font-medium">87.76.191.49</span>
-            </span>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Standby Banner when market is closed */}
       {isEnabled && isLiveUpstox && !marketSession.isOpen && (

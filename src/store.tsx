@@ -2229,10 +2229,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
         // Dispatch queued orders (if in full_autonomous mode and within rate limits)
         if (currentPilot.executionMode === 'full_autonomous' && pilotResult.ordersToDispatch.length > 0) {
           const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
-          if (isLiveUpstox) {
-            // Server daemon is authoritative executor; trigger server sweep
-            ApiClient.triggerPilotSweep().catch(() => {});
-          } else {
+          const isCloudDaemonConfirmed = Boolean(
+            currentPilot.cloudDaemonStatus &&
+            currentPilot.lastCloudSyncAt &&
+            Date.now() - currentPilot.lastCloudSyncAt < 30_000
+          );
+
+          const dispatchLocally = () => {
             for (const prop of pilotResult.ordersToDispatch) {
               if (orderRef.current) {
                 const res = orderRef.current(
@@ -2247,8 +2250,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
                     auto: true,
                     strategyName: prop.strategyName,
                     product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
-                    live: false,
-                    accountMode: 'paper',
+                    live: isLiveUpstox,
+                    accountMode: isLiveUpstox ? 'upstox' : 'paper',
                   }
                 );
 
@@ -2259,6 +2262,22 @@ export function Provider({ children }: { children: React.ReactNode }) {
                 }
               }
             }
+          };
+
+          if (isLiveUpstox && isCloudDaemonConfirmed) {
+            // Server daemon is authoritative executor; trigger server sweep with instant fallback on error
+            ApiClient.triggerPilotSweep()
+              .then((res) => {
+                if (!res.ok) {
+                  dispatchLocally();
+                }
+              })
+              .catch(() => {
+                dispatchLocally();
+              });
+          } else {
+            // Browser local master: executes directly (for paper trading OR standalone Upstox live trading)
+            dispatchLocally();
           }
         }
 
@@ -3522,9 +3541,13 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
         if (updated.executionMode === 'full_autonomous' && pilotRes.ordersToDispatch.length > 0) {
           const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
-          if (isLiveUpstox) {
-            ApiClient.triggerPilotSweep().catch(() => {});
-          } else {
+          const isCloudDaemonConfirmed = Boolean(
+            updated.cloudDaemonStatus &&
+            updated.lastCloudSyncAt &&
+            Date.now() - updated.lastCloudSyncAt < 30_000
+          );
+
+          const dispatchLocalToggled = () => {
             setTimeout(() => {
               for (const prop of pilotRes.ordersToDispatch) {
                 if (orderRef.current) {
@@ -3536,12 +3559,24 @@ export function Provider({ children }: { children: React.ReactNode }) {
                     auto: true,
                     strategyName: prop.strategyName,
                     product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
-                    live: false,
-                    accountMode: 'paper',
+                    live: isLiveUpstox,
+                    accountMode: isLiveUpstox ? 'upstox' : 'paper',
                   });
                 }
               }
             }, 0);
+          };
+
+          if (isLiveUpstox && isCloudDaemonConfirmed) {
+            ApiClient.triggerPilotSweep()
+              .then((res) => {
+                if (!res.ok) dispatchLocalToggled();
+              })
+              .catch(() => {
+                dispatchLocalToggled();
+              });
+          } else {
+            dispatchLocalToggled();
           }
         }
 
