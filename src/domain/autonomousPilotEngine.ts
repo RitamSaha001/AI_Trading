@@ -879,7 +879,13 @@ export function tickAutonomousPilot(
     const stopLossDist = Math.max(limitPrice * 0.008, atr * profile.stopLossAtrMultiplier);
     const stopLossPrice = alignToTickSize(limitPrice - stopLossDist, asset);
     const takeProfitPrice = alignToTickSize(limitPrice + stopLossDist * profile.minRiskReward, asset);
-    const takeProfit2Price = alignToTickSize(limitPrice + atr * profile.takeProfitAtrMultiplier, asset);
+    // Adaptive Trend Expansion: In confirmed high-Hurst super-trends (H >= 0.62) with Squeeze Release,
+    // dynamically expand Tranche 2 take-profit multiplier by 20% to capture larger multi-ATR trend runners!
+    const isSuperTrend = cand.hurst >= 0.62 && cand.squeezeStatus === 'SQUEEZE_OFF';
+    const dynamicTpMultiplier = isSuperTrend
+      ? profile.takeProfitAtrMultiplier * 1.20
+      : profile.takeProfitAtrMultiplier;
+    const takeProfit2Price = alignToTickSize(limitPrice + atr * dynamicTpMultiplier, asset);
     const takeProfit3Price = calculateChandelierExit(cand.market.history, 22, 2.0);
 
     const riskPerShare = limitPrice - stopLossPrice;
@@ -892,6 +898,11 @@ export function tickAutonomousPilot(
     if (cand.hurst > 0.60) estWinRate += 0.03;
     if ((ranked?.relativeStrengthPct || 0) > 0) estWinRate += 0.03;
     if ((ranked?.alphaConvictionIndex || 0) >= 75) estWinRate += 0.03;
+
+    // Adaptive Volatility Shock Dampener: In high-volatility chop (ATR/P > 4.5%), dampen Kelly sizing
+    if (atr / price > 0.045) {
+      estWinRate -= 0.06;
+    }
 
     const rrRatio = (takeProfitPrice - limitPrice) / riskPerShare;
     const kellyRes = calculateHalfKellyFraction(estWinRate, rrRatio, 1.25, 0.4);
