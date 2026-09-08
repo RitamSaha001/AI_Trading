@@ -11,7 +11,7 @@
 
 import { initDb, getDb } from '../../../../server/db';
 import { UpstoxAdapter } from '../../../../server/services/brokers/upstox/upstoxAdapter';
-import { UPSTOX_FLEET_ASSETS, evaluateAssetRegimeAndStrategy } from '../../../../src/domain/autonomousPilotEngine';
+import { UPSTOX_FLEET_ASSETS, determineAssetStrategyAndRegime } from '../../../../src/domain/autonomousPilotEngine';
 import { PILOT_PROFILES } from '../../../../src/domain/autonomousPilot';
 import { Asset, Market } from '../../../../src/types';
 
@@ -138,7 +138,7 @@ async function runAudit(): Promise<void> {
           change24h: q.changePercent || 0,
           history: [q.lastPrice],
         };
-        const regime = evaluateAssetRegimeAndStrategy(asset as Asset, fakeMarket as Market, 14);
+        const regime = determineAssetStrategyAndRegime(fakeMarket as Market);
         fleetMatrix.push({
           asset,
           sector: regime.sector,
