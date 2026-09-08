@@ -923,16 +923,21 @@ export function tickAutonomousPilot(
     // Check cash liquidity constraint: must preserve mandatory cash reserve floor
     const requiredOrderCash = unitsToBuy * limitPrice;
     if (requiredOrderCash > allocatableCash || allocatableCash <= 0) {
-      newActionLogs.push({
-        id: `log_cash_floor_${asset}_${now}`,
-        timestamp: now,
-        asset,
-        action: 'SKIPPED',
-        strategy,
-        detail: `Preserving mandatory ${minCashFloorPct}% liquid cash buffer. Required: ₹${requiredOrderCash.toFixed(2)}, Allocatable: ₹${allocatableCash.toFixed(2)}.`,
-        price: limitPrice,
-        status: 'BLOCKED',
-      });
+      const recentCashSkip = state.autonomousPilot?.actionLogs?.find(
+        (l) => l.asset === asset && l.action === 'SKIPPED' && now - l.timestamp < 300_000
+      );
+      if (!recentCashSkip) {
+        newActionLogs.push({
+          id: `log_cash_floor_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'SKIPPED',
+          strategy,
+          detail: `Preserving mandatory ${minCashFloorPct}% liquid cash buffer. Required: ₹${requiredOrderCash.toFixed(2)}, Allocatable: ₹${allocatableCash.toFixed(2)}.`,
+          price: limitPrice,
+          status: 'BLOCKED',
+        });
+      }
       continue;
     }
 
@@ -947,16 +952,21 @@ export function tickAutonomousPilot(
     );
 
     if (!sectorCheck.allowed) {
-      newActionLogs.push({
-        id: `log_sector_${asset}_${now}`,
-        timestamp: now,
-        asset,
-        action: 'SECTOR_CAP_DEFENSE',
-        strategy,
-        detail: sectorCheck.reason || `Sector concentration cap (35%) reached for ${sector}.`,
-        price: limitPrice,
-        status: 'BLOCKED',
-      });
+      const recentSectorCap = state.autonomousPilot?.actionLogs?.find(
+        (l) => l.asset === asset && l.action === 'SECTOR_CAP_DEFENSE' && now - l.timestamp < 300_000
+      );
+      if (!recentSectorCap) {
+        newActionLogs.push({
+          id: `log_sector_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'SECTOR_CAP_DEFENSE',
+          strategy,
+          detail: sectorCheck.reason || `Sector concentration cap (35%) reached for ${sector}.`,
+          price: limitPrice,
+          status: 'BLOCKED',
+        });
+      }
       continue;
     }
 

@@ -92,7 +92,7 @@ async function runAudit(): Promise<void> {
 
   // 1. Resolve Active User
   const userRow = await db.queryOne<{ user_id: string }>(
-    `SELECT user_id FROM autonomous_pilot_state WHERE enabled = 1 ORDER BY updated_at DESC LIMIT 1`
+    `SELECT user_id FROM autonomous_pilot_state ORDER BY updated_at DESC LIMIT 1`
   ) || { user_id: 'usr_ema_860ef16129d43b60' };
   const userId = userRow.user_id;
 

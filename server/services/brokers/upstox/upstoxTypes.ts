@@ -207,26 +207,55 @@ export interface UpstoxOrderBookItem {
   trigger_price?: number;
 }
 
-export const UpstoxOrderBookItemSchema = z.object({
-  order_id: z.string().min(1),
-  exchange: z.string().optional().default(''),
-  product: z.string().optional().default(''),
-  price: z.number().optional().default(0),
-  quantity: z.number().optional().default(0),
-  status: z.string(),
-  order_type: z.string().optional().default(''),
-  transaction_type: z.string().optional().default(''),
-  average_price: z.number().optional().default(0),
-  filled_quantity: z.number().optional().default(0),
-  pending_quantity: z.number().optional().default(0),
-  status_message: z.string().optional(),
-  order_timestamp: z.string().optional().default(''),
-  tag: z.string().optional(),
-  instrument_token: z.string().optional().default(''),
-  trading_symbol: z.string().optional().default(''),
-  disclosed_quantity: z.number().optional(),
-  trigger_price: z.number().optional(),
-});
+export const UpstoxOrderBookItemSchema = z
+  .object({
+    order_id: z.string().min(1),
+    exchange: z.string().nullish().default(''),
+    product: z.string().nullish().default(''),
+    price: z.number().nullish().default(0),
+    quantity: z.number().nullish().default(0),
+    status: z.string(),
+    order_type: z.string().nullish().default(''),
+    transaction_type: z.string().nullish().default(''),
+    average_price: z.number().nullish().default(0),
+    filled_quantity: z.number().nullish().default(0),
+    pending_quantity: z.number().nullish().default(0),
+    status_message: z.string().nullish(),
+    status_message_raw: z.string().nullish(),
+    order_timestamp: z.string().nullish().default(''),
+    exchange_timestamp: z.string().nullish(),
+    tag: z.string().nullish(),
+    instrument_token: z.string().nullish().default(''),
+    trading_symbol: z.string().nullish().default(''),
+    tradingsymbol: z.string().nullish(),
+    disclosed_quantity: z.number().nullish(),
+    trigger_price: z.number().nullish(),
+    guid: z.string().nullish(),
+    exchange_order_id: z.string().nullish(),
+    parent_order_id: z.string().nullish(),
+    order_ref_id: z.string().nullish(),
+    order_request_id: z.string().nullish(),
+    variety: z.string().nullish(),
+    validity: z.string().nullish(),
+    placed_by: z.string().nullish(),
+    is_amo: z.boolean().nullish(),
+  })
+  .passthrough()
+  .transform((item) => ({
+    ...item,
+    exchange: item.exchange ?? '',
+    product: item.product ?? '',
+    price: item.price ?? 0,
+    quantity: item.quantity ?? 0,
+    order_type: item.order_type ?? '',
+    transaction_type: item.transaction_type ?? '',
+    average_price: item.average_price ?? 0,
+    filled_quantity: item.filled_quantity ?? 0,
+    pending_quantity: item.pending_quantity ?? 0,
+    order_timestamp: item.order_timestamp ?? '',
+    instrument_token: item.instrument_token ?? '',
+    trading_symbol: item.trading_symbol || item.tradingsymbol || '',
+  }));
 
 export interface UpstoxTradeItem {
   trade_id: string;
@@ -246,19 +275,26 @@ export const UpstoxTradeItemSchema = z
   .object({
     trade_id: z.string().min(1),
     order_id: z.string().min(1),
-    exchange: z.string().optional().default(''),
-    trading_symbol: z.string().optional().default(''),
-    exchange_order_id: z.string().optional(),
+    exchange: z.string().nullish().default(''),
+    trading_symbol: z.string().nullish().default(''),
+    tradingsymbol: z.string().nullish(),
+    exchange_order_id: z.string().nullish(),
     transaction_type: z.enum(['BUY', 'SELL']),
-    quantity: z.number(),
-    price: z.number().optional(),
-    average_price: z.number().optional(),
-    exchange_timestamp: z.string().optional(),
-    trade_timestamp: z.string().optional(),
+    quantity: z.number().nullish().default(0),
+    price: z.number().nullish(),
+    average_price: z.number().nullish().default(0),
+    exchange_timestamp: z.string().nullish(),
+    trade_timestamp: z.string().nullish(),
+    order_timestamp: z.string().nullish(),
+    order_ref_id: z.string().nullish(),
   })
+  .passthrough()
   .transform((t) => ({
     ...t,
+    exchange: t.exchange ?? '',
+    trading_symbol: t.trading_symbol || t.tradingsymbol || '',
     average_price: t.average_price ?? t.price ?? 0,
+    quantity: t.quantity ?? 0,
   }));
 
 export interface UpstoxQuoteData {

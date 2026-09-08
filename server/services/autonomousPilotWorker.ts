@@ -439,18 +439,34 @@ export class AutonomousPilotWorker {
               })
             );
 
-            // Fetch live positions, holdings, and funds
-            const [funds, rawPositions, rawHoldings, openOrdersRows] = await Promise.all([
+            // Fetch live positions, holdings, funds, and open orders
+            const [funds, rawPositions, rawHoldings, openOrdersRows, recentActionLogs] = await Promise.all([
               upstoxAdapter.getFunds(userId).catch(() => null),
               upstoxAdapter.getPositions(userId).catch(() => []),
               upstoxAdapter.getHoldings(userId).catch(() => []),
               db.query<any>(
-                `SELECT id, symbol, side, type, status, orig_qty, price
+                `SELECT id, client_order_id, symbol, side, type, status, orig_qty, price
                  FROM exchange_orders
-                 WHERE user_id = ? AND status IN ('NEW', 'SUBMITTING', 'PARTIALLY_FILLED')`,
+                 WHERE user_id = ? AND status IN ('NEW', 'SUBMITTING', 'PARTIALLY_FILLED', 'OPEN')`,
+                [userId]
+              ).catch(() => []),
+              db.query<any>(
+                `SELECT id, timestamp, asset, action, strategy, detail, price, status
+                 FROM autonomous_pilot_logs
+                 WHERE user_id = ?
+                 ORDER BY timestamp DESC
+                 LIMIT 50`,
                 [userId]
               ).catch(() => []),
             ]);
+
+            // Reconcile open orders against Upstox venue order book
+            if (openOrdersRows.length > 0) {
+              for (const ord of openOrdersRows) {
+                const targetCoid = ord.client_order_id || ord.id;
+                await upstoxAdapter.reconcileUnknownOrder(targetCoid, ord.symbol, userId).catch(() => null);
+              }
+            }
 
             const totalEquityNum =
               funds?.totalEquity !== undefined && funds.totalEquity !== null
@@ -474,13 +490,17 @@ export class AutonomousPilotWorker {
 
             for (const p of rawPositions) {
               const sym = p.symbol as Asset;
-              assetPositions[sym] = (assetPositions[sym] || 0) + (p.quantity || 0);
-              if (p.averagePrice) assetAvgPrices[sym] = p.averagePrice;
+              const qty = Number(p.quantity) || 0;
+              const avg = Number(p.averagePrice) || 0;
+              assetPositions[sym] = (assetPositions[sym] || 0) + qty;
+              if (avg > 0) assetAvgPrices[sym] = avg;
             }
             for (const h of rawHoldings) {
               const sym = h.symbol as Asset;
-              assetPositions[sym] = (assetPositions[sym] || 0) + (h.quantity || 0);
-              if (h.averagePrice && !assetAvgPrices[sym]) assetAvgPrices[sym] = h.averagePrice;
+              const qty = Number(h.quantity) || 0;
+              const avg = Number(h.averagePrice) || 0;
+              assetPositions[sym] = (assetPositions[sym] || 0) + qty;
+              if (avg > 0 && !assetAvgPrices[sym]) assetAvgPrices[sym] = avg;
             }
 
             // Parse or initialize fleet status
@@ -537,6 +557,7 @@ export class AutonomousPilotWorker {
               cash: availableCashNum,
               startingEquity: resolvedStartingVal,
               positions: assetPositions as any,
+              avgBuyPrice: assetAvgPrices as any,
               averageBuyPrices: assetAvgPrices as any,
               orders: mappedOrders,
               trades: [],
@@ -563,7 +584,16 @@ export class AutonomousPilotWorker {
                 circuitBreakerReason: row.circuit_breaker_reason || undefined,
                 activeFleet: fleet,
                 rateLimitStatus: createDefaultRateLimitStatus(),
-                actionLogs: [],
+                actionLogs: (recentActionLogs || []).map((l: any) => ({
+                  id: l.id,
+                  timestamp: Number(l.timestamp),
+                  asset: l.asset as Asset,
+                  action: l.action,
+                  strategy: l.strategy,
+                  detail: l.detail,
+                  price: Number(l.price || 0),
+                  status: l.status,
+                })),
                 lastScanAt: row.last_server_run_at,
                 activeOpportunities: [],
                 totalAutopilotTradesExecuted: 0,
