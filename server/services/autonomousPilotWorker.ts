@@ -398,11 +398,12 @@ export class AutonomousPilotWorker {
             const creds = await upstoxAdapter.loadCredentials(userId);
             const accessToken = creds?.accessToken;
 
+            const quotesBatch = await upstoxAdapter.getMarketQuotesBatch(UPSTOX_FLEET_ASSETS, userId, accessToken);
             const markets: Partial<Record<Asset, Market>> = {};
             await Promise.all(
               UPSTOX_FLEET_ASSETS.map(async (asset) => {
                 try {
-                  const quote = await upstoxAdapter.getMarketQuote(asset, userId, accessToken);
+                  const quote = quotesBatch[asset];
                   const candles = await UpstoxCandleService.getCandles(asset, '1D', accessToken);
                   if (quote && quote.lastPrice > 0) {
                     markets[asset] = {
@@ -423,7 +424,7 @@ export class AutonomousPilotWorker {
                     };
                   }
                 } catch (err: any) {
-                  logger.warn(`[AutonomousPilotWorker] Quote fetch failed for ${asset}: ${err.message}`);
+                  logger.warn(`[AutonomousPilotWorker] Market compilation failed for ${asset}: ${err.message}`);
                 }
               })
             );

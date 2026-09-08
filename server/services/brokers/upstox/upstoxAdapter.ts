@@ -1538,6 +1538,84 @@ export class UpstoxAdapter implements BrokerGateway {
   }
 
   /**
+   * Fetches batch market quotes in a single network request.
+   */
+  async getMarketQuotesBatch(
+    symbols: string[],
+    userId?: string,
+    token?: string
+  ): Promise<Record<string, BrokerMarketQuote>> {
+    const result: Record<string, BrokerMarketQuote> = {};
+    if (!symbols || symbols.length === 0) return result;
+
+    let accessToken = token || '';
+    if (!accessToken && userId) {
+      const creds = await this.getCredentials(userId);
+      if (creds?.accessToken) accessToken = creds.accessToken;
+    }
+
+    const keyToSymbolMap: Record<string, string> = {};
+    const instrumentKeys: string[] = [];
+
+    for (const sym of symbols) {
+      const inst = this.instrumentProvider.getInstrument(sym);
+      if (inst) {
+        keyToSymbolMap[inst.instrumentKey] = sym;
+        keyToSymbolMap[`NSE_EQ:${sym.toUpperCase()}`] = sym;
+        keyToSymbolMap[`BSE_EQ:${sym.toUpperCase()}`] = sym;
+        instrumentKeys.push(inst.instrumentKey);
+      }
+    }
+
+    if (accessToken && instrumentKeys.length > 0) {
+      try {
+        const quotes = await UpstoxClient.getQuote(accessToken, instrumentKeys.join(','));
+        for (const [key, data] of Object.entries(quotes)) {
+          const sym = keyToSymbolMap[key] || key.split(':')[1] || key;
+          if (data) {
+            if (data.lower_circuit_limit !== undefined && data.upper_circuit_limit !== undefined) {
+              UpstoxInstrumentRegistry.updateCircuitLimits(sym, {
+                lower: Number(data.lower_circuit_limit),
+                upper: Number(data.upper_circuit_limit),
+                lastPrice: data.last_price !== undefined ? Number(data.last_price) : undefined,
+              });
+            }
+            result[sym] = {
+              symbol: sym,
+              instrumentKey: key,
+              bidPrice: data.depth?.buy?.[0]?.price || data.last_price,
+              bidQty: data.depth?.buy?.[0]?.quantity || 1,
+              askPrice: data.depth?.sell?.[0]?.price || data.last_price,
+              askQty: data.depth?.sell?.[0]?.quantity || 1,
+              lastPrice: data.last_price,
+              price: data.last_price,
+              lastQty: 1,
+              quoteTime: data.timestamp ? new Date(data.timestamp).getTime() : Date.now(),
+              lowerCircuitLimit: data.lower_circuit_limit,
+              upperCircuitLimit: data.upper_circuit_limit,
+              isAuthoritative: true,
+              isSynthetic: false,
+              source: 'UPSTOX_API',
+            };
+          }
+        }
+      } catch (err: any) {
+        logger.warn(`[UpstoxAdapter] Batch quote fetch failed: ${err.message}`);
+      }
+    }
+
+    // Fill in any missing symbols using fallback
+    for (const sym of symbols) {
+      if (!result[sym]) {
+        const single = await this.getMarketQuote(sym, userId, accessToken);
+        if (single) result[sym] = single;
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Performs gateway health check.
    */
   async healthCheck(): Promise<{ isHealthy: boolean; latencyMs: number; message?: string }> {

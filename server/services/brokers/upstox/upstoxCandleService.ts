@@ -13,7 +13,7 @@ export interface UpstoxCandle {
 
 export class UpstoxCandleService {
   private static cache: Map<string, { timestamp: number; candles: UpstoxCandle[] }> = new Map();
-  private static readonly CACHE_TTL_MS = 20_000; // 20s cache
+  private static readonly CACHE_TTL_MS = 300_000; // 5 minutes cache for daily candles
 
   /**
    * Fetches authoritative candles for an Indian equity from Upstox V2 API.
