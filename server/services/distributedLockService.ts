@@ -46,16 +46,8 @@ export class DistributedLockService {
     const expiresAt = now + ttlMs;
     const isPostgres = db.isPostgres();
 
-    // 1. PostgreSQL Advisory Lock Check (fail-fast without DB writes if locked)
-    if (isPostgres && db.tryAdvisoryLock) {
-      const lockKey = this.getAdvisoryLockKey(workerName);
-      const acquired = await db.tryAdvisoryLock(lockKey);
-      if (!acquired) {
-        return null; // Another Postgres session actively holds the lock
-      }
-    }
-
-    // 2. Durable worker_leases Record with Atomic Compare-and-Swap
+    // Durable worker_leases Record with Atomic Compare-and-Swap
+    // Completely ACID-safe across distributed clusters, PgBouncer transaction poolers, and single nodes.
     try {
       if (isPostgres) {
         const result = await db.execute(
@@ -72,10 +64,6 @@ export class DistributedLockService {
 
         if (result.changes === 0) {
           // Lock held by unexpired lease from another instance
-          if (db.releaseAdvisoryLock) {
-            const lockKey = this.getAdvisoryLockKey(workerName);
-            await db.releaseAdvisoryLock(lockKey).catch(() => {});
-          }
           return null;
         }
       } else {
@@ -99,10 +87,6 @@ export class DistributedLockService {
 
       return this.instanceId;
     } catch (err) {
-      if (isPostgres && db.releaseAdvisoryLock) {
-        const lockKey = this.getAdvisoryLockKey(workerName);
-        await db.releaseAdvisoryLock(lockKey).catch(() => {});
-      }
       throw err;
     }
   }
@@ -115,21 +99,12 @@ export class DistributedLockService {
     leaseId: string = this.instanceId,
     db: DBClient = getDb()
   ): Promise<boolean> {
-    const isPostgres = db.isPostgres();
+    const res = await db.execute(
+      `UPDATE worker_leases SET expires_at = 0 WHERE worker_name = ? AND instance_id = ?`,
+      [workerName, leaseId]
+    );
 
-    try {
-      const res = await db.execute(
-        `UPDATE worker_leases SET expires_at = 0 WHERE worker_name = ? AND instance_id = ?`,
-        [workerName, leaseId]
-      );
-
-      return res.changes > 0;
-    } finally {
-      if (isPostgres && db.releaseAdvisoryLock) {
-        const lockKey = this.getAdvisoryLockKey(workerName);
-        await db.releaseAdvisoryLock(lockKey).catch(() => {});
-      }
-    }
+    return res.changes > 0;
   }
 
   /**
