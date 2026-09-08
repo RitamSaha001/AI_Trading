@@ -592,7 +592,12 @@ export class UpstoxAdapter implements BrokerGateway {
       upstoxOrderType = 'LIMIT';
     }
 
-    const triggerPriceNum = order.triggerPrice ? Number(order.triggerPrice) : undefined;
+    const triggerPriceNum =
+      order.triggerPrice !== undefined && order.triggerPrice !== null && !isNaN(Number(order.triggerPrice))
+        ? Number(order.triggerPrice)
+        : (order as any).stopPrice !== undefined && (order as any).stopPrice !== null && !isNaN(Number((order as any).stopPrice))
+        ? Number((order as any).stopPrice)
+        : 0;
     const disclosedQtyNum = order.disclosedQuantity ? Number(order.disclosedQuantity) : undefined;
 
     // Record order placement for SEBI OTR compliance
