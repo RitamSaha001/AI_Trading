@@ -659,9 +659,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <OnboardingWizardModal isOpen={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
 
       {/* Nexus AI Drawer */}
-      <ErrorBoundary fallbackTitle="Nexus Intelligence Drawer" isDrawer={true} onClose={closeChat}>
-        <ChatDrawer open={chatOpen} onClose={closeChat} />
-      </ErrorBoundary>
+      {chatOpen && (
+        <ErrorBoundary fallbackTitle="Nexus Intelligence Drawer" isDrawer={true} onClose={closeChat}>
+          <ChatDrawer open={chatOpen} onClose={closeChat} />
+        </ErrorBoundary>
+      )}
 
       {/* Upstox Terminal Drawer */}
       <UpstoxTerminalDrawer open={upstoxDrawerOpen} onClose={closeUpstoxDrawer} />

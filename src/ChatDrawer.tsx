@@ -651,6 +651,34 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   const selectedAsset = state?.selectedAsset || 'BTC';
   const isIndian = isIndianAsset(selectedAsset) || state?.accountMode === 'upstox';
 
+  const quantTools = useMemo(() => [
+    { id: 'audit', label: 'Risk Audit', command: '/audit', icon: ShieldAlert, color: 'text-rose-600 bg-rose-50/80 hover:bg-rose-100 border-rose-200/80', badge: 'HHI' },
+    { id: 'scan', label: isIndian ? 'NSE Radar' : 'Alpha Radar', command: isIndian ? '/scan nse' : '/scan', icon: Compass, color: 'text-violet-600 bg-violet-50/80 hover:bg-violet-100 border-violet-200/80', badge: 'R:R' },
+    { id: 'bot', label: 'Strategy Bot', command: `/bot ${selectedAsset}`, icon: Zap, color: 'text-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 border-indigo-200/80', badge: 'ATR' },
+    { id: 'dca', label: 'Smart DCA', command: `/dca ${selectedAsset}`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50/80 hover:bg-emerald-100 border-emerald-200/80', badge: 'RSI' },
+    { id: 'rebalance', label: 'Rebalance', command: '/rebalance', icon: Scale, color: 'text-blue-600 bg-blue-50/80 hover:bg-blue-100 border-blue-200/80', badge: 'Kelly' },
+    { id: 'stress', label: 'Stress Test', command: '/stress', icon: Activity, color: 'text-amber-600 bg-amber-50/80 hover:bg-amber-100 border-amber-200/80', badge: 'VaR' },
+  ], [isIndian, selectedAsset]);
+
+  const slashCommands = useMemo(() => [
+    { name: '/audit', title: 'Sentinel Risk & HHI Audit', desc: 'Concentration, liquidation, drawdown & cash reserve checks', icon: ShieldAlert },
+    { name: isIndian ? '/scan nse' : '/scan', title: isIndian ? 'NSE Bluechips Alpha Radar' : 'Alpha Radar Multi-Asset Scan', desc: 'Scan asymmetric setups with >=2.5:1 R:R', icon: Compass },
+    { name: `/bot ${selectedAsset}`, title: `Synthesize Bot (${selectedAsset})`, desc: 'Institutional VWAP momentum bot with ATR brackets', icon: Zap },
+    { name: `/dca ${selectedAsset}`, title: `Smart DCA Plan (${selectedAsset})`, desc: 'Value-weighted accumulation with dip multipliers', icon: TrendingUp },
+    { name: '/rebalance', title: 'Fractional Kelly Rebalance', desc: 'Two-stage cash-feasible risk parity optimization', icon: Scale },
+    { name: '/stress', title: 'Portfolio Stress Test', desc: 'Simulate flash crashes, rate hikes, and 95% VaR', icon: Activity },
+    { name: '/help', title: 'Quant Tools Cheat Sheet', desc: 'Interactive guide of all deterministic math tools', icon: Sparkles },
+  ], [isIndian, selectedAsset]);
+
+  const showSlashMenu = text.startsWith('/');
+  const filteredSlashCommands = useMemo(() => {
+    if (!showSlashMenu) return [];
+    const query = text.toLowerCase();
+    return slashCommands.filter(
+      (cmd) => cmd.name.toLowerCase().includes(query) || cmd.title.toLowerCase().includes(query.slice(1))
+    );
+  }, [showSlashMenu, text, slashCommands]);
+
   useEffect(() => {
     if (open) {
       try {
@@ -668,8 +696,6 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       setText(prefilledChatPrompt);
     }
   }, [prefilledChatPrompt]);
-
-  if (!open) return null;
 
   const handleSend = async (msgText?: string) => {
     const query = (msgText || text).trim();
@@ -753,34 +779,6 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
     },
   ];
 
-  const quantTools = useMemo(() => [
-    { id: 'audit', label: 'Risk Audit', command: '/audit', icon: ShieldAlert, color: 'text-rose-600 bg-rose-50/80 hover:bg-rose-100 border-rose-200/80', badge: 'HHI' },
-    { id: 'scan', label: isIndian ? 'NSE Radar' : 'Alpha Radar', command: isIndian ? '/scan nse' : '/scan', icon: Compass, color: 'text-violet-600 bg-violet-50/80 hover:bg-violet-100 border-violet-200/80', badge: 'R:R' },
-    { id: 'bot', label: 'Strategy Bot', command: `/bot ${selectedAsset}`, icon: Zap, color: 'text-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 border-indigo-200/80', badge: 'ATR' },
-    { id: 'dca', label: 'Smart DCA', command: `/dca ${selectedAsset}`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50/80 hover:bg-emerald-100 border-emerald-200/80', badge: 'RSI' },
-    { id: 'rebalance', label: 'Rebalance', command: '/rebalance', icon: Scale, color: 'text-blue-600 bg-blue-50/80 hover:bg-blue-100 border-blue-200/80', badge: 'Kelly' },
-    { id: 'stress', label: 'Stress Test', command: '/stress', icon: Activity, color: 'text-amber-600 bg-amber-50/80 hover:bg-amber-100 border-amber-200/80', badge: 'VaR' },
-  ], [isIndian, selectedAsset]);
-
-  const slashCommands = useMemo(() => [
-    { name: '/audit', title: 'Sentinel Risk & HHI Audit', desc: 'Concentration, liquidation, drawdown & cash reserve checks', icon: ShieldAlert },
-    { name: isIndian ? '/scan nse' : '/scan', title: isIndian ? 'NSE Bluechips Alpha Radar' : 'Alpha Radar Multi-Asset Scan', desc: 'Scan asymmetric setups with >=2.5:1 R:R', icon: Compass },
-    { name: `/bot ${selectedAsset}`, title: `Synthesize Bot (${selectedAsset})`, desc: 'Institutional VWAP momentum bot with ATR brackets', icon: Zap },
-    { name: `/dca ${selectedAsset}`, title: `Smart DCA Plan (${selectedAsset})`, desc: 'Value-weighted accumulation with dip multipliers', icon: TrendingUp },
-    { name: '/rebalance', title: 'Fractional Kelly Rebalance', desc: 'Two-stage cash-feasible risk parity optimization', icon: Scale },
-    { name: '/stress', title: 'Portfolio Stress Test', desc: 'Simulate flash crashes, rate hikes, and 95% VaR', icon: Activity },
-    { name: '/help', title: 'Quant Tools Cheat Sheet', desc: 'Interactive guide of all deterministic math tools', icon: Sparkles },
-  ], [isIndian, selectedAsset]);
-
-  const showSlashMenu = text.startsWith('/');
-  const filteredSlashCommands = useMemo(() => {
-    if (!showSlashMenu) return [];
-    const query = text.toLowerCase();
-    return slashCommands.filter(
-      (cmd) => cmd.name.toLowerCase().includes(query) || cmd.title.toLowerCase().includes(query.slice(1))
-    );
-  }, [showSlashMenu, text, slashCommands]);
-
   const quickPrompts = isIndian
     ? [
         { label: 'Sentinel Danger Audit', prompt: 'Sense market danger across my Indian equities portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
@@ -798,6 +796,8 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         { label: 'Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization.' },
         { label: 'Compare BTC vs ETH vs SOL', prompt: 'Compare BTC, ETH, and SOL head-to-head on Alpha Radar.' },
       ];
+
+  if (!open) return null;
 
   return (
     <ErrorBoundary fallbackTitle="Nexus Intelligence Drawer" isDrawer={true} onClose={onClose}>
