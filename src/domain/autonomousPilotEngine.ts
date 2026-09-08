@@ -64,6 +64,7 @@ export interface AutonomousPilotOrderProposal {
   takeProfit2?: number;
   takeProfit3?: number;
   type: 'limit' | 'market';
+  product?: 'MIS' | 'CNC';
   strategyName: string;
   reason: string;
   trancheStage?: number;
@@ -518,6 +519,59 @@ export function tickAutonomousPilot(
       });
     }
 
+    // 15:15 IST Intraday Session Square-Off (MIS Mandatory Rule)
+    // All intraday MIS positions MUST be closed before market close (15:30) to prevent overnight delivery risk
+    // and eliminate broker auto-square-off penalty charges (₹50 + GST).
+    if (timingQuality.isSessionCutoffPhase && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: currentHolding,
+        price: alignToTickSize(price, asset),
+        type: 'market',
+        product: 'MIS',
+        strategyName: `Auto-Pilot: 15:15 MIS Auto Square-Off`,
+        reason: `15:15 IST intraday cutoff reached. Closing ${currentHolding} shares of ${asset} @ market to eliminate overnight gap risk.`,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      lifecycleState = 'COOLDOWN';
+      trancheStage = 0;
+
+      newActionLogs.push({
+        id: `log_eod_squareoff_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'SESSION_CLOSE' as any,
+        strategy,
+        detail: `15:15 IST Session Cutoff: Auto squared-off ${currentHolding} shares of ${asset} @ ₹${price.toFixed(2)}. Zero overnight exposure.`,
+        price,
+        status: 'EXECUTED',
+      });
+
+      updatedFleet[asset] = {
+        ...fleetStatus,
+        assignedStrategy: strategy,
+        regimeLabel,
+        hurst,
+        currentPrice: price,
+        state: lifecycleState,
+        entryPrice: avgBuyPrice,
+        stopLossPrice: currentStop,
+        takeProfitPrice: t1Price,
+        takeProfit2Price: t2Price,
+        takeProfit3Price: t3Chandelier,
+        unitsHeld: 0,
+        unrealizedPnl: 0,
+        unrealizedPnlPct: 0,
+        lastActionAt: now,
+        trancheStage,
+        highWaterMark,
+      };
+      continue;
+    }
+
     // Late-Day Liquidation Defense (14:15 - 15:15 IST): Compress stop to protect High-Water Mark before retail MIS square-off
     const lateDayCompression = lateDayStopCompression(
       avgBuyPrice,
@@ -563,6 +617,7 @@ export function tickAutonomousPilot(
         amount: currentHolding,
         price: alignToTickSize(price, asset),
         type: 'market',
+        product: 'MIS',
         strategyName: `Auto-Pilot: ${strategy} Stagnancy Exit`,
         reason: stagnancyCheck.reason,
       });
@@ -593,6 +648,7 @@ export function tickAutonomousPilot(
         amount: exitQty,
         price: alignToTickSize(price, asset),
         type: 'limit',
+        product: 'MIS',
         strategyName: `Auto-Pilot: ${strategy} Tranche 1 Harvest`,
         reason: `Tranche 1 (+1.5 ATR) reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Locking partial profit.`,
         trancheStage: 1,
@@ -624,6 +680,7 @@ export function tickAutonomousPilot(
         amount: exitQty,
         price: alignToTickSize(price, asset),
         type: 'limit',
+        product: 'MIS',
         strategyName: `Auto-Pilot: ${strategy} Core Target Harvest`,
         reason: `Core Target T2 reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Harvesting core gain.`,
         trancheStage: 2,
@@ -654,6 +711,7 @@ export function tickAutonomousPilot(
         amount: currentHolding,
         price: alignToTickSize(price, asset),
         type: 'market',
+        product: 'MIS',
         strategyName: `Auto-Pilot: ${strategy} Chandelier Runner Exit`,
         reason: `Chandelier Trailing Exit triggered at ₹${price.toFixed(2)}. Final runner closed.`,
         trancheStage: 3,
@@ -683,6 +741,7 @@ export function tickAutonomousPilot(
         amount: currentHolding,
         price: alignToTickSize(price, asset),
         type: 'market',
+        product: 'MIS',
         strategyName: `Auto-Pilot: ${strategy} Capital Defense Stop`,
         reason: `Stop hit at ₹${price.toFixed(2)}. Protecting capital.`,
       });
@@ -1114,6 +1173,7 @@ export function tickAutonomousPilot(
       takeProfit2: takeProfit2Price,
       takeProfit3: takeProfit3Price,
       type: 'limit',
+      product: 'MIS',
       strategyName: `Auto-Pilot: ${strategy} [Rank #${ranked?.rank || 1} ACI:${ranked?.alphaConvictionIndex || 0}]`,
       reason: `${cand.entryRationale} [Rank #${ranked?.rank || 1}, ACI:${ranked?.alphaConvictionIndex || 0}, Half-Kelly: ${kellyRes.recommendedSizeMultiplier}x, Sector: ${sector}]`,
     });

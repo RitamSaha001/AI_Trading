@@ -1,4 +1,5 @@
 import { Candle } from '../../../../types';
+import todayFleetCandlesJson from './todayFleetCandles.json';
 
 /**
  * Historical OHLCV Candle Fixtures for Quantitative Validation
@@ -16,7 +17,8 @@ import { Candle } from '../../../../types';
 
 /**
  * Generates 1 week (5 trading days, 75 5-minute bars per day = 375 candles)
- * of persistent trending equity price action (TCS style, base ₹2,200 -> ₹2,380).
+ * of persistent trending equity price action with realistic two-way volatility,
+ * corrective pullbacks, and bidirectional wicks (TCS style, base ₹2,200).
  *
  * baseTime aligned to Monday Sep 7 2026 09:15 IST for accurate session timing.
  */
@@ -30,20 +32,29 @@ export function getTrendingWeekCandles(baseTime = 1788752700000): Candle[] {
     const dayStart = baseTime + day * 24 * 60 * 60 * 1000;
     for (let bar = 0; bar < 75; bar++) {
       const time = dayStart + bar * barIntervalMs;
-      // Strong persistent drift with positive autocorrelation (TCS ~30-40 pts/day)
-      const drift = 1.4 + Math.sin(bar / 15) * 0.4;
-      const noise = Math.sin(bar * 0.7 + day) * 0.5;
-      const open = +currentPrice.toFixed(2);
-      const close = +(open + drift + noise).toFixed(2);
+      // Realistic trending waves:
+      // Morning expansion (bars 0-22): Upward impulse (+0.95 pt/bar)
+      // Midday consolidation/pullback (bars 22-36): Counter-trend retracement (-0.25 pt/bar)
+      // Afternoon trend continuation (bars 36-62): Second upward leg (+0.80 pt/bar)
+      // Closing consolidation (bars 62-74): Flat/slight pullback (+0.05 pt/bar)
+      let waveDrift = 0.2;
+      if (bar < 22) waveDrift = 0.95;
+      else if (bar >= 22 && bar < 36) waveDrift = -0.25;
+      else if (bar >= 36 && bar < 62) waveDrift = 0.80;
+      else waveDrift = 0.05;
 
-      // Realistic 5m bar wicks in an uptrend (strong buying pressure creates tight lower shadows)
+      const noise = Math.sin(bar * 0.9 + day) * 0.9 + Math.cos(bar * 1.8) * 0.7;
+      const open = +currentPrice.toFixed(2);
+      const close = +(open + waveDrift + noise).toFixed(2);
+
+      // Realistic bidirectional wicks with authentic two-way adverse shadows
       const body = Math.abs(close - open);
-      const upperWick = +(1.6 + body * 0.5 + Math.abs(Math.sin(bar * 1.3)) * 1.0).toFixed(2);
-      const lowerWick = +(0.35 + Math.abs(Math.cos(bar * 0.9)) * 0.45).toFixed(2);
+      const upperWick = +(1.1 + body * 0.35 + Math.abs(Math.sin(bar * 1.5)) * 1.3).toFixed(2);
+      const lowerWick = +(1.1 + body * 0.35 + Math.abs(Math.cos(bar * 1.3)) * 1.3).toFixed(2);
 
       const high = +(Math.max(open, close) + upperWick).toFixed(2);
       const low = +(Math.min(open, close) - lowerWick).toFixed(2);
-      const volume = Math.floor(15000 + bar * 120 + Math.abs(drift) * 8000);
+      const volume = Math.floor(14000 + Math.max(0, waveDrift) * 12000 + Math.abs(noise) * 3000);
 
       candles.push({ time, open, high, low, close, volume });
       currentPrice = close;
@@ -143,3 +154,26 @@ export function getShockDayCandles(baseTime = 1788752700000): Candle[] {
   }
   return candles;
 }
+
+/**
+ * Loads authentic 1-minute Upstox candles recorded on Sep 8 2026
+ * for any of the 10 NSE bluechip fleet assets.
+ */
+export function getTodayRealMarketCandles(symbol: string = 'TCS'): Candle[] {
+  try {
+    const data = todayFleetCandlesJson as unknown as Record<string, (string | number)[][]>;
+    const rawBars = data[symbol] || [];
+    // Convert from Upstox newest-first to chronological
+    return [...rawBars].reverse().map(([dateStr, open, high, low, close, volume]) => ({
+      time: new Date(dateStr as string).getTime(),
+      open: Number(open),
+      high: Number(high),
+      low: Number(low),
+      close: Number(close),
+      volume: Number(volume),
+    }));
+  } catch {
+    return [];
+  }
+}
+

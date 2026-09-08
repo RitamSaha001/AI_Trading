@@ -678,7 +678,7 @@ export class AutonomousPilotWorker {
                     type: prop.type.toUpperCase() as 'LIMIT' | 'MARKET',
                     quantity: prop.amount,
                     price: prop.price,
-                    product: 'CNC',
+                    product: (prop.product || 'MIS') as 'CNC' | 'MIS',
                     stopPrice: prop.stopLoss,
                     isAutonomous: true,
                     strategyName: prop.strategyName,

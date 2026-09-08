@@ -841,6 +841,7 @@ export interface SessionTimingQuality {
   convictionThresholdDelta: number; // e.g. +8 during opening noise or midday lull
   minVolumeSurgeRequired: number;  // e.g. 1.35x during midday lull
   isLateDayLiquidationPhase: boolean;
+  isSessionCutoffPhase: boolean;
   reason: string;
 }
 
@@ -851,6 +852,7 @@ export interface SessionTimingQuality {
  * - 11:30-13:15 Midday consolidation dampener (+6 conviction score, 1.35x volume surge)
  * - 14:00 Entry curfew (No new entries permitted after 14:00 IST)
  * - 14:15-15:15 Late-day liquidation window flag (triggers trailing stop compression)
+ * - 15:15-15:30 Intraday session cutoff (triggers automatic MIS position square-off)
  */
 export function evaluateSessionTimingQuality(now: number = Date.now()): SessionTimingQuality {
   const d = new Date(now);
@@ -866,6 +868,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       convictionThresholdDelta: 999,
       minVolumeSurgeRequired: 2.0,
       isLateDayLiquidationPhase: false,
+      isSessionCutoffPhase: false,
       reason: 'Weekend - Indian exchange closed',
     };
   }
@@ -878,6 +881,10 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
     timeInMinutes >= thresholds.SESSION_LATE_DAY_LIQUIDATION_START_MIN &&
     timeInMinutes < thresholds.SESSION_INTRADAY_CUTOFF_MIN;
 
+  const isSessionCutoffPhase =
+    timeInMinutes >= thresholds.SESSION_INTRADAY_CUTOFF_MIN &&
+    timeInMinutes < thresholds.SESSION_CLOSE_MIN;
+
   if (timeInMinutes < thresholds.SESSION_PRE_OPEN_MIN) {
     return {
       phase: 'PRE_OPEN',
@@ -885,6 +892,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       convictionThresholdDelta: 999,
       minVolumeSurgeRequired: 2.0,
       isLateDayLiquidationPhase: false,
+      isSessionCutoffPhase: false,
       reason: 'Market pre-open: No orders permitted.',
     };
   }
@@ -895,6 +903,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       convictionThresholdDelta: 999,
       minVolumeSurgeRequired: 2.0,
       isLateDayLiquidationPhase: false,
+      isSessionCutoffPhase: false,
       reason: 'NSE Call Auction / Pre-market price discovery session.',
     };
   }
@@ -905,6 +914,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       convictionThresholdDelta: thresholds.OPENING_CONVICTION_DELTA,
       minVolumeSurgeRequired: thresholds.OPENING_MIN_VOLUME_SURGE,
       isLateDayLiquidationPhase: false,
+      isSessionCutoffPhase: false,
       reason: 'Opening volatility window (09:15-09:30): Strict volume & score filtering active.',
     };
   }
@@ -915,6 +925,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       convictionThresholdDelta: 0,
       minVolumeSurgeRequired: 1.15,
       isLateDayLiquidationPhase: false,
+      isSessionCutoffPhase: false,
       reason: 'Prime morning institutional expansion window (09:30-11:30).',
     };
   }
@@ -925,6 +936,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       convictionThresholdDelta: thresholds.MIDDAY_CONVICTION_DELTA,
       minVolumeSurgeRequired: thresholds.MIDDAY_MIN_VOLUME_SURGE,
       isLateDayLiquidationPhase: false,
+      isSessionCutoffPhase: false,
       reason: 'European pre-open / Midday consolidation (11:30-13:15): High false breakout rate.',
     };
   }
@@ -935,6 +947,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       convictionThresholdDelta: 0,
       minVolumeSurgeRequired: 1.20,
       isLateDayLiquidationPhase: false,
+      isSessionCutoffPhase: false,
       reason: 'Afternoon continuation & expansion window (13:15-14:00).',
     };
   }
@@ -945,7 +958,10 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       convictionThresholdDelta: 999,
       minVolumeSurgeRequired: 2.0,
       isLateDayLiquidationPhase,
-      reason: 'Post-14:00 entry curfew active. No new positions permitted before market close.',
+      isSessionCutoffPhase,
+      reason: isSessionCutoffPhase
+        ? '15:15 IST intraday session cutoff active. Automatic MIS position square-off engaged.'
+        : 'Post-14:00 entry curfew active. No new positions permitted before market close.',
     };
   }
   return {
@@ -954,6 +970,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
     convictionThresholdDelta: 999,
     minVolumeSurgeRequired: 2.0,
     isLateDayLiquidationPhase: false,
+    isSessionCutoffPhase: false,
     reason: 'Market closed.',
   };
 }
