@@ -477,10 +477,38 @@ export class AutonomousPilotWorker {
               auto: true,
             }));
 
+            // Calculate total positions & holdings valuation
+            let totalPositionsValue = 0;
+            for (const [sym, qty] of Object.entries(assetPositions)) {
+              const p = markets[sym as Asset]?.price || assetAvgPrices[sym] || 0;
+              totalPositionsValue += (Number(qty) || 0) * p;
+            }
+            const currentTotalEquity = availableCash + totalPositionsValue;
+
+            // Auto-calibrate starting equity if it's the paper default (50000) or has a false cross-mode mismatch
+            let resolvedStartingVal = row.daily_starting_value;
+            const needsDaemonCalibration =
+              (resolvedStartingVal === 50000 || resolvedStartingVal <= 0 || Math.abs(resolvedStartingVal - currentTotalEquity) > currentTotalEquity * 0.15) &&
+              currentTotalEquity > 0;
+
+            if (needsDaemonCalibration) {
+              resolvedStartingVal = currentTotalEquity;
+              row.daily_starting_value = resolvedStartingVal;
+              row.circuit_breaker_tripped = 0;
+              row.circuit_breaker_reason = null;
+              db.execute(
+                `UPDATE autonomous_pilot_state
+                 SET daily_starting_value = ?, circuit_breaker_tripped = 0, circuit_breaker_reason = NULL, updated_at = ?
+                 WHERE user_id = ?`,
+                [resolvedStartingVal, now, userId]
+              ).catch(() => {});
+            }
+
             // Construct AppState representation for quant engine evaluation
             const syntheticState: AppState = {
               balance: availableCash,
-              startingEquity: row.daily_starting_value,
+              cash: availableCash,
+              startingEquity: resolvedStartingVal,
               positions: assetPositions as any,
               averageBuyPrices: assetAvgPrices as any,
               orders: mappedOrders,
@@ -492,7 +520,8 @@ export class AutonomousPilotWorker {
                 enabled: true,
                 executionMode: row.execution_mode,
                 profile: row.profile,
-                dailyStartingValue: row.daily_starting_value,
+                dailyStartingValue: resolvedStartingVal,
+                peakPortfolioValue: Math.max(resolvedStartingVal, currentTotalEquity),
                 riskPerTradePct: row.risk_per_trade_pct,
                 circuitBreakerTripped: Boolean(row.circuit_breaker_tripped),
                 circuitBreakerReason: row.circuit_breaker_reason || undefined,
@@ -536,12 +565,18 @@ export class AutonomousPilotWorker {
               );
             }
 
-            // Circuit breaker trip check
+            // Circuit breaker trip check & self-healing recovery
             let cbTripped = row.circuit_breaker_tripped;
             let cbReason = row.circuit_breaker_reason;
             if (tickResult.circuitBreakerTripped && !row.circuit_breaker_tripped) {
               cbTripped = 1;
               cbReason = tickResult.tripReason || 'Daily drawdown limit reached.';
+              await db.execute(
+                `UPDATE autonomous_pilot_state
+                 SET circuit_breaker_tripped = 1, circuit_breaker_reason = ?, updated_at = ?
+                 WHERE user_id = ?`,
+                [cbReason, now, userId]
+              );
               await AuditService.logEvent({
                 userId,
                 eventType: 'AUTONOMOUS_CIRCUIT_BREAKER_TRIPPED',
@@ -550,6 +585,15 @@ export class AutonomousPilotWorker {
                 metadata: { reason: cbReason },
                 result: 'BLOCKED',
               });
+            } else if (!tickResult.circuitBreakerTripped && row.circuit_breaker_tripped) {
+              cbTripped = 0;
+              cbReason = null;
+              await db.execute(
+                `UPDATE autonomous_pilot_state
+                 SET circuit_breaker_tripped = 0, circuit_breaker_reason = NULL, updated_at = ?
+                 WHERE user_id = ?`,
+                [now, userId]
+              );
             }
 
             // Process Orders to Dispatch (Full Autonomous Mode only)

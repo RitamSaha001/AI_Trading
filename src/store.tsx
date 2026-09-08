@@ -342,11 +342,32 @@ function getEffectivePilotState(state: AppState): AppState {
     }
   }
 
+  const upstoxCash = state.upstoxAccount.funds?.availableCash ?? state.cash;
+  const currentPilot = state.autonomousPilot || createDefaultAutonomousPilotState(upstoxCash);
+
+  // Authoritative baseline calibration for Upstox mode:
+  // Detects uncalibrated paper default 50000 or significant cross-mode baseline mismatch
+  const isUncalibrated =
+    currentPilot.dailyStartingValue === 50000 ||
+    currentPilot.dailyStartingValue <= 0 ||
+    Math.abs(currentPilot.dailyStartingValue - upstoxCash) > upstoxCash * 0.15;
+
+  const resolvedStartingVal = isUncalibrated ? upstoxCash : currentPilot.dailyStartingValue;
+
   return {
     ...state,
-    cash: state.upstoxAccount.funds?.availableCash ?? state.cash,
+    cash: upstoxCash,
+    startingEquity: resolvedStartingVal,
     positions: effectivePositions,
     avgBuyPrice: effectiveAvgBuyPrice,
+    autonomousPilot: {
+      ...currentPilot,
+      dailyStartingValue: resolvedStartingVal,
+      peakPortfolioValue: Math.max(currentPilot.peakPortfolioValue || 0, resolvedStartingVal),
+      circuitBreakerTripped: isUncalibrated ? false : currentPilot.circuitBreakerTripped,
+      tripReason: isUncalibrated ? undefined : currentPilot.tripReason,
+      circuitBreakerTier: isUncalibrated ? 'NORMAL' : (currentPilot.circuitBreakerTier || 'NORMAL'),
+    },
   };
 }
 
@@ -748,6 +769,14 @@ export function Provider({ children }: { children: React.ReactNode }) {
               cash: nextCash,
               startingEquity: resolvedTotalEquity || nextCash,
               realizedPnl: 0,
+              autonomousPilot: {
+                ...(s.autonomousPilot || createDefaultAutonomousPilotState(resolvedTotalEquity || nextCash)),
+                dailyStartingValue: (resolvedTotalEquity || nextCash),
+                peakPortfolioValue: Math.max(s.autonomousPilot?.peakPortfolioValue || 0, (resolvedTotalEquity || nextCash)),
+                circuitBreakerTripped: false,
+                tripReason: undefined,
+                circuitBreakerTier: 'NORMAL',
+              },
               ...(!isIndianAsset(s.selectedAsset) ? { selectedAsset: 'RELIANCE' as Asset } : {}),
               watchlist: s.watchlist.some((w) => isIndianAsset(w))
                 ? s.watchlist.filter((w) => isIndianAsset(w))
@@ -921,15 +950,26 @@ export function Provider({ children }: { children: React.ReactNode }) {
         const cleanNotifs = s.notifications.filter(
           (n) => !n.body.match(/SOL|BTC|ETH|BNB|XRP|DOGE|USDT|USDC/i) && !n.title.match(/SOL|BTC|ETH|BNB|XRP|DOGE/i)
         );
+        const targetEquity = upstoxCash ?? nextCash;
+        const currentPilot = s.autonomousPilot || createDefaultAutonomousPilotState(targetEquity);
         return {
           ...s,
           accountMode: mode,
           cash: nextCash,
-          startingEquity: upstoxCash ?? nextCash,
+          startingEquity: targetEquity,
           realizedPnl: 0,
           selectedAsset: nextSelectedAsset,
           watchlist: nextWatchlist,
           notifications: cleanNotifs,
+          autonomousPilot: {
+            ...currentPilot,
+            dailyStartingValue: targetEquity,
+            peakPortfolioValue: targetEquity,
+            dailyDrawdownPct: 0,
+            circuitBreakerTripped: false,
+            circuitBreakerTier: 'NORMAL',
+            tripReason: undefined,
+          },
         };
       } else if (mode === 'paper') {
         if (isIndianAsset(nextSelectedAsset)) {
@@ -939,13 +979,24 @@ export function Provider({ children }: { children: React.ReactNode }) {
         nextWatchlist = cryptoWatchlist.length > 0
           ? (cryptoWatchlist as Asset[])
           : (['BTC', 'ETH', 'SOL', 'AVAX'] as Asset[]);
+        const paperEquity = s.initialCash || 50000;
+        const currentPilot = s.autonomousPilot || createDefaultAutonomousPilotState(paperEquity);
         return {
           ...s,
           accountMode: mode,
-          cash: s.initialCash || 50000,
-          startingEquity: s.initialCash || 50000,
+          cash: paperEquity,
+          startingEquity: paperEquity,
           selectedAsset: nextSelectedAsset,
           watchlist: nextWatchlist,
+          autonomousPilot: {
+            ...currentPilot,
+            dailyStartingValue: paperEquity,
+            peakPortfolioValue: paperEquity,
+            dailyDrawdownPct: 0,
+            circuitBreakerTripped: false,
+            circuitBreakerTier: 'NORMAL',
+            tripReason: undefined,
+          },
         };
       }
       return {
@@ -2305,8 +2356,9 @@ export function Provider({ children }: { children: React.ReactNode }) {
               activeFleet: pilotResult.updatedFleet,
               rateLimitStatus: pilotResult.updatedRateLimits,
               actionLogs: mergedLogs,
-              circuitBreakerTripped: pilotResult.circuitBreakerTripped || p.circuitBreakerTripped,
-              tripReason: pilotResult.tripReason || p.tripReason,
+              circuitBreakerTripped: pilotResult.circuitBreakerTripped,
+              tripReason: pilotResult.circuitBreakerTripped ? (pilotResult.tripReason || p.tripReason) : undefined,
+              circuitBreakerTier: pilotResult.circuitBreakerTripped ? (p.circuitBreakerTier || 'BUY_HALTED') : 'NORMAL',
               totalAutopilotTradesExecuted: p.totalAutopilotTradesExecuted + pilotResult.ordersToDispatch.length,
             },
           };
@@ -3736,22 +3788,32 @@ export function Provider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetPilotCircuitBreaker = useCallback(() => {
-    let pv = 50000;
+    let pv = 30000;
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
       pv = portfolioValue(prev, markets);
+      if (prev.accountMode === 'upstox') {
+        const upstoxCash = prev.upstoxAccount?.funds?.availableCash 
+          ?? (prev.upstoxAccount?.balances?.INR ? Number(prev.upstoxAccount.balances.INR.free) : undefined);
+        if (upstoxCash !== undefined && upstoxCash > 0) {
+          pv = upstoxCash;
+        }
+      }
       return {
         ...prev,
+        startingEquity: pv,
         autonomousPilot: {
           ...current,
           circuitBreakerTripped: false,
+          circuitBreakerTier: 'NORMAL',
           tripReason: undefined,
           dailyStartingValue: pv,
+          peakPortfolioValue: pv,
           dailyDrawdownPct: 0,
         },
       };
     });
-    triggerToast('Circuit Breaker Reset', 'Autonomous Pilot drawdown limits reset with current portfolio valuation.', 'success');
+    triggerToast('Circuit Breaker Calibrated', 'Autonomous Pilot capital baseline calibrated to current active portfolio valuation.', 'success');
     ApiClient.updatePilotConfig({ resetCircuitBreaker: true, dailyStartingValue: pv }).catch(() => {});
   }, [markets, triggerToast]);
 

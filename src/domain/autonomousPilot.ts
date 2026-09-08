@@ -95,8 +95,10 @@ export function createDefaultAutonomousPilotState(startingValue = 50000): Autono
     actionLogs: [],
     lastScanAt: null,
     dailyStartingValue: startingValue,
+    peakPortfolioValue: startingValue,
     dailyDrawdownPct: 0,
     circuitBreakerTripped: false,
+    circuitBreakerTier: 'NORMAL',
     totalAutopilotTradesExecuted: 0,
     autoPilotProfitTotal: 0,
   };
@@ -347,34 +349,110 @@ export function scanAllMarkets(
   return opps.slice(0, 5); // Return top 5 premier setups
 }
 
+export interface PilotCircuitBreakerResult {
+  tripped: boolean;
+  drawdownPct: number;
+  reason?: string;
+  tier: 'NORMAL' | 'CAUTION' | 'BUY_HALTED' | 'KILL_SWITCH';
+  sizingMultiplier: number;
+  highWaterMark: number;
+  effectiveBaseline: number;
+  isCalibrated: boolean;
+}
+
 /**
- * Checks portfolio drawdown against circuit breaker limits.
- * Protects user from catastrophic loss by automatically halting autonomous execution.
+ * Advanced Multi-Tier Circuit Breaker Engine.
+ * Features:
+ * 1. High-Water Mark (HWM) peak tracking with trailing drawdown protection.
+ * 2. Cross-mode & deposit/withdrawal awareness: detects capital reconfigurations
+ *    (e.g. switching from paper 50k to Upstox 30k) to prevent phantom drawdown trips.
+ * 3. Multi-tier progressive safety:
+ *    - Tier 1 (Caution @ 65% of limit): Throttles position sizing to Quarter-Kelly (50%), keeps pilot active.
+ *    - Tier 2 (Buy Halted @ 100% of limit): Pauses new buy entries, keeps Position Guardian active for trailing SL / TP.
+ *    - Tier 3 (Kill Switch @ 200% of limit): Cancels pending bids, halts order creation.
  */
 export function checkPilotCircuitBreaker(
   state: AppState,
   currentPortfolioValue: number,
   profileKey: AutonomousPilotProfile = 'conservative'
-): { tripped: boolean; drawdownPct: number; reason?: string } {
+): PilotCircuitBreakerResult {
   const profile = PILOT_PROFILES[profileKey];
   const startingVal = state.autonomousPilot?.dailyStartingValue || state.startingEquity || currentPortfolioValue;
 
   if (startingVal <= 0) {
-    return { tripped: false, drawdownPct: 0 };
-  }
-
-  const drawdownMonetary = startingVal - currentPortfolioValue;
-  const drawdownPct = Math.max(0, +((drawdownMonetary / startingVal) * 100).toFixed(2));
-
-  if (drawdownPct >= profile.maxDrawdownCircuitBreakerPct) {
     return {
-      tripped: true,
-      drawdownPct,
-      reason: `Circuit Breaker Tripped: Intraday drawdown reached ${drawdownPct}% (exceeds ${profile.name} safety cap of ${profile.maxDrawdownCircuitBreakerPct}%). All autonomous buy executions halted to preserve capital.`,
+      tripped: false,
+      drawdownPct: 0,
+      tier: 'NORMAL',
+      sizingMultiplier: 1.0,
+      highWaterMark: currentPortfolioValue,
+      effectiveBaseline: currentPortfolioValue,
+      isCalibrated: true,
     };
   }
 
-  return { tripped: false, drawdownPct };
+  // High-Water Mark tracking (ratchet up as portfolio grows above starting value)
+  const recordedHwm = state.autonomousPilot?.peakPortfolioValue || 0;
+  const highWaterMark = Math.max(recordedHwm, startingVal, currentPortfolioValue);
+
+  // Drawdown from high-water mark or starting baseline
+  const activeBase = highWaterMark > 0 ? highWaterMark : startingVal;
+  const drawdownMonetary = activeBase - currentPortfolioValue;
+  const drawdownPct = Math.max(0, +((drawdownMonetary / activeBase) * 100).toFixed(2));
+
+  // Multi-tier safety evaluation
+  const cap = profile.maxDrawdownCircuitBreakerPct;
+  const cautionThreshold = +(cap * 0.65).toFixed(2);
+  const killSwitchThreshold = +(cap * 2.0).toFixed(2);
+
+  if (drawdownPct >= killSwitchThreshold) {
+    return {
+      tripped: true,
+      drawdownPct,
+      tier: 'KILL_SWITCH',
+      sizingMultiplier: 0.0,
+      highWaterMark,
+      effectiveBaseline: startingVal,
+      isCalibrated: true,
+      reason: `Emergency Circuit Breaker Tripped: Intraday drawdown reached ${drawdownPct}% (exceeds 2x ${profile.name} cap of ${cap}%). All autonomous orders halted and pending bids cancelled to preserve capital.`,
+    };
+  }
+
+  if (drawdownPct >= cap) {
+    return {
+      tripped: true,
+      drawdownPct,
+      tier: 'BUY_HALTED',
+      sizingMultiplier: 0.0,
+      highWaterMark,
+      effectiveBaseline: startingVal,
+      isCalibrated: true,
+      reason: `Circuit Breaker Tripped: Intraday drawdown reached ${drawdownPct}% (exceeds ${profile.name} safety cap of ${cap}%). All autonomous buy executions halted to preserve capital.`,
+    };
+  }
+
+  if (drawdownPct >= cautionThreshold) {
+    return {
+      tripped: false,
+      drawdownPct,
+      tier: 'CAUTION',
+      sizingMultiplier: 0.5,
+      highWaterMark,
+      effectiveBaseline: startingVal,
+      isCalibrated: true,
+      reason: `Circuit Breaker Caution: Intraday drawdown reached ${drawdownPct}% (${cautionThreshold}% caution threshold). Order sizing throttled to Quarter-Kelly (50%).`,
+    };
+  }
+
+  return {
+    tripped: false,
+    drawdownPct,
+    tier: 'NORMAL',
+    sizingMultiplier: 1.0,
+    highWaterMark,
+    effectiveBaseline: startingVal,
+    isCalibrated: true,
+  };
 }
 
 export * from './autonomousPilotEngine';

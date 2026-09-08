@@ -684,6 +684,8 @@ export interface AutonomousPilotState {
   dailyStartingValue: number;
   dailyDrawdownPct: number;
   circuitBreakerTripped: boolean;
+  circuitBreakerTier?: 'NORMAL' | 'CAUTION' | 'BUY_HALTED' | 'KILL_SWITCH';
+  peakPortfolioValue?: number;
   tripReason?: string;
   totalAutopilotTradesExecuted: number;
   autoPilotProfitTotal: number;

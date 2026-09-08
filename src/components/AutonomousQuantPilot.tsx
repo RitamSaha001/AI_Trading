@@ -409,9 +409,13 @@ export function AutonomousQuantPilot() {
               Drawdown Defense
             </span>
             <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-              isTripped ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+              isTripped
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : autonomousPilot?.circuitBreakerTier === 'CAUTION'
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
             }`}>
-              {isTripped ? 'TRIPPED' : 'ARMED'}
+              {isTripped ? 'TRIPPED' : autonomousPilot?.circuitBreakerTier === 'CAUTION' ? 'THROTTLED (50%)' : 'ARMED'}
             </span>
           </div>
           <div className="text-sm font-bold font-mono text-zinc-950">
@@ -430,13 +434,15 @@ export function AutonomousQuantPilot() {
               Order Rate Pacing
             </span>
             <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-              rateLimitStatus.isThrottled ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              rateLimitStatus.isThrottled
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-zinc-100 text-zinc-600 border-zinc-200'
             }`}>
-              {rateLimitStatus.isThrottled ? 'Paced' : 'Optimal'}
+              {rateLimitStatus.requestsThisMinute} / {rateLimitStatus.maxPerMinute} req/min
             </span>
           </div>
           <div className="text-sm font-bold font-mono text-zinc-950">
-            {rateLimitStatus.requestsThisMinute} / {rateLimitStatus.maxPerMinute} <span className="text-[11px] font-normal text-zinc-500">orders/min</span>
+            {rateLimitStatus.isThrottled ? 'PAUSED' : 'OPTIMAL'}
           </div>
           <div className="text-[10px] text-zinc-400">
             &ge;1,500ms safety interval
@@ -444,27 +450,46 @@ export function AutonomousQuantPilot() {
         </div>
       </div>
 
-      {/* Circuit Breaker Alert */}
+      {/* Multi-Tier Circuit Breaker Alert */}
       {isTripped && (
         <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-3">
             <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-rose-700">
-                Capital Protection Circuit Breaker Tripped
-              </h4>
-              <p className="text-xs text-rose-600">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-rose-700">
+                  Capital Protection Circuit Breaker Tripped
+                </h4>
+                <span className="text-[10px] font-mono bg-rose-200/60 text-rose-800 px-2 py-0.5 rounded-full font-semibold">
+                  Baseline: ₹{(autonomousPilot?.dailyStartingValue || pv).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <p className="text-xs text-rose-600 mt-0.5">
                 {autonomousPilot?.tripReason || 'Daily drawdown limit reached. Order routing halted to safeguard capital.'}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={resetPilotCircuitBreaker}
-            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs shrink-0"
-          >
-            Reset Circuit Breaker
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={resetPilotCircuitBreaker}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl transition-all shadow-xs shrink-0 flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Calibrate Baseline (₹{Math.round(currentCash).toLocaleString('en-IN')})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!isTripped && autonomousPilot?.circuitBreakerTier === 'CAUTION' && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <p className="text-xs text-amber-800">
+              <strong className="font-semibold">Tier 1 Risk Caution Active:</strong> Drawdown approaching profile limit. Position sizing automatically throttled by 50% (Quarter-Kelly) to safeguard capital.
+            </p>
+          </div>
         </div>
       )}
 
