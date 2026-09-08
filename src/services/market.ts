@@ -41,12 +41,19 @@ function createSeededRng(seed: number) {
 }
 
 /**
+ * In-memory cache of last verified live quotes across exchange networks.
+ * Prevents transient heuristic jumps or flickering during network refreshes.
+ */
+export const lastKnownLiveMarkets: Partial<Record<Asset, Market>> = {};
+
+/**
  * Deterministic synthetic simulation fallback when external exchange networks are unreachable or rate-limited.
  * Uses seeded pseudo-random curves for fully deterministic, reproducible candle bars.
  */
 export function generateHeuristicMarket(asset: Asset, tf: Timeframe): Market {
   const meta = META[asset];
-  const base = meta?.basePrice || 100;
+  const lastLive = lastKnownLiveMarkets[asset];
+  const base = (lastLive && lastLive.price > 0 && !lastLive.isSynthetic) ? lastLive.price : (meta?.basePrice || 100);
   const cfg = tfMap[tf];
   const now = Date.now();
   const candles: Candle[] = [];
@@ -226,7 +233,7 @@ export async function fetchMarket(asset: Asset, tf: Timeframe): Promise<Market> 
           candles[candles.length - 1].close = price;
         }
 
-        return {
+        const liveMarket: Market = {
           asset,
           name: meta.name,
           symbol: meta.symbol,
@@ -242,6 +249,10 @@ export async function fetchMarket(asset: Asset, tf: Timeframe): Promise<Market> 
           lastUpdated: now,
           category: meta.category,
         };
+        if (!liveMarket.isSynthetic) {
+          lastKnownLiveMarkets[asset] = liveMarket;
+        }
+        return liveMarket;
       }
     } catch {}
   }
@@ -252,6 +263,9 @@ export async function fetchMarket(asset: Asset, tf: Timeframe): Promise<Market> 
     try {
       return await fetchCoinbaseAsset(asset, tf);
     } catch {
+      if (lastKnownLiveMarkets[asset]) {
+        return { ...lastKnownLiveMarkets[asset]!, lastUpdated: Date.now() };
+      }
       return generateHeuristicMarket(asset, tf);
     }
   }
@@ -378,7 +392,7 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
           history = candles.map((c) => c.close);
         }
 
-        result[a] = {
+        const mktObj: Market = {
           asset: a,
           name: meta.name,
           symbol: meta.symbol,
@@ -394,6 +408,10 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
           lastUpdated: now,
           category: meta.category,
         };
+        if (!mktObj.isSynthetic) {
+          lastKnownLiveMarkets[a] = mktObj;
+        }
+        result[a] = mktObj;
       } else if (t) {
         const price = +t.lastPrice;
         const change24h = +t.priceChangePercent;
@@ -441,7 +459,7 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
           history = candles.map((c) => c.close);
         }
 
-        result[a] = {
+        const binanceMkt: Market = {
           asset: a,
           name: meta.name,
           symbol: meta.symbol,
@@ -457,6 +475,13 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
           lastUpdated: now,
           category: meta.category,
         };
+        lastKnownLiveMarkets[a] = binanceMkt;
+        result[a] = binanceMkt;
+      } else if (lastKnownLiveMarkets[a]) {
+        result[a] = {
+          ...lastKnownLiveMarkets[a]!,
+          lastUpdated: now,
+        };
       } else {
         result[a] = generateHeuristicMarket(a, tf);
       }
@@ -466,7 +491,11 @@ export async function fetchAll(tf: Timeframe, focusAsset?: Asset): Promise<Recor
   } catch {
     const res: Partial<Record<Asset, Market>> = {};
     for (const a of ASSETS) {
-      res[a] = generateHeuristicMarket(a, tf);
+      if (lastKnownLiveMarkets[a]) {
+        res[a] = { ...lastKnownLiveMarkets[a]!, lastUpdated: Date.now() };
+      } else {
+        res[a] = generateHeuristicMarket(a, tf);
+      }
     }
     return res as Record<Asset, Market>;
   }

@@ -2267,6 +2267,19 @@ export function Provider({ children }: { children: React.ReactNode }) {
       // 4. Master Autonomous Pilot Execution (Zero Gemini, Multi-Asset Fleet Orchestration, Rate-Limited)
       const currentPilot = stateRef.current.autonomousPilot;
       if (currentPilot?.enabled) {
+        const isLiveUpstox = stateRef.current.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
+        const isCloudDaemonConfirmed = Boolean(
+          currentPilot.cloudDaemonStatus &&
+          currentPilot.lastCloudSyncAt &&
+          Date.now() - currentPilot.lastCloudSyncAt < 30_000
+        );
+
+        if (isLiveUpstox && isCloudDaemonConfirmed) {
+          // Cloud daemon running on GigaNode server is the authoritative execution master.
+          // Do not overwrite activeFleet or dispatch local browser orders.
+          return;
+        }
+
         const pilotResult = tickAutonomousPilot(getEffectivePilotState(stateRef.current), m);
 
         if (pilotResult.circuitBreakerTripped && !currentPilot.circuitBreakerTripped) {
@@ -3669,6 +3682,24 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const setPilotProfile = useCallback((profile: AutonomousPilotProfile) => {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      const isLiveUpstox = prev.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
+      const isCloudDaemonConfirmed = Boolean(
+        current.cloudDaemonStatus &&
+        current.lastCloudSyncAt &&
+        Date.now() - current.lastCloudSyncAt < 30_000
+      );
+
+      if (isLiveUpstox && isCloudDaemonConfirmed) {
+        return {
+          ...prev,
+          autonomousPilot: {
+            ...current,
+            profile,
+            riskPerTradePct: PILOT_PROFILES[profile].maxRiskPerTradePct,
+          },
+        };
+      }
+
       const effState = getEffectivePilotState(prev);
       const pilotRes = tickAutonomousPilot(effState, markets);
       const updated = {
@@ -3683,8 +3714,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
       return { ...prev, autonomousPilot: updated };
     });
     triggerToast('Pilot Profile Updated', `Active profile switched to ${PILOT_PROFILES[profile].name}.`, 'info');
-    ApiClient.updatePilotConfig({ profile }).catch(() => {});
-  }, [markets, triggerToast]);
+    ApiClient.updatePilotConfig({ profile }).then(() => ApiClient.triggerPilotSweep()).catch(() => {});
+  }, [markets, triggerToast, upstoxAccount?.connected]);
 
   const setPilotExecutionMode = useCallback((mode: 'full_autonomous' | 'semi_autonomous') => {
     setState((prev) => {
@@ -3758,6 +3789,18 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const scanPilotOpportunities = useCallback(() => {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      const isLiveUpstox = prev.accountMode === 'upstox' && Boolean(upstoxAccount?.connected);
+      const isCloudDaemonConfirmed = Boolean(
+        current.cloudDaemonStatus &&
+        current.lastCloudSyncAt &&
+        Date.now() - current.lastCloudSyncAt < 30_000
+      );
+
+      if (isLiveUpstox && isCloudDaemonConfirmed) {
+        ApiClient.triggerPilotSweep().catch(() => {});
+        return prev;
+      }
+
       const effState = getEffectivePilotState(prev);
       const m = marketsRef.current;
       const opps = scanAllMarkets(effState, m, current.profile);
@@ -3781,7 +3824,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
         },
       };
     });
-  }, []);
+    triggerToast('Market Scan Complete', 'Autonomous quantitative scanner refreshed opportunities.', 'info');
+  }, [triggerToast, upstoxAccount?.connected]);
 
   const clearNotifications = useCallback(() => {
     setState((s) => ({ ...s, notifications: [] }));

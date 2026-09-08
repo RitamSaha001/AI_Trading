@@ -650,8 +650,14 @@ export function AutonomousQuantPilot() {
                 {UPSTOX_FLEET_ASSETS.map((asset) => {
                   const meta = META[asset];
                   const mkt = markets[asset];
-                  const price = mkt?.price || meta.basePrice;
                   const fleetItem = activeFleet[asset];
+                  // Prioritize authoritative live Upstox price from activeFleet or live REST market over synthetic fallback
+                  const authoritativePrice = (fleetItem?.currentPrice && fleetItem.currentPrice > 0)
+                    ? fleetItem.currentPrice
+                    : (!mkt?.isSynthetic && mkt?.price && mkt.price > 0)
+                    ? mkt.price
+                    : (mkt?.price || meta?.basePrice || 100);
+                  const price = authoritativePrice;
                   const strat = fleetItem?.assignedStrategy || 'Titan Alpha Sentinel';
                   const hurst = fleetItem?.hurst ?? 0.50;
                   const unitsHeld = state.positions[asset] || fleetItem?.unitsHeld || 0;
