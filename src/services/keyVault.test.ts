@@ -87,8 +87,9 @@ describe('Client-Side Encrypted Key Vault', () => {
     lockVault();
 
     const stored = JSON.parse(getStorage().getItem(VAULT_STORAGE_KEY)!);
-    // Tamper with the ciphertext
-    const tamperedCipher = 'ff' + stored.ciphertext.slice(2);
+    // Tamper with the ciphertext deterministically
+    const firstTwo = stored.ciphertext.slice(0, 2);
+    const tamperedCipher = (firstTwo === 'ff' ? '00' : 'ff') + stored.ciphertext.slice(2);
     stored.ciphertext = tamperedCipher;
     getStorage().setItem(VAULT_STORAGE_KEY, JSON.stringify(stored));
 

@@ -485,11 +485,12 @@ export function tickAutonomousPilot(
     // Differentiate delivery (CNC) from intraday (MIS) for accurate fee-shielding:
     // If holding exists in Upstox CNC holdings or position.product === 'D'/'CNC', apply delivery clearing friction.
     const isDeliveryHolding = Boolean(
-      state.upstoxAccount?.holdings?.some((h) => (h as any).asset === asset || (h as any).tradingsymbol === asset) ||
+      state.upstoxAccount?.holdings?.some((h) => (h as any).asset === asset || (h as any).tradingsymbol === asset || (h as any).symbol === asset) ||
       state.upstoxAccount?.positions?.some(
-        (p) => ((p as any).asset === asset || (p as any).symbol === asset) && (p.product === 'D' || p.product === 'CNC')
+        (p) => ((p as any).asset === asset || (p as any).symbol === asset) && (p.product === 'D' || p.product === 'CNC' || p.product === 'DELIVERY')
       )
     );
+    const exitProduct: 'CNC' | 'MIS' = isDeliveryHolding ? 'CNC' : 'MIS';
     const roundtripFriction = calculateRoundtripFriction(avgBuyPrice, currentHolding, isDeliveryHolding);
     const highWaterMark = Math.max(fleetStatus.highWaterMark || avgBuyPrice, price);
 
@@ -522,7 +523,8 @@ export function tickAutonomousPilot(
     // 15:15 IST Intraday Session Square-Off (MIS Mandatory Rule)
     // All intraday MIS positions MUST be closed before market close (15:30) to prevent overnight delivery risk
     // and eliminate broker auto-square-off penalty charges (₹50 + GST).
-    if (timingQuality.isSessionCutoffPhase && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    // Note: CNC delivery holdings do NOT face broker auto-square-off penalties and settle overnight.
+    if (!isDeliveryHolding && timingQuality.isSessionCutoffPhase && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -617,7 +619,7 @@ export function tickAutonomousPilot(
         amount: currentHolding,
         price: alignToTickSize(price, asset),
         type: 'market',
-        product: 'MIS',
+        product: exitProduct,
         strategyName: `Auto-Pilot: ${strategy} Stagnancy Exit`,
         reason: stagnancyCheck.reason,
       });
@@ -648,7 +650,7 @@ export function tickAutonomousPilot(
         amount: exitQty,
         price: alignToTickSize(price, asset),
         type: 'limit',
-        product: 'MIS',
+        product: exitProduct,
         strategyName: `Auto-Pilot: ${strategy} Tranche 1 Harvest`,
         reason: `Tranche 1 (+1.5 ATR) reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Locking partial profit.`,
         trancheStage: 1,
@@ -680,7 +682,7 @@ export function tickAutonomousPilot(
         amount: exitQty,
         price: alignToTickSize(price, asset),
         type: 'limit',
-        product: 'MIS',
+        product: exitProduct,
         strategyName: `Auto-Pilot: ${strategy} Core Target Harvest`,
         reason: `Core Target T2 reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Harvesting core gain.`,
         trancheStage: 2,
@@ -711,7 +713,7 @@ export function tickAutonomousPilot(
         amount: currentHolding,
         price: alignToTickSize(price, asset),
         type: 'market',
-        product: 'MIS',
+        product: exitProduct,
         strategyName: `Auto-Pilot: ${strategy} Chandelier Runner Exit`,
         reason: `Chandelier Trailing Exit triggered at ₹${price.toFixed(2)}. Final runner closed.`,
         trancheStage: 3,
@@ -741,7 +743,7 @@ export function tickAutonomousPilot(
         amount: currentHolding,
         price: alignToTickSize(price, asset),
         type: 'market',
-        product: 'MIS',
+        product: exitProduct,
         strategyName: `Auto-Pilot: ${strategy} Capital Defense Stop`,
         reason: `Stop hit at ₹${price.toFixed(2)}. Protecting capital.`,
       });
