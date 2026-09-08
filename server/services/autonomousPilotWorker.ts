@@ -406,13 +406,20 @@ export class AutonomousPilotWorker {
                   const quote = quotesBatch[asset];
                   const candles = await UpstoxCandleService.getCandles(asset, '1D', accessToken);
                   if (quote && quote.lastPrice > 0) {
+                    const history = candles.length > 0 ? candles.map((c) => c.close) : [quote.lastPrice];
+                    if (history.length > 0) {
+                      history[history.length - 1] = quote.lastPrice;
+                    }
                     markets[asset] = {
+                      asset: asset as Asset,
+                      symbol: asset,
+                      name: asset,
                       price: quote.lastPrice,
                       change24h: quote.changePercent || 0,
                       high24h: quote.high || quote.lastPrice,
                       low24h: quote.low || quote.lastPrice,
                       volume24h: quote.volume || 0,
-                      history: candles.length > 0 ? candles.map((c) => c.close) : [quote.lastPrice],
+                      history,
                       candles: candles.map((c) => ({
                         time: new Date(c.time).toISOString(),
                         open: c.open,
@@ -421,6 +428,9 @@ export class AutonomousPilotWorker {
                         close: c.close,
                         volume: c.volume,
                       })),
+                      source: 'upstox',
+                      isSynthetic: false,
+                      lastUpdated: Date.now(),
                     };
                   }
                 } catch (err: any) {

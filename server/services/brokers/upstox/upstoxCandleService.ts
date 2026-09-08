@@ -54,11 +54,15 @@ export class UpstoxCandleService {
       logger.warn(`[UpstoxCandleService] Failed to fetch Upstox candles for ${cleanSym}: ${err.message}`);
     }
 
+    if (cached && cached.candles && cached.candles.length > 0) {
+      return cached.candles;
+    }
+
     return this.generateFallbackCandles(inst.lastPrice || 1000, timeframe);
   }
 
   /**
-   * Fetches authoritative candles for multiple Indian equities in parallel.
+   * Fetches multiple symbols in parallel batches with rate-limit pacing.
    */
   public static async getCandlesBatch(
     symbols: string[],
@@ -70,11 +74,9 @@ export class UpstoxCandleService {
       symbols.map(async (sym) => {
         try {
           const c = await this.getCandles(sym, timeframe, accessToken);
-          if (c && c.length > 0) {
-            results[sym.toUpperCase().trim()] = c;
-          }
-        } catch (err: any) {
-          logger.warn(`[UpstoxCandleService] Batch candle fetch error for ${sym}: ${err.message}`);
+          results[sym] = c;
+        } catch {
+          results[sym] = [];
         }
       })
     );
@@ -90,7 +92,7 @@ export class UpstoxCandleService {
     const now = new Date();
     const toDate = now.toISOString().split('T')[0];
 
-    // Map timeframe to Upstox API endpoint & interval
+    // 1. Minute intraday candles for 1H
     if (timeframe === '1H') {
       try {
         const res = await (UpstoxClient as any).request(
@@ -99,34 +101,39 @@ export class UpstoxCandleService {
           accessToken
         );
         const raw = res?.data?.candles;
-        if (Array.isArray(raw) && raw.length > 0) {
+        if (Array.isArray(raw) && raw.length >= 20) {
           return this.parseCandles(raw.slice(0, 60));
         }
       } catch {
-        // Fallback to 30m intraday if 1m is unavailable
+        // Fallback to 30m historical if 1m is unavailable or insufficient
       }
     }
 
-    if (timeframe === '1D' || timeframe === '1H') {
+    // 2. 30-minute historical candles for '1D', '1H', '30m', '30minute'
+    // Provides 30 days of 30-minute historical bars (~300+ candles), optimal for intraday swing,
+    // TTM Squeeze compression detection, and Hurst exponent trend riding.
+    if (timeframe === '1D' || timeframe === '1H' || timeframe === '30m' || timeframe === '30minute') {
       try {
+        const fromDate30mObj = new Date(now.getTime() - 30 * 86400000);
+        const fromDate30m = fromDate30mObj.toISOString().split('T')[0];
         const res = await (UpstoxClient as any).request(
-          `/historical-candle/intraday/${encodedKey}/30minute`,
+          `/historical-candle/${encodedKey}/30minute/${toDate}/${fromDate30m}`,
           'GET',
           accessToken
         );
         const raw = res?.data?.candles;
-        if (Array.isArray(raw) && raw.length > 0) {
+        if (Array.isArray(raw) && raw.length >= 20) {
           return this.parseCandles(raw);
         }
       } catch (e: any) {
-        logger.debug(`[UpstoxCandleService] Intraday fetch failed, attempting historical day candles: ${e.message}`);
+        logger.debug(`[UpstoxCandleService] 30m historical fetch failed, attempting daily candles: ${e.message}`);
       }
     }
 
-    // Daily historical candles for 1W, 1M, 1Y or fallback
-    let daysBack = 30;
-    if (timeframe === '1W') daysBack = 7;
-    else if (timeframe === '1M') daysBack = 30;
+    // 3. Daily historical candles for '1W', '1M', '1Y' or fallback for '1D'
+    let daysBack = 60; // 60 calendar days gives ~42 trading sessions (optimal for 20-period Hurst & 20-period Bollinger/Keltner)
+    if (timeframe === '1W') daysBack = 90;
+    else if (timeframe === '1M') daysBack = 180;
     else if (timeframe === '1Y') daysBack = 365;
 
     const fromDateObj = new Date(now.getTime() - daysBack * 86400000);
@@ -177,7 +184,7 @@ export class UpstoxCandleService {
    * Clean fallback generator when outside market hours and API is offline.
    */
   private static generateFallbackCandles(basePrice: number, timeframe: string): UpstoxCandle[] {
-    const count = timeframe === '1H' ? 60 : timeframe === '1D' ? 13 : 30;
+    const count = timeframe === '1H' ? 60 : timeframe === '1D' ? 45 : 60;
     const stepMs = timeframe === '1H' ? 60000 : timeframe === '1D' ? 1800000 : 86400000;
     const now = Date.now();
     const list: UpstoxCandle[] = [];

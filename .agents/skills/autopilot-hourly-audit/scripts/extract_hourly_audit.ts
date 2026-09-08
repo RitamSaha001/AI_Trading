@@ -11,6 +11,7 @@
 
 import { initDb, getDb } from '../../../../server/db';
 import { UpstoxAdapter } from '../../../../server/services/brokers/upstox/upstoxAdapter';
+import { UpstoxCandleService } from '../../../../server/services/brokers/upstox/upstoxCandleService';
 import { IndianMarketCalendar } from '../../../../server/services/brokers/upstox/indianMarketCalendar';
 import { UPSTOX_FLEET_ASSETS, determineAssetStrategyAndRegime } from '../../../../src/domain/autonomousPilotEngine';
 import { PILOT_PROFILES } from '../../../../src/domain/autonomousPilot';
@@ -132,12 +133,28 @@ async function runAudit(): Promise<void> {
   for (const asset of UPSTOX_FLEET_ASSETS) {
     try {
       const q = await adapter.getMarketQuote(asset, userId, creds?.accessToken);
+      const candles = await UpstoxCandleService.getCandles(asset, '1D', creds?.accessToken);
       if (q && q.lastPrice > 0) {
         quotesMap[asset] = q;
+        const history = candles.length > 0 ? candles.map((c) => c.close) : [q.lastPrice];
+        if (history.length > 0) {
+          history[history.length - 1] = q.lastPrice;
+        }
         const fakeMarket: Partial<Market> = {
+          asset: asset as Asset,
+          symbol: asset,
+          name: asset,
           price: q.lastPrice,
           change24h: q.changePercent || 0,
-          history: [q.lastPrice],
+          history,
+          candles: candles.map((c) => ({
+            time: new Date(c.time).toISOString(),
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          })),
         };
         const regime = determineAssetStrategyAndRegime(fakeMarket as Market);
         fleetMatrix.push({
