@@ -632,6 +632,8 @@ export interface AssetFleetStatus {
   volumeSurgeRatio?: number;
   alphaRank?: number;
   alphaConvictionIndex?: number;
+  highWaterMark?: number;
+  entryTimestamp?: number;
 }
 
 export interface PilotRateLimitStatus {
@@ -658,6 +660,7 @@ export interface PilotActionLog {
     | 'PROFIT_HARVEST_T2'
     | 'CHANDELIER_EXIT'
     | 'SECTOR_CAP_DEFENSE'
+    | 'CORRELATION_DEFENSE'
     | 'STAGNATION_EXIT'
     | 'AUTONOMOUS_ENGAGED'
     | 'DISARMED'

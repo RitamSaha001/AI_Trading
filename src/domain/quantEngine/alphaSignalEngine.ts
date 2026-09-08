@@ -1,4 +1,96 @@
-import { Asset, Market } from '../../types';
+import { Asset, Market, Candle } from '../../types';
+import * as thresholds from './config/thresholds';
+import {
+  calculateHurstExponent,
+  estimateOrnsteinUhlenbeck,
+  runKalmanFilter,
+} from './regimeDetectionEngine';
+
+export interface FrictionBreakdown {
+  turnover: number;
+  brokerage: number;
+  stt: number;
+  exchangeTxnCharge: number;
+  sebiTurnoverCharge: number;
+  stampDuty: number;
+  gst: number;
+  totalRoundtripFriction: number;
+  frictionPerShare: number;
+  frictionPct: number;
+}
+
+/**
+ * Computes exact roundtrip transaction costs and statutory clearing friction on NSE.
+ * Includes Upstox flat/percentage brokerage, STT, exchange charges, SEBI turnover,
+ * state stamp duty, and 18% GST on service charges.
+ */
+export function calculateRoundtripFriction(
+  price: number,
+  quantity: number,
+  isDelivery = true
+): FrictionBreakdown {
+  const safeQty = Math.max(1, quantity);
+  const safePrice = Math.max(0.01, price);
+  const turnover = safePrice * safeQty;
+
+  // Upstox brokerage per executed order
+  const buyBrokerage = isDelivery
+    ? Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * 0.025)
+    : Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * thresholds.BROKERAGE_PCT);
+  const sellBrokerage = isDelivery
+    ? Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * 0.025)
+    : Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * thresholds.BROKERAGE_PCT);
+  const brokerage = +(buyBrokerage + sellBrokerage).toFixed(2);
+
+  // Securities Transaction Tax (STT)
+  const stt = isDelivery
+    ? +(turnover * thresholds.STT_DELIVERY_BUY_PCT + turnover * thresholds.STT_DELIVERY_SELL_PCT).toFixed(2)
+    : +(turnover * thresholds.STT_INTRADAY_SELL_PCT).toFixed(2);
+
+  // Exchange transaction charges (both legs)
+  const exchangeTxnCharge = +(2 * turnover * thresholds.EXCHANGE_TXN_CHARGE_PCT).toFixed(2);
+
+  // SEBI turnover charge (both legs)
+  const sebiTurnoverCharge = +(2 * turnover * thresholds.SEBI_TURNOVER_CHARGE_PCT).toFixed(2);
+
+  // State stamp duty (buy leg only)
+  const stampDuty = isDelivery
+    ? +(turnover * thresholds.STAMP_DUTY_DELIVERY_BUY_PCT).toFixed(2)
+    : +(turnover * thresholds.STAMP_DUTY_INTRADAY_BUY_PCT).toFixed(2);
+
+  // GST 18% on (brokerage + exchange + sebi)
+  const gst = +(thresholds.GST_PCT * (brokerage + exchangeTxnCharge + sebiTurnoverCharge)).toFixed(2);
+
+  const totalRoundtripFriction = +(brokerage + stt + exchangeTxnCharge + sebiTurnoverCharge + stampDuty + gst).toFixed(2);
+  const frictionPerShare = +(totalRoundtripFriction / safeQty).toFixed(2);
+  const frictionPct = +((totalRoundtripFriction / turnover) * 100).toFixed(2);
+
+  return {
+    turnover: +turnover.toFixed(2),
+    brokerage,
+    stt,
+    exchangeTxnCharge,
+    sebiTurnoverCharge,
+    stampDuty,
+    gst,
+    totalRoundtripFriction,
+    frictionPerShare,
+    frictionPct,
+  };
+}
+
+/**
+ * Scenario 1: Pre-Trade Transaction Cost Analysis (TCA) Hurdle
+ * Rejects any trade setup where expected target gross profit is less than 3x roundtrip friction.
+ */
+export function passesFrictionHurdle(
+  expectedGrossProfit: number,
+  totalRoundtripFriction: number,
+  multiple: number = thresholds.MIN_FRICTION_PROFIT_MULTIPLE
+): boolean {
+  if (expectedGrossProfit <= 0 || totalRoundtripFriction <= 0) return false;
+  return expectedGrossProfit >= multiple * totalRoundtripFriction;
+}
 
 export interface TTMSqueezeResult {
   squeezeState: 'SQUEEZE_ON' | 'SQUEEZE_OFF' | 'NO_SQUEEZE';
@@ -150,6 +242,101 @@ export function calculateTTMSqueeze(
     kcUpper: +kcUpper.toFixed(2),
     kcLower: +kcLower.toFixed(2),
     bandwidth: +bandwidth.toFixed(4),
+  };
+}
+
+/**
+ * Convenience helper returning concise 'on' | 'off' | 'none' squeeze status.
+ */
+export function ttmSqueezeState(candlesOrPrices: Candle[] | number[]): 'on' | 'off' | 'none' {
+  const prices = Array.isArray(candlesOrPrices) && candlesOrPrices.length > 0 && typeof (candlesOrPrices[0] as any) === 'object'
+    ? (candlesOrPrices as Candle[]).map((c) => c.close)
+    : (candlesOrPrices as number[]);
+  const res = calculateTTMSqueeze(prices);
+  if (res.squeezeState === 'SQUEEZE_ON') return 'on';
+  if (res.squeezeState === 'SQUEEZE_OFF') return 'off';
+  return 'none';
+}
+
+/**
+ * Scenario 4: Ornstein-Uhlenbeck Mean-Reversion Signal
+ * Computes mean-reverting velocity theta, equilibrium price mu, and standardized Z-score.
+ */
+export function ouMeanReversionSignal(candlesOrPrices: Candle[] | number[]): {
+  theta: number;
+  mu: number;
+  zScore: number;
+  isExtreme: boolean;
+} {
+  const prices = Array.isArray(candlesOrPrices) && candlesOrPrices.length > 0 && typeof (candlesOrPrices[0] as any) === 'object'
+    ? (candlesOrPrices as Candle[]).map((c) => c.close)
+    : (candlesOrPrices as number[]);
+  const ou = estimateOrnsteinUhlenbeck(prices);
+  const isExtreme = Math.abs(ou.currentZScore) >= thresholds.OU_EXTREME_ZSCORE_THRESHOLD;
+  return {
+    theta: +ou.theta.toFixed(4),
+    mu: +ou.mu.toFixed(2),
+    zScore: +ou.currentZScore.toFixed(2),
+    isExtreme,
+  };
+}
+
+/**
+ * Computes the 1D recursive Kalman Filter Fair Value as an unbiased reference for smart limit pricing.
+ */
+export function kalmanFairValue(prices: number[]): number {
+  if (!prices || prices.length === 0) return 0;
+  const res = runKalmanFilter(prices);
+  return +res.finalState.estimatedState.toFixed(2);
+}
+
+/**
+ * Computes Hurst exponent from either candle arrays or raw close price streams.
+ */
+export function calculateHurstExponentFromCandles(candlesOrPrices: Candle[] | number[], window?: number) {
+  const prices = Array.isArray(candlesOrPrices) && candlesOrPrices.length > 0 && typeof (candlesOrPrices[0] as any) === 'object'
+    ? (candlesOrPrices as Candle[]).map((c) => c.close)
+    : (candlesOrPrices as number[]);
+  const slice = window && window > 0 ? prices.slice(-window) : prices;
+  return calculateHurstExponent(slice);
+}
+
+/**
+ * Scenario 8: Sector Beta Gate
+ * Blocks long entries when the underlying sector index is trading below VWAP with lower lows.
+ */
+export function sectorBetaGate(
+  asset: string,
+  sectorIndexMarket?: Market,
+  assetMarket?: Market
+): { allowed: boolean; reason: string } {
+  if (!sectorIndexMarket || !sectorIndexMarket.history || sectorIndexMarket.history.length < 5) {
+    return { allowed: true, reason: 'Sector data neutral or unavailable; gate open.' };
+  }
+
+  const secPrices = sectorIndexMarket.history;
+  const secCurrent = secPrices[secPrices.length - 1];
+  const secMetrics = calculateVolumeMetrics(sectorIndexMarket.candles, secPrices);
+  const secVwap = secMetrics.vwap;
+
+  // Sector is below VWAP
+  const isSectorBelowVwap = secCurrent < secVwap;
+
+  // Sector making lower lows over the last 10 periods
+  const recentSec = secPrices.slice(-10);
+  const isSectorLowerLows = recentSec.length >= 5 && recentSec[recentSec.length - 1] < recentSec[0];
+
+  const sectorName = getAssetSector(asset);
+  if (isSectorBelowVwap && isSectorLowerLows) {
+    return {
+      allowed: false,
+      reason: `Sector ${sectorName} is in breakdown (Price ₹${secCurrent.toFixed(2)} < VWAP ₹${secVwap.toFixed(2)} with lower lows). Long entries blocked to avoid fighting sector beta.`,
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: `Sector ${sectorName} healthy (Price ₹${secCurrent.toFixed(2)} relative to VWAP ₹${secVwap.toFixed(2)}).`,
   };
 }
 
@@ -367,23 +554,31 @@ export function calculateVolumeMetrics(
 
 export interface DynamicProfitRatchetResult {
   ratchetedStopPrice: number;
-  stageName: 'INITIAL_RISK' | 'STEPPED_BREAKEVEN' | 'LOCKED_PROFIT_T1' | 'CORE_TARGET_T2' | 'CHANDELIER_RUNNER';
+  stageName:
+    | 'INITIAL_RISK'
+    | 'FEE_BREAKEVEN_SHIELD'
+    | 'STEPPED_BREAKEVEN'
+    | 'LOCKED_PROFIT_T1'
+    | 'CORE_TARGET_T2'
+    | 'CHANDELIER_RUNNER';
   isRatcheted: boolean;
   gainAtrMultiples: number;
 }
 
 /**
- * Computes stepped trailing stop-loss levels to guarantee winning trades never round-trip to a loss:
- * - At >= +0.8 ATR: Move stop to Breakeven + Tick (100% risk-free trade).
- * - At >= +1.5 ATR: Lock in +0.5 ATR profit.
- * - At >= +2.2 ATR: Lock in +1.2 ATR core profit.
+ * Scenario 2: Volatility-Adjusted Multi-Stage Profit Ratchet
+ * - Level 0.5 (+0.30 ATR): Fee-Breakeven Shield (Entry + Fees + 1 tick)
+ * - Level 1 (+0.70 ATR): Stepped Profit Lock (Entry + 0.25 ATR)
+ * - Level 2 (+1.40 ATR): Tranche 1 Harvest (Lock +0.60 ATR)
+ * - Level 3 (+2.00 ATR): Core Target T2 (Lock +1.25 ATR)
  */
 export function calculateDynamicProfitRatchet(
   entryPrice: number,
   currentPrice: number,
   atr: number,
   currentStopPrice: number,
-  tickSize: number = 0.05
+  tickSize: number = thresholds.NSE_TICK_SIZE_INR,
+  roundtripFrictionPerShare: number = 0
 ): DynamicProfitRatchetResult {
   const profitDistance = currentPrice - entryPrice;
   const safeAtr = Math.max(0.01, atr);
@@ -392,23 +587,31 @@ export function calculateDynamicProfitRatchet(
   let ratchetedStop = currentStopPrice;
   let stageName: DynamicProfitRatchetResult['stageName'] = 'INITIAL_RISK';
 
-  // Level 3: Core target reached (+2.2 ATR) -> Ratchet stop to +1.2 ATR
-  if (gainAtrMultiples >= 2.2) {
-    const t2Lock = entryPrice + safeAtr * 1.2;
+  // Level 3: Core target reached (+2.00 ATR) -> Ratchet stop to +1.25 ATR
+  if (gainAtrMultiples >= thresholds.RATCHET_STAGE_3_ATR) {
+    const t2Lock = entryPrice + safeAtr * thresholds.RATCHET_LOCK_3_ATR;
     ratchetedStop = Math.max(ratchetedStop, t2Lock);
     stageName = 'CORE_TARGET_T2';
   }
-  // Level 2: Target 1 reached (+1.5 ATR) -> Ratchet stop to +0.5 ATR (banked gain)
-  else if (gainAtrMultiples >= 1.5) {
-    const t1Lock = entryPrice + safeAtr * 0.5;
+  // Level 2: Target 1 reached (+1.40 ATR) -> Ratchet stop to +0.60 ATR (banked gain)
+  else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_2_ATR) {
+    const t1Lock = entryPrice + safeAtr * thresholds.RATCHET_LOCK_2_ATR;
     ratchetedStop = Math.max(ratchetedStop, t1Lock);
     stageName = 'LOCKED_PROFIT_T1';
   }
-  // Level 1: Initial expansion (+0.8 ATR) -> Stepped Breakeven (Entry + 1 tick)
-  else if (gainAtrMultiples >= 0.8) {
-    const breakeven = entryPrice + tickSize;
-    ratchetedStop = Math.max(ratchetedStop, breakeven);
+  // Level 1: Stepped Profit Lock (+0.70 ATR) -> Ratchet stop to +0.25 ATR
+  else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_1_ATR) {
+    const steppedLock = entryPrice + safeAtr * thresholds.RATCHET_LOCK_1_ATR;
+    ratchetedStop = Math.max(ratchetedStop, steppedLock);
     stageName = 'STEPPED_BREAKEVEN';
+  }
+  // Level 0.5: Fee-Breakeven Micro-Shield (+0.30 ATR) -> Stop to Entry + Net Friction + 1 tick
+  else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_0_5_ATR) {
+    const feeBreakeven = entryPrice + roundtripFrictionPerShare + tickSize;
+    if (currentPrice > feeBreakeven) {
+      ratchetedStop = Math.max(ratchetedStop, feeBreakeven);
+      stageName = 'FEE_BREAKEVEN_SHIELD';
+    }
   }
 
   // Align ratcheted stop to tick size
@@ -420,6 +623,188 @@ export function calculateDynamicProfitRatchet(
     stageName,
     isRatcheted,
     gainAtrMultiples,
+  };
+}
+
+/**
+ * Scenario 5: 14:15 Late-Day Stop Compression
+ * Protects session high-water marks against the 14:15-15:15 retail MIS liquidation cascade.
+ */
+export function lateDayStopCompression(
+  entryPrice: number,
+  currentPrice: number,
+  atr: number,
+  highWaterMark: number,
+  currentStopPrice: number,
+  now: number = Date.now(),
+  tickSize: number = thresholds.NSE_TICK_SIZE_INR
+): { compressedStopPrice: number; isCompressed: boolean; reason: string } {
+  const timing = evaluateSessionTimingQuality(now);
+  if (!timing.isLateDayLiquidationPhase) {
+    return { compressedStopPrice: currentStopPrice, isCompressed: false, reason: 'Outside late-day liquidation window.' };
+  }
+
+  const safeAtr = Math.max(0.01, atr);
+  let targetStop = currentStopPrice;
+  let reason = '';
+
+  if (currentPrice > entryPrice) {
+    // In profit: compress stop to protect High-Water Mark - 0.5 ATR
+    const profitLock = highWaterMark - safeAtr * thresholds.LATE_DAY_PROFIT_STOP_COMPRESSION_ATR;
+    targetStop = Math.max(currentStopPrice, profitLock);
+    reason = `Late-Day Profit Shield: Compressed stop to ₹${targetStop.toFixed(2)} (HWM - 0.5 ATR) to protect banked gains before 15:15 retail liquidation.`;
+  } else {
+    // Flat or slight loss: compress stop to Entry - 0.75 ATR
+    const lossCeiling = entryPrice - safeAtr * thresholds.LATE_DAY_LOSS_STOP_COMPRESSION_ATR;
+    targetStop = Math.max(currentStopPrice, lossCeiling);
+    reason = `Late-Day Loss Defense: Compressed stop to ₹${targetStop.toFixed(2)} (Entry - 0.75 ATR) to eliminate overnight gap catastrophe.`;
+  }
+
+  const alignedStop = +(Math.round(targetStop / tickSize) * tickSize).toFixed(2);
+  const isCompressed = alignedStop > currentStopPrice;
+
+  return {
+    compressedStopPrice: Math.max(currentStopPrice, alignedStop),
+    isCompressed,
+    reason,
+  };
+}
+
+/**
+ * Scenario 7: Stagnant Capital / 90-Minute Dead Trade Expiration
+ */
+export function deadTradeStagnancyExit(
+  entryPrice: number,
+  currentPrice: number,
+  atr: number,
+  elapsedMs: number,
+  currentVolume: number = 0,
+  avgVolume: number = 0
+): { shouldExit: boolean; reason: string } {
+  if (elapsedMs < thresholds.STAGNANT_TRADE_MAX_DURATION_MS) {
+    return { shouldExit: false, reason: 'Trade duration within active execution window.' };
+  }
+
+  const safeAtr = Math.max(0.01, atr);
+  const priceRangeAtr = Math.abs(currentPrice - entryPrice) / safeAtr;
+  const isRangeStagnant = priceRangeAtr < thresholds.STAGNANT_TRADE_PRICE_RANGE_ATR;
+
+  const volumeRatio = avgVolume > 0 ? currentVolume / avgVolume : 0.5;
+  const isVolumeFading = volumeRatio < thresholds.STAGNANT_TRADE_MAX_VOLUME_RATIO;
+
+  if (isRangeStagnant && isVolumeFading) {
+    return {
+      shouldExit: true,
+      reason: `Dead Trade Stagnancy Exit: Position active for ${(elapsedMs / 60000).toFixed(0)} mins within +/-${priceRangeAtr.toFixed(2)} ATR with fading volume (${volumeRatio.toFixed(2)}x avg). Liquidating to free capital.`,
+    };
+  }
+
+  return { shouldExit: false, reason: 'Active momentum or price expansion present.' };
+}
+
+/**
+ * Scenario 6: Volatility Shock & Flash Gap Dampener
+ */
+export function volatilityShockFreeze(
+  candle: Candle | undefined,
+  atr: number,
+  lastShockTimestamp: number,
+  now: number = Date.now()
+): { isFrozen: boolean; newShockDetected: boolean; cooldownRemainingMs: number } {
+  const safeAtr = Math.max(0.01, atr);
+  let newShockDetected = false;
+
+  if (candle) {
+    const candleRange = candle.high - candle.low;
+    if (candleRange >= safeAtr * thresholds.VOLATILITY_SHOCK_ATR_MULTIPLE) {
+      newShockDetected = true;
+      lastShockTimestamp = now;
+    }
+  }
+
+  const elapsedSinceShock = now - lastShockTimestamp;
+  const isFrozen = elapsedSinceShock < thresholds.VOLATILITY_SHOCK_COOLDOWN_MS;
+  const cooldownRemainingMs = Math.max(0, thresholds.VOLATILITY_SHOCK_COOLDOWN_MS - elapsedSinceShock);
+
+  return {
+    isFrozen,
+    newShockDetected,
+    cooldownRemainingMs,
+  };
+}
+
+/**
+ * Computes rolling Pearson correlation between two price series.
+ */
+export function calculateCorrelation(x: number[], y: number[]): number {
+  const n = Math.min(x.length, y.length);
+  if (n < 5) return 0;
+  const xSlice = x.slice(-n);
+  const ySlice = y.slice(-n);
+
+  const meanX = xSlice.reduce((a, b) => a + b, 0) / n;
+  const meanY = ySlice.reduce((a, b) => a + b, 0) / n;
+
+  let num = 0;
+  let denX = 0;
+  let denY = 0;
+
+  for (let i = 0; i < n; i++) {
+    const dx = xSlice[i] - meanX;
+    const dy = ySlice[i] - meanY;
+    num += dx * dy;
+    denX += dx * dx;
+    denY += dy * dy;
+  }
+
+  const den = Math.sqrt(denX * denY);
+  return den > 1e-9 ? +(num / den).toFixed(3) : 0;
+}
+
+/**
+ * Scenario 8: Portfolio Rolling Correlation Gate
+ * Blocks entries that would cause portfolio correlation to exceed threshold.
+ */
+export function correlationGate(
+  candidateAsset: string,
+  candidateHistory: number[],
+  currentHoldings: string[],
+  markets: Record<string, Market | undefined>,
+  threshold: number = thresholds.MAX_PORTFOLIO_CORRELATION_THRESHOLD
+): { allowed: boolean; maxCorrelation: number; correlatedAsset: string; reason: string } {
+  if (currentHoldings.length === 0 || candidateHistory.length < thresholds.CORRELATION_LOOKBACK_BARS) {
+    return { allowed: true, maxCorrelation: 0, correlatedAsset: '', reason: 'No correlation conflict.' };
+  }
+
+  let maxCorr = -1;
+  let maxAsset = '';
+
+  for (const held of currentHoldings) {
+    if (held === candidateAsset) continue;
+    const heldHistory = markets[held]?.history || [];
+    if (heldHistory.length < thresholds.CORRELATION_LOOKBACK_BARS) continue;
+
+    const corr = calculateCorrelation(candidateHistory, heldHistory);
+    if (corr > maxCorr) {
+      maxCorr = corr;
+      maxAsset = held;
+    }
+  }
+
+  if (maxCorr >= threshold) {
+    return {
+      allowed: false,
+      maxCorrelation: maxCorr,
+      correlatedAsset: maxAsset,
+      reason: `Correlation breach: ${candidateAsset} has ${(maxCorr * 100).toFixed(0)}% correlation with held ${maxAsset} (exceeds ${(threshold * 100).toFixed(0)}% ceiling). Entry blocked to prevent correlated drawdown.`,
+    };
+  }
+
+  return {
+    allowed: true,
+    maxCorrelation: Math.max(0, maxCorr),
+    correlatedAsset: maxAsset,
+    reason: `Correlation within safe limits (Max: ${(Math.max(0, maxCorr) * 100).toFixed(0)}% with ${maxAsset || 'none'}).`,
   };
 }
 
@@ -437,11 +822,17 @@ export interface SessionTimingQuality {
   allowsNewEntries: boolean;
   convictionThresholdDelta: number; // e.g. +8 during opening noise or midday lull
   minVolumeSurgeRequired: number;  // e.g. 1.35x during midday lull
+  isLateDayLiquidationPhase: boolean;
   reason: string;
 }
 
 /**
  * Classifies Indian Market (NSE) intraday session phases to eliminate low-volume whipsaws.
+ * Enforces:
+ * - 09:15-09:30 Opening volatility filtering (+8 conviction score, 1.5x volume surge)
+ * - 11:30-13:15 Midday consolidation dampener (+6 conviction score, 1.35x volume surge)
+ * - 14:00 Entry curfew (No new entries permitted after 14:00 IST)
+ * - 14:15-15:15 Late-day liquidation window flag (triggers trailing stop compression)
  */
 export function evaluateSessionTimingQuality(now: number = Date.now()): SessionTimingQuality {
   const d = new Date(now);
@@ -456,6 +847,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
       allowsNewEntries: false,
       convictionThresholdDelta: 999,
       minVolumeSurgeRequired: 2.0,
+      isLateDayLiquidationPhase: false,
       reason: 'Weekend - Indian exchange closed',
     };
   }
@@ -464,75 +856,78 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
   const minutes = ist.getMinutes();
   const timeInMinutes = hours * 60 + minutes;
 
-  const preOpen = 9 * 60;          // 09:00
-  const openTime = 9 * 60 + 15;     // 09:15
-  const openNoiseEnd = 9 * 60 + 25; // 09:25 (first 10 min high volatility auction)
-  const morningEnd = 11 * 60 + 30;  // 11:30
-  const middayEnd = 13 * 60 + 15;   // 13:15
-  const afternoonEnd = 15 * 60;     // 15:00 (intraday cut-off)
-  const closeTime = 15 * 60 + 30;   // 15:30
+  const isLateDayLiquidationPhase =
+    timeInMinutes >= thresholds.SESSION_LATE_DAY_LIQUIDATION_START_MIN &&
+    timeInMinutes < thresholds.SESSION_INTRADAY_CUTOFF_MIN;
 
-  if (timeInMinutes < preOpen) {
+  if (timeInMinutes < thresholds.SESSION_PRE_OPEN_MIN) {
     return {
       phase: 'PRE_OPEN',
       allowsNewEntries: false,
       convictionThresholdDelta: 999,
       minVolumeSurgeRequired: 2.0,
+      isLateDayLiquidationPhase: false,
       reason: 'Market pre-open: No orders permitted.',
     };
   }
-  if (timeInMinutes < openTime) {
+  if (timeInMinutes < thresholds.SESSION_OPEN_MIN) {
     return {
       phase: 'PRE_OPEN',
       allowsNewEntries: false,
       convictionThresholdDelta: 999,
       minVolumeSurgeRequired: 2.0,
+      isLateDayLiquidationPhase: false,
       reason: 'NSE Call Auction / Pre-market price discovery session.',
     };
   }
-  if (timeInMinutes < openNoiseEnd) {
+  if (timeInMinutes < thresholds.SESSION_OPENING_NOISE_END_MIN) {
     return {
       phase: 'OPENING_VOLATILITY',
       allowsNewEntries: true,
-      convictionThresholdDelta: +8, // Require 8 points higher conviction score to avoid fake opening gaps
-      minVolumeSurgeRequired: 1.5,
-      reason: 'Opening volatility window (09:15-09:25): Strict volume & score filtering active.',
+      convictionThresholdDelta: thresholds.OPENING_CONVICTION_DELTA,
+      minVolumeSurgeRequired: thresholds.OPENING_MIN_VOLUME_SURGE,
+      isLateDayLiquidationPhase: false,
+      reason: 'Opening volatility window (09:15-09:30): Strict volume & score filtering active.',
     };
   }
-  if (timeInMinutes < morningEnd) {
+  if (timeInMinutes < thresholds.SESSION_MORNING_END_MIN) {
     return {
       phase: 'MORNING_EXPANSION',
       allowsNewEntries: true,
       convictionThresholdDelta: 0,
       minVolumeSurgeRequired: 1.15,
-      reason: 'Prime morning institutional expansion window (09:25-11:30).',
+      isLateDayLiquidationPhase: false,
+      reason: 'Prime morning institutional expansion window (09:30-11:30).',
     };
   }
-  if (timeInMinutes < middayEnd) {
+  if (timeInMinutes < thresholds.SESSION_MIDDAY_END_MIN) {
     return {
       phase: 'MIDDAY_CONSOLIDATION',
       allowsNewEntries: true,
-      convictionThresholdDelta: +6, // Raise threshold slightly to prevent buying flat lunch consolidation
-      minVolumeSurgeRequired: 1.35, // Require genuine volume surge to justify entering at midday
+      convictionThresholdDelta: thresholds.MIDDAY_CONVICTION_DELTA,
+      minVolumeSurgeRequired: thresholds.MIDDAY_MIN_VOLUME_SURGE,
+      isLateDayLiquidationPhase: false,
       reason: 'European pre-open / Midday consolidation (11:30-13:15): High false breakout rate.',
     };
   }
-  if (timeInMinutes < afternoonEnd) {
+  if (timeInMinutes < thresholds.SESSION_INTRADAY_ENTRY_CURFEW_MIN) {
     return {
       phase: 'AFTERNOON_EXPANSION',
       allowsNewEntries: true,
       convictionThresholdDelta: 0,
       minVolumeSurgeRequired: 1.20,
-      reason: 'Afternoon continuation & expansion window (13:15-15:00).',
+      isLateDayLiquidationPhase: false,
+      reason: 'Afternoon continuation & expansion window (13:15-14:00).',
     };
   }
-  if (timeInMinutes < closeTime) {
+  if (timeInMinutes < thresholds.SESSION_CLOSE_MIN) {
     return {
       phase: 'CLOSING_SQUAREOFF',
       allowsNewEntries: false,
       convictionThresholdDelta: 999,
       minVolumeSurgeRequired: 2.0,
-      reason: 'Intraday squaring and closing run (15:00-15:30): No new positions permitted.',
+      isLateDayLiquidationPhase,
+      reason: 'Post-14:00 entry curfew active. No new positions permitted before market close.',
     };
   }
   return {
@@ -540,6 +935,7 @@ export function evaluateSessionTimingQuality(now: number = Date.now()): SessionT
     allowsNewEntries: false,
     convictionThresholdDelta: 999,
     minVolumeSurgeRequired: 2.0,
+    isLateDayLiquidationPhase: false,
     reason: 'Market closed.',
   };
 }

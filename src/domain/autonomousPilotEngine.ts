@@ -25,6 +25,12 @@ import {
   evaluateSessionTimingQuality,
   calculateCrossSectionalAlphaRanking,
   calculateSmartLimitPrice,
+  calculateRoundtripFriction,
+  passesFrictionHurdle,
+  lateDayStopCompression,
+  deadTradeStagnancyExit,
+  volatilityShockFreeze,
+  correlationGate,
 } from './quantEngine';
 
 // Institutional Indian Bluechip Assets monitored by the Autonomous Desk
@@ -475,13 +481,25 @@ export function tickAutonomousPilot(
     const t2Price = currentTarget;
     const t3Chandelier = calculateChandelierExit(market.history, 22, 2.0);
 
-    // Stepped Trailing Defense: Ratchet stop-loss dynamically (+0.8 ATR -> Breakeven, +1.5 ATR -> +0.5 ATR, +2.2 ATR -> +1.2 ATR)
+    // Differentiate delivery (CNC) from intraday (MIS) for accurate fee-shielding:
+    // If holding exists in Upstox CNC holdings or position.product === 'D'/'CNC', apply delivery clearing friction.
+    const isDeliveryHolding = Boolean(
+      state.upstoxAccount?.holdings?.some((h) => (h as any).asset === asset || (h as any).tradingsymbol === asset) ||
+      state.upstoxAccount?.positions?.some(
+        (p) => ((p as any).asset === asset || (p as any).symbol === asset) && (p.product === 'D' || p.product === 'CNC')
+      )
+    );
+    const roundtripFriction = calculateRoundtripFriction(avgBuyPrice, currentHolding, isDeliveryHolding);
+    const highWaterMark = Math.max(fleetStatus.highWaterMark || avgBuyPrice, price);
+
+    // Stepped Trailing Defense: Level 0.5 Micro-Shield (+0.30 ATR -> Breakeven + Fees), Level 1 (+0.70 ATR), Level 2 (+1.40 ATR), Level 3 (+2.00 ATR)
     const dynamicRatchet = calculateDynamicProfitRatchet(
       avgBuyPrice,
       price,
       atr,
       currentStop,
-      isIndianAsset(asset) ? 0.05 : 0.01
+      isIndianAsset(asset) ? 0.05 : 0.01,
+      roundtripFriction.frictionPerShare
     );
 
     if (dynamicRatchet.isRatcheted && dynamicRatchet.ratchetedStopPrice > currentStop) {
@@ -493,7 +511,73 @@ export function tickAutonomousPilot(
         asset,
         action: 'TRAILING_RATCHET',
         strategy,
-        detail: `Stepped Defense (${dynamicRatchet.stageName}): Ratcheted stop-loss to ₹${currentStop.toFixed(2)} (+${dynamicRatchet.gainAtrMultiples} ATR gain). Zero downside risk.`,
+        detail: `Stepped Defense (${dynamicRatchet.stageName}): Ratcheted stop-loss to ₹${currentStop.toFixed(2)} (+${dynamicRatchet.gainAtrMultiples} ATR gain). Net-risk free.`,
+        price,
+        status: 'EXECUTED',
+      });
+    }
+
+    // Late-Day Liquidation Defense (14:15 - 15:15 IST): Compress stop to protect High-Water Mark before retail MIS square-off
+    const lateDayCompression = lateDayStopCompression(
+      avgBuyPrice,
+      price,
+      atr,
+      highWaterMark,
+      currentStop,
+      now,
+      isIndianAsset(asset) ? 0.05 : 0.01
+    );
+
+    if (lateDayCompression.isCompressed && lateDayCompression.compressedStopPrice > currentStop) {
+      currentStop = lateDayCompression.compressedStopPrice;
+      lifecycleState = 'TRAILING_PROFIT';
+      newActionLogs.push({
+        id: `log_lateday_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'TRAILING_RATCHET',
+        strategy,
+        detail: lateDayCompression.reason,
+        price,
+        status: 'EXECUTED',
+      });
+    }
+
+    // Stagnant Capital / Dead Trade Expiration: After 90 mins with range < 0.25 ATR and volume fading, liquidate orderly
+    const entryTimestamp = fleetStatus.entryTimestamp || fleetStatus.lastActionAt || now;
+    const elapsedMs = now - entryTimestamp;
+    const stagnancyCheck = deadTradeStagnancyExit(
+      avgBuyPrice,
+      price,
+      atr,
+      elapsedMs,
+      volumeSurgeRatio,
+      1.0
+    );
+
+    if (stagnancyCheck.shouldExit && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: currentHolding,
+        price: alignToTickSize(price, asset),
+        type: 'market',
+        strategyName: `Auto-Pilot: ${strategy} Stagnancy Exit`,
+        reason: stagnancyCheck.reason,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      lifecycleState = 'COOLDOWN';
+      trancheStage = 0;
+
+      newActionLogs.push({
+        id: `log_stagnant_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'DEAD_TRADE_EXIT' as any,
+        strategy,
+        detail: stagnancyCheck.reason,
         price,
         status: 'EXECUTED',
       });
@@ -640,6 +724,8 @@ export function tickAutonomousPilot(
       trancheStage,
       vwap,
       volumeSurgeRatio,
+      highWaterMark,
+      entryTimestamp,
     };
   }
 
@@ -963,6 +1049,52 @@ export function tickAutonomousPilot(
           action: 'SECTOR_CAP_DEFENSE',
           strategy,
           detail: sectorCheck.reason || `Sector concentration cap (35%) reached for ${sector}.`,
+          price: limitPrice,
+          status: 'BLOCKED',
+        });
+      }
+      continue;
+    }
+
+    // Pre-Trade TCA Friction Hurdle: Expected profit must be >= 3.0x roundtrip friction
+    // Autonomous pilot orders execute as Intraday MIS by default
+    const isDeliveryOrder = false;
+    const expectedGrossProfit = (takeProfitPrice - limitPrice) * unitsToBuy;
+    const orderFriction = calculateRoundtripFriction(limitPrice, unitsToBuy, isDeliveryOrder);
+    if (!passesFrictionHurdle(expectedGrossProfit, orderFriction.totalRoundtripFriction, 3.0)) {
+      const recentTcaSkip = state.autonomousPilot?.actionLogs?.find(
+        (l) => l.asset === asset && l.action === 'SKIPPED' && now - l.timestamp < 300_000
+      );
+      if (!recentTcaSkip) {
+        newActionLogs.push({
+          id: `log_tca_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'SKIPPED',
+          strategy,
+          detail: `TCA Friction Hurdle: Expected profit ₹${expectedGrossProfit.toFixed(2)} is less than 3x roundtrip fees (₹${(3 * orderFriction.totalRoundtripFriction).toFixed(2)}). Setup rejected to avoid negative expectancy.`,
+          price: limitPrice,
+          status: 'BLOCKED',
+        });
+      }
+      continue;
+    }
+
+    // Portfolio Correlation Gate: Prevent concentrated correlated drawdown
+    const heldAssets = (Object.keys(state.positions) as Asset[]).filter((k) => (state.positions[k] || 0) > 0);
+    const corrCheck = correlationGate(asset, cand.market.history || [], heldAssets, markets, 0.75);
+    if (!corrCheck.allowed) {
+      const recentCorrSkip = state.autonomousPilot?.actionLogs?.find(
+        (l) => l.asset === asset && l.action === 'CORRELATION_DEFENSE' && now - l.timestamp < 300_000
+      );
+      if (!recentCorrSkip) {
+        newActionLogs.push({
+          id: `log_corr_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'CORRELATION_DEFENSE',
+          strategy,
+          detail: corrCheck.reason,
           price: limitPrice,
           status: 'BLOCKED',
         });
