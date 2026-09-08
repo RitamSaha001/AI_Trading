@@ -2028,15 +2028,28 @@ export function Provider({ children }: { children: React.ReactNode }) {
     sendHeartbeat();
     const hbInterval = setInterval(sendHeartbeat, 5000);
 
-    // 2. Sync pilot state from server on mount and every 10 seconds
+    // 2. Sync pilot state from server on mount and every 3 seconds
     syncPilotState();
-    const syncInterval = setInterval(syncPilotState, 10000);
+    const syncInterval = setInterval(syncPilotState, 3000);
+
+    // 3. Instant reactive refresh on tab focus / visibility change (eliminates background tab freeze)
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        sendHeartbeat();
+        syncPilotState();
+        syncUpstoxAccount();
+      }
+    };
+    window.addEventListener('focus', onVisibilityOrFocus);
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
 
     return () => {
       clearInterval(hbInterval);
       clearInterval(syncInterval);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
     };
-  }, [syncPilotState]);
+  }, [syncPilotState, syncUpstoxAccount]);
 
   // Cross-tab synchronization
   useEffect(() => {
