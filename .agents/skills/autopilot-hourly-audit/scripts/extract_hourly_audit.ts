@@ -11,6 +11,7 @@
 
 import { initDb, getDb } from '../../../../server/db';
 import { UpstoxAdapter } from '../../../../server/services/brokers/upstox/upstoxAdapter';
+import { IndianMarketCalendar } from '../../../../server/services/brokers/upstox/indianMarketCalendar';
 import { UPSTOX_FLEET_ASSETS, determineAssetStrategyAndRegime } from '../../../../src/domain/autonomousPilotEngine';
 import { PILOT_PROFILES } from '../../../../src/domain/autonomousPilot';
 import { Asset, Market } from '../../../../src/types';
@@ -238,7 +239,7 @@ async function runAudit(): Promise<void> {
       profile: profileKey,
       executionMode: pilotState?.execution_mode || 'full_autonomous',
       daemonStatus: pilotState?.execution_mode_status || 'CLOUD_HEADLESS',
-      isMarketOpen: false,
+      isMarketOpen: IndianMarketCalendar.isMarketOpen(),
     },
     portfolio: {
       totalEquity,

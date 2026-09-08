@@ -702,20 +702,30 @@ export class AutonomousPilotWorker {
             errors.push(`User ${row.user_id}: ${userErr.message}`);
           }
         }
+
+        return {
+          runId,
+          usersProcessed,
+          ordersDispatched,
+          ordersCancelled,
+          errors,
+          durationMs: Date.now() - startTime,
+        };
       }
     );
 
     if (!lockResult) {
       logger.warn('[AutonomousPilotWorker] Run skipped: already active on another cluster node.');
+      return {
+        runId,
+        usersProcessed: 0,
+        ordersDispatched: 0,
+        ordersCancelled: 0,
+        errors: ['Run skipped: already active on another cluster node.'],
+        durationMs: 0,
+      };
     }
 
-    return {
-      runId,
-      usersProcessed,
-      ordersDispatched,
-      ordersCancelled,
-      errors,
-      durationMs: Date.now() - startTime,
-    };
+    return lockResult;
   }
 }
