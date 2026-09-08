@@ -134,7 +134,7 @@ export const ASSET_SECTOR_MAP: Record<string, string> = {
 };
 
 // Maximum permitted portfolio allocation per single sector
-export const MAX_SECTOR_ALLOCATION_PCT = 35.0;
+export const MAX_SECTOR_ALLOCATION_PCT = thresholds.MAX_SECTOR_ALLOCATION_PCT;
 
 /**
  * Computes TTM Volatility Squeeze using Bollinger Bands (20, 2.0) and Keltner Channels (20, 1.5).
@@ -180,7 +180,7 @@ export function calculateTTMSqueeze(
   for (let i = 1; i < window.length; i++) {
     atrSum += Math.abs(window[i] - window[i - 1]);
   }
-  const atr = Math.max(currentPrice * 0.01, atrSum / (window.length - 1));
+  const atr = Math.max(currentPrice * 0.0025, atrSum / (window.length - 1));
 
   // 5. Keltner Channels (1.5 ATR)
   const kcUpper = sma + kcMultiplier * atr;
@@ -202,7 +202,7 @@ export function calculateTTMSqueeze(
     for (let i = 1; i < prevWindow.length; i++) {
       prevAtrSum += Math.abs(prevWindow[i] - prevWindow[i - 1]);
     }
-    const prevAtr = Math.max(prevWindow[prevWindow.length - 1] * 0.01, prevAtrSum / (prevWindow.length - 1));
+    const prevAtr = Math.max(prevWindow[prevWindow.length - 1] * 0.0025, prevAtrSum / (prevWindow.length - 1));
     const prevKcUpper = prevSma + kcMultiplier * prevAtr;
     const prevKcLower = prevSma - kcMultiplier * prevAtr;
     prevSqueezeActive = prevBbUpper < prevKcUpper && prevBbLower > prevKcLower;
@@ -349,16 +349,25 @@ export function sectorBetaGate(
 export function calculateHalfKellyFraction(
   winRate: number,
   rewardRiskRatio: number,
-  maxFraction: number = 1.0,
-  minFraction: number = 0.25
+  maxFraction: number = thresholds.MAX_KELLY_SIZE_MULTIPLIER,
+  minFraction: number = thresholds.MIN_KELLY_SIZE_MULTIPLIER,
+  atrPriceRatio?: number
 ): HalfKellyResult {
-  const p = Math.max(0.01, Math.min(0.99, winRate));
+  let effectiveWinRate = winRate;
+  if (
+    atrPriceRatio !== undefined &&
+    atrPriceRatio > thresholds.VOLATILITY_DAMPENER_ATR_PRICE_RATIO
+  ) {
+    effectiveWinRate -= thresholds.VOLATILITY_DAMPENER_WIN_RATE_PENALTY;
+  }
+
+  const p = Math.max(0.01, Math.min(0.99, effectiveWinRate));
   const b = Math.max(0.1, rewardRiskRatio);
   const q = 1 - p;
 
   // Kelly formula: (p * b - q) / b = p - (q / b)
   const fullKelly = (p * b - q) / b;
-  const halfKelly = fullKelly * 0.5;
+  const halfKelly = fullKelly * thresholds.HALF_KELLY_FRACTION;
 
   // Clamped fractional sizing multiplier
   const recommendedSizeMultiplier = Math.max(
@@ -477,7 +486,7 @@ export function validateSectorExposureLimit(
 export function calculateChandelierExit(
   history: number[],
   period: number = 22,
-  atrMultiplier: number = 2.0
+  atrMultiplier: number = thresholds.CHANDELIER_ATR_MULTIPLIER
 ): number {
   if (!history || history.length === 0) return 0;
   const window = history.slice(-Math.max(5, period));
@@ -578,36 +587,45 @@ export function calculateDynamicProfitRatchet(
   atr: number,
   currentStopPrice: number,
   tickSize: number = thresholds.NSE_TICK_SIZE_INR,
-  roundtripFrictionPerShare: number = 0
+  roundtripFrictionPerShare: number = 0,
+  highWaterMark?: number
 ): DynamicProfitRatchetResult {
-  const profitDistance = currentPrice - entryPrice;
+  const peakPrice = highWaterMark !== undefined ? Math.max(highWaterMark, currentPrice) : currentPrice;
+  const profitDistance = peakPrice - entryPrice;
   const safeAtr = Math.max(0.01, atr);
   const gainAtrMultiples = +(profitDistance / safeAtr).toFixed(2);
 
   let ratchetedStop = currentStopPrice;
   let stageName: DynamicProfitRatchetResult['stageName'] = 'INITIAL_RISK';
 
-  // Level 3: Core target reached (+2.00 ATR) -> Ratchet stop to +1.25 ATR
+  const feeBreakeven = entryPrice + roundtripFrictionPerShare + tickSize;
+
+  // Level 3: Core target reached (+2.00 ATR) -> Ratchet stop to max(feeBreakeven, +1.25 ATR)
   if (gainAtrMultiples >= thresholds.RATCHET_STAGE_3_ATR) {
-    const t2Lock = entryPrice + safeAtr * thresholds.RATCHET_LOCK_3_ATR;
-    ratchetedStop = Math.max(ratchetedStop, t2Lock);
-    stageName = 'CORE_TARGET_T2';
+    const t2Lock = Math.max(feeBreakeven, entryPrice + safeAtr * thresholds.RATCHET_LOCK_3_ATR);
+    if (currentPrice > t2Lock) {
+      ratchetedStop = Math.max(ratchetedStop, t2Lock);
+      stageName = 'CORE_TARGET_T2';
+    }
   }
-  // Level 2: Target 1 reached (+1.40 ATR) -> Ratchet stop to +0.60 ATR (banked gain)
+  // Level 2: Target 1 reached (+1.40 ATR) -> Ratchet stop to max(feeBreakeven, +0.60 ATR)
   else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_2_ATR) {
-    const t1Lock = entryPrice + safeAtr * thresholds.RATCHET_LOCK_2_ATR;
-    ratchetedStop = Math.max(ratchetedStop, t1Lock);
-    stageName = 'LOCKED_PROFIT_T1';
+    const t1Lock = Math.max(feeBreakeven, entryPrice + safeAtr * thresholds.RATCHET_LOCK_2_ATR);
+    if (currentPrice > t1Lock) {
+      ratchetedStop = Math.max(ratchetedStop, t1Lock);
+      stageName = 'LOCKED_PROFIT_T1';
+    }
   }
-  // Level 1: Stepped Profit Lock (+0.70 ATR) -> Ratchet stop to +0.25 ATR
+  // Level 1: Stepped Profit Lock (+0.70 ATR) -> Ratchet stop to max(feeBreakeven, +0.25 ATR)
   else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_1_ATR) {
-    const steppedLock = entryPrice + safeAtr * thresholds.RATCHET_LOCK_1_ATR;
-    ratchetedStop = Math.max(ratchetedStop, steppedLock);
-    stageName = 'STEPPED_BREAKEVEN';
+    const steppedLock = Math.max(feeBreakeven, entryPrice + safeAtr * thresholds.RATCHET_LOCK_1_ATR);
+    if (currentPrice > steppedLock) {
+      ratchetedStop = Math.max(ratchetedStop, steppedLock);
+      stageName = 'STEPPED_BREAKEVEN';
+    }
   }
   // Level 0.5: Fee-Breakeven Micro-Shield (+0.30 ATR) -> Stop to Entry + Net Friction + 1 tick
   else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_0_5_ATR) {
-    const feeBreakeven = entryPrice + roundtripFrictionPerShare + tickSize;
     if (currentPrice > feeBreakeven) {
       ratchetedStop = Math.max(ratchetedStop, feeBreakeven);
       stageName = 'FEE_BREAKEVEN_SHIELD';

@@ -499,7 +499,8 @@ export function tickAutonomousPilot(
       atr,
       currentStop,
       isIndianAsset(asset) ? 0.05 : 0.01,
-      roundtripFriction.frictionPerShare
+      roundtripFriction.frictionPerShare,
+      highWaterMark
     );
 
     if (dynamicRatchet.isRatcheted && dynamicRatchet.ratchetedStopPrice > currentStop) {

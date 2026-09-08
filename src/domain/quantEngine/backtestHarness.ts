@@ -4,9 +4,16 @@ import {
   calculateRoundtripFriction,
   passesFrictionHurdle,
   calculateDynamicProfitRatchet,
+  calculateHalfKellyFraction,
+  evaluateSessionTimingQuality,
+  ttmSqueezeState,
+  calculateHurstExponentFromCandles,
+  ouMeanReversionSignal,
+  lateDayStopCompression,
+  deadTradeStagnancyExit,
+  volatilityShockFreeze,
   FrictionBreakdown,
 } from './alphaSignalEngine';
-import { calculateHurstExponent, estimateOrnsteinUhlenbeck } from './regimeDetectionEngine';
 
 export interface SignalFeatures {
   hurst: number;
@@ -17,37 +24,83 @@ export interface SignalFeatures {
   atrPriceRatio: number;
 }
 
-/**
- * Empirically grounded logistic win-probability calibration.
- * Replaces static heuristic ranges with a validated multi-factor logit model.
- */
-export function estimateWinProbability(features: SignalFeatures): number {
-  // Calibrated logistic regression weights from historical equity regimes
-  const beta0 = 0.12; // Base log-odds (corresponds to ~53% base win rate)
-  const betaHurst = 1.65; // High persistence strongly increases continuation odds
-  const betaVol = 0.45; // Institutional volume surge confirms genuine breakout
-  const betaSqueeze = 0.35; // Volatility expansion release boost
-  const betaConv = 0.55; // Multi-factor alpha conviction
-  const betaAtrShock = -0.85; // High volatility chop penalizes win probability
-
-  const hurstOffset = features.hurst - 0.50;
-  const volSurge = Math.max(0, Math.min(2.5, features.volumeSurgeRatio) - 1.0);
-  const sqzBonus = features.isSqueezeRelease ? 1.0 : 0.0;
-  const convOffset = (features.alphaConvictionIndex - 50) / 50;
-  const atrPenalty = Math.max(0, (features.atrPriceRatio - 0.02) / 0.02);
-
-  const logit =
-    beta0 +
-    betaHurst * hurstOffset +
-    betaVol * volSurge +
-    betaSqueeze * sqzBonus +
-    betaConv * convOffset +
-    betaAtrShock * atrPenalty;
-
-  // Sigmoidal activation bounded between 0.30 and 0.78
-  const rawP = 1 / (1 + Math.exp(-logit));
-  return +Math.max(0.30, Math.min(0.78, rawP)).toFixed(3);
+export interface TradeSample {
+  features: SignalFeatures;
+  won: number; // 1 for profitable trade, 0 for loss
 }
+
+/**
+ * Supervised Logistic Regression Classifier for Empirical Win-Probability Fitting.
+ * Replaces static constants with gradient-descent optimization over historical trade samples.
+ */
+export class LogisticRegressionModel {
+  // Model weights: [bias, beta_hurst, beta_vol, beta_sqz, beta_conv, beta_atr]
+  public weights: number[] = [0.12, 1.65, 0.45, 0.35, 0.55, -0.85];
+  public isFitted = false;
+  public trainingLoss = 0;
+  public sampleCount = 0;
+
+  public fit(samples: TradeSample[], learningRate = 0.05, epochs = 250): void {
+    if (samples.length < 5) {
+      this.isFitted = false;
+      return;
+    }
+
+    this.sampleCount = samples.length;
+
+    for (let epoch = 0; epoch < epochs; epoch++) {
+      const grads = new Array(this.weights.length).fill(0);
+      let totalLoss = 0;
+
+      for (const s of samples) {
+        const x = this.extractVector(s.features);
+        const logit = x.reduce((sum, val, idx) => sum + val * this.weights[idx], 0);
+        const p = 1 / (1 + Math.exp(-Math.max(-10, Math.min(10, logit))));
+        const error = p - s.won;
+
+        totalLoss += -(s.won * Math.log(Math.max(1e-7, p)) + (1 - s.won) * Math.log(Math.max(1e-7, 1 - p)));
+
+        for (let k = 0; k < this.weights.length; k++) {
+          grads[k] += error * x[k];
+        }
+      }
+
+      this.trainingLoss = totalLoss / samples.length;
+      for (let k = 0; k < this.weights.length; k++) {
+        this.weights[k] -= (learningRate * grads[k]) / samples.length;
+      }
+    }
+
+    this.isFitted = true;
+  }
+
+  public predict(features: SignalFeatures): number {
+    const x = this.extractVector(features);
+    const logit = x.reduce((sum, val, idx) => sum + val * this.weights[idx], 0);
+    const rawP = 1 / (1 + Math.exp(-logit));
+    return +Math.max(0.30, Math.min(0.78, rawP)).toFixed(3);
+  }
+
+  private extractVector(f: SignalFeatures): number[] {
+    const hurstOffset = f.hurst - 0.50;
+    const volSurge = Math.max(0, Math.min(2.5, f.volumeSurgeRatio) - 1.0);
+    const sqzBonus = f.isSqueezeRelease ? 1.0 : 0.0;
+    const convOffset = (f.alphaConvictionIndex - 50) / 50;
+    const atrPenalty = Math.max(0, (f.atrPriceRatio - 0.02) / 0.02);
+    return [1, hurstOffset, volSurge, sqzBonus, convOffset, atrPenalty];
+  }
+}
+
+/**
+ * Heuristic prior for win-probability estimation when empirical fitting is not yet active.
+ */
+export function estimateWinProbabilityHeuristic(features: SignalFeatures): number {
+  const model = new LogisticRegressionModel();
+  return model.predict(features);
+}
+
+// Backward-compatible alias with transparent documentation
+export const estimateWinProbability = estimateWinProbabilityHeuristic;
 
 export interface BacktestTrade {
   entryBar: number;
@@ -61,6 +114,7 @@ export interface BacktestTrade {
   exitReason: 'STOP_LOSS' | 'BREAKEVEN_SHIELD' | 'TRANCHE_1' | 'TRANCHE_2' | 'CHANDELIER' | 'DEAD_TRADE_TIME_STOP' | 'SESSION_CLOSE';
   holdBars: number;
   highestPriceSeen: number;
+  signalFeatures?: SignalFeatures;
 }
 
 export interface BacktestReport {
@@ -79,6 +133,7 @@ export interface BacktestReport {
   sharpeRatio: number;
   frictionHurdleRejections: number;
   trades: BacktestTrade[];
+  tradeSamples: TradeSample[];
 }
 
 export interface BacktestConfig {
@@ -89,36 +144,45 @@ export interface BacktestConfig {
   takeProfitAtrMultiple?: number;
   frictionProfitMultiple?: number;
   microShieldAtrMultiple?: number;
+  model?: LogisticRegressionModel;
 }
 
 /**
  * Replays quantitative execution tick-by-tick across candle fixtures.
+ * Exercises Scenarios 1 (TCA), 2 (Unified Ratchet), 3 (Timing), 4 (Regime),
+ * 5 (Late-Day Compression), 6 (Stagnancy), 7 (Volatility Shock), 9 (Multi-Tranche Harvesting),
+ * and 10 (Half-Kelly Sizing) with next-bar execution delay.
  */
 export function runBacktest(
   candles: Candle[],
   regimeLabel: string,
   config: BacktestConfig = {}
 ): BacktestReport {
-  const isDelivery = config.isDelivery ?? true;
+  const isDelivery = config.isDelivery ?? false; // Autonomous pilot defaults to Intraday MIS
   const frictionMultiple = config.frictionProfitMultiple ?? thresholds.MIN_FRICTION_PROFIT_MULTIPLE;
-  const microShieldAtr = config.microShieldAtrMultiple ?? thresholds.RATCHET_STAGE_0_5_ATR;
+  const model = config.model;
 
-  let capital = config.initialCapital ?? 30000;
+  let capital = config.initialCapital ?? 50000;
   let peakCapital = capital;
   let maxDrawdown = 0;
 
   const trades: BacktestTrade[] = [];
+  const tradeSamples: TradeSample[] = [];
   let frictionHurdleRejections = 0;
 
+  // Open position state
   let inPosition = false;
   let entryBar = 0;
   let entryPrice = 0;
   let currentStop = 0;
-  let targetPrice = 0;
-  let quantity = 0;
+  let target1Price = 0;
+  let target2Price = 0;
+  let initialQuantity = 0;
+  let remainingQuantity = 0;
   let highestPrice = 0;
   let trancheStage = 0;
   let lastExitBar = -999;
+  let entryFeatures: SignalFeatures | undefined;
   let activeFriction: FrictionBreakdown = {
     turnover: 0,
     brokerage: 0,
@@ -131,8 +195,20 @@ export function runBacktest(
     frictionPerShare: 0,
     frictionPct: 0,
   };
+  let lastShockTimestamp = 0;
 
-  const windowSize = 20;
+  // Pending order for next-bar execution delay
+  let pendingOrder: {
+    entryPrice: number;
+    stop: number;
+    t1: number;
+    t2: number;
+    qty: number;
+    friction: FrictionBreakdown;
+    features: SignalFeatures;
+  } | null = null;
+
+  const windowSize = 35;
 
   for (let i = windowSize; i < candles.length; i++) {
     const window = candles.slice(i - windowSize, i + 1);
@@ -147,65 +223,40 @@ export function runBacktest(
     }
     const atr = Math.max(0.5, atrSum / 14);
 
+    // ------------------------------------------------------------------------
+    // Process Pending Order from Previous Bar (Realistic Next-Bar Open Fill)
+    // ------------------------------------------------------------------------
+    if (pendingOrder && !inPosition) {
+      entryPrice = currentCandle.open;
+      currentStop = pendingOrder.stop;
+      target1Price = pendingOrder.t1;
+      target2Price = pendingOrder.t2;
+      initialQuantity = pendingOrder.qty;
+      remainingQuantity = pendingOrder.qty;
+      activeFriction = pendingOrder.friction;
+      entryFeatures = pendingOrder.features;
+      inPosition = true;
+      entryBar = i;
+      highestPrice = currentCandle.open;
+      trancheStage = 0;
+      pendingOrder = null;
+    }
+
+    // ------------------------------------------------------------------------
+    // Open Position Lifecycle Management
+    // ------------------------------------------------------------------------
     if (inPosition) {
       const barsHeld = i - entryBar;
-      highestPrice = Math.max(highestPrice, currentCandle.high);
-      const gainAtr = (highestPrice - entryPrice) / atr;
-
-      // 1. Level 0.5 Micro-Shield Check: Gain touched +0.30 ATR AND price is above fee-breakeven
-      const feeBreakevenStop = +(entryPrice + activeFriction.frictionPerShare + thresholds.NSE_TICK_SIZE_INR).toFixed(2);
-      if (gainAtr >= microShieldAtr && currentPrice > feeBreakevenStop && currentStop < feeBreakevenStop) {
-        currentStop = feeBreakevenStop;
-      }
-
-      // 2. Level 1 Lock: +0.70 ATR -> Lock +0.25 ATR
-      if (gainAtr >= thresholds.RATCHET_STAGE_1_ATR && currentPrice > entryPrice + atr * thresholds.RATCHET_LOCK_1_ATR) {
-        currentStop = Math.max(currentStop, +(entryPrice + atr * thresholds.RATCHET_LOCK_1_ATR).toFixed(2));
-      }
-
-      // 3. Tranche 1 Harvest: +1.40 ATR -> Stop to +0.60 ATR
-      if (gainAtr >= thresholds.RATCHET_STAGE_2_ATR && trancheStage === 0) {
-        trancheStage = 1;
-        currentStop = Math.max(currentStop, +(entryPrice + atr * thresholds.RATCHET_LOCK_2_ATR).toFixed(2));
-      }
-
-      // 4. Tranche 2 Harvest: +2.00 ATR -> Core target reached
-      if (gainAtr >= thresholds.RATCHET_STAGE_3_ATR && trancheStage <= 1) {
-        trancheStage = 2;
-        currentStop = Math.max(currentStop, +(entryPrice + atr * thresholds.RATCHET_LOCK_2_ATR).toFixed(2));
-      }
+      const timingQuality = evaluateSessionTimingQuality(currentCandle.time);
 
       if (barsHeld > 0) {
-        // 5. Dead Trade Stagnancy Exit: 90 minutes (18 5-min bars) with range < 0.25 ATR
-        const priceRangeAtr = Math.abs(currentPrice - entryPrice) / atr;
-        if (barsHeld >= 18 && priceRangeAtr < thresholds.STAGNANT_TRADE_PRICE_RANGE_ATR && currentPrice >= currentStop) {
-          const grossProfit = +(quantity * (currentPrice - entryPrice)).toFixed(2);
-          const netProfit = +(grossProfit - activeFriction.totalRoundtripFriction).toFixed(2);
-          trades.push({
-            entryBar,
-            exitBar: i,
-            entryPrice,
-            exitPrice: currentPrice,
-            quantity,
-            grossProfit,
-            friction: activeFriction.totalRoundtripFriction,
-            netProfit,
-            exitReason: 'DEAD_TRADE_TIME_STOP',
-            holdBars: barsHeld,
-            highestPriceSeen: highestPrice,
-          });
-          capital += netProfit;
-          inPosition = false;
-          lastExitBar = i;
-          continue;
-        }
-
-        // 6. Stop-Loss Trigger (including ratcheted breakeven stop)
+        // 1. Stop-Loss or Level 0.5 Breakeven Shield Exit (evaluated against stop active entering bar)
         if (currentCandle.low <= currentStop) {
-          // Stop triggers at currentStop (or at open if candle gapped through stop)
           const exitPrice = currentCandle.open < currentStop ? currentCandle.open : currentStop;
-          const grossProfit = +(quantity * (exitPrice - entryPrice)).toFixed(2);
-          const netProfit = +(grossProfit - activeFriction.totalRoundtripFriction).toFixed(2);
+          const grossProfit = +(remainingQuantity * (exitPrice - entryPrice)).toFixed(2);
+          const feeFraction = remainingQuantity / initialQuantity;
+          const frictionShare = +(activeFriction.totalRoundtripFriction * feeFraction).toFixed(2);
+          const netProfit = +(grossProfit - frictionShare).toFixed(2);
           const exitReason = exitPrice >= entryPrice ? 'BREAKEVEN_SHIELD' : 'STOP_LOSS';
 
           trades.push({
@@ -213,39 +264,194 @@ export function runBacktest(
             exitBar: i,
             entryPrice,
             exitPrice,
-            quantity,
+            quantity: remainingQuantity,
             grossProfit,
-            friction: activeFriction.totalRoundtripFriction,
+            friction: frictionShare,
             netProfit,
             exitReason,
             holdBars: barsHeld,
             highestPriceSeen: highestPrice,
+            signalFeatures: entryFeatures,
           });
+
+          tradeSamples.push({
+            features: entryFeatures || {
+              hurst: 0.5,
+              volumeSurgeRatio: 1.0,
+              isSqueezeRelease: false,
+              relativeStrengthPct: 0,
+              alphaConvictionIndex: 50,
+              atrPriceRatio: atr / currentPrice,
+            },
+            won: netProfit > 0 ? 1 : 0,
+          });
+
           capital += netProfit;
           inPosition = false;
           lastExitBar = i;
           continue;
         }
 
-        // 7. Take Profit Target
-        if (currentCandle.high >= targetPrice) {
-          const exitPrice = targetPrice;
-          const grossProfit = +(quantity * (exitPrice - entryPrice)).toFixed(2);
-          const netProfit = +(grossProfit - activeFriction.totalRoundtripFriction).toFixed(2);
+        // 2. Scenario 9: Multi-Tranche Partial Harvesting (Tranche 1 @ +1.40 ATR)
+        if (currentCandle.high >= target1Price && trancheStage === 0 && remainingQuantity >= 2) {
+          const harvestQty = Math.floor(initialQuantity / 2);
+          const harvestPrice = target1Price;
+          const grossProfit = +(harvestQty * (harvestPrice - entryPrice)).toFixed(2);
+          const frictionShare = +(activeFriction.totalRoundtripFriction * (harvestQty / initialQuantity)).toFixed(2);
+          const netProfit = +(grossProfit - frictionShare).toFixed(2);
+
+          trades.push({
+            entryBar,
+            exitBar: i,
+            entryPrice,
+            exitPrice: harvestPrice,
+            quantity: harvestQty,
+            grossProfit,
+            friction: frictionShare,
+            netProfit,
+            exitReason: 'TRANCHE_1',
+            holdBars: barsHeld,
+            highestPriceSeen: Math.max(highestPrice, currentCandle.high),
+            signalFeatures: entryFeatures,
+          });
+
+          capital += netProfit;
+          remainingQuantity -= harvestQty;
+          trancheStage = 1;
+          // Lock stop to RATCHET_LOCK_2_ATR (+0.60 ATR) on the remaining position
+          currentStop = Math.max(
+            currentStop,
+            +(entryPrice + atr * thresholds.RATCHET_LOCK_2_ATR).toFixed(2)
+          );
+        }
+
+        // 3. Scenario 9: Tranche 2 Final Target Exit (+2.00 ATR)
+        if (currentCandle.high >= target2Price && trancheStage >= 1) {
+          const exitPrice = target2Price;
+          const grossProfit = +(remainingQuantity * (exitPrice - entryPrice)).toFixed(2);
+          const feeFraction = remainingQuantity / initialQuantity;
+          const frictionShare = +(activeFriction.totalRoundtripFriction * feeFraction).toFixed(2);
+          const netProfit = +(grossProfit - frictionShare).toFixed(2);
 
           trades.push({
             entryBar,
             exitBar: i,
             entryPrice,
             exitPrice,
-            quantity,
+            quantity: remainingQuantity,
             grossProfit,
-            friction: activeFriction.totalRoundtripFriction,
+            friction: frictionShare,
             netProfit,
             exitReason: 'TRANCHE_2',
             holdBars: barsHeld,
-            highestPriceSeen: highestPrice,
+            highestPriceSeen: Math.max(highestPrice, currentCandle.high),
+            signalFeatures: entryFeatures,
           });
+
+          tradeSamples.push({
+            features: entryFeatures || {
+              hurst: 0.5,
+              volumeSurgeRatio: 1.0,
+              isSqueezeRelease: false,
+              relativeStrengthPct: 0,
+              alphaConvictionIndex: 50,
+              atrPriceRatio: atr / currentPrice,
+            },
+            won: 1,
+          });
+
+          capital += netProfit;
+          inPosition = false;
+          lastExitBar = i;
+          continue;
+        }
+
+        // 4. Scenario 6: Dead Trade Stagnancy Exit (90 minutes with zero progress)
+        const stagnancy = deadTradeStagnancyExit(
+          entryPrice,
+          currentPrice,
+          atr,
+          barsHeld * 5 * 60 * 1000
+        );
+        if (stagnancy.shouldExit && currentPrice >= currentStop) {
+          const grossProfit = +(remainingQuantity * (currentPrice - entryPrice)).toFixed(2);
+          const feeFraction = remainingQuantity / initialQuantity;
+          const frictionShare = +(activeFriction.totalRoundtripFriction * feeFraction).toFixed(2);
+          const netProfit = +(grossProfit - frictionShare).toFixed(2);
+
+          trades.push({
+            entryBar,
+            exitBar: i,
+            entryPrice,
+            exitPrice: currentPrice,
+            quantity: remainingQuantity,
+            grossProfit,
+            friction: frictionShare,
+            netProfit,
+            exitReason: 'DEAD_TRADE_TIME_STOP',
+            holdBars: barsHeld,
+            highestPriceSeen: highestPrice,
+            signalFeatures: entryFeatures,
+          });
+
+          tradeSamples.push({
+            features: entryFeatures || {
+              hurst: 0.5,
+              volumeSurgeRatio: 1.0,
+              isSqueezeRelease: false,
+              relativeStrengthPct: 0,
+              alphaConvictionIndex: 50,
+              atrPriceRatio: atr / currentPrice,
+            },
+            won: netProfit > 0 ? 1 : 0,
+          });
+
+          capital += netProfit;
+          inPosition = false;
+          lastExitBar = i;
+          continue;
+        }
+
+        // 5. Scenario 3 / MIS Rule: Session Close Auto Square-Off (15:15 IST or last bar)
+        const isSessionCutoff =
+          !isDelivery &&
+          (timingQuality.phase === 'POST_CLOSE' ||
+            i === candles.length - 1 ||
+            (candles[i + 1] && candles[i + 1].time - currentCandle.time > 30 * 60 * 1000));
+
+        if (isSessionCutoff) {
+          const grossProfit = +(remainingQuantity * (currentPrice - entryPrice)).toFixed(2);
+          const feeFraction = remainingQuantity / initialQuantity;
+          const frictionShare = +(activeFriction.totalRoundtripFriction * feeFraction).toFixed(2);
+          const netProfit = +(grossProfit - frictionShare).toFixed(2);
+
+          trades.push({
+            entryBar,
+            exitBar: i,
+            entryPrice,
+            exitPrice: currentPrice,
+            quantity: remainingQuantity,
+            grossProfit,
+            friction: frictionShare,
+            netProfit,
+            exitReason: 'SESSION_CLOSE',
+            holdBars: barsHeld,
+            highestPriceSeen: highestPrice,
+            signalFeatures: entryFeatures,
+          });
+
+          tradeSamples.push({
+            features: entryFeatures || {
+              hurst: 0.5,
+              volumeSurgeRatio: 1.0,
+              isSqueezeRelease: false,
+              relativeStrengthPct: 0,
+              alphaConvictionIndex: 50,
+              atrPriceRatio: atr / currentPrice,
+            },
+            won: netProfit > 0 ? 1 : 0,
+          });
+
           capital += netProfit;
           inPosition = false;
           lastExitBar = i;
@@ -253,48 +459,145 @@ export function runBacktest(
         }
       }
 
-      // Check drawdown
-      peakCapital = Math.max(peakCapital, capital + (currentPrice - entryPrice) * quantity);
-      const dd = ((peakCapital - capital) / peakCapital) * 100;
+      // Position survived stop checks: update highest price and ratchet stop for subsequent bars
+      highestPrice = Math.max(highestPrice, currentCandle.high);
+
+      // Scenario 2: Authoritative Unified Ratchet Call (Single source of truth)
+      const ratchet = calculateDynamicProfitRatchet(
+        entryPrice,
+        currentPrice,
+        atr,
+        currentStop,
+        thresholds.NSE_TICK_SIZE_INR,
+        activeFriction.frictionPerShare,
+        highestPrice
+      );
+      if (ratchet.isRatcheted) {
+        currentStop = Math.max(currentStop, ratchet.ratchetedStopPrice);
+      }
+
+      // Scenario 5: 14:15 Late-Day Stop Compression before retail MIS square-off
+      if (timingQuality.isLateDayLiquidationPhase && currentPrice > entryPrice) {
+        const compressedStop = lateDayStopCompression(
+          entryPrice,
+          currentPrice,
+          atr,
+          highestPrice,
+          currentStop,
+          currentCandle.time,
+          thresholds.NSE_TICK_SIZE_INR
+        );
+        currentStop = Math.max(currentStop, compressedStop.compressedStopPrice);
+      }
+
+      // Track Peak Portfolio Value & Drawdown
+      const unrealizedPnl = (currentPrice - entryPrice) * remainingQuantity;
+      peakCapital = Math.max(peakCapital, capital + unrealizedPnl);
+      const dd = ((peakCapital - (capital + unrealizedPnl)) / peakCapital) * 100;
       maxDrawdown = Math.max(maxDrawdown, dd);
     } else {
-      // Evaluate Entry Setup (enforce minimum 3-bar cooldown after previous exit)
-      if (i - lastExitBar < 3) continue;
+      // ----------------------------------------------------------------------
+      // Entry Evaluation & Multi-Scenario Safety Gates
+      // ----------------------------------------------------------------------
+      // Enforce 4-bar (20 min) cooldown after exit to prevent fee-draining churn
+      if (i - lastExitBar < 4) continue;
 
-      const hurstRes = calculateHurstExponent(closePrices);
-      const sma20 = closePrices.reduce((a, b) => a + b, 0) / closePrices.length;
-      const isTrending = hurstRes.hurst > 0.52 && currentPrice > sma20;
-      const isOversoldDip = hurstRes.hurst < 0.45 && currentPrice < sma20 - atr * 1.2;
+      // Scenario 3: Session Timing Gate (blocks outside trading hours & 14:00 curfew)
+      const timingQuality = evaluateSessionTimingQuality(currentCandle.time);
+      if (!timingQuality.allowsNewEntries) continue;
 
-      if (isTrending || isOversoldDip) {
-        const proposedUnits = Math.max(1, Math.floor((capital * 0.25) / currentPrice));
-        const proposedStop = +(currentPrice - atr * 1.5).toFixed(2);
-        const proposedTarget = +(currentPrice + atr * 2.8).toFixed(2);
-        const expectedProfit = (proposedTarget - currentPrice) * proposedUnits;
+      // Scenario 7: Flash Volatility Shock Freeze (> 3.5x ATR bar)
+      const shock = volatilityShockFreeze(currentCandle, atr, lastShockTimestamp, currentCandle.time);
+      if (shock.newShockDetected) {
+        lastShockTimestamp = currentCandle.time;
+      }
+      if (shock.isFrozen) continue;
 
+      // Scenario 4: Regime & Alpha Signal Math
+      const hurstRes = calculateHurstExponentFromCandles(window);
+      const squeezeState = ttmSqueezeState(closePrices);
+      const ou = ouMeanReversionSignal(closePrices);
+      const sma20 = closePrices.slice(-20).reduce((a, b) => a + b, 0) / 20;
+      const donchian10 = Math.max(...closePrices.slice(-11, -1));
+
+      // Alpha Entry Filters:
+      // 1. Hurst Persistent Breakout: H >= 0.55 AND price >= Donchian 10 High AND price > SMA20
+      const isTrendingBreakout =
+        hurstRes.hurst >= thresholds.HURST_TRENDING_THRESHOLD &&
+        currentPrice >= donchian10 &&
+        currentPrice > sma20;
+
+      // 2. Extreme Mean Reversion Dip: H <= 0.48 AND OU Z-Score <= -1.20
+      const isOversoldDip =
+        hurstRes.hurst <= 0.48 &&
+        ou.zScore <= -1.20;
+
+      if (isTrendingBreakout || isOversoldDip) {
+        // Signal Features for Win Probability Calibration
+        const features: SignalFeatures = {
+          hurst: hurstRes.hurst,
+          volumeSurgeRatio: currentCandle.volume / 50000,
+          isSqueezeRelease: squeezeState === 'off',
+          relativeStrengthPct: ((currentPrice - sma20) / sma20) * 100,
+          alphaConvictionIndex: Math.round(50 + (hurstRes.hurst - 0.5) * 60),
+          atrPriceRatio: atr / currentPrice,
+        };
+
+        const estimatedWinRate = model
+          ? model.predict(features)
+          : estimateWinProbabilityHeuristic(features);
+
+        // Price Targets & Stops
+        const stopDistance = Math.max(currentPrice * 0.008, atr * 1.5);
+        const proposedStop = +(currentPrice - stopDistance).toFixed(2);
+        const t1 = +(currentPrice + atr * thresholds.RATCHET_STAGE_2_ATR).toFixed(2); // +1.40 ATR
+        const dynamicTpMultiplier =
+          hurstRes.hurst >= thresholds.HURST_SUPER_TREND_THRESHOLD
+            ? thresholds.RATCHET_STAGE_3_ATR * 1.20
+            : thresholds.RATCHET_STAGE_3_ATR;
+        const t2 = +(currentPrice + atr * dynamicTpMultiplier).toFixed(2);
+
+        const rewardRiskRatio = (t1 - currentPrice) / (currentPrice - proposedStop);
+
+        // Scenario 10: Half-Kelly Volatility-Adaptive Position Sizing
+        const kelly = calculateHalfKellyFraction(
+          estimatedWinRate,
+          rewardRiskRatio,
+          thresholds.MAX_KELLY_SIZE_MULTIPLIER,
+          thresholds.MIN_KELLY_SIZE_MULTIPLIER,
+          features.atrPriceRatio
+        );
+
+        const positionNotional = Math.min(
+          capital * thresholds.MAX_SECTOR_ALLOCATION_PCT,
+          capital * Math.max(0.15, kelly.recommendedSizeMultiplier)
+        );
+        const proposedUnits = Math.max(1, Math.floor(positionNotional / currentPrice));
+
+        // Scenario 1: Pre-Trade TCA Hurdle Check
+        const expectedProfit = (t2 - currentPrice) * proposedUnits;
         const friction = calculateRoundtripFriction(currentPrice, proposedUnits, isDelivery);
 
-        // Pre-Trade TCA Hurdle Check
         if (!passesFrictionHurdle(expectedProfit, friction.totalRoundtripFriction, frictionMultiple)) {
           frictionHurdleRejections++;
           continue;
         }
 
-        // Enter trade
-        inPosition = true;
-        entryBar = i;
-        entryPrice = currentPrice;
-        currentStop = proposedStop;
-        targetPrice = proposedTarget;
-        quantity = proposedUnits;
-        highestPrice = currentPrice;
-        activeFriction = friction;
-        trancheStage = 0;
+        // Queue order for next-bar execution delay
+        pendingOrder = {
+          entryPrice: currentPrice,
+          stop: proposedStop,
+          t1,
+          t2,
+          qty: proposedUnits,
+          friction,
+          features,
+        };
       }
     }
   }
 
-  // Calculate aggregate metrics
+  // Calculate aggregate performance metrics
   const winningTrades = trades.filter((t) => t.netProfit > 0).length;
   const losingTrades = trades.filter((t) => t.netProfit < 0).length;
   const breakevenTrades = trades.filter((t) => t.netProfit === 0).length;
@@ -307,12 +610,13 @@ export function runBacktest(
   const grossLosses = Math.abs(trades.filter((t) => t.netProfit < 0).reduce((s, t) => s + t.netProfit, 0));
   const profitFactor = grossLosses > 0 ? +(grossGains / grossLosses).toFixed(2) : grossGains > 0 ? 99.0 : 0;
 
-  // Approximate Sharpe Ratio
+  // Annualized Sharpe Ratio
   const returns = trades.map((t) => t.netProfit / (t.entryPrice * t.quantity));
   const meanReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
-  const varReturn = returns.length > 1
-    ? returns.reduce((a, b) => a + Math.pow(b - meanReturn, 2), 0) / (returns.length - 1)
-    : 0;
+  const varReturn =
+    returns.length > 1
+      ? returns.reduce((a, b) => a + Math.pow(b - meanReturn, 2), 0) / (returns.length - 1)
+      : 0;
   const stdReturn = Math.sqrt(varReturn);
   const sharpeRatio = stdReturn > 0 ? +((meanReturn / stdReturn) * Math.sqrt(252)).toFixed(2) : 0;
 
@@ -332,5 +636,6 @@ export function runBacktest(
     sharpeRatio,
     frictionHurdleRejections,
     trades,
+    tradeSamples,
   };
 }
