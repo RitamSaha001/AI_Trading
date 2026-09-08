@@ -32,6 +32,7 @@ import { money, moneyINR } from './trading';
 import { isIndianAsset } from './domain/portfolio';
 import { resolveGemini3Model } from './gemini';
 import { LatexRenderer } from './components/LatexRenderer';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { go } from './Shell';
 
 /**
@@ -46,38 +47,40 @@ function TypewriterAssistantMessage({
   content: string;
   isLatest: boolean;
 }) {
+  const safeContent = typeof content === 'string' ? content : (content ? String(content) : '');
+
   // Extract thinking block if present
   const { thinkingBlock, bodyContent } = useMemo(() => {
-    const match = content.match(/<thinking>([\s\S]*?)<\/thinking>/);
+    const match = safeContent.match(/<thinking>([\s\S]*?)<\/thinking>/);
     if (match) {
       return {
         thinkingBlock: match[0],
-        bodyContent: content.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim(),
+        bodyContent: safeContent.replace(/<thinking>[\s\S]*?<\/thinking>/, '').trim(),
       };
     }
-    return { thinkingBlock: '', bodyContent: content };
-  }, [content]);
+    return { thinkingBlock: '', bodyContent: safeContent };
+  }, [safeContent]);
 
   // Keep track of messages that have already completed typing animation
   const typedMessagesRef = useRef<Set<string>>(new Set());
-  const alreadyCompleted = !isLatest || typedMessagesRef.current.has(content);
+  const alreadyCompleted = !isLatest || typedMessagesRef.current.has(safeContent);
 
   const [displayedLength, setDisplayedLength] = useState(() =>
-    alreadyCompleted ? bodyContent.length : 0
+    alreadyCompleted ? (bodyContent?.length || 0) : 0
   );
-  const [isTyping, setIsTyping] = useState(() => !alreadyCompleted && bodyContent.length > 0);
+  const [isTyping, setIsTyping] = useState(() => !alreadyCompleted && (bodyContent?.length || 0) > 0);
 
   useEffect(() => {
-    if (!isLatest || typedMessagesRef.current.has(content)) {
-      setDisplayedLength(bodyContent.length);
+    if (!isLatest || typedMessagesRef.current.has(safeContent)) {
+      setDisplayedLength(bodyContent?.length || 0);
       setIsTyping(false);
       return;
     }
 
-    if (bodyContent.length === 0) {
+    if (!bodyContent || bodyContent.length === 0) {
       setDisplayedLength(0);
       setIsTyping(false);
-      typedMessagesRef.current.add(content);
+      typedMessagesRef.current.add(safeContent);
       return;
     }
 
@@ -92,7 +95,7 @@ function TypewriterAssistantMessage({
         if (next >= bodyContent.length) {
           clearInterval(timer);
           setIsTyping(false);
-          typedMessagesRef.current.add(content);
+          typedMessagesRef.current.add(safeContent);
           return bodyContent.length;
         }
         return next;
@@ -100,16 +103,16 @@ function TypewriterAssistantMessage({
     }, 16);
 
     return () => clearInterval(timer);
-  }, [content, isLatest, bodyContent]);
+  }, [safeContent, isLatest, bodyContent]);
 
   const handleSkip = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setDisplayedLength(bodyContent.length);
+    setDisplayedLength(bodyContent?.length || 0);
     setIsTyping(false);
-    typedMessagesRef.current.add(content);
+    typedMessagesRef.current.add(safeContent);
   };
 
-  const currentBody = isTyping ? bodyContent.slice(0, displayedLength) : bodyContent;
+  const currentBody = isTyping ? (bodyContent?.slice(0, displayedLength) || '') : (bodyContent || '');
   const renderContent = thinkingBlock
     ? `${thinkingBlock}\n\n${currentBody}`
     : currentBody;
@@ -513,7 +516,7 @@ function ActionProposalCard({
               </div>
             </div>
 
-            {p.stressTest.mitigationSteps.length > 0 && (
+            {p.stressTest?.mitigationSteps && Array.isArray(p.stressTest.mitigationSteps) && p.stressTest.mitigationSteps.length > 0 && (
               <div className="p-2 rounded-xl bg-amber-50/60 border border-amber-200/70 text-[11px] text-amber-900 flex items-start gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
                 <span className="leading-snug">{p.stressTest.mitigationSteps[0]}</span>
@@ -528,7 +531,7 @@ function ActionProposalCard({
               {p.tokenComparison.verdict}
             </div>
             <div className="space-y-1.5">
-              {p.tokenComparison.tokens.map((t: any) => (
+              {p.tokenComparison.tokens && Array.isArray(p.tokenComparison.tokens) && p.tokenComparison.tokens.map((t: any) => (
                 <div key={t.asset} className="flex justify-between items-center text-[11px] font-mono p-2 rounded-xl bg-zinc-50 border border-zinc-200/60">
                   <span className="font-bold text-zinc-900">{t.asset}</span>
                   <span className="text-zinc-500 text-[10.5px]">
@@ -551,7 +554,7 @@ function ActionProposalCard({
                 </div>
               </div>
             )}
-            {p.rebalanceSteps && p.rebalanceSteps.length > 0 && (
+            {p.rebalanceSteps && Array.isArray(p.rebalanceSteps) && p.rebalanceSteps.length > 0 && (
               <div className="p-2 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
                 <span className="text-[9px] font-mono uppercase text-zinc-400 block">Defensive Rebalancing:</span>
                 {p.rebalanceSteps.slice(0, 3).map((step: any, sIdx: number) => (
@@ -567,7 +570,7 @@ function ActionProposalCard({
 
         {p.type === 'rebalance' && (
           <div className="space-y-2.5">
-            {p.rebalanceSteps && p.rebalanceSteps.length > 0 && (
+            {p.rebalanceSteps && Array.isArray(p.rebalanceSteps) && p.rebalanceSteps.length > 0 && (
               <div className="p-2 rounded-xl bg-zinc-50 border border-zinc-200/60 space-y-1">
                 <span className="text-[9px] font-mono uppercase text-zinc-400 block">Optimal Allocation Steps:</span>
                 {p.rebalanceSteps.slice(0, 3).map((step: any, sIdx: number) => (
@@ -645,9 +648,18 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   const [dismissedProposals, setDismissedProposals] = useState<Record<number, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  const selectedAsset = state?.selectedAsset || 'BTC';
+  const isIndian = isIndianAsset(selectedAsset) || state?.accountMode === 'upstox';
+
   useEffect(() => {
     if (open) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      try {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } catch {
+        try {
+          messagesEndRef.current?.scrollIntoView();
+        } catch {}
+      }
     }
   }, [open, chatHistory, chatLoading]);
 
@@ -697,7 +709,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       color: 'from-indigo-500 to-purple-600',
       title: 'Synthesize Strategy Bot',
       desc: 'Calibrate and deploy a VWAP or Grid bot on live ticks',
-      prompt: `Synthesize an institutional VWAP momentum strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets and deploy it.`,
+      prompt: `Synthesize an institutional VWAP momentum strategy bot for ${selectedAsset} with dynamic ATR profit brackets and deploy it.`,
     },
     {
       id: 'smart_dca',
@@ -705,7 +717,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       color: 'from-emerald-500 to-teal-600',
       title: 'Smart Value-Weighted DCA',
       desc: 'Automated accumulation with dip multipliers and peak pauses',
-      prompt: `Create a Smart Value-Weighted DCA accumulation plan for ${state.selectedAsset} with dip buying multipliers.`,
+      prompt: `Create a Smart Value-Weighted DCA accumulation plan for ${selectedAsset} with dip buying multipliers.`,
     },
     {
       id: 'rebalance',
@@ -729,7 +741,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       color: 'from-cyan-500 to-blue-600',
       title: 'Asymmetric Bracket Trade',
       desc: 'Smart order ticket with 2.8x ATR Take-Profit and Trailing SL',
-      prompt: `Draft an asymmetric paper buy order for ${state.selectedAsset} with ATR-based Take-Profit and Trailing Stop-Loss brackets.`,
+      prompt: `Draft an asymmetric paper buy order for ${selectedAsset} with ATR-based Take-Profit and Trailing Stop-Loss brackets.`,
     },
     {
       id: 'alert',
@@ -737,30 +749,28 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       color: 'from-amber-500 to-yellow-600',
       title: 'Adaptive Volatility Alert',
       desc: 'Set intelligent breakout and support/resistance triggers',
-      prompt: `Set an intelligent volatility price alert for ${state.selectedAsset} based on its current Bollinger band levels.`,
+      prompt: `Set an intelligent volatility price alert for ${selectedAsset} based on its current Bollinger band levels.`,
     },
   ];
-
-  const isIndian = isIndianAsset(state.selectedAsset) || state.accountMode === 'upstox';
 
   const quantTools = useMemo(() => [
     { id: 'audit', label: 'Risk Audit', command: '/audit', icon: ShieldAlert, color: 'text-rose-600 bg-rose-50/80 hover:bg-rose-100 border-rose-200/80', badge: 'HHI' },
     { id: 'scan', label: isIndian ? 'NSE Radar' : 'Alpha Radar', command: isIndian ? '/scan nse' : '/scan', icon: Compass, color: 'text-violet-600 bg-violet-50/80 hover:bg-violet-100 border-violet-200/80', badge: 'R:R' },
-    { id: 'bot', label: 'Strategy Bot', command: `/bot ${state.selectedAsset}`, icon: Zap, color: 'text-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 border-indigo-200/80', badge: 'ATR' },
-    { id: 'dca', label: 'Smart DCA', command: `/dca ${state.selectedAsset}`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50/80 hover:bg-emerald-100 border-emerald-200/80', badge: 'RSI' },
+    { id: 'bot', label: 'Strategy Bot', command: `/bot ${selectedAsset}`, icon: Zap, color: 'text-indigo-600 bg-indigo-50/80 hover:bg-indigo-100 border-indigo-200/80', badge: 'ATR' },
+    { id: 'dca', label: 'Smart DCA', command: `/dca ${selectedAsset}`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50/80 hover:bg-emerald-100 border-emerald-200/80', badge: 'RSI' },
     { id: 'rebalance', label: 'Rebalance', command: '/rebalance', icon: Scale, color: 'text-blue-600 bg-blue-50/80 hover:bg-blue-100 border-blue-200/80', badge: 'Kelly' },
     { id: 'stress', label: 'Stress Test', command: '/stress', icon: Activity, color: 'text-amber-600 bg-amber-50/80 hover:bg-amber-100 border-amber-200/80', badge: 'VaR' },
-  ], [isIndian, state.selectedAsset]);
+  ], [isIndian, selectedAsset]);
 
   const slashCommands = useMemo(() => [
     { name: '/audit', title: 'Sentinel Risk & HHI Audit', desc: 'Concentration, liquidation, drawdown & cash reserve checks', icon: ShieldAlert },
     { name: isIndian ? '/scan nse' : '/scan', title: isIndian ? 'NSE Bluechips Alpha Radar' : 'Alpha Radar Multi-Asset Scan', desc: 'Scan asymmetric setups with >=2.5:1 R:R', icon: Compass },
-    { name: `/bot ${state.selectedAsset}`, title: `Synthesize Bot (${state.selectedAsset})`, desc: 'Institutional VWAP momentum bot with ATR brackets', icon: Zap },
-    { name: `/dca ${state.selectedAsset}`, title: `Smart DCA Plan (${state.selectedAsset})`, desc: 'Value-weighted accumulation with dip multipliers', icon: TrendingUp },
+    { name: `/bot ${selectedAsset}`, title: `Synthesize Bot (${selectedAsset})`, desc: 'Institutional VWAP momentum bot with ATR brackets', icon: Zap },
+    { name: `/dca ${selectedAsset}`, title: `Smart DCA Plan (${selectedAsset})`, desc: 'Value-weighted accumulation with dip multipliers', icon: TrendingUp },
     { name: '/rebalance', title: 'Fractional Kelly Rebalance', desc: 'Two-stage cash-feasible risk parity optimization', icon: Scale },
     { name: '/stress', title: 'Portfolio Stress Test', desc: 'Simulate flash crashes, rate hikes, and 95% VaR', icon: Activity },
     { name: '/help', title: 'Quant Tools Cheat Sheet', desc: 'Interactive guide of all deterministic math tools', icon: Sparkles },
-  ], [isIndian, state.selectedAsset]);
+  ], [isIndian, selectedAsset]);
 
   const showSlashMenu = text.startsWith('/');
   const filteredSlashCommands = useMemo(() => {
@@ -783,18 +793,19 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
     : [
         { label: 'Sentinel Danger Audit', prompt: 'Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.' },
         { label: 'Stress Test (-20% BTC)', prompt: 'Run a portfolio stress test simulating a 20% Bitcoin flash crash.' },
-        { label: 'Synthesize Strategy Bot', prompt: `Synthesize an institutional strategy bot for ${state.selectedAsset} with dynamic ATR profit brackets.` },
-        { label: 'Smart DCA Plan', prompt: `Create a Smart Value-Weighted DCA plan for ${state.selectedAsset}.` },
+        { label: 'Synthesize Strategy Bot', prompt: `Synthesize an institutional strategy bot for ${selectedAsset} with dynamic ATR profit brackets.` },
+        { label: 'Smart DCA Plan', prompt: `Create a Smart Value-Weighted DCA plan for ${selectedAsset}.` },
         { label: 'Kelly Rebalance', prompt: 'Compute optimal agentic portfolio rebalancing using Fractional Kelly optimization.' },
         { label: 'Compare BTC vs ETH vs SOL', prompt: 'Compare BTC, ETH, and SOL head-to-head on Alpha Radar.' },
       ];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/25 transition-opacity duration-300"
-      onMouseDown={(e) => e.currentTarget === e.target && onClose()}
-    >
-      <aside className="relative flex flex-col w-full max-w-[540px] h-full bg-white border-l border-zinc-200/80 shadow-[-16px_0_48px_rgba(0,0,0,0.06)] text-zinc-900 animate-in slide-in-from-right duration-300 overflow-hidden">
+    <ErrorBoundary fallbackTitle="Nexus Intelligence Drawer" isDrawer={true} onClose={onClose}>
+      <div
+        className="fixed inset-0 z-50 flex justify-end bg-black/25 transition-opacity duration-300"
+        onMouseDown={(e) => e.currentTarget === e.target && onClose()}
+      >
+        <aside className="relative flex flex-col w-full max-w-[540px] h-full bg-white border-l border-zinc-200/80 shadow-[-16px_0_48px_rgba(0,0,0,0.06)] text-zinc-900 animate-in slide-in-from-right duration-300 overflow-hidden">
         {/* Minimalist Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 bg-white/95">
           <div className="flex items-center gap-3">
@@ -806,11 +817,11 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 <h2 className="text-sm font-semibold tracking-tight text-zinc-900">Nexus Intelligence</h2>
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-800 rounded-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  {state.settings.geminiApiKey ? 'Gemini 3 + Local Quant' : 'Local Quant AI (100% Offline)'}
+                  {state?.settings?.geminiApiKey ? 'Gemini 3 + Local Quant' : 'Local Quant AI (100% Offline)'}
                 </span>
-                {state.settings.geminiApiKey && (
+                {state?.settings?.geminiApiKey && (
                   <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">
-                    {resolveGemini3Model(state.settings.geminiModel).replace('gemini-', '')}
+                    {resolveGemini3Model(state?.settings?.geminiModel).replace('gemini-', '')}
                   </span>
                 )}
               </div>
@@ -885,10 +896,10 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                     }`}
                   >
                     {isUser ? (
-                      <div className="whitespace-pre-line">{m.text}</div>
+                      <div className="whitespace-pre-line">{m.text || ''}</div>
                     ) : (
                       <TypewriterAssistantMessage
-                        content={m.text}
+                        content={m.text || ''}
                         isLatest={i === chatHistory.length - 1 && !isUser}
                       />
                     )}
@@ -909,15 +920,15 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                         </div>
                       </div>
 
-                      {m.telemetry.toolsUsed && m.telemetry.toolsUsed.length > 0 && (
+                      {m.telemetry.toolsUsed && Array.isArray(m.telemetry.toolsUsed) && m.telemetry.toolsUsed.length > 0 && (
                         <div className="flex items-center gap-1 flex-wrap pt-0.5">
                           <span className="text-[10px] text-zinc-400 font-sans">Tools Used:</span>
-                          {m.telemetry.toolsUsed.map((tool: string, tIdx: number) => (
+                          {m.telemetry.toolsUsed.map((tool: any, tIdx: number) => (
                             <span
                               key={tIdx}
                               className="px-1.5 py-0.5 rounded-md bg-white border border-zinc-200/80 text-zinc-700 text-[9.5px] font-mono shadow-2xs"
                             >
-                              {tool.replace(/_/g, ' ')}
+                              {String(typeof tool === 'string' ? tool : tool?.name || tool?.tool || tool).replace(/_/g, ' ')}
                             </span>
                           ))}
                         </div>
@@ -965,7 +976,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                             <span>Execution Verified</span>
                           </span>
                           <span className="text-[10px] font-mono text-zinc-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/15">
-                            {new Date(receipt.executedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            {receipt.executedAt ? new Date(receipt.executedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
                           </span>
                         </div>
 
@@ -981,7 +992,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                           </div>
                         )}
 
-                        {receipt.details && receipt.details.length > 0 && (
+                        {receipt.details && Array.isArray(receipt.details) && receipt.details.length > 0 && (
                           <div className="p-2.5 rounded-xl bg-zinc-50 border border-emerald-200/60 space-y-1 text-[11px] font-mono text-zinc-700 shadow-2xs">
                             {receipt.details.map((d: string, dIdx: number) => (
                               <div key={dIdx} className="flex items-center gap-2">
@@ -1021,7 +1032,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                       isIndian={isIndian}
                       currentPrice={
                         markets[p.asset as keyof typeof markets]?.price ||
-                        (p.asset === state.selectedAsset ? markets[state.selectedAsset]?.price : undefined)
+                        (p.asset === selectedAsset ? markets[selectedAsset]?.price : undefined)
                       }
                     />
                   )}
@@ -1224,6 +1235,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         </div>
       </aside>
     </div>
+    </ErrorBoundary>
   );
 }
 

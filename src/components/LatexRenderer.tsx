@@ -23,14 +23,16 @@ function ThinkingBlock({ thought }: { thought: string }) {
   const [open, setOpen] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
 
+  const safeThought = typeof thought === 'string' ? thought : (thought ? String(thought) : '');
+
   // Extract intuitive summary metrics from thought trace
-  const assetMatch = thought.match(/Primary Focus Asset:\s*([A-Za-z0-9_]+)/i);
-  const spotMatch = thought.match(/Current Spot Quote:\s*([0-9,.]+)/i);
-  const rsiMatch = thought.match(/RSI\(14\)\s*=\s*([0-9.]+)/i);
-  const winnerMatch = thought.match(/Winning Hypothesis:\s*([^(\n]+)/i);
-  const invalidationMatch = thought.match(/Invalidation Level:\s*([0-9,.]+)/i);
-  const criticMatch = thought.match(/Nexus Adversarial Risk Auditor[^:]*:\s*\"([^\"]+)\"/i);
-  const riskProfileMatch = thought.match(/Risk Profile\s*=\s*([A-Za-z_]+)/i);
+  const assetMatch = safeThought.match(/Primary Focus Asset:\s*([A-Za-z0-9_]+)/i);
+  const spotMatch = safeThought.match(/Current Spot Quote:\s*([0-9,.]+)/i);
+  const rsiMatch = safeThought.match(/RSI\(14\)\s*=\s*([0-9.]+)/i);
+  const winnerMatch = safeThought.match(/Winning Hypothesis:\s*([^(\n]+)/i);
+  const invalidationMatch = safeThought.match(/Invalidation Level:\s*([0-9,.]+)/i);
+  const criticMatch = safeThought.match(/Nexus Adversarial Risk Auditor[^:]*:\s*\"([^\"]+)\"/i);
+  const riskProfileMatch = safeThought.match(/Risk Profile\s*=\s*([A-Za-z_]+)/i);
 
   const asset = assetMatch ? assetMatch[1] : '';
   const spot = spotMatch ? spotMatch[1] : '';
@@ -621,9 +623,12 @@ export const LatexRenderer: React.FC<LatexRendererProps> = ({ content, className
  * Parses inline LaTeX formulas ($...$ or \(...\)) and inline markdown (**bold**, `code`, etc.)
  */
 export function renderInlineLatexAndFormatting(text: string): React.ReactNode[] {
+  const safeText = typeof text === 'string' ? text : (text ? String(text) : '');
+  if (!safeText) return [];
+
   // Matches inline LaTeX ($formula$ where opening $ is not followed by whitespace, and closing $ is not preceded by whitespace) or \(formula\)
   const mathRegex = /(\$(?:[^\s$](?:[^$]*[^\s$])?)\$|\\\([^\\]+\\\))/g;
-  const parts = text.split(mathRegex);
+  const parts = safeText.split(mathRegex);
 
   return parts.map((part, idx) => {
     if (!part) return null;
@@ -679,8 +684,11 @@ export function renderInlineLatexAndFormatting(text: string): React.ReactNode[] 
  * Handles inline bold (**text**), inline code (`code`), italics (*text* or _text_), and links ([text](url))
  */
 export function renderInlineMarkdown(text: string, baseKey: number | string = 0): React.ReactNode {
+  const safeText = typeof text === 'string' ? text : (text ? String(text) : '');
+  if (!safeText) return null;
+
   // Parse `code`
-  const codeParts = text.split(/(`[^`]+`)/g);
+  const codeParts = safeText.split(/(`[^`]+`)/g);
 
   return (
     <React.Fragment key={`fmt-${baseKey}`}>

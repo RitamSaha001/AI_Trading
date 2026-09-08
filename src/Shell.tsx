@@ -13,6 +13,7 @@ import { GrievanceModal } from './components/GrievanceModal';
 import { LegalFooter } from './components/LegalFooter';
 import { UpstoxTerminalDrawer } from './components/UpstoxTerminalDrawer';
 import { LiveOrderConfirmationModal } from './components/LiveOrderConfirmationModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   LayoutDashboard,
   BarChart3,
@@ -658,7 +659,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <OnboardingWizardModal isOpen={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
 
       {/* Nexus AI Drawer */}
-      <ChatDrawer open={chatOpen} onClose={closeChat} />
+      <ErrorBoundary fallbackTitle="Nexus Intelligence Drawer" isDrawer={true} onClose={closeChat}>
+        <ChatDrawer open={chatOpen} onClose={closeChat} />
+      </ErrorBoundary>
 
       {/* Upstox Terminal Drawer */}
       <UpstoxTerminalDrawer open={upstoxDrawerOpen} onClose={closeUpstoxDrawer} />
