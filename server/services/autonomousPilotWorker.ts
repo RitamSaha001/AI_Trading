@@ -452,7 +452,23 @@ export class AutonomousPilotWorker {
               ).catch(() => []),
             ]);
 
-            const availableCash = funds?.available || row.daily_starting_value;
+            const totalEquityNum =
+              funds?.totalEquity !== undefined && funds.totalEquity !== null
+                ? Number(funds.totalEquity)
+                : funds?.availableCash !== undefined && funds.availableCash !== null
+                ? Number(funds.availableCash) + (Number(funds?.usedMargin) || 0)
+                : Number(row.daily_starting_value) || 30000;
+
+            const availableCashNum =
+              funds?.availableCash !== undefined && funds.availableCash !== null
+                ? Number(funds.availableCash)
+                : Number(row.daily_starting_value) || 30000;
+
+            const usedMarginNum =
+              funds?.usedMargin !== undefined && funds.usedMargin !== null
+                ? Number(funds.usedMargin)
+                : 0;
+
             const assetPositions: Record<string, number> = {};
             const assetAvgPrices: Record<string, number> = {};
 
@@ -494,7 +510,7 @@ export class AutonomousPilotWorker {
               const p = markets[sym as Asset]?.price || assetAvgPrices[sym] || 0;
               totalPositionsValue += (Number(qty) || 0) * p;
             }
-            const currentTotalEquity = availableCash + totalPositionsValue;
+            const currentTotalEquity = totalEquityNum > 0 ? totalEquityNum : (availableCashNum + totalPositionsValue);
 
             // Auto-calibrate starting equity if it's the paper default (50000) or has a false cross-mode mismatch
             let resolvedStartingVal = row.daily_starting_value;
@@ -517,8 +533,8 @@ export class AutonomousPilotWorker {
 
             // Construct AppState representation for quant engine evaluation
             const syntheticState: AppState = {
-              balance: availableCash,
-              cash: availableCash,
+              balance: currentTotalEquity,
+              cash: availableCashNum,
               startingEquity: resolvedStartingVal,
               positions: assetPositions as any,
               averageBuyPrices: assetAvgPrices as any,
@@ -527,6 +543,15 @@ export class AutonomousPilotWorker {
               notifications: [],
               walletTransactions: [],
               accountMode: 'upstox',
+              upstoxAccount: {
+                funds: {
+                  totalEquity: currentTotalEquity,
+                  availableCash: availableCashNum,
+                  usedMargin: usedMarginNum,
+                },
+                positions: rawPositions,
+                holdings: rawHoldings,
+              } as any,
               autonomousPilot: {
                 enabled: true,
                 executionMode: row.execution_mode,
