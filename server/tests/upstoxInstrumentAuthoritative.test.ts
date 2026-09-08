@@ -45,26 +45,26 @@ describe('Authoritative Upstox Instrument Registry & Circuit Limits', () => {
   });
 
   it('validates ₹0.05 tick size steps for limit orders', () => {
-    // Valid tick: 2900.05
+    // Valid tick: 1300.05
     const valid = provider.validateOrder({
       userId: 'usr_test',
       symbol: 'RELIANCE',
       side: 'BUY',
       type: 'LIMIT',
       quantity: 10,
-      price: 2900.05,
+      price: 1300.05,
       idempotencyKey: 'idemp_tick_valid',
     });
     expect(valid.isValid).toBe(true);
 
-    // Invalid tick: 2900.03
+    // Invalid tick: 1300.03
     const invalid = provider.validateOrder({
       userId: 'usr_test',
       symbol: 'RELIANCE',
       side: 'BUY',
       type: 'LIMIT',
       quantity: 10,
-      price: 2900.03,
+      price: 1300.03,
       idempotencyKey: 'idemp_tick_invalid',
     });
     expect(invalid.isValid).toBe(false);
@@ -72,27 +72,27 @@ describe('Authoritative Upstox Instrument Registry & Circuit Limits', () => {
   });
 
   it('enforces exchange lower and upper circuit limits (Finding 8)', () => {
-    // RELIANCE has lowerCircuit: 2000.0, upperCircuit: 3500.0
-    // Price within band: 2800.0
+    // RELIANCE has lowerCircuit: 950.0, upperCircuit: 1750.0
+    // Price within band: 1300.0
     const normal = provider.validateOrder({
       userId: 'usr_test',
       symbol: 'RELIANCE',
       side: 'BUY',
       type: 'LIMIT',
       quantity: 5,
-      price: 2800.0,
+      price: 1300.0,
       idempotencyKey: 'idemp_circuit_normal',
     });
     expect(normal.isValid).toBe(true);
 
-    // Below lower circuit: 1800.0 (< 2000.0)
+    // Below lower circuit: 800.0 (< 950.0)
     const belowLower = provider.validateOrder({
       userId: 'usr_test',
       symbol: 'RELIANCE',
       side: 'BUY',
       type: 'LIMIT',
       quantity: 5,
-      price: 1800.0,
+      price: 800.0,
       idempotencyKey: 'idemp_circuit_low',
     });
     expect(belowLower.isValid).toBe(false);
@@ -121,7 +121,7 @@ describe('Authoritative Upstox Instrument Registry & Circuit Limits', () => {
       side: 'BUY',
       type: 'LIMIT',
       quantity: 15000,
-      price: 2900.0,
+      price: 1300.0,
       slice: false,
       idempotencyKey: 'idemp_freeze_unsliced',
     });
@@ -135,7 +135,7 @@ describe('Authoritative Upstox Instrument Registry & Circuit Limits', () => {
       side: 'BUY',
       type: 'LIMIT',
       quantity: 15000,
-      price: 2900.0,
+      price: 1300.0,
       slice: true,
       idempotencyKey: 'idemp_freeze_sliced',
     });

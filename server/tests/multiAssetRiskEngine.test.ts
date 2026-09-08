@@ -94,8 +94,8 @@ describe('Multi-Asset & Asset-Class Aware Risk Engine (Finding 2)', () => {
     const db = getDb();
     await db.execute(`UPDATE ledger_accounts SET balance_minor = 20 WHERE id = ?`, [tcsAccount.id]);
 
-    // Portfolio should be: ₹50,000 cash + 20 TCS * ₹4,000 = ₹50,000 + ₹80,000 = ₹130,000
-    // Buying 5 shares of RELIANCE at ₹2,800 = ₹14,000 (10.7% of portfolio <= 40% cap, remaining cash ₹36,000 > ₹19,500 reserve)
+    // Portfolio should be: ₹50,000 cash + 20 TCS * ₹2,250 = ₹50,000 + ₹45,000 = ₹95,000
+    // Buying 5 shares of RELIANCE at ₹2,800 = ₹14,000 (14.7% of portfolio <= 40% cap, remaining cash ₹36,000 > ₹14,250 reserve)
     const decision = await ServerRiskEngine.evaluateTrade({
       userId,
       broker: 'upstox',
@@ -110,7 +110,7 @@ describe('Multi-Asset & Asset-Class Aware Risk Engine (Finding 2)', () => {
       marketQuoteAgeMs: 2000,
     });
 
-    expect(decision.portfolioEquity).toBe(130000);
+    expect(decision.portfolioEquity).toBe(95000);
     expect(decision.notional).toBe(14000);
     expect(decision.approved).toBe(true);
   });

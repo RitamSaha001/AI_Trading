@@ -43,6 +43,7 @@ import {
   UpstoxTradeItem,
 } from './upstoxTypes';
 import { UpstoxProductMatrix } from './upstoxProductMatrix';
+import { UpstoxInstrumentRegistry } from './upstoxInstrumentRegistry';
 import {
   calculateNextUpstoxExpiry,
   getTokenHealth,
@@ -1487,6 +1488,13 @@ export class UpstoxAdapter implements BrokerGateway {
         const quotes = await UpstoxClient.getQuote(accessToken, instrument.instrumentKey);
         const data = quotes[instrument.instrumentKey] || Object.values(quotes)[0];
         if (data) {
+          if (data.lower_circuit_limit !== undefined && data.upper_circuit_limit !== undefined) {
+            UpstoxInstrumentRegistry.updateCircuitLimits(symbol, {
+              lower: Number(data.lower_circuit_limit),
+              upper: Number(data.upper_circuit_limit),
+              lastPrice: data.last_price !== undefined ? Number(data.last_price) : undefined,
+            });
+          }
           return {
             symbol,
             instrumentKey: instrument.instrumentKey,

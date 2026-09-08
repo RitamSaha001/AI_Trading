@@ -259,7 +259,7 @@ export class PostgresClient implements DBClient {
       client = await this.pool.connect();
       this.advisoryClients.set(k, client);
     }
-    await client.query('SELECT pg_advisory_lock($1)', [k]);
+    await client.query('SELECT pg_advisory_lock($1::bigint)', [k]);
   }
 
   /**
@@ -270,7 +270,7 @@ export class PostgresClient implements DBClient {
     const client = this.advisoryClients.get(k);
     if (client) {
       try {
-        await client.query('SELECT pg_advisory_unlock($1)', [k]);
+        await client.query('SELECT pg_advisory_unlock($1::bigint)', [k]);
       } finally {
         client.release();
         this.advisoryClients.delete(k);
@@ -289,7 +289,7 @@ export class PostgresClient implements DBClient {
     }
     const client = await this.pool.connect();
     try {
-      const res = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [k]);
+      const res = await client.query('SELECT pg_try_advisory_lock($1::bigint) AS acquired', [k]);
       const acquired = Boolean(res.rows[0]?.acquired);
       if (acquired) {
         this.advisoryClients.set(k, client);
@@ -363,7 +363,7 @@ export class PostgresClient implements DBClient {
   async close(): Promise<void> {
     for (const [k, client] of this.advisoryClients.entries()) {
       try {
-        await client.query('SELECT pg_advisory_unlock($1)', [k]);
+        await client.query('SELECT pg_advisory_unlock($1::bigint)', [k]);
       } catch {}
       try {
         client.release(true);
