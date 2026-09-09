@@ -1012,13 +1012,14 @@ export class ReconciliationWorker {
 
     const localByClientOrderId = new Map<string, any>();
     for (const ord of localOpenOrders) {
-      localByClientOrderId.set(ord.client_order_id, ord);
+      if (ord.client_order_id) localByClientOrderId.set(ord.client_order_id, ord);
+      if (ord.exchange_order_id) localByClientOrderId.set(ord.exchange_order_id, ord);
     }
 
     // 1. Detect orphaned exchange orders (on exchange but not in local DB)
     for (const venueOrd of venueOpenOrders) {
       const clientOrderId = venueOrd.clientOrderId;
-      const localOrd = localByClientOrderId.get(clientOrderId);
+      const localOrd = localByClientOrderId.get(clientOrderId) || (venueOrd.orderId ? localByClientOrderId.get(String(venueOrd.orderId)) : undefined);
 
       if (!localOrd) {
         mismatches++;
