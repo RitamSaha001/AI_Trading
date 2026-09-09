@@ -212,14 +212,15 @@ export class AutonomousPilotWorker {
     );
 
     let activeFleet: Record<string, AssetFleetStatus> = {};
+    const defaultFleet = initializeFleetStatus();
     try {
       if (row?.fleet_state_json) {
-        activeFleet = JSON.parse(row.fleet_state_json);
+        activeFleet = { ...defaultFleet, ...JSON.parse(row.fleet_state_json) };
       } else {
-        activeFleet = initializeFleetStatus();
+        activeFleet = defaultFleet;
       }
     } catch {
-      activeFleet = initializeFleetStatus();
+      activeFleet = defaultFleet;
     }
 
     const elapsedHeartbeat = now - (row?.last_client_heartbeat_at || 0);
@@ -505,10 +506,11 @@ export class AutonomousPilotWorker {
 
             // Parse or initialize fleet status
             let fleet: Record<string, AssetFleetStatus>;
+            const defaultFleet = initializeFleetStatus();
             try {
-              fleet = row.fleet_state_json ? JSON.parse(row.fleet_state_json) : initializeFleetStatus();
+              fleet = row.fleet_state_json ? { ...defaultFleet, ...JSON.parse(row.fleet_state_json) } : defaultFleet;
             } catch {
-              fleet = initializeFleetStatus();
+              fleet = defaultFleet;
             }
 
             const mappedOrders = openOrdersRows.map((o) => ({
