@@ -501,6 +501,7 @@ export class LiveOrderGateService {
         type: order.type as any,
         quantity: order.quantity,
         price,
+        product: order.product,
         marketQuoteAgeMs: serverQuoteAgeMs,
         idempotencyKey: order.clientOrderId || order.idempotencyKey,
       });
