@@ -884,13 +884,45 @@ export function buildServer(): FastifyInstance {
     return { success: true, instruments };
   });
 
+  async function getAuthoritativeUpstoxCred(userId?: string): Promise<{ userId: string; accessTokenEncrypted: string } | null> {
+    const db = getDb();
+    const now = Date.now();
+    if (userId) {
+      const row = await db.queryOne<{ user_id: string; access_token_encrypted: string }>(
+        `SELECT user_id, access_token_encrypted FROM broker_credentials 
+         WHERE user_id = ? AND broker = 'upstox' AND access_token_encrypted IS NOT NULL LIMIT 1`,
+        [userId]
+      );
+      if (row) return { userId: row.user_id, accessTokenEncrypted: row.access_token_encrypted };
+    }
+
+    // 1. Prefer active / non-expired token
+    const activeRow = await db.queryOne<{ user_id: string; access_token_encrypted: string }>(
+      `SELECT user_id, access_token_encrypted FROM broker_credentials 
+       WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL AND (token_expires_at IS NULL OR token_expires_at > ?)
+       ORDER BY updated_at DESC LIMIT 1`,
+      [now]
+    );
+    if (activeRow) return { userId: activeRow.user_id, accessTokenEncrypted: activeRow.access_token_encrypted };
+
+    // 2. Fallback to latest updated
+    const latestRow = await db.queryOne<{ user_id: string; access_token_encrypted: string }>(
+      `SELECT user_id, access_token_encrypted FROM broker_credentials 
+       WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL
+       ORDER BY updated_at DESC LIMIT 1`
+    );
+    if (latestRow) return { userId: latestRow.user_id, accessTokenEncrypted: latestRow.access_token_encrypted };
+
+    return null;
+  }
+
   server.get('/api/market/quotes/upstox', async (req: FastifyRequest) => {
     const query = (req.query as any) || {};
     const symbolsParam = query.symbols as string | undefined;
     const defaultSymbols = [
       'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL',
       'ITC', 'KOTAKBANK', 'LT', 'TATAMOTORS', 'AXISBANK', 'MARUTI', 'SUNPHARMA',
-      'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC'
+      'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC', 'HAL', 'BEL'
     ];
     const requestedSymbols = symbolsParam
       ? symbolsParam.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean)
@@ -907,18 +939,13 @@ export function buildServer(): FastifyInstance {
         if (user) userId = user.id;
       } catch {}
     }
-    if (!userId) {
-      const db = getDb();
-      const anyCred = await db.queryOne<{ user_id: string }>(
-        `SELECT user_id FROM broker_credentials WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL ORDER BY updated_at DESC LIMIT 1`
-      );
-      if (anyCred) userId = anyCred.user_id;
-    }
+    const cred = await getAuthoritativeUpstoxCred(userId);
+    const activeUserId = cred?.userId || userId;
 
     await Promise.all(
       requestedSymbols.map(async (sym) => {
         try {
-          const q = await upstox.getMarketQuote(sym, userId);
+          const q = await upstox.getMarketQuote(sym, activeUserId);
           if (q) {
             quotes[sym] = q;
           }
@@ -946,23 +973,10 @@ export function buildServer(): FastifyInstance {
       } catch {}
     }
 
-    const db = getDb();
-    let credRow: any;
-    if (userId) {
-      credRow = await db.queryOne<{ access_token_encrypted: string }>(
-        `SELECT access_token_encrypted FROM broker_credentials WHERE user_id = $1 AND broker = 'upstox' AND access_token_encrypted IS NOT NULL LIMIT 1`,
-        [userId]
-      );
-    }
-    if (!credRow) {
-      credRow = await db.queryOne<{ access_token_encrypted: string }>(
-        `SELECT access_token_encrypted FROM broker_credentials WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL ORDER BY updated_at DESC LIMIT 1`
-      );
-    }
-
-    if (credRow?.access_token_encrypted) {
+    const cred = await getAuthoritativeUpstoxCred(userId);
+    if (cred?.accessTokenEncrypted) {
       try {
-        accessToken = UpstoxAdapter.decryptSecret(credRow.access_token_encrypted);
+        accessToken = UpstoxAdapter.decryptSecret(cred.accessTokenEncrypted);
       } catch (err: any) {
         logger.warn(`[UpstoxCandles] Failed to decrypt access token: ${err.message}`);
       }
@@ -978,7 +992,7 @@ export function buildServer(): FastifyInstance {
     const timeframe = (query.timeframe as string || '1D').toUpperCase().trim();
     const defaultSymbols = [
       'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK',
-      'SBIN', 'BHARTIARTL', 'ITC', 'LT', 'TATAMOTORS'
+      'SBIN', 'BHARTIARTL', 'ITC', 'LT', 'TATAMOTORS', 'HAL', 'BEL'
     ];
     const symbols = symbolsParam
       ? symbolsParam.split(',').map((s: string) => s.trim()).filter(Boolean)
@@ -994,23 +1008,10 @@ export function buildServer(): FastifyInstance {
       } catch {}
     }
 
-    const db = getDb();
-    let credRow: any;
-    if (userId) {
-      credRow = await db.queryOne<{ access_token_encrypted: string }>(
-        `SELECT access_token_encrypted FROM broker_credentials WHERE user_id = $1 AND broker = 'upstox' AND access_token_encrypted IS NOT NULL LIMIT 1`,
-        [userId]
-      );
-    }
-    if (!credRow) {
-      credRow = await db.queryOne<{ access_token_encrypted: string }>(
-        `SELECT access_token_encrypted FROM broker_credentials WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL ORDER BY updated_at DESC LIMIT 1`
-      );
-    }
-
-    if (credRow?.access_token_encrypted) {
+    const cred = await getAuthoritativeUpstoxCred(userId);
+    if (cred?.accessTokenEncrypted) {
       try {
-        accessToken = UpstoxAdapter.decryptSecret(credRow.access_token_encrypted);
+        accessToken = UpstoxAdapter.decryptSecret(cred.accessTokenEncrypted);
       } catch (err: any) {
         logger.warn(`[UpstoxCandlesBatch] Failed to decrypt access token: ${err.message}`);
       }
@@ -1029,12 +1030,10 @@ export function buildServer(): FastifyInstance {
         if (user) return user.id;
       } catch {}
     }
-    const db = getDb();
-    const anyCred = await db.queryOne<{ user_id: string }>(
-      `SELECT user_id FROM broker_credentials WHERE broker = 'upstox' AND access_token_encrypted IS NOT NULL ORDER BY updated_at DESC LIMIT 1`
-    );
-    if (anyCred?.user_id) return anyCred.user_id;
+    const cred = await getAuthoritativeUpstoxCred();
+    if (cred?.userId) return cred.userId;
 
+    const db = getDb();
     const anyUser = await db.queryOne<{ id: string }>(
       `SELECT id FROM users ORDER BY created_at ASC LIMIT 1`
     );
