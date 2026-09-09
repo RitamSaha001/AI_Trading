@@ -18,6 +18,8 @@ export const MIN_FRICTION_PROFIT_MULTIPLE = 3.0;
 export const BROKERAGE_FLAT_INR = 20.0;
 /** Upstox variable brokerage percentage (0.05%) */
 export const BROKERAGE_PCT = 0.0005;
+/** Minimum order notional floor (INR) to prevent flat brokerage fee drag on small accounts */
+export const MIN_TRADE_NOTIONAL_INR = 12000.0;
 
 /** Securities Transaction Tax (STT) for delivery buy side (0.10%) */
 export const STT_DELIVERY_BUY_PCT = 0.001;
@@ -125,8 +127,8 @@ export const STAGNANT_TRADE_MAX_VOLUME_RATIO = 0.80;
 // ============================================================================
 /** Maximum portfolio exposure permitted in any single economic sector (35.0%) */
 export const MAX_SECTOR_ALLOCATION_PCT = 35.0;
-/** Maximum portfolio exposure permitted in any single asset (25.0%) */
-export const MAX_SINGLE_ASSET_ALLOCATION_PCT = 25.0;
+/** Maximum portfolio exposure permitted in any single asset (35.0%) */
+export const MAX_SINGLE_ASSET_ALLOCATION_PCT = 35.0;
 /** Maximum rolling correlation permitted between an asset and existing portfolio (0.75) */
 export const MAX_PORTFOLIO_CORRELATION_THRESHOLD = 0.75;
 /** Lookback periods for calculating rolling asset correlation */

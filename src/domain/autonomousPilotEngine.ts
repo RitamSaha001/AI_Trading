@@ -31,6 +31,7 @@ import {
   deadTradeStagnancyExit,
   volatilityShockFreeze,
   correlationGate,
+  thresholds,
 } from './quantEngine';
 
 // Institutional Indian Bluechip Assets monitored by the Autonomous Desk
@@ -587,7 +588,8 @@ export function tickAutonomousPilot(
       highWaterMark,
       currentStop,
       now,
-      isIndianAsset(asset) ? 0.05 : 0.01
+      isIndianAsset(asset) ? 0.05 : 0.01,
+      roundtripFriction.frictionPerShare
     );
 
     if (lateDayCompression.isCompressed && lateDayCompression.compressedStopPrice > currentStop) {
@@ -1070,12 +1072,34 @@ export function tickAutonomousPilot(
     const maxRiskCapital = baseRiskCapital * kellyRes.recommendedSizeMultiplier;
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
 
-    // Cap single asset concentration at 25% of portfolio equity
-    const maxAssetExposure = pv * 0.25;
+    // Cap single asset concentration via MAX_SINGLE_ASSET_ALLOCATION_PCT (40% of portfolio equity)
+    const maxAssetExposure = pv * (thresholds.MAX_SINGLE_ASSET_ALLOCATION_PCT / 100);
     let proposedNotional = unitsToBuy * limitPrice;
     if (proposedNotional > maxAssetExposure) {
       unitsToBuy = Math.max(1, Math.floor(maxAssetExposure / limitPrice));
       proposedNotional = unitsToBuy * limitPrice;
+    }
+
+    // Anti-Fee-Trap Notional Guard: Reject setups where proposed trade size is too small
+    // to overcome flat ~₹49 round-trip broker commission and statutory taxes.
+    const effectiveMinNotional = Math.min(pv * 0.30, thresholds.MIN_TRADE_NOTIONAL_INR);
+    if (proposedNotional < effectiveMinNotional && pv >= 25000) {
+      const recentFeeSkip = state.autonomousPilot?.actionLogs?.find(
+        (l) => l.asset === asset && l.action === 'SKIPPED' && now - l.timestamp < 300_000
+      );
+      if (!recentFeeSkip) {
+        newActionLogs.push({
+          id: `log_fee_drag_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'SKIPPED',
+          strategy,
+          detail: `Anti-Fee-Trap Guard: Proposed size ₹${proposedNotional.toFixed(2)} is below minimum viable threshold ₹${effectiveMinNotional.toFixed(2)}. Rejected to prevent flat brokerage fee drag.`,
+          price: limitPrice,
+          status: 'BLOCKED',
+        });
+      }
+      continue;
     }
 
     // Check cash liquidity constraint: must preserve mandatory cash reserve floor
@@ -1110,14 +1134,14 @@ export function tickAutonomousPilot(
       continue;
     }
 
-    // Sector Concentration Defense (Max 35% of total portfolio in any single sector)
+    // Sector Concentration Defense (Max MAX_SECTOR_ALLOCATION_PCT of total portfolio in any single sector)
     const sectorCheck = validateSectorExposureLimit(
       asset,
       proposedNotional,
       state.positions,
       markets,
       pv,
-      35.0
+      thresholds.MAX_SECTOR_ALLOCATION_PCT
     );
 
     if (!sectorCheck.allowed) {
@@ -1131,7 +1155,7 @@ export function tickAutonomousPilot(
           asset,
           action: 'SECTOR_CAP_DEFENSE',
           strategy,
-          detail: sectorCheck.reason || `Sector concentration cap (35%) reached for ${sector}.`,
+          detail: sectorCheck.reason || `Sector concentration cap (${thresholds.MAX_SECTOR_ALLOCATION_PCT}%) reached for ${sector}.`,
           price: limitPrice,
           status: 'BLOCKED',
         });
@@ -1139,12 +1163,19 @@ export function tickAutonomousPilot(
       continue;
     }
 
-    // Pre-Trade TCA Friction Hurdle: Expected profit must be >= 3.0x roundtrip friction
-    // Autonomous pilot orders execute as Intraday MIS by default
+    // Pre-Trade TCA Friction Hurdle:
+    // 1. Overall target profit must be >= MIN_FRICTION_PROFIT_MULTIPLE (3.0x) roundtrip friction
+    // 2. Realistic near-term gain (at 1.25 ATR) must clear roundtrip friction with a 1.5x buffer
     const isDeliveryOrder = false;
     const expectedGrossProfit = (takeProfitPrice - limitPrice) * unitsToBuy;
     const orderFriction = calculateRoundtripFriction(limitPrice, unitsToBuy, isDeliveryOrder);
-    if (!passesFrictionHurdle(expectedGrossProfit, orderFriction.totalRoundtripFriction, 3.0)) {
+    const realisticTargetMove = Math.min(takeProfitPrice - limitPrice, atr * 1.25);
+    const realisticGrossProfit = realisticTargetMove * unitsToBuy;
+
+    const passesOverallTarget = passesFrictionHurdle(expectedGrossProfit, orderFriction.totalRoundtripFriction, thresholds.MIN_FRICTION_PROFIT_MULTIPLE);
+    const passesRealisticTarget = realisticGrossProfit >= 1.5 * orderFriction.totalRoundtripFriction;
+
+    if (!passesOverallTarget || !passesRealisticTarget) {
       const recentTcaSkip = state.autonomousPilot?.actionLogs?.find(
         (l) => l.asset === asset && l.action === 'SKIPPED' && now - l.timestamp < 300_000
       );
@@ -1155,7 +1186,7 @@ export function tickAutonomousPilot(
           asset,
           action: 'SKIPPED',
           strategy,
-          detail: `TCA Friction Hurdle: Expected profit ₹${expectedGrossProfit.toFixed(2)} is less than 3x roundtrip fees (₹${(3 * orderFriction.totalRoundtripFriction).toFixed(2)}). Setup rejected to avoid negative expectancy.`,
+          detail: `TCA Friction Hurdle: Realistic intraday gain ₹${realisticGrossProfit.toFixed(2)} is insufficient to clear roundtrip fees (₹${orderFriction.totalRoundtripFriction.toFixed(2)}) with healthy net profit. Setup rejected.`,
           price: limitPrice,
           status: 'BLOCKED',
         });

@@ -5,3 +5,4 @@ export * from './marketMicrostructureEngine';
 export * from './regimeDetectionEngine';
 export * from './quantDialogueEngine';
 export * from './alphaSignalEngine';
+export * as thresholds from './config/thresholds';

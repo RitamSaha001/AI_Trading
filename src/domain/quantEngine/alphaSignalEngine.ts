@@ -660,7 +660,8 @@ export function lateDayStopCompression(
   highWaterMark: number,
   currentStopPrice: number,
   now: number = Date.now(),
-  tickSize: number = thresholds.NSE_TICK_SIZE_INR
+  tickSize: number = thresholds.NSE_TICK_SIZE_INR,
+  frictionPerShare: number = 0
 ): { compressedStopPrice: number; isCompressed: boolean; reason: string } {
   const timing = evaluateSessionTimingQuality(now);
   if (!timing.isLateDayLiquidationPhase) {
@@ -672,15 +673,20 @@ export function lateDayStopCompression(
   let reason = '';
 
   if (currentPrice > entryPrice) {
-    // In profit: compress stop to protect High-Water Mark - 0.5 ATR
+    // In profit: compress stop to protect High-Water Mark - 0.35 ATR
     const profitLock = highWaterMark - safeAtr * thresholds.LATE_DAY_PROFIT_STOP_COMPRESSION_ATR;
-    targetStop = Math.max(currentStopPrice, profitLock);
-    reason = `Late-Day Profit Shield: Compressed stop to ₹${targetStop.toFixed(2)} (HWM - 0.5 ATR) to protect banked gains before 15:15 retail liquidation.`;
+    const feeBreakeven = entryPrice + frictionPerShare;
+    // If high-water mark reached above fee breakeven, ensure stop preserves net profit above fees
+    const candidateStop = (frictionPerShare > 0 && highWaterMark > feeBreakeven)
+      ? Math.max(feeBreakeven, profitLock)
+      : profitLock;
+    targetStop = Math.max(currentStopPrice, candidateStop);
+    reason = `Late-Day Profit Shield: Compressed stop to ₹${targetStop.toFixed(2)} (fee-shielded net profit) before 15:15 retail liquidation.`;
   } else {
-    // Flat or slight loss: compress stop to Entry - 0.75 ATR
+    // Flat or slight loss: compress stop to Entry - 0.40 ATR
     const lossCeiling = entryPrice - safeAtr * thresholds.LATE_DAY_LOSS_STOP_COMPRESSION_ATR;
     targetStop = Math.max(currentStopPrice, lossCeiling);
-    reason = `Late-Day Loss Defense: Compressed stop to ₹${targetStop.toFixed(2)} (Entry - 0.75 ATR) to eliminate overnight gap catastrophe.`;
+    reason = `Late-Day Loss Defense: Compressed stop to ₹${targetStop.toFixed(2)} (Entry - 0.40 ATR) to eliminate overnight gap catastrophe.`;
   }
 
   const alignedStop = +(Math.round(targetStop / tickSize) * tickSize).toFixed(2);
