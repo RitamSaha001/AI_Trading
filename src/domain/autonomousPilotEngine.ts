@@ -850,9 +850,14 @@ export function tickAutonomousPilot(
     };
 
     // Cooldown & pending order check
-    if (pendingBuyAssets.has(asset) || fleetStatus.state === 'COOLDOWN') {
+    // Also skip if the server-side risk gate recently rejected a BUY for this asset (THROTTLED log).
+    // This prevents redundant strategy computation and the 10s retry spam loop.
+    const recentBuyReject = state.autonomousPilot?.actionLogs?.find(
+      (l) => l.asset === asset && l.action === 'THROTTLED' && l.status === 'BLOCKED' && now - l.timestamp < 15 * 60 * 1000
+    );
+    if (pendingBuyAssets.has(asset) || fleetStatus.state === 'COOLDOWN' || recentBuyReject) {
       const cooldownElapsed = now - (fleetStatus.lastActionAt || 0);
-      if (fleetStatus.state === 'COOLDOWN' && cooldownElapsed > 180000) {
+      if (fleetStatus.state === 'COOLDOWN' && cooldownElapsed > 180000 && !recentBuyReject) {
         fleetStatus.state = 'MONITORING';
       } else {
         updatedFleet[asset] = {
@@ -1074,10 +1079,21 @@ export function tickAutonomousPilot(
     }
 
     // Check cash liquidity constraint: must preserve mandatory cash reserve floor
+    // Also suppress re-attempts if the server-side risk gate recently rejected a BUY for this
+    // asset (action === 'THROTTLED' written by the worker on ORDER_REJECTED). This prevents
+    // the 10-second retry spam loop when available cash is insufficient per the ledger.
+    const CASH_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+    const recentServerReject = state.autonomousPilot?.actionLogs?.find(
+      (l) => l.asset === asset && l.action === 'THROTTLED' && l.status === 'BLOCKED' && now - l.timestamp < CASH_COOLDOWN_MS
+    );
+    if (recentServerReject) {
+      continue; // Server already rejected a BUY for this asset recently — wait out the cooldown
+    }
+
     const requiredOrderCash = unitsToBuy * limitPrice;
     if (requiredOrderCash > allocatableCash || allocatableCash <= 0) {
       const recentCashSkip = state.autonomousPilot?.actionLogs?.find(
-        (l) => l.asset === asset && l.action === 'SKIPPED' && now - l.timestamp < 300_000
+        (l) => l.asset === asset && (l.action === 'SKIPPED' || l.action === 'THROTTLED') && now - l.timestamp < CASH_COOLDOWN_MS
       );
       if (!recentCashSkip) {
         newActionLogs.push({
