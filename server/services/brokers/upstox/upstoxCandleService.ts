@@ -58,7 +58,9 @@ export class UpstoxCandleService {
       return cached.candles;
     }
 
-    return this.generateFallbackCandles(inst.lastPrice || 1000, timeframe);
+    const fallback = this.generateFallbackCandles(inst.lastPrice || 1000, timeframe);
+    this.cache.set(cacheKey, { timestamp: now, candles: fallback });
+    return fallback;
   }
 
   /**

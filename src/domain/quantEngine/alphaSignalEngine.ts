@@ -133,6 +133,9 @@ export const ASSET_SECTOR_MAP: Record<string, string> = {
   BHARTIARTL: 'Telecom',
   HAL: 'Defence',
   BEL: 'Defence',
+  NTPC: 'Power',
+  TATASTEEL: 'Metals',
+  SUNPHARMA: 'Pharma',
 };
 
 // Maximum permitted portfolio allocation per single sector

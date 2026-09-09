@@ -167,7 +167,7 @@ describe('Autonomous Local Quant Pilot Engine', () => {
   });
 
   describe('Multi-Asset Fleet Orchestration & Zero Gemini Engine', () => {
-    it('monitors all 12 institutional Indian bluechip assets', () => {
+    it('monitors all 15 institutional Indian bluechip assets', () => {
       const expectedAssets = [
         'RELIANCE',
         'TCS',
@@ -181,14 +181,17 @@ describe('Autonomous Local Quant Pilot Engine', () => {
         'TATAMOTORS',
         'HAL',
         'BEL',
+        'NTPC',
+        'TATASTEEL',
+        'SUNPHARMA',
       ];
       expect(UPSTOX_FLEET_ASSETS).toEqual(expectedAssets);
-      expect(UPSTOX_FLEET_ASSETS).toHaveLength(12);
+      expect(UPSTOX_FLEET_ASSETS).toHaveLength(15);
     });
 
     it('initializes fleet telemetry with default monitoring state', () => {
       const fleet = initializeFleetStatus();
-      expect(Object.keys(fleet)).toHaveLength(12);
+      expect(Object.keys(fleet)).toHaveLength(15);
       for (const asset of UPSTOX_FLEET_ASSETS) {
         expect(fleet[asset]).toBeDefined();
         expect(fleet[asset].state).toBe('MONITORING');

@@ -112,6 +112,11 @@ export const NSE_SECTORS: Record<string, SectorInfo> = {
     color: '#991b1b', // Red-800
     iconBg: 'bg-red-800/10 text-red-800',
   },
+  'Metals & Mining': {
+    name: 'Metals & Mining',
+    color: '#1e40af', // Blue-800
+    iconBg: 'bg-blue-800/10 text-blue-800',
+  },
 };
 
 export const ASSET_SECTOR_MAP: Record<string, string> = {
@@ -137,6 +142,7 @@ export const ASSET_SECTOR_MAP: Record<string, string> = {
   NTPC: 'Power & Utilities',
   HAL: 'Defence & Aerospace',
   BEL: 'Defence & Aerospace',
+  TATASTEEL: 'Metals & Mining',
 };
 
 // ---------------------------------------------------------------------------

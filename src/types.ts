@@ -2,7 +2,7 @@ export const INDIAN_ASSETS = [
   'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL',
   'ITC', 'KOTAKBANK', 'LT', 'TATAMOTORS', 'AXISBANK', 'MARUTI', 'SUNPHARMA',
   'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC',
-  'HAL', 'BEL',
+  'HAL', 'BEL', 'TATASTEEL',
 ] as const;
 export type IndianAsset = typeof INDIAN_ASSETS[number];
 

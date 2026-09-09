@@ -922,7 +922,7 @@ export function buildServer(): FastifyInstance {
     const defaultSymbols = [
       'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL',
       'ITC', 'KOTAKBANK', 'LT', 'TATAMOTORS', 'AXISBANK', 'MARUTI', 'SUNPHARMA',
-      'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC', 'HAL', 'BEL'
+      'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC', 'HAL', 'BEL', 'TATASTEEL'
     ];
     const requestedSymbols = symbolsParam
       ? symbolsParam.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean)
@@ -992,7 +992,8 @@ export function buildServer(): FastifyInstance {
     const timeframe = (query.timeframe as string || '1D').toUpperCase().trim();
     const defaultSymbols = [
       'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK',
-      'SBIN', 'BHARTIARTL', 'ITC', 'LT', 'TATAMOTORS', 'HAL', 'BEL'
+      'SBIN', 'BHARTIARTL', 'ITC', 'LT', 'TATAMOTORS', 'HAL', 'BEL',
+      'NTPC', 'TATASTEEL', 'SUNPHARMA'
     ];
     const symbols = symbolsParam
       ? symbolsParam.split(',').map((s: string) => s.trim()).filter(Boolean)

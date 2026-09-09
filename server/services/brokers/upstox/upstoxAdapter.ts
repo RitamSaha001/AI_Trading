@@ -1606,6 +1606,34 @@ export class UpstoxAdapter implements BrokerGateway {
         }
       } catch (err: any) {
         logger.warn(`[UpstoxAdapter] Batch quote fetch failed: ${err.message}`);
+        if (
+          err?.code === 'RATE_LIMITED' ||
+          err?.message?.includes('Too Many Request') ||
+          err?.message?.includes('429')
+        ) {
+          for (const sym of symbols) {
+            if (!result[sym]) {
+              const inst = this.instrumentProvider.getInstrument(sym);
+              const estPrice = this.instrumentProvider.getEstimatedPrice(sym) || 100;
+              result[sym] = {
+                symbol: sym,
+                instrumentKey: inst?.instrumentKey || `NSE_EQ|${sym}`,
+                bidPrice: estPrice,
+                bidQty: 10,
+                askPrice: estPrice,
+                askQty: 10,
+                lastPrice: estPrice,
+                price: estPrice,
+                lastQty: 1,
+                quoteTime: Date.now(),
+                isAuthoritative: false,
+                isSynthetic: true,
+                source: 'SIMULATED_ESTIMATE',
+              };
+            }
+          }
+          return result;
+        }
       }
     }
 

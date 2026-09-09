@@ -3,8 +3,8 @@ import { INDIAN_ASSETS } from '../types';
 import { ASSET_SECTOR_MAP, NSE_SECTORS } from './UpstoxPortfolioAnalytics';
 
 describe('UpstoxPortfolioAnalytics Sector & Mathematical Logic', () => {
-  it('maps all 22 Indian Assets to valid NSE Sectors with designated color schemes', () => {
-    expect(INDIAN_ASSETS.length).toBe(22);
+  it('maps all 23 Indian Assets to valid NSE Sectors with designated color schemes', () => {
+    expect(INDIAN_ASSETS.length).toBe(23);
 
     for (const asset of INDIAN_ASSETS) {
       const sector = ASSET_SECTOR_MAP[asset];

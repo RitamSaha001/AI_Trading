@@ -89,9 +89,9 @@ export class AutonomousPilotWorker {
   }
 
   /**
-   * Starts the periodic 5-second autonomous execution daemon.
+   * Starts the periodic 10-second autonomous execution daemon.
    */
-  public static startScheduler(intervalMs: number = 5000): void {
+  public static startScheduler(intervalMs: number = 10000): void {
     if (this.schedulerTimer) return;
     logger.info(`[AutonomousPilotWorker] Starting autonomous pilot daemon (interval: ${intervalMs}ms)`);
     this.schedulerTimer = setInterval(async () => {
