@@ -78,8 +78,8 @@ export const SESSION_MIDDAY_END_MIN = 13 * 60 + 15;
 export const SESSION_INTRADAY_ENTRY_CURFEW_MIN = 14 * 60;
 /** Late-Day Liquidation & Unwinding Window Start (14:15 IST) */
 export const SESSION_LATE_DAY_LIQUIDATION_START_MIN = 14 * 60 + 15;
-/** Intraday Hard Cutoff for MIS auto-square-off (15:15 IST) */
-export const SESSION_INTRADAY_CUTOFF_MIN = 15 * 60 + 15;
+/** Intraday Hard Cutoff for MIS auto-square-off (15:05 IST - safely before broker RMS penalty window) */
+export const SESSION_INTRADAY_CUTOFF_MIN = 15 * 60 + 5;
 /** Official Market Close (15:30 IST) */
 export const SESSION_CLOSE_MIN = 15 * 60 + 30;
 
@@ -97,10 +97,10 @@ export const MIDDAY_CONVICTION_DELTA = 6;
 /** Minimum volume surge multiplier required to justify midday breakout */
 export const MIDDAY_MIN_VOLUME_SURGE = 1.35;
 
-/** Late-day trailing stop compression buffer for profitable trades (HWM - 0.5 ATR) */
-export const LATE_DAY_PROFIT_STOP_COMPRESSION_ATR = 0.50;
-/** Late-day stop compression ceiling for flat/underwater trades (Entry - 0.75 ATR) */
-export const LATE_DAY_LOSS_STOP_COMPRESSION_ATR = 0.75;
+/** Late-day trailing stop compression buffer for profitable trades (HWM - 0.35 ATR to lock gains) */
+export const LATE_DAY_PROFIT_STOP_COMPRESSION_ATR = 0.35;
+/** Late-day stop compression ceiling for flat/underwater trades (Entry - 0.40 ATR to cut slight loss early) */
+export const LATE_DAY_LOSS_STOP_COMPRESSION_ATR = 0.40;
 
 // ============================================================================
 // SCENARIO 6: Volatility Shock & Flash Gap Dampener

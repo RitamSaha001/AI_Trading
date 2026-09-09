@@ -592,12 +592,15 @@ export class UpstoxAdapter implements BrokerGateway {
       upstoxOrderType = 'LIMIT';
     }
 
-    const triggerPriceNum =
+    const rawTrigger =
       order.triggerPrice !== undefined && order.triggerPrice !== null && !isNaN(Number(order.triggerPrice))
         ? Number(order.triggerPrice)
         : (order as any).stopPrice !== undefined && (order as any).stopPrice !== null && !isNaN(Number((order as any).stopPrice))
         ? Number((order as any).stopPrice)
         : 0;
+    // Strict 0.05 NSE equity tick size alignment to guarantee no venue rejection
+    const triggerPriceNum = rawTrigger > 0 ? Math.round(rawTrigger * 20) / 20 : 0;
+    const alignedPrice = upstoxOrderType === 'MARKET' ? 0 : Math.round(price * 20) / 20;
     const disclosedQtyNum = order.disclosedQuantity ? Number(order.disclosedQuantity) : undefined;
 
     // Record order placement for SEBI OTR compliance
@@ -611,7 +614,7 @@ export class UpstoxAdapter implements BrokerGateway {
       quantity: Number(order.quantity),
       product,
       validity,
-      price: upstoxOrderType === 'MARKET' ? 0 : price,
+      price: alignedPrice,
       tag: strategyTag,
       instrument_token: instrument.instrumentKey,
       order_type: upstoxOrderType,

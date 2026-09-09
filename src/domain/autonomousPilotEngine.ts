@@ -525,11 +525,11 @@ export function tickAutonomousPilot(
       });
     }
 
-    // 15:15 IST Intraday Session Square-Off (MIS Mandatory Rule)
-    // All intraday MIS positions MUST be closed before market close (15:30) to prevent overnight delivery risk
-    // and eliminate broker auto-square-off penalty charges (₹50 + GST).
-    // Note: CNC delivery holdings do NOT face broker auto-square-off penalties and settle overnight.
-    if (!isDeliveryHolding && timingQuality.isSessionCutoffPhase && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    // 15:05 IST Intraday Session Square-Off (MIS Mandatory Rule)
+    // All intraday MIS positions MUST be closed before 15:10 IST to eliminate overnight gap risk
+    // and completely avoid Upstox RMS forced auto-square-off penalty charges (₹50 + GST).
+    // Priority exit: Never throttled by rate-limit allowances.
+    if (!isDeliveryHolding && timingQuality.isSessionCutoffPhase) {
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -537,8 +537,8 @@ export function tickAutonomousPilot(
         price: alignToTickSize(price, asset),
         type: 'market',
         product: 'MIS',
-        strategyName: `Auto-Pilot: 15:15 MIS Auto Square-Off`,
-        reason: `15:15 IST intraday cutoff reached. Closing ${currentHolding} shares of ${asset} @ market to eliminate overnight gap risk.`,
+        strategyName: `Auto-Pilot: 15:05 MIS Auto Square-Off`,
+        reason: `15:05 IST intraday cutoff reached. Closing ${currentHolding} shares of ${asset} @ market to eliminate overnight gap risk and avoid broker penalty.`,
       });
 
       rateLimits.requestsThisMinute++;
@@ -552,7 +552,7 @@ export function tickAutonomousPilot(
         asset,
         action: 'SESSION_CLOSE' as any,
         strategy,
-        detail: `15:15 IST Session Cutoff: Auto squared-off ${currentHolding} shares of ${asset} @ ₹${price.toFixed(2)}. Zero overnight exposure.`,
+        detail: `15:05 IST Session Cutoff: Auto squared-off ${currentHolding} shares of ${asset} @ ₹${price.toFixed(2)}. Zero overnight exposure.`,
         price,
         status: 'EXECUTED',
       });
@@ -740,8 +740,8 @@ export function tickAutonomousPilot(
         status: 'EXECUTED',
       });
     }
-    // Capital Defense Stop Loss Triggered
-    else if (price <= currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    // Capital Defense Stop Loss Triggered - Priority Exit (Never throttled by rate limit allowances)
+    else if (price <= currentStop) {
       ordersToDispatch.push({
         asset,
         side: 'sell',

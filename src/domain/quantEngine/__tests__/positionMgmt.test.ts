@@ -86,7 +86,7 @@ describe('Phase 4: Defensive Position Management & Scenario Gates', () => {
       return new Date(Date.UTC(2026, 8, 7, hours - 5, minutes - 30, 0)).getTime();
     }
 
-    it('compresses trailing stop on profitable positions to HWM - 0.5 ATR at 14:30 IST', () => {
+    it('compresses trailing stop on profitable positions to HWM - 0.35 ATR at 14:30 IST', () => {
       const entry = 2200;
       const current = 2220;
       const hwm = 2230;
@@ -96,12 +96,12 @@ describe('Phase 4: Defensive Position Management & Scenario Gates', () => {
 
       const res = lateDayStopCompression(entry, current, atr, hwm, initialStop, t1430);
       expect(res.isCompressed).toBe(true);
-      // HWM 2230 - 0.5 * 10 = 2225
-      expect(res.compressedStopPrice).toBe(2225);
+      // HWM 2230 - 0.35 * 10 = 2226.50
+      expect(res.compressedStopPrice).toBe(2226.5);
       expect(res.reason).toContain('Late-Day Profit Shield');
     });
 
-    it('compresses stop on underwater positions to Entry - 0.75 ATR at 14:45 IST', () => {
+    it('compresses stop on underwater positions to Entry - 0.40 ATR at 14:45 IST', () => {
       const entry = 2200;
       const current = 2195;
       const hwm = 2202;
@@ -111,8 +111,8 @@ describe('Phase 4: Defensive Position Management & Scenario Gates', () => {
 
       const res = lateDayStopCompression(entry, current, atr, hwm, initialStop, t1445);
       expect(res.isCompressed).toBe(true);
-      // Entry 2200 - 0.75 * 10 = 2192.50
-      expect(res.compressedStopPrice).toBe(2192.5);
+      // Entry 2200 - 0.40 * 10 = 2196.00
+      expect(res.compressedStopPrice).toBe(2196);
       expect(res.reason).toContain('Late-Day Loss Defense');
     });
 

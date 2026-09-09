@@ -54,15 +54,17 @@ export class IntradaySquareOffService {
   }
 
   /**
-   * Determines if the 15:15 IST auto-squareoff window is reached.
+   * Determines if the 15:05 IST auto-squareoff window is reached.
+   * Executes early (15:05 IST) to guarantee all MIS positions are gracefully closed before
+   * Upstox RMS forced auto-liquidation (15:15-15:20 IST) with penalty fees (₹50+GST).
    */
   public static isSquareOffTime(date: Date = new Date()): boolean {
     const session = IndianMarketCalendar.getSession(date);
     if (session !== 'NORMAL') return false;
 
     const ist = IndianMarketCalendar.toIST(date);
-    // 15:15 IST = 915 minutes.
-    return ist.timeMinutes >= 915 && ist.timeMinutes < 930;
+    // 15:05 IST = 905 minutes (safely ahead of 15:15 IST broker penalty threshold).
+    return ist.timeMinutes >= 905 && ist.timeMinutes < 930;
   }
 
   /**
@@ -122,6 +124,10 @@ export class IntradaySquareOffService {
         for (const pos of positions) {
           const qty = Number(pos.quantity || 0);
           if (qty === 0) continue;
+
+          // Strictly filter for Intraday (MIS) products - NEVER touch Delivery (CNC / 'D') holdings
+          const isIntraday = pos.product === 'INTRADAY' || pos.product === 'I' || pos.product === 'MIS';
+          if (!isIntraday) continue;
 
           // Square off: if long (+qty), submit SELL; if short (-qty), submit BUY
           const side: 'BUY' | 'SELL' = qty > 0 ? 'SELL' : 'BUY';

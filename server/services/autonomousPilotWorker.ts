@@ -687,11 +687,19 @@ export class AutonomousPilotWorker {
             }
 
             // Process Orders to Dispatch (Full Autonomous Mode only)
-            if (row.execution_mode === 'full_autonomous' && tickResult.ordersToDispatch.length > 0 && !cbTripped) {
+            if (row.execution_mode === 'full_autonomous' && tickResult.ordersToDispatch.length > 0) {
               for (const prop of tickResult.ordersToDispatch) {
-                if (prop.asset && markets[prop.asset]?.isSynthetic) {
+                const isSell = prop.side.toLowerCase() === 'sell';
+
+                // If circuit breaker is tripped, allow SELL orders to preserve capital, but block new BUY entries
+                if (cbTripped && !isSell) {
+                  continue;
+                }
+
+                // If quotes are synthetic/fallback, pause new BUY entries, but never block SELL exits
+                if (!isSell && prop.asset && markets[prop.asset]?.isSynthetic) {
                   logger.warn(
-                    `[AutonomousPilotWorker] Skipping live order for ${prop.asset}: Authoritative market quote is synthetic/fallback.`
+                    `[AutonomousPilotWorker] Skipping live buy order for ${prop.asset}: Authoritative market quote is synthetic/fallback.`
                   );
                   continue;
                 }
