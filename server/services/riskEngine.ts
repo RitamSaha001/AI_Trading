@@ -416,7 +416,10 @@ export class ServerRiskEngine {
     if (req.accountMode !== 'paper') {
       if (assetClass === 'EQUITY') {
         const isIntraday = req.product === 'I' || req.product === 'MIS' || req.product === 'INTRADAY';
-        const isDelivery = !isIntraday && (req.product === 'D' || req.product === 'CNC' || !req.product || req.product === 'DELIVERY');
+        // Only explicitly flagged D/CNC/DELIVERY orders require holdings coverage.
+        // Unknown/undefined product on a SELL must NOT default to delivery — intraday
+        // stop-loss exits may omit the product field and must not be blocked as naked shorts.
+        const isDelivery = !isIntraday && (req.product === 'D' || req.product === 'CNC' || req.product === 'DELIVERY');
         if (req.side === 'SELL' && isDelivery && !req.skipHoldingsCheck) {
           // SEBI compliance: Retail delivery sales must be covered by pre-existing holdings
           if (currentAssetHoldingDec.lt(qtyDec)) {
