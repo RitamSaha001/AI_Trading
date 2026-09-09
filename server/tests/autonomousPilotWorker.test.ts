@@ -33,7 +33,7 @@ describe('Autonomous Quant Pilot Server Daemon & Dual-Mode Integration Suite', (
       expect(state.riskPerTradePct).toBe(0.75);
       expect(state.circuitBreakerTripped).toBe(false);
       expect(state.executionModeStatus).toBe('CLOUD_HEADLESS');
-      expect(Object.keys(state.activeFleet).length).toBe(10);
+      expect(Object.keys(state.activeFleet).length).toBe(12);
     });
 
     it('2. updates user configuration deterministically and adjusts profile risk', async () => {

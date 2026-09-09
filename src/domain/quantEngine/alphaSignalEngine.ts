@@ -131,6 +131,8 @@ export const ASSET_SECTOR_MAP: Record<string, string> = {
   LT: 'Infrastructure',
   ITC: 'FMCG',
   BHARTIARTL: 'Telecom',
+  HAL: 'Defence',
+  BEL: 'Defence',
 };
 
 // Maximum permitted portfolio allocation per single sector

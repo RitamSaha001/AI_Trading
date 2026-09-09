@@ -45,6 +45,8 @@ export const UPSTOX_FLEET_ASSETS: Asset[] = [
   'LT',
   'ITC',
   'TATAMOTORS',
+  'HAL',
+  'BEL',
 ];
 
 // Upstox API Rate Limit Constants (Conservative Pacing)

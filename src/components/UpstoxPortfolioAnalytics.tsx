@@ -107,6 +107,11 @@ export const NSE_SECTORS: Record<string, SectorInfo> = {
     color: '#64748b', // Slate
     iconBg: 'bg-slate-500/10 text-slate-600',
   },
+  'Defence & Aerospace': {
+    name: 'Defence & Aerospace',
+    color: '#991b1b', // Red-800
+    iconBg: 'bg-red-800/10 text-red-800',
+  },
 };
 
 export const ASSET_SECTOR_MAP: Record<string, string> = {
@@ -130,6 +135,8 @@ export const ASSET_SECTOR_MAP: Record<string, string> = {
   TITAN: 'Consumer Discretionary',
   BAJFINANCE: 'NBFC & Financial Services',
   NTPC: 'Power & Utilities',
+  HAL: 'Defence & Aerospace',
+  BEL: 'Defence & Aerospace',
 };
 
 // ---------------------------------------------------------------------------
