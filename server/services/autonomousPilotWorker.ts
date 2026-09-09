@@ -77,6 +77,8 @@ export class AutonomousPilotWorker {
     this.mockSession = session;
   }
 
+  private static rateLimitCooldownUntil: number = 0;
+
   /**
    * For unit testing: overrides current timestamp.
    */
@@ -345,6 +347,20 @@ export class AutonomousPilotWorker {
     let ordersDispatched = 0;
     let ordersCancelled = 0;
 
+    if (now < this.rateLimitCooldownUntil) {
+      logger.debug(
+        `[AutonomousPilotWorker] Upstox rate limit cooldown active (${Math.ceil((this.rateLimitCooldownUntil - now) / 1000)}s remaining). Skipping sweep.`
+      );
+      return {
+        runId,
+        usersProcessed: 0,
+        ordersDispatched: 0,
+        ordersCancelled: 0,
+        durationMs: 0,
+        errors: [],
+      };
+    }
+
     const lockResult = await DistributedLockService.withLock(
       'worker:autonomous_pilot',
       12_000,
@@ -400,6 +416,12 @@ export class AutonomousPilotWorker {
             const accessToken = creds?.accessToken;
 
             const quotesBatch = await upstoxAdapter.getMarketQuotesBatch(UPSTOX_FLEET_ASSETS, userId, accessToken);
+            if (Object.values(quotesBatch).some((q) => q.isSynthetic)) {
+              AutonomousPilotWorker.rateLimitCooldownUntil = now + 60_000;
+              logger.warn(
+                `[AutonomousPilotWorker] Batch quotes contained synthetic/fallback data (rate-limited). Initiating 60s cooldown.`
+              );
+            }
             const markets: Partial<Record<Asset, Market>> = {};
             await Promise.all(
               UPSTOX_FLEET_ASSETS.map(async (asset) => {
@@ -667,6 +689,12 @@ export class AutonomousPilotWorker {
             // Process Orders to Dispatch (Full Autonomous Mode only)
             if (row.execution_mode === 'full_autonomous' && tickResult.ordersToDispatch.length > 0 && !cbTripped) {
               for (const prop of tickResult.ordersToDispatch) {
+                if (prop.asset && markets[prop.asset]?.isSynthetic) {
+                  logger.warn(
+                    `[AutonomousPilotWorker] Skipping live order for ${prop.asset}: Authoritative market quote is synthetic/fallback.`
+                  );
+                  continue;
+                }
                 try {
                   const clientOrderId = `lm_pilot_${now}_${crypto.randomBytes(4).toString('hex')}`;
                   logger.info(
