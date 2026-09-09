@@ -415,7 +415,8 @@ export class ServerRiskEngine {
     // Pre-trade cash, margin, and holdings validations for live accounts
     if (req.accountMode !== 'paper') {
       if (assetClass === 'EQUITY') {
-        const isDelivery = req.product === 'D' || req.product === 'CNC' || !req.product || req.product === 'DELIVERY';
+        const isIntraday = req.product === 'I' || req.product === 'MIS' || req.product === 'INTRADAY';
+        const isDelivery = !isIntraday && (req.product === 'D' || req.product === 'CNC' || !req.product || req.product === 'DELIVERY');
         if (req.side === 'SELL' && isDelivery && !req.skipHoldingsCheck) {
           // SEBI compliance: Retail delivery sales must be covered by pre-existing holdings
           if (currentAssetHoldingDec.lt(qtyDec)) {
