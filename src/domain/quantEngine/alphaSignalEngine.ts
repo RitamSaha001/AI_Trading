@@ -35,10 +35,10 @@ export function calculateRoundtripFriction(
 
   // Upstox brokerage per executed order
   const buyBrokerage = isDelivery
-    ? Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * 0.025)
+    ? thresholds.BROKERAGE_FLAT_INR
     : Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * thresholds.BROKERAGE_PCT);
   const sellBrokerage = isDelivery
-    ? Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * 0.025)
+    ? thresholds.BROKERAGE_FLAT_INR
     : Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * thresholds.BROKERAGE_PCT);
   const brokerage = +(buyBrokerage + sellBrokerage).toFixed(2);
 
@@ -90,6 +90,19 @@ export function passesFrictionHurdle(
 ): boolean {
   if (expectedGrossProfit <= 0 || totalRoundtripFriction <= 0) return false;
   return expectedGrossProfit >= multiple * totalRoundtripFriction;
+}
+
+/**
+ * Validates that realistic near-term gain (capped at 1.25 ATR) clears all roundtrip
+ * friction with at least the statutory minimum net rupee profit floor.
+ */
+export function passesNetProfitFloor(
+  realisticGrossProfit: number,
+  totalRoundtripFriction: number,
+  minNetProfitFloor: number = thresholds.MIN_NET_PROFIT_FLOOR_INR
+): boolean {
+  if (realisticGrossProfit <= 0 || totalRoundtripFriction <= 0) return false;
+  return (realisticGrossProfit - totalRoundtripFriction) >= minNetProfitFloor;
 }
 
 export interface TTMSqueezeResult {
@@ -629,9 +642,13 @@ export function calculateDynamicProfitRatchet(
       stageName = 'STEPPED_BREAKEVEN';
     }
   }
-  // Level 0.5: Fee-Breakeven Micro-Shield (+0.30 ATR) -> Stop to Entry + Net Friction + 1 tick
+  // Level 0.5: Fee-Breakeven Micro-Shield (+0.30 ATR) -> Stop to Entry + Net Friction + Net Gain Armor
   else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_0_5_ATR) {
-    if (currentPrice > feeBreakeven) {
+    const feeArmorStop = entryPrice + roundtripFrictionPerShare + tickSize + (roundtripFrictionPerShare > 0 ? thresholds.FEE_ARMOR_NET_GAIN_PER_SHARE : 0);
+    if (currentPrice > feeArmorStop) {
+      ratchetedStop = Math.max(ratchetedStop, feeArmorStop);
+      stageName = 'FEE_BREAKEVEN_SHIELD';
+    } else if (currentPrice > feeBreakeven) {
       ratchetedStop = Math.max(ratchetedStop, feeBreakeven);
       stageName = 'FEE_BREAKEVEN_SHIELD';
     }
@@ -1130,3 +1147,215 @@ export function calculateSmartLimitPrice(
   return Math.min(currentPrice, aligned > 0 ? aligned : currentPrice);
 }
 
+export type MarketRegimeScenario = 'A_EXPANSION' | 'B_BREAKOUT' | 'C_CHOP' | 'D_VOL_SHOCK';
+
+/**
+ * Classifies an asset into one of 4 systematic market regimes:
+ * - Scenario A: High-Momentum Expansion (Trending)
+ * - Scenario B: Squeeze Breakout / Release
+ * - Scenario C: Choppy / Sideways / Random Walk (No Edge)
+ * - Scenario D: Volatility Shock / Gap Trap (Extreme Risk)
+ */
+export function classifyRegimeScenario(
+  price: number,
+  atr: number,
+  hurst: number,
+  squeezeStatus: 'SQUEEZE_ON' | 'SQUEEZE_OFF' | 'NO_SQUEEZE',
+  volumeSurgeRatio: number,
+  rsi: number = 50
+): MarketRegimeScenario {
+  // Scenario D: Volatility Shock / Gap Trap (ATR > 4.5% or extreme RSI)
+  if (atr / price > 0.045 || rsi >= 75 || rsi <= 25) {
+    return 'D_VOL_SHOCK';
+  }
+  // Scenario A: High-Momentum Persistent Trend
+  if (hurst > 0.55 && volumeSurgeRatio >= 1.25) {
+    return 'A_EXPANSION';
+  }
+  // Scenario B: Squeeze Release Momentum
+  if (squeezeStatus === 'SQUEEZE_OFF' && hurst > 0.50) {
+    return 'B_BREAKOUT';
+  }
+  // Scenario C: Choppy / Sideways / Anti-Persistent
+  if (hurst <= 0.52 && volumeSurgeRatio < 1.15 && squeezeStatus !== 'SQUEEZE_OFF') {
+    return 'C_CHOP';
+  }
+  return 'A_EXPANSION';
+}
+
+export interface CandidateForAllocation {
+  asset: Asset;
+  price: number;
+  atr: number;
+  sector: string;
+  convictionScore: number;
+  hurst: number;
+  squeezeStatus: 'SQUEEZE_ON' | 'SQUEEZE_OFF' | 'NO_SQUEEZE';
+  volumeSurgeRatio: number;
+  realisticGrossProfit: number;
+  roundtripFriction: number;
+  realisticNetProfit: number;
+  history?: number[];
+  regimeScenario?: MarketRegimeScenario;
+}
+
+export type DynamicAllocationMode = 'STAND_ASIDE' | 'MODE_40_1' | 'MODE_35_2';
+
+export interface DynamicAllocationDecision {
+  mode: DynamicAllocationMode;
+  selectedCandidates: CandidateForAllocation[];
+  maxPositions: number;
+  assetAllocationPct: number;
+  cashBufferPct: number;
+  rationale: string;
+  stepTriggered: number;
+}
+
+/**
+ * Executes the 7-Step Sequential Decision Engine for conditions-based mode switching:
+ * Step 1: Regime classifier says Scenario C (choppy) or D (vol shock) -> Stand aside (0 positions)
+ * Step 2: Fewer than 2 candidate signals clear MIN_NET_PROFIT_FLOOR (₹120) -> Force 40-1
+ * Step 3 & 4: Is signal #2's conviction score >= 85% of signal #1's? If no -> Force 40-1
+ * Step 5: Are #1 and #2 in different sectors (or rolling correlation < 0.50)? If no -> Force 40-1
+ * Step 6: Does signal #2 clear elevated floor (1.5x = ₹180)? If no -> Force 40-1
+ * Post-Loss Dampener: If dayHasLoss is true -> Force 40-1
+ * Step 7: All pass -> Mode 35-2 activates (35% per asset, 2 positions, 30% cash buffer)
+ */
+export function evaluateAllocationModeSwitch(
+  candidates: CandidateForAllocation[],
+  dayHasLoss: boolean = false
+): DynamicAllocationDecision {
+  if (!candidates || candidates.length === 0) {
+    return {
+      mode: 'STAND_ASIDE',
+      selectedCandidates: [],
+      maxPositions: 0,
+      assetAllocationPct: 0,
+      cashBufferPct: 100,
+      rationale: 'Zero candidate setups available.',
+      stepTriggered: 1,
+    };
+  }
+
+  // Sort candidates descending by conviction score
+  const sorted = [...candidates].sort((a, b) => b.convictionScore - a.convictionScore);
+
+  // Step 1: Check regime scenario on top candidate
+  const topCandidate = sorted[0];
+  if (topCandidate.regimeScenario === 'C_CHOP' || topCandidate.regimeScenario === 'D_VOL_SHOCK') {
+    return {
+      mode: 'STAND_ASIDE',
+      selectedCandidates: [],
+      maxPositions: 0,
+      assetAllocationPct: 0,
+      cashBufferPct: 100,
+      rationale: `Step 1: Top candidate ${topCandidate.asset} is in ${topCandidate.regimeScenario === 'C_CHOP' ? 'Scenario C (Choppy/Sideways)' : 'Scenario D (Volatility Shock)'}. Zero edge; standing aside in cash to avoid fee bleed.`,
+      stepTriggered: 1,
+    };
+  }
+
+  // Step 2: Candidates clearing base MIN_NET_PROFIT_FLOOR (₹120.0)
+  const qualifying = sorted.filter(
+    (c) =>
+      c.realisticNetProfit >= thresholds.MIN_NET_PROFIT_FLOOR_INR &&
+      c.regimeScenario !== 'C_CHOP' &&
+      c.regimeScenario !== 'D_VOL_SHOCK'
+  );
+
+  if (qualifying.length === 0) {
+    return {
+      mode: 'STAND_ASIDE',
+      selectedCandidates: [],
+      maxPositions: 0,
+      assetAllocationPct: 0,
+      cashBufferPct: 100,
+      rationale: 'Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash.',
+      stepTriggered: 2,
+    };
+  }
+
+  if (qualifying.length < 2) {
+    return {
+      mode: 'MODE_40_1',
+      selectedCandidates: [qualifying[0]],
+      maxPositions: 1,
+      assetAllocationPct: thresholds.MODE_40_1_ASSET_ALLOCATION_PCT,
+      cashBufferPct: 60,
+      rationale: 'Step 2: Fewer than 2 candidate signals clear MIN_NET_PROFIT_FLOOR (₹120.00). Only one qualifying idea exists; forcing Mode 40-1.',
+      stepTriggered: 2,
+    };
+  }
+
+  const cand1 = qualifying[0];
+  const cand2 = qualifying[1];
+
+  // Step 4: Conviction Gap (Score #2 >= 85% of #1)
+  const convictionRatio = cand1.convictionScore > 0 ? cand2.convictionScore / cand1.convictionScore : 0;
+  if (convictionRatio < thresholds.CONVICTION_RATIO_MIN) {
+    return {
+      mode: 'MODE_40_1',
+      selectedCandidates: [cand1],
+      maxPositions: 1,
+      assetAllocationPct: thresholds.MODE_40_1_ASSET_ALLOCATION_PCT,
+      cashBufferPct: 60,
+      rationale: `Step 4: Candidate #2 (${cand2.asset}) conviction score (${cand2.convictionScore}) is ${(convictionRatio * 100).toFixed(1)}% of #1 (${cand1.asset}: ${cand1.convictionScore}), below 85% threshold. Second idea not strong enough; forcing Mode 40-1.`,
+      stepTriggered: 4,
+    };
+  }
+
+  // Step 5: Uncorrelated Sectors (Different sectors AND rolling correlation < 0.50)
+  const isSameSector = cand1.sector === cand2.sector;
+  let correlation = 0;
+  if (cand1.history && cand2.history && cand1.history.length >= 10 && cand2.history.length >= 10) {
+    correlation = calculateCorrelation(cand1.history, cand2.history);
+  }
+
+  if (isSameSector || correlation >= thresholds.MAX_PAIRWISE_CORRELATION_MODE_B) {
+    return {
+      mode: 'MODE_40_1',
+      selectedCandidates: [cand1],
+      maxPositions: 1,
+      assetAllocationPct: thresholds.MODE_40_1_ASSET_ALLOCATION_PCT,
+      cashBufferPct: 60,
+      rationale: `Step 5: Candidates #1 and #2 ${isSameSector ? `share the same sector (${cand1.sector})` : `have high pairwise correlation (${(correlation * 100).toFixed(0)}% >= 50%)`}. Forcing Mode 40-1 to avoid paying double fees for correlated risk.`,
+      stepTriggered: 5,
+    };
+  }
+
+  // Step 6: Elevated Profit Floor for #2 (>= ₹180.0)
+  if (cand2.realisticNetProfit < thresholds.ELEVATED_NET_PROFIT_FLOOR_INR) {
+    return {
+      mode: 'MODE_40_1',
+      selectedCandidates: [cand1],
+      maxPositions: 1,
+      assetAllocationPct: thresholds.MODE_40_1_ASSET_ALLOCATION_PCT,
+      cashBufferPct: 60,
+      rationale: `Step 6: Candidate #2 (${cand2.asset}) net expected profit (₹${cand2.realisticNetProfit.toFixed(2)}) is below the elevated safety floor (₹${thresholds.ELEVATED_NET_PROFIT_FLOOR_INR.toFixed(2)}). Forcing Mode 40-1.`,
+      stepTriggered: 6,
+    };
+  }
+
+  // Global Guardrail: Post-Loss Dampener
+  if (dayHasLoss) {
+    return {
+      mode: 'MODE_40_1',
+      selectedCandidates: [cand1],
+      maxPositions: 1,
+      assetAllocationPct: thresholds.MODE_40_1_ASSET_ALLOCATION_PCT,
+      cashBufferPct: 60,
+      rationale: 'Post-Loss Dampener: A trade was stopped out earlier today. Mode 35-2 is disabled to prevent opening a second position while the day is in the red. Forcing Mode 40-1.',
+      stepTriggered: 6,
+    };
+  }
+
+  // Step 7: All 4 Checks Pass -> Mode 35-2 Activates
+  return {
+    mode: 'MODE_35_2',
+    selectedCandidates: [cand1, cand2],
+    maxPositions: 2,
+    assetAllocationPct: thresholds.MODE_35_2_ASSET_ALLOCATION_PCT,
+    cashBufferPct: 30,
+    rationale: 'Step 7: All four conditions passed (>=2 qualifying ideas, conviction ratio >= 85%, uncorrelated sectors, elevated net profit >= ₹180). Activating dual-opportunity Mode 35-2 (35% each, 30% cash buffer).',
+    stepTriggered: 7,
+  };
+}

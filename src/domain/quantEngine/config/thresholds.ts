@@ -16,10 +16,16 @@ export const MIN_FRICTION_PROFIT_MULTIPLE = 3.0;
 
 /** Upstox flat brokerage cap per executed order (INR) */
 export const BROKERAGE_FLAT_INR = 20.0;
-/** Upstox variable brokerage percentage (0.05%) */
-export const BROKERAGE_PCT = 0.0005;
+/** Upstox equity-intraday brokerage percentage cap (0.10%, per executed order). */
+export const BROKERAGE_PCT = 0.001;
 /** Minimum order notional floor (INR) to prevent flat brokerage fee drag on small accounts */
 export const MIN_TRADE_NOTIONAL_INR = 12000.0;
+/** Minimum net expected profit floor (INR) after roundtrip brokerage and all statutory taxes */
+export const MIN_NET_PROFIT_FLOOR_INR = 120.0;
+/** Elevated net expected profit floor (INR) required for candidate #2 in dual-position Mode 35-2 (1.5x) */
+export const ELEVATED_NET_PROFIT_FLOOR_INR = 180.0;
+/** Guaranteed net cash buffer per share added to Stage 0.5 fee armor stop */
+export const FEE_ARMOR_NET_GAIN_PER_SHARE = 5.0;
 
 /** Securities Transaction Tax (STT) for delivery buy side (0.10%) */
 export const STT_DELIVERY_BUY_PCT = 0.001;
@@ -28,8 +34,8 @@ export const STT_DELIVERY_SELL_PCT = 0.001;
 /** Securities Transaction Tax (STT) for intraday equity sell side (0.025%) */
 export const STT_INTRADAY_SELL_PCT = 0.00025;
 
-/** NSE Exchange Transaction Charge (0.00297%) */
-export const EXCHANGE_TXN_CHARGE_PCT = 0.0000297;
+/** NSE equity transaction charge from 1 March 2026 (0.00307% per executed leg). */
+export const EXCHANGE_TXN_CHARGE_PCT = 0.0000307;
 /** SEBI Turnover Charge (₹10 per crore = 0.0001%) */
 export const SEBI_TURNOVER_CHARGE_PCT = 0.000001;
 
@@ -125,10 +131,24 @@ export const STAGNANT_TRADE_MAX_VOLUME_RATIO = 0.80;
 // ============================================================================
 // SCENARIO 8: Sector Exposure, Beta Gating & Correlation Gate
 // ============================================================================
-/** Maximum portfolio exposure permitted in any single economic sector (35.0%) */
-export const MAX_SECTOR_ALLOCATION_PCT = 35.0;
-/** Maximum portfolio exposure permitted in any single asset (35.0%) */
-export const MAX_SINGLE_ASSET_ALLOCATION_PCT = 35.0;
+/** Maximum portfolio exposure permitted in any single economic sector (50.0%) */
+export const MAX_SECTOR_ALLOCATION_PCT = 50.0;
+/** Maximum portfolio exposure permitted in any single asset in Mode 40-1 (40.0%) */
+export const MAX_SINGLE_ASSET_ALLOCATION_PCT = 40.0;
+/** Capital allocation fraction for single concentrated trade in Mode 40-1 (40.0%) */
+export const MODE_40_1_ASSET_ALLOCATION_PCT = 40.0;
+/** Capital allocation fraction per asset in dual-opportunity Mode 35-2 (35.0%) */
+export const MODE_35_2_ASSET_ALLOCATION_PCT = 35.0;
+/** Minimum relative conviction ratio (Score #2 / Score #1) required to activate Mode 35-2 (0.85) */
+export const CONVICTION_RATIO_MIN = 0.85;
+/** Maximum rolling pairwise correlation permitted between pick #1 and pick #2 in Mode 35-2 (0.50) */
+export const MAX_PAIRWISE_CORRELATION_MODE_B = 0.50;
+/** Maximum concurrent active intraday MIS positions permitted on accounts < ₹100k */
+export const MAX_CONCURRENT_MIS_POSITIONS = 2;
+/** Maximum number of new intraday MIS entries permitted per calendar day */
+export const MAX_DAILY_MIS_ENTRIES = 2;
+/** Minimum pause after a completed autonomous exit before the same symbol can re-enter. */
+export const EXIT_REENTRY_COOLDOWN_MS = 20 * 60 * 1000;
 /** Maximum rolling correlation permitted between an asset and existing portfolio (0.75) */
 export const MAX_PORTFOLIO_CORRELATION_THRESHOLD = 0.75;
 /** Lookback periods for calculating rolling asset correlation */
@@ -137,6 +157,8 @@ export const CORRELATION_LOOKBACK_BARS = 30;
 // ============================================================================
 // SCENARIO 9: Multi-Tranche Asymmetric Scaling & Chandelier Runner Exit
 // ============================================================================
+/** Trade notional ceiling below which multi-tranche partial exits are disabled in favor of unified single exit (INR) */
+export const UNIFIED_EXIT_NOTIONAL_CEILING = 35000.0;
 /** Fraction of position harvested at Tranche 1 (33%) */
 export const TRANCHE_1_HARVEST_FRACTION = 0.33;
 /** Fraction of remaining position harvested at Tranche 2 (50%) */

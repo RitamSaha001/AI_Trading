@@ -27,6 +27,10 @@ import {
   calculateSmartLimitPrice,
   calculateRoundtripFriction,
   passesFrictionHurdle,
+  passesNetProfitFloor,
+  classifyRegimeScenario,
+  evaluateAllocationModeSwitch,
+  CandidateForAllocation,
   lateDayStopCompression,
   deadTradeStagnancyExit,
   volatilityShockFreeze,
@@ -59,6 +63,27 @@ export const PILOT_RATE_LIMITS = {
   MAX_ORDERS_PER_MINUTE: 10,  // Max 10 orders per 60-second rolling window
   WINDOW_MS: 60000,
 };
+
+export function applyDrawdownSizing(units: number, sizingMultiplier: number): number {
+  if (!Number.isFinite(units) || units <= 0) return 0;
+  if (!Number.isFinite(sizingMultiplier) || sizingMultiplier <= 0) return 0;
+  return Math.floor(units * Math.min(1, sizingMultiplier));
+}
+
+const IST_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function isSameIstTradingDay(timestamp: number, now: number): boolean {
+  return IST_DATE_FORMATTER.format(timestamp) === IST_DATE_FORMATTER.format(now);
+}
+
+function getTodayPilotActionLogs(state: AppState, now: number): PilotActionLog[] {
+  return (state.autonomousPilot?.actionLogs || []).filter((log) => isSameIstTradingDay(log.timestamp, now));
+}
 
 export interface AutonomousPilotOrderProposal {
   asset: Asset;
@@ -441,6 +466,11 @@ export function tickAutonomousPilot(
       .filter((o) => (o.status === 'pending' || o.status === 'partially_filled') && o.side === 'buy' && !cancelledOrderIds.has(o.id))
       .map((o) => o.asset)
   );
+  const pendingExitAssets = new Set(
+    state.orders
+      .filter((o) => (o.status === 'pending' || o.status === 'partially_filled') && o.side === 'sell' && o.auto)
+      .map((o) => o.asset)
+  );
 
   // 3A. STEP 1: OPEN POSITION MANAGEMENT (Stepped Breakeven Defense & Multi-Tranche Profit Ladder)
   for (const asset of UPSTOX_FLEET_ASSETS) {
@@ -475,6 +505,25 @@ export function tickAutonomousPilot(
       trancheStage: 0,
     };
 
+    // A live autonomous exit is already working at the broker. Never submit a
+    // second sell while its terminal state has not yet reached local positions.
+    if (pendingExitAssets.has(asset)) {
+      updatedFleet[asset] = {
+        ...fleetStatus,
+        assignedStrategy: strategy,
+        regimeLabel,
+        hurst,
+        currentPrice: price,
+        state: 'ORDER_PENDING',
+        unitsHeld: currentHolding,
+        sector,
+        squeezeStatus,
+        vwap,
+        volumeSurgeRatio,
+      };
+      continue;
+    }
+
     const unrealizedPnl = (price - avgBuyPrice) * currentHolding;
     const unrealizedPnlPct = +(((price - avgBuyPrice) / avgBuyPrice) * 100).toFixed(2);
 
@@ -499,6 +548,8 @@ export function tickAutonomousPilot(
     const exitProduct: 'CNC' | 'MIS' = isDeliveryHolding ? 'CNC' : 'MIS';
     const roundtripFriction = calculateRoundtripFriction(avgBuyPrice, currentHolding, isDeliveryHolding);
     const highWaterMark = Math.max(fleetStatus.highWaterMark || avgBuyPrice, price);
+    const usesUnifiedExit = !isDeliveryHolding
+      && avgBuyPrice * currentHolding < thresholds.UNIFIED_EXIT_NOTIONAL_CEILING;
 
     // Stepped Trailing Defense: Level 0.5 Micro-Shield (+0.30 ATR -> Breakeven + Fees), Level 1 (+0.70 ATR), Level 2 (+1.40 ATR), Level 3 (+2.00 ATR)
     const dynamicRatchet = calculateDynamicProfitRatchet(
@@ -619,7 +670,8 @@ export function tickAutonomousPilot(
       1.0
     );
 
-    if (stagnancyCheck.shouldExit && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    let exitOrderQueued = false;
+    if (stagnancyCheck.shouldExit && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -635,6 +687,7 @@ export function tickAutonomousPilot(
       rateLimits.lastDispatchedAt = now;
       lifecycleState = 'COOLDOWN';
       trancheStage = 0;
+      exitOrderQueued = true;
 
       newActionLogs.push({
         id: `log_stagnant_${asset}_${now}`,
@@ -648,8 +701,38 @@ export function tickAutonomousPilot(
       });
     }
 
+    // Small MIS positions use one exit order. Partial exits would multiply the flat brokerage fee.
+    if (!exitOrderQueued && usesUnifiedExit && dynamicRatchet.gainAtrMultiples >= thresholds.RATCHET_STAGE_3_ATR && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: currentHolding,
+        price: alignToTickSize(price, asset),
+        type: 'limit',
+        product: 'MIS',
+        strategyName: `Auto-Pilot: ${strategy} Unified Profit Exit`,
+        reason: `Unified exit at +${dynamicRatchet.gainAtrMultiples} ATR. Closing all ${currentHolding} shares in one order to avoid partial-exit fee multiplication.`,
+        trancheStage: 3,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      lifecycleState = 'COOLDOWN';
+      trancheStage = 0;
+
+      newActionLogs.push({
+        id: `log_unified_exit_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'TAKE_PROFIT',
+        strategy,
+        detail: `Unified single-order profit exit: closed ${currentHolding} shares at ₹${price.toFixed(2)} to cap sell-side brokerage.`,
+        price,
+        status: 'EXECUTED',
+      });
+    }
     // Tranche 1 Profit Harvest: Take partial profit (33%) at +1.5 ATR
-    if (trancheStage === 0 && price >= t1Price && currentHolding >= 2 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    else if (!exitOrderQueued && !usesUnifiedExit && trancheStage === 0 && price >= t1Price && currentHolding >= 2 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       const exitQty = Math.max(1, Math.floor(currentHolding * 0.33));
       ordersToDispatch.push({
         asset,
@@ -681,7 +764,7 @@ export function tickAutonomousPilot(
       });
     }
     // Tranche 2 Profit Harvest: Take core target (50% of remaining) at T2
-    else if (trancheStage <= 1 && price >= t2Price && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    else if (!exitOrderQueued && !usesUnifiedExit && trancheStage <= 1 && price >= t2Price && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       const exitQty = Math.max(1, Math.floor(currentHolding * 0.5));
       ordersToDispatch.push({
         asset,
@@ -713,7 +796,7 @@ export function tickAutonomousPilot(
       });
     }
     // Tranche 3 Chandelier Runner Exit: Trail remainder until breakdown below 22-period high - 2 ATR
-    else if (trancheStage >= 2 && price <= t3Chandelier && currentHolding > 0 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    else if (!exitOrderQueued && !usesUnifiedExit && trancheStage >= 2 && price <= t3Chandelier && currentHolding > 0 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -743,7 +826,7 @@ export function tickAutonomousPilot(
       });
     }
     // Capital Defense Stop Loss Triggered - Priority Exit (Never throttled by rate limit allowances)
-    else if (price <= currentStop) {
+    else if (!exitOrderQueued && price <= currentStop) {
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -795,6 +878,7 @@ export function tickAutonomousPilot(
       volumeSurgeRatio,
       highWaterMark,
       entryTimestamp,
+      lastActionAt: lifecycleState === 'COOLDOWN' ? now : fleetStatus.lastActionAt,
     };
   }
 
@@ -859,7 +943,7 @@ export function tickAutonomousPilot(
     );
     if (pendingBuyAssets.has(asset) || fleetStatus.state === 'COOLDOWN' || recentBuyReject) {
       const cooldownElapsed = now - (fleetStatus.lastActionAt || 0);
-      if (fleetStatus.state === 'COOLDOWN' && cooldownElapsed > 180000 && !recentBuyReject) {
+      if (fleetStatus.state === 'COOLDOWN' && cooldownElapsed > thresholds.EXIT_REENTRY_COOLDOWN_MS && !recentBuyReject) {
         fleetStatus.state = 'MONITORING';
       } else {
         updatedFleet[asset] = {
@@ -994,6 +1078,67 @@ export function tickAutonomousPilot(
     return rankA - rankB;
   });
 
+  const todayActions = getTodayPilotActionLogs(state, now);
+  const dayHasLoss = todayActions.some((log) => log.action === 'STOP_LOSS');
+  const dailyMisEntries = todayActions.filter((log) => log.action === 'BUY_ENTRY').length;
+  const activePositionCount = UPSTOX_FLEET_ASSETS.filter((asset) => (state.positions[asset] || 0) > 0).length;
+
+  const allocationCandidates: CandidateForAllocation[] = candidatePool.map((cand) => {
+    const ranked = alphaByAsset.get(cand.asset);
+    const limitPrice = calculateSmartLimitPrice(
+      cand.price,
+      cand.vwap,
+      cand.atr,
+      isIndianAsset(cand.asset) ? 0.05 : 0.01,
+      ranked?.alphaConvictionIndex
+    );
+    const projectedNotional = Math.min(
+      pv * (thresholds.MODE_40_1_ASSET_ALLOCATION_PCT / 100),
+      Math.max(0, allocatableCash)
+    );
+    const projectedQuantity = Math.max(1, Math.floor(projectedNotional / limitPrice));
+    const friction = calculateRoundtripFriction(limitPrice, projectedQuantity, false);
+    const realisticGrossProfit = Math.min(cand.atr * 1.25, limitPrice * 0.08) * projectedQuantity;
+    const rsi = indicators(cand.market.history, cand.market.candles).rsi ?? 50;
+
+    return {
+      asset: cand.asset,
+      price: limitPrice,
+      atr: cand.atr,
+      sector: cand.sector,
+      convictionScore: ranked?.alphaConvictionIndex || 0,
+      hurst: cand.hurst,
+      squeezeStatus: cand.squeezeStatus,
+      volumeSurgeRatio: cand.volumeSurgeRatio,
+      realisticGrossProfit,
+      roundtripFriction: friction.totalRoundtripFriction,
+      realisticNetProfit: realisticGrossProfit - friction.totalRoundtripFriction,
+      history: cand.market.history,
+      regimeScenario: classifyRegimeScenario(cand.price, cand.atr, cand.hurst, cand.squeezeStatus, cand.volumeSurgeRatio, rsi),
+    };
+  });
+  const allocationDecision = evaluateAllocationModeSwitch(allocationCandidates, dayHasLoss);
+  const selectedAllocationAssets = new Set(allocationDecision.selectedCandidates.map((candidate) => candidate.asset));
+  const availableConcurrentSlots = Math.max(
+    0,
+    thresholds.MAX_CONCURRENT_MIS_POSITIONS - activePositionCount - pendingBuyAssets.size
+  );
+  const maxNewEntries = Math.min(allocationDecision.maxPositions, availableConcurrentSlots);
+  let dispatchedMisEntries = 0;
+
+  if (candidatePool.length > 0 && allocationDecision.mode === 'STAND_ASIDE') {
+    newActionLogs.push({
+      id: `log_allocation_stand_aside_${now}`,
+      timestamp: now,
+      asset: candidatePool[0].asset,
+      action: 'SKIPPED',
+      strategy: 'Conditions-Based Allocation Gate',
+      detail: allocationDecision.rationale,
+      price: candidatePool[0].price,
+      status: 'BLOCKED',
+    });
+  }
+
   // Iterate in order of highest conviction alpha rank
   for (const cand of candidatePool) {
     const ranked = alphaByAsset.get(cand.asset);
@@ -1003,10 +1148,38 @@ export function tickAutonomousPilot(
     const sector = cand.sector;
     const strategy = cand.strategy;
 
-    // Update telemetry
+    // Retain ranking telemetry even when the allocation gate stands aside.
     if (updatedFleet[asset]) {
       updatedFleet[asset].alphaRank = ranked?.rank;
       updatedFleet[asset].alphaConvictionIndex = ranked?.alphaConvictionIndex;
+    }
+
+    if (!selectedAllocationAssets.has(asset)) continue;
+    if (dailyMisEntries + dispatchedMisEntries >= thresholds.MAX_DAILY_MIS_ENTRIES) {
+      newActionLogs.push({
+        id: `log_daily_entry_cap_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'SKIPPED',
+        strategy,
+        detail: `Daily MIS entry governor: ${thresholds.MAX_DAILY_MIS_ENTRIES} entries already dispatched today. No new intraday position.`,
+        price,
+        status: 'BLOCKED',
+      });
+      continue;
+    }
+    if (dispatchedMisEntries >= maxNewEntries) {
+      newActionLogs.push({
+        id: `log_concurrency_cap_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'SKIPPED',
+        strategy,
+        detail: `MIS concurrency limiter: allocation mode permits ${allocationDecision.maxPositions} new positions and ${activePositionCount} are already active.`,
+        price,
+        status: 'BLOCKED',
+      });
+      continue;
     }
 
     // Check rate limit
@@ -1072,11 +1245,34 @@ export function tickAutonomousPilot(
     const maxRiskCapital = baseRiskCapital * kellyRes.recommendedSizeMultiplier;
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
 
-    // Cap single asset concentration via MAX_SINGLE_ASSET_ALLOCATION_PCT (40% of portfolio equity)
-    const maxAssetExposure = pv * (thresholds.MAX_SINGLE_ASSET_ALLOCATION_PCT / 100);
+    // Allocation mode is the final asset-cap ceiling: 40% for the concentrated mode and 35% per asset in split mode.
+    const maxAssetExposure = Math.min(
+      pv * (thresholds.MAX_SINGLE_ASSET_ALLOCATION_PCT / 100),
+      pv * (allocationDecision.assetAllocationPct / 100)
+    );
     let proposedNotional = unitsToBuy * limitPrice;
     if (proposedNotional > maxAssetExposure) {
       unitsToBuy = Math.max(1, Math.floor(maxAssetExposure / limitPrice));
+      proposedNotional = unitsToBuy * limitPrice;
+    }
+
+    // Caution-tier drawdown protection must affect the actual venue quantity, not
+    // only the circuit-breaker telemetry. Exits remain unrestricted elsewhere.
+    if (cbCheck.sizingMultiplier < 1) {
+      unitsToBuy = applyDrawdownSizing(unitsToBuy, cbCheck.sizingMultiplier);
+      if (unitsToBuy < 1) {
+        newActionLogs.push({
+          id: `log_drawdown_size_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'SKIPPED',
+          strategy,
+          detail: `Drawdown caution tier (${cbCheck.drawdownPct}%): reduced size falls below one share; entry skipped.`,
+          price: limitPrice,
+          status: 'BLOCKED',
+        });
+        continue;
+      }
       proposedNotional = unitsToBuy * limitPrice;
     }
 
@@ -1165,7 +1361,7 @@ export function tickAutonomousPilot(
 
     // Pre-Trade TCA Friction Hurdle:
     // 1. Overall target profit must be >= MIN_FRICTION_PROFIT_MULTIPLE (3.0x) roundtrip friction
-    // 2. Realistic near-term gain (at 1.25 ATR) must clear roundtrip friction with a 1.5x buffer
+    // 2. Realistic near-term gain (at 1.25 ATR) must clear the absolute net-profit floor.
     const isDeliveryOrder = false;
     const expectedGrossProfit = (takeProfitPrice - limitPrice) * unitsToBuy;
     const orderFriction = calculateRoundtripFriction(limitPrice, unitsToBuy, isDeliveryOrder);
@@ -1173,7 +1369,7 @@ export function tickAutonomousPilot(
     const realisticGrossProfit = realisticTargetMove * unitsToBuy;
 
     const passesOverallTarget = passesFrictionHurdle(expectedGrossProfit, orderFriction.totalRoundtripFriction, thresholds.MIN_FRICTION_PROFIT_MULTIPLE);
-    const passesRealisticTarget = realisticGrossProfit >= 1.5 * orderFriction.totalRoundtripFriction;
+    const passesRealisticTarget = passesNetProfitFloor(realisticGrossProfit, orderFriction.totalRoundtripFriction);
 
     if (!passesOverallTarget || !passesRealisticTarget) {
       const recentTcaSkip = state.autonomousPilot?.actionLogs?.find(
@@ -1186,7 +1382,7 @@ export function tickAutonomousPilot(
           asset,
           action: 'SKIPPED',
           strategy,
-          detail: `TCA Friction Hurdle: Realistic intraday gain ₹${realisticGrossProfit.toFixed(2)} is insufficient to clear roundtrip fees (₹${orderFriction.totalRoundtripFriction.toFixed(2)}) with healthy net profit. Setup rejected.`,
+          detail: `TCA Friction Hurdle: Realistic intraday gain ₹${realisticGrossProfit.toFixed(2)} leaves less than ₹${thresholds.MIN_NET_PROFIT_FLOOR_INR.toFixed(2)} after ₹${orderFriction.totalRoundtripFriction.toFixed(2)} in roundtrip fees. Setup rejected.`,
           price: limitPrice,
           status: 'BLOCKED',
         });
@@ -1229,7 +1425,7 @@ export function tickAutonomousPilot(
       type: 'limit',
       product: 'MIS',
       strategyName: `Auto-Pilot: ${strategy} [Rank #${ranked?.rank || 1} ACI:${ranked?.alphaConvictionIndex || 0}]`,
-      reason: `${cand.entryRationale} [Rank #${ranked?.rank || 1}, ACI:${ranked?.alphaConvictionIndex || 0}, Half-Kelly: ${kellyRes.recommendedSizeMultiplier}x, Sector: ${sector}]`,
+      reason: `${cand.entryRationale} [Rank #${ranked?.rank || 1}, ACI:${ranked?.alphaConvictionIndex || 0}, Half-Kelly: ${kellyRes.recommendedSizeMultiplier}x, Drawdown: ${cbCheck.sizingMultiplier}x, Sector: ${sector}]`,
     });
 
     // Update internal pacing and cash
@@ -1237,6 +1433,7 @@ export function tickAutonomousPilot(
     rateLimits.lastDispatchedAt = now;
     allocatableCash -= requiredOrderCash;
     pendingBuyAssets.add(asset);
+    dispatchedMisEntries++;
 
     updatedFleet[asset] = {
       ...updatedFleet[asset],

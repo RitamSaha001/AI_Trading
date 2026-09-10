@@ -94,7 +94,7 @@ export class UpstoxRateLimiter {
   private static readonly MAX_ORDERS_PER_MINUTE = 500;
 
   private static requestTimestamps30Min: number[] = [];
-  private static readonly MAX_REQUESTS_PER_30_MINUTES = 1800;
+  private static readonly MAX_REQUESTS_PER_30_MINUTES = 2000;
   private static readonly WINDOW_30_MINUTES_MS = 30 * 60 * 1000;
 
   public static async throttleRequest(): Promise<void> {

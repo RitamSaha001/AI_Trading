@@ -201,6 +201,52 @@ describe('Production Server Configuration & Secret Security Boundary', () => {
     expect(res.data?.SQLITE_PATH).toBe(':memory:');
     expect(res.data?.SESSION_SECRET.length).toBeGreaterThanOrEqual(32);
     expect(res.data?.ENCRYPTION_MASTER_KEY.length).toBe(64);
+    expect(res.data?.UPSTOX_AUTONOMOUS_LIVE_ENABLED).toBe(false);
+    expect(res.data?.UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR).toBe(15_000);
+  });
+
+  it('rejects autonomous live trading unless manual live execution is explicitly enabled', () => {
+    const res = validateServerConfig({
+      ...validProductionBaseEnv,
+      UPSTOX_AUTONOMOUS_LIVE_ENABLED: 'true',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.errors).toContain('UPSTOX_AUTONOMOUS_LIVE_ENABLED requires UPSTOX_LIVE_TRADING_ENABLED=true.');
+  });
+
+  it('rejects an autonomous live notional cap above the guarded rollout limit', () => {
+    const res = validateServerConfig({
+      ...validProductionBaseEnv,
+      UPSTOX_LIVE_TRADING_ENABLED: 'true',
+      UPSTOX_AUTONOMOUS_LIVE_ENABLED: 'true',
+      UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR: '15001',
+      UPSTOX_CLIENT_ID: 'upstox_live_client_id_123',
+      UPSTOX_CLIENT_SECRET: 'upstox_live_client_secret_123',
+      UPSTOX_REDIRECT_URI: 'https://trading.lumen.io/api/exchange/upstox/callback',
+      UPSTOX_STATIC_IP: '203.0.113.10',
+      UPSTOX_ENV: 'production',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.errors).toContain('UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR must not exceed ₹15,000 during the guarded live rollout.');
+    expect(res.errors).toContain('AUTONOMOUS_EXECUTION_SECRET must be at least 32 characters when autonomous live trading is enabled.');
+  });
+
+  it('requires an internal execution secret for autonomous live trading', () => {
+    const res = validateServerConfig({
+      ...validProductionBaseEnv,
+      UPSTOX_LIVE_TRADING_ENABLED: 'true',
+      UPSTOX_AUTONOMOUS_LIVE_ENABLED: 'true',
+      UPSTOX_CLIENT_ID: 'upstox_live_client_id_123',
+      UPSTOX_CLIENT_SECRET: 'upstox_live_client_secret_123',
+      UPSTOX_REDIRECT_URI: 'https://trading.lumen.io/api/exchange/upstox/callback',
+      UPSTOX_STATIC_IP: '203.0.113.10',
+      UPSTOX_ENV: 'production',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.errors).toContain('AUTONOMOUS_EXECUTION_SECRET must be at least 32 characters when autonomous live trading is enabled.');
   });
 
   it('13. valid production configuration passes validation completely', () => {

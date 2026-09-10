@@ -20,7 +20,10 @@ import { OrderFillsService } from '../../orderFillsService';
 import { OrderRecoveryService } from '../../orderRecoveryService';
 import { UpstoxInstrumentMasterService } from './upstoxInstrumentMasterService';
 import { UpstoxClient } from './upstoxClient';
+import { UpstoxAdapter } from './upstoxAdapter';
+import { signAutonomousExecution } from '../../autonomousExecutionAuth';
 import { config } from '../../../config';
+import { EmergencyControlService } from '../../emergencyControlService';
 
 export type UpstoxStreamHealth = 'HEALTHY' | 'DEGRADED' | 'DISCONNECTED';
 
@@ -36,6 +39,7 @@ export class UpstoxUserStreamTransport {
   private pingTimer: NodeJS.Timeout | null = null;
   private lastEventTime: number = 0;
   private streamHealth: UpstoxStreamHealth = 'DISCONNECTED';
+  private protectiveStopQueue: Promise<void> = Promise.resolve();
 
   constructor(userId: string, accessToken: string) {
     this.userId = userId;
@@ -82,6 +86,11 @@ export class UpstoxUserStreamTransport {
       transport.close();
     }
     this.transports.clear();
+  }
+
+  public static async runProtectiveStopWatchdog(userId: string): Promise<void> {
+    const transport = this.transports.get(userId) || new UpstoxUserStreamTransport(userId, 'watchdog');
+    await transport.verifyProtectiveStopCoverage();
   }
 
   public close(): void {
@@ -275,6 +284,20 @@ export class UpstoxUserStreamTransport {
       : data.order_timestamp
         ? new Date(data.order_timestamp).getTime()
         : Date.now();
+    let protectiveStop: {
+      userId: string;
+      symbol: string;
+      quantity: number;
+      product: string;
+      triggerPrice: number;
+      parentClientOrderId: string;
+    } | null = null;
+    let protectiveExit: {
+      userId: string;
+      symbol: string;
+      parentClientOrderId: string;
+    } | null = null;
+    let filledProtectiveStopParent: string | null = null;
 
     try {
       await db.transaction(async (tx) => {
@@ -361,11 +384,40 @@ export class UpstoxUserStreamTransport {
               executedAt: eventTime,
               tx,
             });
+
+            if (
+              orderRow.order_role === 'AUTONOMOUS_ENTRY' &&
+              orderRow.side === 'BUY' &&
+              Number(orderRow.protective_stop_price) > 0
+            ) {
+              protectiveStop = {
+                userId: orderRow.user_id,
+                symbol: resolvedSymbol,
+                quantity: filledQty,
+                product: orderRow.product || 'MIS',
+                triggerPrice: Number(orderRow.protective_stop_price),
+                parentClientOrderId: orderRow.client_order_id,
+              };
+            }
+            if (
+              orderRow.order_role === 'AUTONOMOUS_EXIT' &&
+              orderRow.side === 'SELL' &&
+              orderRow.parent_client_order_id
+            ) {
+              protectiveExit = {
+                userId: orderRow.user_id,
+                symbol: resolvedSymbol,
+                parentClientOrderId: orderRow.parent_client_order_id,
+              };
+            }
           }
 
           // Determine target status
           const isTerminalFilled = isComplete || filledQty >= Number(orderRow.orig_qty);
           const targetStatus = isTerminalFilled ? 'FILLED' : 'PARTIALLY_FILLED';
+          if (isTerminalFilled && orderRow.order_role === 'PROTECTIVE_STOP' && orderRow.parent_client_order_id) {
+            filledProtectiveStopParent = orderRow.parent_client_order_id;
+          }
 
           // C. Transition order state atomically within transaction
           await OrderStateMachine.transitionOrder(
@@ -443,6 +495,16 @@ export class UpstoxUserStreamTransport {
           }
         }
       });
+
+      if (protectiveStop) {
+        await this.enqueueProtectiveStopWork(() => this.ensureProtectiveStop(protectiveStop!));
+      }
+      if (protectiveExit) {
+        await this.enqueueProtectiveStopWork(() => this.reconcileProtectiveStopCoverage(protectiveExit!));
+      }
+      if (filledProtectiveStopParent) {
+        await this.enqueueProtectiveStopWork(() => this.cancelSiblingProtectiveStops(filledProtectiveStopParent!));
+      }
     } catch (err: any) {
       logger.error(`[UpstoxUserStreamTransport] Atomic settlement failed for venue order ${venueOrderId}: ${err.message}. Triggering recovery.`);
       void AuditService.logEvent({
@@ -453,9 +515,280 @@ export class UpstoxUserStreamTransport {
         result: 'FAILED',
         metadata: { venueOrderId, clientOrderId, error: err.message },
       });
+      if (protectiveStop || protectiveExit || filledProtectiveStopParent) {
+        const reason = `Protective-stop coverage could not be verified for ${clientOrderId || venueOrderId}: ${err.message}`;
+        await EmergencyControlService.setState('TRADING_HALTED', reason, 'upstox_protective_stop_guard').catch(() => {});
+        await EmergencyControlService.executePanicSquareOff(
+          this.userId,
+          'upstox',
+          reason,
+          'upstox_protective_stop_guard'
+        ).catch(() => {});
+      }
       // Schedule immediate recovery sweep to reconcile venue vs local state
       void OrderRecoveryService.runRecoverySweep().catch(() => {});
     }
   }
-}
 
+  private async enqueueProtectiveStopWork(work: () => Promise<void>): Promise<void> {
+    const next = this.protectiveStopQueue.then(work, work);
+    this.protectiveStopQueue = next.catch(() => {});
+    return next;
+  }
+
+  public async verifyProtectiveStopCoverage(): Promise<void> {
+    const db = getDb();
+    const entries = await db.query<{ client_order_id: string; symbol: string }>(
+      `SELECT client_order_id, symbol
+       FROM exchange_orders
+       WHERE user_id = ? AND side = 'BUY' AND order_role = 'AUTONOMOUS_ENTRY'
+         AND executed_qty > 0 AND status IN ('OPEN', 'PARTIALLY_FILLED', 'FILLED')`,
+      [this.userId]
+    );
+    try {
+      for (const entry of entries) {
+        await this.reconcileProtectiveStopCoverage({
+          userId: this.userId,
+          symbol: entry.symbol,
+          parentClientOrderId: entry.client_order_id,
+        });
+      }
+    } catch (err: any) {
+      await this.failProtectiveStopCoverage(`Protective-stop watchdog failed: ${err.message}`);
+      throw err;
+    }
+  }
+
+  public async applyProfitLock(symbol: string, desiredTriggerPrice: number): Promise<void> {
+    if (!(desiredTriggerPrice > 0)) return;
+    const db = getDb();
+    const entries = await db.query<{ client_order_id: string; protective_stop_price: number }>(
+      `SELECT client_order_id, protective_stop_price
+       FROM exchange_orders
+       WHERE user_id = ? AND symbol = ? AND side = 'BUY' AND order_role = 'AUTONOMOUS_ENTRY'
+         AND executed_qty > 0 AND status IN ('OPEN', 'PARTIALLY_FILLED', 'FILLED')`,
+      [this.userId, symbol]
+    );
+    const activeParents = await db.query<{ parent_client_order_id: string }>(
+      `SELECT DISTINCT parent_client_order_id
+       FROM exchange_orders
+       WHERE user_id = ? AND symbol = ? AND order_role = 'PROTECTIVE_STOP'
+         AND status IN ('OPEN', 'PARTIALLY_FILLED')`,
+      [this.userId, symbol]
+    );
+    const parentsWithActiveStops = new Set(activeParents.map((row) => row.parent_client_order_id));
+    try {
+      for (const entry of entries) {
+        if (!parentsWithActiveStops.has(entry.client_order_id)) continue;
+        await this.reconcileProtectiveStopCoverage({
+          userId: this.userId,
+          symbol,
+          parentClientOrderId: entry.client_order_id,
+          triggerPrice: Math.max(Number(entry.protective_stop_price || 0), desiredTriggerPrice),
+        });
+      }
+    } catch (err: any) {
+      await this.failProtectiveStopCoverage(`Profit-lock stop update failed for ${symbol}: ${err.message}`);
+      throw err;
+    }
+  }
+
+  private async failProtectiveStopCoverage(reason: string): Promise<void> {
+    await AuditService.logEvent({
+      userId: this.userId,
+      eventType: 'PROTECTIVE_STOP_COVERAGE_FAILED',
+      source: 'upstox_user_stream_transport',
+      actor: 'protective_stop_watchdog',
+      result: 'FAILED',
+      metadata: { reason },
+    }).catch(() => {});
+    await EmergencyControlService.setState('TRADING_HALTED', reason, 'upstox_protective_stop_guard').catch(() => {});
+    await EmergencyControlService.executePanicSquareOff(this.userId, 'upstox', reason, 'upstox_protective_stop_guard').catch(() => {});
+  }
+
+  private async ensureProtectiveStop(stop: {
+    userId: string;
+    symbol: string;
+    quantity: number;
+    product: string;
+    triggerPrice: number;
+    parentClientOrderId: string;
+  }): Promise<void> {
+    await this.reconcileProtectiveStopCoverage({
+      userId: stop.userId,
+      symbol: stop.symbol,
+      parentClientOrderId: stop.parentClientOrderId,
+      targetQuantity: stop.quantity,
+      product: stop.product,
+      triggerPrice: stop.triggerPrice,
+    });
+  }
+
+  private async reconcileProtectiveStopCoverage(input: {
+    userId: string;
+    symbol: string;
+    parentClientOrderId: string;
+    targetQuantity?: number;
+    product?: string;
+    triggerPrice?: number;
+  }): Promise<void> {
+    const db = getDb();
+    const entry = await db.queryOne<any>(
+      `SELECT executed_qty, product, protective_stop_price
+       FROM exchange_orders WHERE client_order_id = ? AND user_id = ?`,
+      [input.parentClientOrderId, input.userId]
+    );
+    if (!entry) throw new Error(`Protective stop parent order not found: ${input.parentClientOrderId}`);
+
+    const exits = await db.queryOne<{ filled_qty: number }>(
+      `SELECT COALESCE(SUM(executed_qty), 0) AS filled_qty
+       FROM exchange_orders
+       WHERE parent_client_order_id = ? AND order_role = 'AUTONOMOUS_EXIT'`,
+      [input.parentClientOrderId]
+    );
+    const filledStops = await db.queryOne<{ filled_qty: number }>(
+      `SELECT COALESCE(SUM(executed_qty), 0) AS filled_qty
+       FROM exchange_orders
+       WHERE parent_client_order_id = ? AND order_role = 'PROTECTIVE_STOP'`,
+      [input.parentClientOrderId]
+    );
+    const targetQuantity = input.targetQuantity !== undefined
+      ? input.targetQuantity
+      : Math.max(0, Number(entry.executed_qty || 0) - Number(exits?.filled_qty || 0) - Number(filledStops?.filled_qty || 0));
+    const triggerPrice = Number(input.triggerPrice ?? entry.protective_stop_price);
+    const product = input.product || entry.product || 'MIS';
+    if (!(triggerPrice > 0)) throw new Error(`Protective stop trigger is invalid for ${input.parentClientOrderId}`);
+
+    const activeStops = await db.query<any>(
+      `SELECT * FROM exchange_orders
+       WHERE user_id = ? AND parent_client_order_id = ? AND order_role = 'PROTECTIVE_STOP'
+         AND status IN ('SUBMITTING', 'OPEN', 'PARTIALLY_FILLED')
+       ORDER BY created_at ASC`,
+      [input.userId, input.parentClientOrderId]
+    );
+    const adapter = new UpstoxAdapter();
+
+    if (targetQuantity <= 0) {
+      await Promise.all(activeStops.map((order) => adapter.cancelOrder(input.userId, order.client_order_id, input.symbol)));
+      return;
+    }
+
+    if (activeStops.length === 0) {
+      await this.placeProtectiveStop({
+        userId: input.userId,
+        symbol: input.symbol,
+        quantity: targetQuantity,
+        product,
+        triggerPrice,
+        parentClientOrderId: input.parentClientOrderId,
+      });
+      return;
+    }
+
+    const primaryStop = activeStops[0];
+    if (primaryStop.status === 'SUBMITTING') {
+      throw new Error(`Protective stop ${primaryStop.client_order_id} is not venue-accepted; coverage cannot be safely resized.`);
+    }
+    const targetOrderQuantity = Number(primaryStop.executed_qty || 0) + targetQuantity;
+    const currentTriggerPrice = Number(primaryStop.protective_stop_price || 0);
+    if (Number(primaryStop.orig_qty || 0) !== targetOrderQuantity || currentTriggerPrice < triggerPrice) {
+      await adapter.modifyOrder(primaryStop.client_order_id, {
+        quantity: targetOrderQuantity,
+        triggerPrice,
+      });
+    }
+    await Promise.all(
+      activeStops.slice(1).map((order) => adapter.cancelOrder(input.userId, order.client_order_id, input.symbol))
+    );
+  }
+
+  private async cancelSiblingProtectiveStops(parentClientOrderId: string): Promise<void> {
+    const db = getDb();
+    const siblings = await db.query<any>(
+      `SELECT user_id, client_order_id, symbol
+       FROM exchange_orders
+       WHERE parent_client_order_id = ? AND order_role = 'PROTECTIVE_STOP'
+         AND status IN ('SUBMITTING', 'OPEN', 'PARTIALLY_FILLED')`,
+      [parentClientOrderId]
+    );
+    const adapter = new UpstoxAdapter();
+    await Promise.all(siblings.map((order) => adapter.cancelOrder(order.user_id, order.client_order_id, order.symbol)));
+  }
+
+  private async placeProtectiveStop(stop: {
+    userId: string;
+    symbol: string;
+    quantity: number;
+    product: string;
+    triggerPrice: number;
+    parentClientOrderId: string;
+  }): Promise<void> {
+    const clientOrderId = `lm_stop_${stop.parentClientOrderId}_${Date.now()}`;
+    try {
+      const internalExecutionSignature = signAutonomousExecution(
+        {
+          userId: stop.userId,
+          symbol: stop.symbol,
+          side: 'SELL',
+          type: 'SL_M',
+          quantity: stop.quantity,
+          triggerPrice: stop.triggerPrice,
+          product: stop.product,
+          orderRole: 'PROTECTIVE_STOP',
+          parentClientOrderId: stop.parentClientOrderId,
+          protectiveStopPrice: stop.triggerPrice,
+          clientOrderId,
+        },
+        config.AUTONOMOUS_EXECUTION_SECRET || ''
+      );
+      await new UpstoxAdapter().placeOrder({
+        userId: stop.userId,
+        symbol: stop.symbol,
+        side: 'SELL',
+        type: 'SL_M',
+        quantity: stop.quantity,
+        product: stop.product,
+        triggerPrice: stop.triggerPrice,
+        protectiveStopPrice: stop.triggerPrice,
+        isAutonomous: true,
+        strategyName: 'AUTOPILOT_PROTECTIVE_STOP',
+        orderRole: 'PROTECTIVE_STOP',
+        parentClientOrderId: stop.parentClientOrderId,
+        idempotencyKey: clientOrderId,
+        clientOrderId,
+        internalExecutionSignature,
+        accountMode: 'live',
+      });
+
+      await AuditService.logEvent({
+        userId: stop.userId,
+        eventType: 'PROTECTIVE_STOP_SUBMITTED',
+        source: 'upstox_user_stream_transport',
+        actor: 'autonomous_protective_stop',
+        result: 'SUCCESS',
+        metadata: {
+          parentClientOrderId: stop.parentClientOrderId,
+          symbol: stop.symbol,
+          quantity: stop.quantity,
+          triggerPrice: stop.triggerPrice,
+        },
+      });
+    } catch (err: any) {
+      await AuditService.logEvent({
+        userId: stop.userId,
+        eventType: 'PROTECTIVE_STOP_SUBMISSION_FAILED',
+        source: 'upstox_user_stream_transport',
+        actor: 'autonomous_protective_stop',
+        result: 'FAILED',
+        metadata: {
+          parentClientOrderId: stop.parentClientOrderId,
+          symbol: stop.symbol,
+          quantity: stop.quantity,
+          triggerPrice: stop.triggerPrice,
+          error: err.message,
+        },
+      });
+      throw err;
+    }
+  }
+}

@@ -40,6 +40,7 @@ import { EmergencyControlService } from './emergencyControlService';
 import { LiveOrderConfirmationService } from './liveOrderConfirmationService';
 import { IntradaySquareOffService } from './intradaySquareOffService';
 import { OtrLimiterService } from './otrLimiterService';
+import { verifyAutonomousExecution } from './autonomousExecutionAuth';
 
 export interface LiveOrderGateVerificationResult {
   passed: boolean;
@@ -284,11 +285,38 @@ export class LiveOrderGateService {
       isPanicBypass = true;
     }
 
-    const isAutonomousAlgo = Boolean(
+    const declaresAutonomousAlgo = Boolean(
       !isPanicBypass &&
       ((order as any).isAutonomous || (order as any).auto) &&
       ((order as any).strategyName || (order as any).strategyId)
     );
+
+    const isAutonomousAlgo = declaresAutonomousAlgo && verifyAutonomousExecution(
+      {
+        userId: order.userId,
+        symbol: order.symbol,
+        side: order.side,
+        type: order.type,
+        quantity: order.quantity,
+        price: order.price,
+        triggerPrice: order.triggerPrice,
+        product: order.product,
+        orderRole: order.orderRole,
+        parentClientOrderId: order.parentClientOrderId,
+        protectiveStopPrice: order.protectiveStopPrice,
+        clientOrderId: order.clientOrderId || order.idempotencyKey,
+      },
+      order.internalExecutionSignature,
+      config.AUTONOMOUS_EXECUTION_SECRET || ''
+    );
+
+    if (declaresAutonomousAlgo && !isAutonomousAlgo) {
+      throw new StandardBrokerError(
+        'ORDER_REJECTED',
+        'Autonomous live order rejected: valid internal execution signature is required.',
+        brokerId
+      );
+    }
 
     if (isAutonomousAlgo) {
       await AuditService.logEvent({

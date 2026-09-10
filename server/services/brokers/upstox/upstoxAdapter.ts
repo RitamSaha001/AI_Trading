@@ -61,7 +61,7 @@ export class UpstoxAdapter implements BrokerGateway {
     supportsTrading: true,
     supportsMarketData: true,
     supportsHistoricalData: true,
-    supportsPortfolioStream: false,
+    supportsPortfolioStream: true,
     supportsMarketStream: true,
     supportsModifyOrder: true,
     supportsCancelOrder: true,
@@ -541,8 +541,9 @@ export class UpstoxAdapter implements BrokerGateway {
           id, user_id, client_order_id, symbol, side, type, status,
           orig_qty, executed_qty, price, avg_price, quote_asset, notional,
           fee, reserved_cash, reserved_qty, orig_qty_exact, price_exact, notional_exact,
-          broker, idempotency_key, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 'upstox', ?, ?, ?)`,
+          broker, product, order_role, parent_client_order_id, protective_stop_price,
+          idempotency_key, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 'upstox', ?, ?, ?, ?, ?, ?, ?)`,
         [
           orderRecordId,
           order.userId,
@@ -558,6 +559,10 @@ export class UpstoxAdapter implements BrokerGateway {
           String(order.quantity),
           String(price),
           notional.toString(),
+          order.product || product,
+          order.orderRole || (order.protectiveStopPrice ? 'AUTONOMOUS_ENTRY' : 'STANDARD'),
+          order.parentClientOrderId || null,
+          order.protectiveStopPrice !== undefined ? Number(order.protectiveStopPrice) : null,
           order.idempotencyKey || clientOrderId,
           now,
           now,
@@ -595,12 +600,13 @@ export class UpstoxAdapter implements BrokerGateway {
     const rawTrigger =
       order.triggerPrice !== undefined && order.triggerPrice !== null && !isNaN(Number(order.triggerPrice))
         ? Number(order.triggerPrice)
-        : (order as any).stopPrice !== undefined && (order as any).stopPrice !== null && !isNaN(Number((order as any).stopPrice))
+        : (upstoxOrderType === 'SL' || upstoxOrderType === 'SL-M') &&
+            (order as any).stopPrice !== undefined && (order as any).stopPrice !== null && !isNaN(Number((order as any).stopPrice))
         ? Number((order as any).stopPrice)
         : 0;
     // Strict 0.05 NSE equity tick size alignment to guarantee no venue rejection
     const triggerPriceNum = rawTrigger > 0 ? Math.round(rawTrigger * 20) / 20 : 0;
-    const alignedPrice = upstoxOrderType === 'MARKET' ? 0 : Math.round(price * 20) / 20;
+    const alignedPrice = upstoxOrderType === 'MARKET' || upstoxOrderType === 'SL-M' ? 0 : Math.round(price * 20) / 20;
     const disclosedQtyNum = order.disclosedQuantity ? Number(order.disclosedQuantity) : undefined;
 
     // Record order placement for SEBI OTR compliance
@@ -1056,8 +1062,9 @@ export class UpstoxAdapter implements BrokerGateway {
     const price = updates.price !== undefined ? Number(updates.price) : Number(order.price);
     const quantity = updates.quantity !== undefined ? Number(updates.quantity) : Number(order.orig_qty);
 
-    if (quantity <= 0 || price <= 0) {
-      throw new StandardBrokerError('INVALID_ORDER', 'Modified quantity and price must be positive numbers.', 'upstox');
+    const isStopMarket = order.type === 'STOP_LOSS' || order.type === 'SL-M' || order.type === 'SL_M';
+    if (quantity <= 0 || price < 0 || (!isStopMarket && price <= 0)) {
+      throw new StandardBrokerError('INVALID_ORDER', 'Modified quantity must be positive and the price must be valid for the order type.', 'upstox');
     }
 
     // 1. Contract & Instrument Constraints Validation (P0-5 & P0-9)
@@ -1111,7 +1118,7 @@ export class UpstoxAdapter implements BrokerGateway {
         quantity,
         order_type: updates.type || (order.type === 'MARKET' ? 'MARKET' : order.type === 'STOP_LOSS' || order.type === 'SL-M' || order.type === 'SL_M' ? 'SL-M' : order.type === 'STOP_LOSS_LIMIT' || order.type === 'SL' ? 'SL' : 'LIMIT'),
         validity: updates.validity || order.validity || 'DAY',
-        trigger_price: updates.triggerPrice ?? (order.trigger_price ? Number(order.trigger_price) : undefined),
+        trigger_price: updates.triggerPrice ?? (order.trigger_price ? Number(order.trigger_price) : (order.protective_stop_price ? Number(order.protective_stop_price) : undefined)),
         disclosed_quantity: updates.disclosedQuantity ?? (order.disclosed_qty ? Number(order.disclosed_qty) : undefined),
       });
     } catch (brokerErr: any) {
@@ -1135,8 +1142,10 @@ export class UpstoxAdapter implements BrokerGateway {
 
     const updatedReservedCash = Math.max(0, Number(order.reserved_cash || 0) + cashDelta);
     await db.execute(
-      `UPDATE exchange_orders SET price = ?, orig_qty = ?, reserved_cash = ?, updated_at = ? WHERE id = ?`,
-      [price, quantity, updatedReservedCash, Date.now(), order.id]
+      `UPDATE exchange_orders
+       SET price = ?, orig_qty = ?, reserved_cash = ?, protective_stop_price = COALESCE(?, protective_stop_price), updated_at = ?
+       WHERE id = ?`,
+      [price, quantity, updatedReservedCash, updates.triggerPrice !== undefined ? Number(updates.triggerPrice) : null, Date.now(), order.id]
     );
 
     // Update child records if present (P0-7)

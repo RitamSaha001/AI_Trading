@@ -168,6 +168,10 @@ export interface BrokerOrderRequest {
   isAutonomous?: boolean;
   strategyName?: string;
   algoTag?: string;
+  orderRole?: 'STANDARD' | 'AUTONOMOUS_ENTRY' | 'AUTONOMOUS_EXIT' | 'PROTECTIVE_STOP';
+  parentClientOrderId?: string;
+  protectiveStopPrice?: number | string | ExactDecimal;
+  internalExecutionSignature?: string;
   marketQuoteAgeMs?: number;
   idempotencyKey: string;
   clientOrderId?: string;

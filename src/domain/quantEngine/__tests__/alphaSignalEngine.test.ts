@@ -8,6 +8,8 @@ import {
   calculateChandelierExit,
   calculateVolumeMetrics,
   MAX_SECTOR_ALLOCATION_PCT,
+  evaluateAllocationModeSwitch,
+  CandidateForAllocation,
 } from '../alphaSignalEngine';
 
 describe('Alpha Signal & Microstructure Engine', () => {
@@ -94,7 +96,7 @@ describe('Alpha Signal & Microstructure Engine', () => {
       expect(summary.maxSector).toBe('Banking');
     });
 
-    it('blocks proposed orders that would breach the 35% sector ceiling', () => {
+    it('blocks proposed orders that would breach the 50% sector ceiling', () => {
       const positions = {
         HDFCBANK: 20, // ₹1,600 * 20 = ₹32,000 (32% of ₹100,000)
       };
@@ -104,10 +106,10 @@ describe('Alpha Signal & Microstructure Engine', () => {
       };
       const pv = 100000;
 
-      // Adding ₹10,000 of ICICIBANK would push Banking to ₹42,000 (42% > 35%)
-      const res = validateSectorExposureLimit('ICICIBANK', 10000, positions, markets, pv, MAX_SECTOR_ALLOCATION_PCT);
+      // Adding ₹20,000 of ICICIBANK would push Banking to ₹52,000 (52% > 50%)
+      const res = validateSectorExposureLimit('ICICIBANK', 20000, positions, markets, pv, MAX_SECTOR_ALLOCATION_PCT);
       expect(res.allowed).toBe(false);
-      expect(res.projectedSectorPct).toBe(42.0);
+      expect(res.projectedSectorPct).toBe(52.0);
       expect(res.reason).toContain('Sector concentration breach');
     });
 
@@ -149,6 +151,48 @@ describe('Alpha Signal & Microstructure Engine', () => {
       const res = calculateVolumeMetrics(candles, history);
       expect(res.vwap).toBeGreaterThan(100);
       expect(res.volumeSurgeRatio).toBeGreaterThanOrEqual(1.0);
+    });
+  });
+
+  describe('Conditions-Based Allocation Switch', () => {
+    const candidate = (overrides: Partial<CandidateForAllocation> = {}): CandidateForAllocation => ({
+      asset: 'RELIANCE',
+      price: 2500,
+      atr: 20,
+      sector: 'Energy',
+      convictionScore: 90,
+      hurst: 0.6,
+      squeezeStatus: 'SQUEEZE_OFF',
+      volumeSurgeRatio: 1.5,
+      realisticGrossProfit: 180,
+      roundtripFriction: 20,
+      realisticNetProfit: 160,
+      history: Array.from({ length: 20 }, (_, index) => 100 + index * 2),
+      regimeScenario: 'A_EXPANSION',
+      ...overrides,
+    });
+
+    it('stands aside in a choppy or volatility-shock regime', () => {
+      expect(evaluateAllocationModeSwitch([candidate({ regimeScenario: 'C_CHOP' })]).mode).toBe('STAND_ASIDE');
+      expect(evaluateAllocationModeSwitch([candidate({ regimeScenario: 'D_VOL_SHOCK' })]).mode).toBe('STAND_ASIDE');
+    });
+
+    it('uses 40-1 after a loss or when only one candidate clears the floor', () => {
+      expect(evaluateAllocationModeSwitch([candidate()]).mode).toBe('MODE_40_1');
+      expect(evaluateAllocationModeSwitch([candidate(), candidate({ asset: 'TCS', sector: 'IT', convictionScore: 88, realisticNetProfit: 220, history: Array.from({ length: 20 }, (_, index) => 200 - index * 3) })], true).mode).toBe('MODE_40_1');
+    });
+
+    it('activates 35-2 only for two strong, uncorrelated candidates clearing the elevated floor', () => {
+      const second = candidate({
+        asset: 'TCS',
+        sector: 'IT',
+        convictionScore: 80,
+        realisticNetProfit: 220,
+        history: Array.from({ length: 20 }, (_, index) => 200 - index * 3),
+      });
+      const decision = evaluateAllocationModeSwitch([candidate(), second]);
+      expect(decision.mode).toBe('MODE_35_2');
+      expect(decision.assetAllocationPct).toBe(35);
     });
   });
 });

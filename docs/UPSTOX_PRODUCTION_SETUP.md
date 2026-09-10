@@ -80,6 +80,11 @@ UPSTOX_SECONDARY_STATIC_IP=
 
 # Safety Gate (MUST REMAIN FALSE IN PHASE 3)
 UPSTOX_LIVE_TRADING_ENABLED=false
+# Kept separate from manual live trading. Leave false until native protective
+# stops and live cost calibration have both been verified in production.
+UPSTOX_AUTONOMOUS_LIVE_ENABLED=false
+# Guarded first-phase autonomous entry cap. Production validation refuses a value above ₹15,000.
+UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR=15000
 ```
 
 ---

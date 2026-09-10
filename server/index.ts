@@ -36,6 +36,7 @@ import { EmergencyControlService } from './services/emergencyControlService';
 import { UpstoxTotpAuthService } from './services/brokers/upstox/upstoxTotpAuthService';
 import { IntradaySquareOffService } from './services/intradaySquareOffService';
 import { AutonomousPilotWorker } from './services/autonomousPilotWorker';
+import { InFlightMtmService } from './services/inFlightMtmService';
 
 let isShuttingDown = false;
 
@@ -61,6 +62,7 @@ export async function shutdownServer(server?: FastifyInstance): Promise<void> {
     UpstoxTotpAuthService.stop();
     IntradaySquareOffService.stop();
     AutonomousPilotWorker.stop();
+    InFlightMtmService.stopDaemon();
   } catch (err: any) {
     logger.warn('Error stopping background workers:', err.message);
   }
@@ -1321,6 +1323,14 @@ export function buildServer(): FastifyInstance {
     const isAutonomous = Boolean(body.auto || (body as any).isAutonomous);
     const hasStrategy = Boolean(body.strategyName || (body as any).strategyId);
 
+    if (accountMode === 'live' && brokerId === 'upstox' && isAutonomous) {
+      return reply.status(403).send({
+        success: false,
+        code: 'AUTONOMOUS_INTERNAL_ONLY',
+        error: 'Autonomous live execution is internal-only and cannot be requested through the public order API.',
+      });
+    }
+
     if (accountMode === 'live' && brokerId === 'upstox' && !body.confirmationId) {
       if (!isAutonomous || !hasStrategy) {
         return reply.status(400).send({
@@ -1572,6 +1582,9 @@ if (isMain || process.env.START_SERVER === 'true') {
       console.log(`[IntradayEgress] Starting mandatory 15:15 IST intraday square-off scheduler...`);
       IntradaySquareOffService.startScheduler();
 
+      console.log(`[InFlightMTM] Starting continuous live margin and stop-out monitor...`);
+      InFlightMtmService.startDaemon();
+
       console.log(`[AutonomousPilot] Starting Autonomous Quant Pilot 5s background execution daemon...`);
       AutonomousPilotWorker.startScheduler();
 
@@ -1595,4 +1608,3 @@ if (isMain || process.env.START_SERVER === 'true') {
     }
   })();
 }
-

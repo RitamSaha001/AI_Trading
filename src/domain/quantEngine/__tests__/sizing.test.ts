@@ -43,7 +43,7 @@ describe('Phase 4: Sizing Engine & Portfolio Invariants', () => {
   });
 
   describe('Portfolio Invariants: Concentration Caps', () => {
-    it('strictly limits sector exposure to 35% ceiling', () => {
+    it('strictly limits sector exposure to 50% ceiling', () => {
       const positions = {
         TCS: 10, // ₹2,267 * 10 = ₹22,670 (IT sector)
       };
@@ -52,10 +52,10 @@ describe('Phase 4: Sizing Engine & Portfolio Invariants', () => {
       };
       const portfolioValue = 100000;
 
-      // Proposing ₹15,000 more in INFY (also IT sector): Total IT = ₹37,670 (37.67% > 35%)
+      // Proposing ₹30,000 more in INFY (also IT sector): Total IT = ₹52,670 (52.67% > 50%)
       const check = validateSectorExposureLimit(
         'INFY',
-        15000,
+        30000,
         positions,
         markets,
         portfolioValue,
@@ -63,10 +63,10 @@ describe('Phase 4: Sizing Engine & Portfolio Invariants', () => {
       );
 
       expect(check.allowed).toBe(false);
-      expect(check.projectedSectorPct).toBeGreaterThan(35.0);
+      expect(check.projectedSectorPct).toBeGreaterThan(50.0);
     });
 
-    it('allows proposed allocation when sector remains below 35%', () => {
+    it('allows proposed allocation when sector remains below 50%', () => {
       const positions = {
         TCS: 5, // ₹2,267 * 5 = ₹11,335 (IT)
       };
@@ -75,7 +75,7 @@ describe('Phase 4: Sizing Engine & Portfolio Invariants', () => {
       };
       const portfolioValue = 100000;
 
-      // Proposing ₹10,000 in INFY: Total IT = ₹21,335 (21.3% < 35%)
+      // Proposing ₹10,000 in INFY: Total IT = ₹21,335 (21.3% < 50%)
       const check = validateSectorExposureLimit(
         'INFY',
         10000,
@@ -86,7 +86,7 @@ describe('Phase 4: Sizing Engine & Portfolio Invariants', () => {
       );
 
       expect(check.allowed).toBe(true);
-      expect(check.projectedSectorPct).toBeLessThanOrEqual(35.0);
+      expect(check.projectedSectorPct).toBeLessThanOrEqual(50.0);
     });
   });
 });

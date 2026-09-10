@@ -10,6 +10,7 @@ import { OrderRecoveryService } from '../services/orderRecoveryService';
 import { EmergencyControlService } from '../services/emergencyControlService';
 import { BrokerRegistry } from '../services/brokers/brokerRegistry';
 import { StandardBrokerError } from '../services/brokers/brokerGateway';
+import { UpstoxAdapter } from '../services/brokers/upstox/upstoxAdapter';
 import crypto from 'node:crypto';
 
 describe('Phase 5 Real-Money Reliability & Production Hardening Suite', () => {
@@ -178,6 +179,209 @@ describe('Phase 5 Real-Money Reliability & Production Hardening Suite', () => {
       expect(updatedOrder.status).toBe('PARTIALLY_FILLED');
       expect(Number(updatedOrder.executed_qty)).toBe(8);
       expect(Number(updatedOrder.avg_price)).toBe(3500);
+    });
+
+    it('creates a linked broker-native SL-M protective order for an autonomous entry fill', async () => {
+      const db = getDb();
+      const internalOrderId = `ord_stop_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+      const clientOrderId = `cli_stop_${Date.now()}`;
+      const venueOrderId = `ven_stop_${Date.now()}`;
+      const placeOrderSpy = vi.spyOn(UpstoxAdapter.prototype, 'placeOrder').mockResolvedValue({} as any);
+      const now = Date.now();
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          reserved_cash, product, order_role, protective_stop_price, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'RELIANCE', 'BUY', 'LIMIT', 'OPEN', 10, 0, 2500, 0, 25000, 'INR', 'upstox', 25000, 'MIS', 'AUTONOMOUS_ENTRY', 2470, ?, ?)`,
+        [internalOrderId, clientOrderId, `idem_${clientOrderId}`, testUserId, now, now]
+      );
+
+      const transport = new UpstoxUserStreamTransport(testUserId, 'test_token');
+      await transport.handleMessage(JSON.stringify({
+        data: {
+          order_id: venueOrderId,
+          tag: clientOrderId,
+          trading_symbol: 'RELIANCE',
+          status: 'complete',
+          filled_quantity: 10,
+          average_price: 2500,
+          exchange_timestamp: new Date().toISOString(),
+        },
+      }));
+
+      expect(placeOrderSpy).toHaveBeenCalledWith(expect.objectContaining({
+        userId: testUserId,
+        symbol: 'RELIANCE',
+        side: 'SELL',
+        type: 'SL_M',
+        quantity: 10,
+        product: 'MIS',
+        triggerPrice: 2470,
+        orderRole: 'PROTECTIVE_STOP',
+        parentClientOrderId: clientOrderId,
+      }));
+    });
+
+    it('resizes a single protective stop to cover cumulative partial entry fills', async () => {
+      const db = getDb();
+      const parentClientOrderId = `cli_stop_parent_${Date.now()}`;
+      const stopClientOrderId = `cli_stop_child_${Date.now()}`;
+      const now = Date.now();
+      const modifySpy = vi.spyOn(UpstoxAdapter.prototype, 'modifyOrder').mockResolvedValue({} as any);
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          product, order_role, protective_stop_price, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'RELIANCE', 'BUY', 'LIMIT', 'PARTIALLY_FILLED', 10, 10, 2500, 2500, 25000, 'INR', 'upstox', 'MIS', 'AUTONOMOUS_ENTRY', 2470, ?, ?)`,
+        [`ord_parent_${parentClientOrderId}`, parentClientOrderId, `idem_${parentClientOrderId}`, testUserId, now, now]
+      );
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          product, order_role, parent_client_order_id, protective_stop_price, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'RELIANCE', 'SELL', 'SL_M', 'OPEN', 4, 0, 0, 0, 0, 'INR', 'upstox', 'MIS', 'PROTECTIVE_STOP', ?, 2470, ?, ?)`,
+        [`ord_child_${stopClientOrderId}`, stopClientOrderId, `idem_${stopClientOrderId}`, testUserId, parentClientOrderId, now, now]
+      );
+
+      const transport = new UpstoxUserStreamTransport(testUserId, 'test_token');
+      await (transport as any).ensureProtectiveStop({
+        userId: testUserId,
+        symbol: 'RELIANCE',
+        quantity: 10,
+        product: 'MIS',
+        triggerPrice: 2470,
+        parentClientOrderId,
+      });
+
+      expect(modifySpy).toHaveBeenCalledWith(stopClientOrderId, expect.objectContaining({
+        quantity: 10,
+        triggerPrice: 2470,
+      }));
+    });
+
+    it('reduces protective-stop coverage after a parent-linked autonomous exit fill', async () => {
+      const db = getDb();
+      const parentClientOrderId = `cli_stop_exit_parent_${Date.now()}`;
+      const stopClientOrderId = `cli_stop_exit_child_${Date.now()}`;
+      const now = Date.now();
+      const modifySpy = vi.spyOn(UpstoxAdapter.prototype, 'modifyOrder').mockResolvedValue({} as any);
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          product, order_role, protective_stop_price, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'RELIANCE', 'BUY', 'LIMIT', 'FILLED', 10, 10, 2500, 2500, 25000, 'INR', 'upstox', 'MIS', 'AUTONOMOUS_ENTRY', 2470, ?, ?)`,
+        [`ord_exit_parent_${parentClientOrderId}`, parentClientOrderId, `idem_${parentClientOrderId}`, testUserId, now, now]
+      );
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          product, order_role, parent_client_order_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'RELIANCE', 'SELL', 'LIMIT', 'PARTIALLY_FILLED', 4, 4, 2525, 2525, 10100, 'INR', 'upstox', 'MIS', 'AUTONOMOUS_EXIT', ?, ?, ?)`,
+        [`ord_exit_${parentClientOrderId}`, `cli_exit_${parentClientOrderId}`, `idem_exit_${parentClientOrderId}`, testUserId, parentClientOrderId, now, now]
+      );
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          product, order_role, parent_client_order_id, protective_stop_price, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'RELIANCE', 'SELL', 'SL_M', 'OPEN', 10, 0, 0, 0, 0, 'INR', 'upstox', 'MIS', 'PROTECTIVE_STOP', ?, 2470, ?, ?)`,
+        [`ord_exit_stop_${stopClientOrderId}`, stopClientOrderId, `idem_${stopClientOrderId}`, testUserId, parentClientOrderId, now, now]
+      );
+
+      const transport = new UpstoxUserStreamTransport(testUserId, 'test_token');
+      await (transport as any).reconcileProtectiveStopCoverage({
+        userId: testUserId,
+        symbol: 'RELIANCE',
+        parentClientOrderId,
+      });
+
+      expect(modifySpy).toHaveBeenCalledWith(stopClientOrderId, expect.objectContaining({
+        quantity: 6,
+        triggerPrice: 2470,
+      }));
+    });
+
+    it('only tightens an active protective stop when applying a profit lock', async () => {
+      const db = getDb();
+      const userId = `${testUserId}_profit_lock_${Date.now()}`;
+      const parentClientOrderId = `cli_profit_lock_parent_${Date.now()}`;
+      const stopClientOrderId = `cli_profit_lock_stop_${Date.now()}`;
+      const now = Date.now();
+      const modifySpy = vi.spyOn(UpstoxAdapter.prototype, 'modifyOrder').mockResolvedValue({} as any);
+
+      await db.execute(
+        `INSERT INTO users (id, email, display_name, provider, provider_id, role, created_at, updated_at)
+         VALUES (?, ?, 'Profit Lock Test Trader', 'email', ?, 'TRADER', ?, ?)`,
+        [userId, `${userId}@example.com`, `prov_${userId}`, now, now]
+      );
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          product, order_role, protective_stop_price, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'RELIANCE', 'BUY', 'LIMIT', 'FILLED', 10, 10, 2500, 2500, 25000, 'INR', 'upstox', 'MIS', 'AUTONOMOUS_ENTRY', 2470, ?, ?)`,
+        [`ord_profit_lock_parent_${parentClientOrderId}`, parentClientOrderId, `idem_${parentClientOrderId}`, userId, now, now]
+      );
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          product, order_role, parent_client_order_id, protective_stop_price, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'RELIANCE', 'SELL', 'SL_M', 'OPEN', 10, 0, 0, 0, 0, 'INR', 'upstox', 'MIS', 'PROTECTIVE_STOP', ?, 2470, ?, ?)`,
+        [`ord_profit_lock_stop_${stopClientOrderId}`, stopClientOrderId, `idem_${stopClientOrderId}`, userId, parentClientOrderId, now, now]
+      );
+
+      const transport = new UpstoxUserStreamTransport(userId, 'test_token');
+      await transport.applyProfitLock('RELIANCE', 2510);
+      await transport.applyProfitLock('RELIANCE', 2460);
+
+      expect(modifySpy).toHaveBeenCalledTimes(1);
+      expect(modifySpy).toHaveBeenCalledWith(stopClientOrderId, expect.objectContaining({
+        quantity: 10,
+        triggerPrice: 2510,
+      }));
+    });
+
+    it('watchdog recreates a missing protective stop for an open autonomous entry', async () => {
+      const db = getDb();
+      const userId = `${testUserId}_watchdog_${Date.now()}`;
+      const parentClientOrderId = `cli_watchdog_parent_${Date.now()}`;
+      const now = Date.now();
+      const placeSpy = vi.spyOn(UpstoxAdapter.prototype, 'placeOrder').mockResolvedValue({} as any);
+
+      await db.execute(
+        `INSERT INTO users (id, email, display_name, provider, provider_id, role, created_at, updated_at)
+         VALUES (?, ?, 'Watchdog Test Trader', 'email', ?, 'TRADER', ?, ?)`,
+        [userId, `${userId}@example.com`, `prov_${userId}`, now, now]
+      );
+
+      await db.execute(
+        `INSERT INTO exchange_orders (
+          id, client_order_id, idempotency_key, user_id, symbol, side, type, status,
+          orig_qty, executed_qty, price, avg_price, notional, quote_asset, broker,
+          product, order_role, protective_stop_price, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'TCS', 'BUY', 'LIMIT', 'FILLED', 5, 5, 3500, 3500, 17500, 'INR', 'upstox', 'MIS', 'AUTONOMOUS_ENTRY', 3470, ?, ?)`,
+        [`ord_watchdog_parent_${parentClientOrderId}`, parentClientOrderId, `idem_${parentClientOrderId}`, userId, now, now]
+      );
+
+      await UpstoxUserStreamTransport.runProtectiveStopWatchdog(userId);
+
+      expect(placeSpy).toHaveBeenCalledWith(expect.objectContaining({
+        symbol: 'TCS',
+        quantity: 5,
+        triggerPrice: 3470,
+        orderRole: 'PROTECTIVE_STOP',
+        parentClientOrderId,
+      }));
     });
   });
 

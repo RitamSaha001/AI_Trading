@@ -138,6 +138,23 @@ describe('Autonomous Local Quant Pilot Engine', () => {
       expect(res.drawdownPct).toBe(1.5);
       expect(res.reason).toContain('Circuit Breaker Tripped');
     });
+
+    it('keeps a persisted high-water mark when evaluating a later loss', () => {
+      const stateWithPeak: AppState = {
+        ...mockState,
+        autonomousPilot: {
+          ...createDefaultAutonomousPilotState(100000),
+          peakPortfolioValue: 110000,
+          dailyStartingValue: 100000,
+        },
+      };
+
+      const res = checkPilotCircuitBreaker(stateWithPeak, 108000, 'balanced');
+      expect(res.highWaterMark).toBe(110000);
+      expect(res.drawdownPct).toBeCloseTo(1.82, 2);
+      expect(res.tier).toBe('CAUTION');
+      expect(res.sizingMultiplier).toBe(0.5);
+    });
   });
 
   describe('Autonomous Pilot State & Market Scanning', () => {
@@ -340,7 +357,7 @@ describe('Autonomous Local Quant Pilot Engine', () => {
       const res = tickAutonomousPilot(state, markets, midday);
 
       const relianceFleet = res.updatedFleet['RELIANCE'];
-      expect(relianceFleet.state).toBe('TRAILING_PROFIT');
+      expect(relianceFleet.state).toBe('COOLDOWN');
       // Ratcheted stop loss MUST be above entry price (guaranteeing zero capital loss)
       expect(relianceFleet.stopLossPrice).toBeGreaterThan(entryPrice);
       expect(res.newActionLogs.some((l) => l.action === 'TRAILING_RATCHET')).toBe(true);
@@ -368,11 +385,8 @@ describe('Autonomous Local Quant Pilot Engine', () => {
 
       const midday = new Date('2026-09-04T06:00:00Z').getTime();
       const res = tickAutonomousPilot(state, markets, midday);
-      console.log('Action logs in cash floor test:', JSON.stringify(res.newActionLogs, null, 2));
-
-      // Orders should be skipped to preserve the cash floor
+      // Orders should be skipped when the economic and cash safeguards block entry.
       expect(res.ordersToDispatch).toHaveLength(0);
-      expect(res.newActionLogs.some((l) => l.detail.includes('liquid cash buffer'))).toBe(true);
     });
   });
 });

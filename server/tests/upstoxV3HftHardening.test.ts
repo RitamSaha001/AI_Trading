@@ -324,4 +324,12 @@ describe('Upstox V3 HFT & Execution Hardening Suite', () => {
     // Beyond burst capacity of 20, remaining 5 tokens at 10/s take >= 400ms
     expect(elapsed).toBeGreaterThanOrEqual(300);
   });
+
+  it('uses Upstox retail-algo rolling request ceiling of 2,000 per 30 minutes', () => {
+    const limiterSource = require('node:fs').readFileSync(
+      require('node:path').resolve(__dirname, '../services/brokers/upstox/upstoxClient.ts'),
+      'utf8'
+    );
+    expect(limiterSource).toContain('MAX_REQUESTS_PER_30_MINUTES = 2000');
+  });
 });

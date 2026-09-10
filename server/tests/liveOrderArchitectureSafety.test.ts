@@ -13,6 +13,33 @@ describe('Phase 4B: Live Order Architecture Safety & AST Invariants', () => {
     const validatorContent = fs.readFileSync(validatorPath, 'utf8');
 
     expect(validatorContent).toContain('UPSTOX_LIVE_TRADING_ENABLED: false');
+    expect(validatorContent).toContain('UPSTOX_AUTONOMOUS_LIVE_ENABLED: false');
+  });
+
+  it('does not permit autonomous live BUY entries without a separate guarded rollout flag', () => {
+    const workerPath = path.resolve(serverDir, 'services/autonomousPilotWorker.ts');
+    const workerContent = fs.readFileSync(workerPath, 'utf8');
+
+    expect(workerContent).toContain('config.UPSTOX_AUTONOMOUS_LIVE_ENABLED');
+    expect(workerContent).toContain('UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR');
+    expect(workerContent).toContain("const orderRole = isSell ? 'AUTONOMOUS_EXIT' : 'AUTONOMOUS_ENTRY'");
+    expect(workerContent).toContain('signAutonomousExecution');
+
+    const gatePath = path.resolve(serverDir, 'services/liveOrderGateService.ts');
+    const gateContent = fs.readFileSync(gatePath, 'utf8');
+    expect(gateContent).toContain('verifyAutonomousExecution');
+    expect(gateContent).toContain('valid internal execution signature is required');
+  });
+
+  it('starts the MTM monitor and restores Upstox user streams at server startup', () => {
+    const indexPath = path.resolve(serverDir, 'index.ts');
+    const indexContent = fs.readFileSync(indexPath, 'utf8');
+    const adapterPath = path.resolve(serverDir, 'services/brokers/upstox/upstoxAdapter.ts');
+    const adapterContent = fs.readFileSync(adapterPath, 'utf8');
+
+    expect(indexContent).toContain('InFlightMtmService.startDaemon()');
+    expect(indexContent).toContain('InFlightMtmService.stopDaemon()');
+    expect(adapterContent).toContain('supportsPortfolioStream: true');
   });
 
   it('enforces that UpstoxAdapter routes live orders through LiveOrderGateService', () => {
@@ -20,6 +47,8 @@ describe('Phase 4B: Live Order Architecture Safety & AST Invariants', () => {
     const adapterContent = fs.readFileSync(adapterPath, 'utf8');
 
     expect(adapterContent).toContain('LiveOrderGateService.verifyLiveOrderPreSubmission');
+    expect(adapterContent).toContain('protective_stop_price');
+    expect(adapterContent).toContain('const isStopMarket');
   });
 
   it('enforces that frontend code never directly imports Upstox server modules or credentials', () => {

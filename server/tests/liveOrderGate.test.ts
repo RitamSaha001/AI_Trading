@@ -8,6 +8,7 @@ import { UpstoxClient } from '../services/brokers/upstox/upstoxClient';
 import { UpstoxAdapter } from '../services/brokers/upstox/upstoxAdapter';
 import { IndianMarketCalendar } from '../services/brokers/upstox/indianMarketCalendar';
 import { BrokerOrderRequest } from '../services/brokers/brokerTypes';
+import { signAutonomousExecution } from '../services/autonomousExecutionAuth';
 
 describe('Phase 4B: Server-Authoritative Live Order Gate', () => {
   const testUserId = 'usr_gate_test_001';
@@ -335,6 +336,19 @@ describe('Phase 4B: Server-Authoritative Live Order Gate', () => {
       auto: true,
       strategyName: 'Hurst Trend Rider',
     } as any;
+    algoOrderReq.internalExecutionSignature = signAutonomousExecution(
+      {
+        userId: algoOrderReq.userId,
+        symbol: algoOrderReq.symbol,
+        side: algoOrderReq.side,
+        type: algoOrderReq.type,
+        quantity: algoOrderReq.quantity,
+        price: algoOrderReq.price,
+        product: algoOrderReq.product,
+        clientOrderId: algoOrderReq.idempotencyKey,
+      },
+      config.AUTONOMOUS_EXECUTION_SECRET || ''
+    );
 
     const result = await LiveOrderGateService.verifyLiveOrderPreSubmission(algoOrderReq);
     expect(result).toBeDefined();

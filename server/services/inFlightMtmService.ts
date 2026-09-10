@@ -13,6 +13,8 @@ import { IndianMarketCalendar } from './brokers/upstox/indianMarketCalendar';
 import { UpstoxInstrumentMasterService } from './brokers/upstox/upstoxInstrumentMasterService';
 import { EmergencyControlService } from './emergencyControlService';
 import { ExactDecimal } from './precision';
+import { UpstoxUserStreamTransport } from './brokers/upstox/upstoxUserStreamTransport';
+import { config } from '../config';
 
 export interface MtmEvaluationResult {
   userId: string;
@@ -108,6 +110,26 @@ export class InFlightMtmService {
       };
     }
 
+    if (brokerId === 'upstox' && config.UPSTOX_LIVE_TRADING_ENABLED) {
+      try {
+        await UpstoxUserStreamTransport.runProtectiveStopWatchdog(userId);
+      } catch (err: any) {
+        return {
+          userId,
+          broker: brokerId,
+          nav: cashBalance,
+          unrealizedPnl: 0,
+          realizedPnl: 0,
+          maintenanceMarginRequired: 0,
+          marginHealthRatio: 0,
+          isMarginCallWarning: true,
+          isStopOutTriggered: false,
+          isRiskDegraded: true,
+          reason: `Protective stop coverage unavailable: ${err.message}`,
+        };
+      }
+    }
+
     let totalUnrealizedPnl = ExactDecimal.zero();
     let totalRealizedPnl = ExactDecimal.zero();
     let totalMaintenanceMargin = ExactDecimal.zero();
@@ -148,7 +170,11 @@ export class InFlightMtmService {
     const brokerMaint = brokerFunds?.usedMargin ? Number(brokerFunds.usedMargin) : 0;
     const maintMarginNum = Math.max(calculatedMaint, brokerMaint);
 
-    const nav = cashBalance + unPnlNum + rePnlNum;
+    const brokerEquity = brokerFunds?.totalEquity && typeof brokerFunds.totalEquity.toNumber === 'function'
+      ? brokerFunds.totalEquity.toNumber()
+      : Number(brokerFunds?.totalEquity || 0);
+    const navBase = Number.isFinite(brokerEquity) && brokerEquity > 0 ? brokerEquity : cashBalance;
+    const nav = navBase + unPnlNum + rePnlNum;
 
     // Margin Health Ratio: NAV / Maintenance Margin
     const marginHealthRatio = maintMarginNum > 0

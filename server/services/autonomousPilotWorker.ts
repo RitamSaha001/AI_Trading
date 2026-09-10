@@ -16,11 +16,14 @@
 
 import crypto from 'node:crypto';
 import { getDb } from '../db';
+import { config } from '../config';
 import { logger, AuditService } from './auditService';
 import { IndianMarketCalendar, MarketSessionType } from './brokers/upstox/indianMarketCalendar';
 import { UpstoxAdapter } from './brokers/upstox/upstoxAdapter';
 import { UpstoxCandleService } from './brokers/upstox/upstoxCandleService';
+import { UpstoxUserStreamTransport } from './brokers/upstox/upstoxUserStreamTransport';
 import { DistributedLockService } from './distributedLockService';
+import { signAutonomousExecution } from './autonomousExecutionAuth';
 import {
   UPSTOX_FLEET_ASSETS,
   tickAutonomousPilot,
@@ -28,7 +31,7 @@ import {
   createDefaultRateLimitStatus,
   AutonomousPilotTickResult,
 } from '../../src/domain/autonomousPilotEngine';
-import { PILOT_PROFILES } from '../../src/domain/autonomousPilot';
+import { PILOT_PROFILES, checkPilotCircuitBreaker } from '../../src/domain/autonomousPilot';
 import {
   Asset,
   Market,
@@ -39,12 +42,27 @@ import {
   AutonomousPilotProfile,
 } from '../../src/types';
 
+const IST_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function getIstRiskSessionDate(timestamp: number): string {
+  return IST_DATE_FORMATTER.format(timestamp);
+}
+
 export interface PilotWorkerStateRecord {
   user_id: string;
   enabled: number;
   execution_mode: 'full_autonomous' | 'semi_autonomous';
   profile: AutonomousPilotProfile;
   daily_starting_value: number;
+  peak_portfolio_value: number;
+  daily_drawdown_pct: number;
+  circuit_breaker_tier: 'NORMAL' | 'CAUTION' | 'BUY_HALTED' | 'KILL_SWITCH';
+  risk_session_date: string | null;
   risk_per_trade_pct: number;
   circuit_breaker_tripped: number;
   circuit_breaker_reason: string | null;
@@ -164,6 +182,10 @@ export class AutonomousPilotWorker {
     executionMode: 'full_autonomous' | 'semi_autonomous';
     profile: AutonomousPilotProfile;
     dailyStartingValue: number;
+    peakPortfolioValue: number;
+    dailyDrawdownPct: number;
+    circuitBreakerTier: 'NORMAL' | 'CAUTION' | 'BUY_HALTED' | 'KILL_SWITCH';
+    riskSessionDate?: string;
     riskPerTradePct: number;
     circuitBreakerTripped: boolean;
     circuitBreakerReason?: string;
@@ -243,7 +265,11 @@ export class AutonomousPilotWorker {
       executionMode: row?.execution_mode || 'full_autonomous',
       profile: row?.profile || 'conservative',
       dailyStartingValue: row?.daily_starting_value || 50000,
-      riskPerTradePct: row?.risk_per_trade_pct || 0.012,
+      peakPortfolioValue: Math.max(Number(row?.peak_portfolio_value) || 0, Number(row?.daily_starting_value) || 0),
+      dailyDrawdownPct: Number(row?.daily_drawdown_pct) || 0,
+      circuitBreakerTier: row?.circuit_breaker_tier || 'NORMAL',
+      riskSessionDate: row?.risk_session_date || undefined,
+      riskPerTradePct: row?.risk_per_trade_pct || PILOT_PROFILES.conservative.maxRiskPerTradePct,
       circuitBreakerTripped: Boolean(row?.circuit_breaker_tripped),
       circuitBreakerReason: row?.circuit_breaker_reason || undefined,
       executionModeStatus: modeStatus,
@@ -308,6 +334,14 @@ export class AutonomousPilotWorker {
     if (typeof updates.dailyStartingValue === 'number' && updates.dailyStartingValue > 0) {
       sets.push('daily_starting_value = ?');
       params.push(updates.dailyStartingValue);
+      sets.push('peak_portfolio_value = ?');
+      params.push(updates.dailyStartingValue);
+      sets.push('daily_drawdown_pct = 0');
+      sets.push("circuit_breaker_tier = 'NORMAL'");
+      sets.push('circuit_breaker_tripped = 0');
+      sets.push('circuit_breaker_reason = NULL');
+      sets.push('risk_session_date = ?');
+      params.push(getIstRiskSessionDate(now));
     }
     if (typeof updates.riskPerTradePct === 'number' && updates.riskPerTradePct > 0) {
       sets.push('risk_per_trade_pct = ?');
@@ -370,6 +404,7 @@ export class AutonomousPilotWorker {
 
         const session = this.mockSession ?? IndianMarketCalendar.getSession(new Date(now));
         const isMarketOpen = session === 'NORMAL';
+        const riskSessionDate = getIstRiskSessionDate(now);
 
         // Query active pilots
         let query = `SELECT * FROM autonomous_pilot_state WHERE enabled = 1`;
@@ -427,7 +462,7 @@ export class AutonomousPilotWorker {
               UPSTOX_FLEET_ASSETS.map(async (asset) => {
                 try {
                   const quote = quotesBatch[asset];
-                  const candles = await UpstoxCandleService.getCandles(asset, '1D', accessToken);
+              const candles = await UpstoxCandleService.getCandles(asset, '30m', accessToken);
                   if (quote && quote.lastPrice > 0) {
                     const history = candles.length > 0 ? candles.map((c) => c.close) : [quote.lastPrice];
                     if (history.length > 0) {
@@ -468,7 +503,7 @@ export class AutonomousPilotWorker {
               upstoxAdapter.getPositions(userId).catch(() => []),
               upstoxAdapter.getHoldings(userId).catch(() => []),
               db.query<any>(
-                `SELECT id, client_order_id, symbol, side, type, status, orig_qty, price
+                `SELECT id, client_order_id, symbol, side, type, status, orig_qty, price, order_role
                  FROM exchange_orders
                  WHERE user_id = ? AND status IN ('NEW', 'SUBMITTING', 'PARTIALLY_FILLED', 'OPEN')`,
                 [userId]
@@ -545,7 +580,7 @@ export class AutonomousPilotWorker {
               status: 'pending' as const,
               type: (o.type.toLowerCase() === 'market' ? 'market' : 'limit') as 'market' | 'limit',
               timestamp: now,
-              auto: true,
+              auto: o.order_role !== 'PROTECTIVE_STOP',
             }));
 
             // Calculate total positions & holdings valuation
@@ -556,13 +591,37 @@ export class AutonomousPilotWorker {
             }
             const currentTotalEquity = totalEquityNum > 0 ? totalEquityNum : (availableCashNum + totalPositionsValue);
 
-            // Auto-calibrate starting equity if it's the paper default (50000) or has a false cross-mode mismatch
-            let resolvedStartingVal = row.daily_starting_value;
-            const needsDaemonCalibration =
-              (resolvedStartingVal === 50000 || resolvedStartingVal <= 0 || Math.abs(resolvedStartingVal - currentTotalEquity) > currentTotalEquity * 0.15) &&
-              currentTotalEquity > 0;
+            const isNewRiskSession = row.risk_session_date !== riskSessionDate;
 
-            if (needsDaemonCalibration) {
+            // Start each India trading day from current NAV. Do not retain yesterday's intraday HWM.
+            let resolvedStartingVal = row.daily_starting_value;
+            const needsDaemonCalibration = (resolvedStartingVal === 50000 || resolvedStartingVal <= 0) && currentTotalEquity > 0;
+
+            if (isNewRiskSession && currentTotalEquity > 0) {
+              resolvedStartingVal = currentTotalEquity;
+              row.daily_starting_value = resolvedStartingVal;
+              row.peak_portfolio_value = currentTotalEquity;
+              row.daily_drawdown_pct = 0;
+              row.circuit_breaker_tier = 'NORMAL';
+              row.circuit_breaker_tripped = 0;
+              row.circuit_breaker_reason = null;
+              await db.execute(
+                `UPDATE autonomous_pilot_state
+                 SET daily_starting_value = ?, peak_portfolio_value = ?, daily_drawdown_pct = 0,
+                     circuit_breaker_tier = 'NORMAL', circuit_breaker_tripped = 0,
+                     circuit_breaker_reason = NULL, risk_session_date = ?, updated_at = ?
+                 WHERE user_id = ?`,
+                [resolvedStartingVal, currentTotalEquity, riskSessionDate, now, userId]
+              );
+              await AuditService.logEvent({
+                userId,
+                eventType: 'AUTONOMOUS_RISK_SESSION_RESET',
+                source: 'autonomous_pilot_worker',
+                actor: 'risk_engine',
+                metadata: { riskSessionDate, startingValue: resolvedStartingVal },
+                result: 'SUCCESS',
+              });
+            } else if (needsDaemonCalibration) {
               resolvedStartingVal = currentTotalEquity;
               row.daily_starting_value = resolvedStartingVal;
               row.circuit_breaker_tripped = 0;
@@ -574,6 +633,9 @@ export class AutonomousPilotWorker {
                 [resolvedStartingVal, now, userId]
               ).catch(() => {});
             }
+
+            const persistedHighWaterMark = Number(row.peak_portfolio_value) || 0;
+            const peakPortfolioValue = Math.max(persistedHighWaterMark, resolvedStartingVal, currentTotalEquity);
 
             // Construct AppState representation for quant engine evaluation
             const syntheticState: AppState = {
@@ -602,7 +664,7 @@ export class AutonomousPilotWorker {
                 executionMode: row.execution_mode,
                 profile: row.profile,
                 dailyStartingValue: resolvedStartingVal,
-                peakPortfolioValue: Math.max(resolvedStartingVal, currentTotalEquity),
+                peakPortfolioValue,
                 riskPerTradePct: row.risk_per_trade_pct,
                 circuitBreakerTripped: Boolean(row.circuit_breaker_tripped),
                 circuitBreakerReason: row.circuit_breaker_reason || undefined,
@@ -622,7 +684,7 @@ export class AutonomousPilotWorker {
                 activeOpportunities: [],
                 totalAutopilotTradesExecuted: 0,
                 autoPilotProfitTotal: 0,
-                dailyDrawdownPct: 0,
+                dailyDrawdownPct: Number(row.daily_drawdown_pct) || 0,
                 maxDailyDrawdownPct: PILOT_PROFILES[row.profile].maxDailyDrawdownPct,
               },
             } as any;
@@ -633,6 +695,19 @@ export class AutonomousPilotWorker {
               markets as Record<Asset, Market | undefined>,
               now
             );
+            const drawdownState = checkPilotCircuitBreaker(syntheticState, currentTotalEquity, row.profile);
+
+            const liveStream = UpstoxUserStreamTransport.get(userId);
+            if (liveStream) {
+              for (const fleetStatus of Object.values(tickResult.updatedFleet)) {
+                if ((fleetStatus.unitsHeld || 0) > 0 && (fleetStatus.trailingStopPrice || fleetStatus.stopLossPrice)) {
+                  await liveStream.applyProfitLock(
+                    fleetStatus.asset,
+                    Number(fleetStatus.trailingStopPrice || fleetStatus.stopLossPrice)
+                  );
+                }
+              }
+            }
 
             // Record action logs to database
             for (const log of tickResult.newActionLogs) {
@@ -691,6 +766,28 @@ export class AutonomousPilotWorker {
               for (const prop of tickResult.ordersToDispatch) {
                 const isSell = prop.side.toLowerCase() === 'sell';
 
+                // Autonomous entries require a separate, explicit rollout authorization.
+                // Protective exits and cancellations must remain available even when entries are paused.
+                if (!isSell && !config.UPSTOX_AUTONOMOUS_LIVE_ENABLED) {
+                  logger.warn(
+                    `[AutonomousPilotWorker] Skipping autonomous BUY for ${prop.asset}: guarded live rollout is disabled.`
+                  );
+                  continue;
+                }
+
+                if (!isSell && (!liveStream || liveStream.getStreamHealth() !== 'HEALTHY')) {
+                  logger.warn(`[AutonomousPilotWorker] Skipping autonomous BUY for ${prop.asset}: Upstox portfolio stream is not healthy.`);
+                  continue;
+                }
+
+                const proposedNotional = Number(prop.amount) * Number(prop.price);
+                if (!isSell && proposedNotional > config.UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR) {
+                  logger.warn(
+                    `[AutonomousPilotWorker] Skipping autonomous BUY for ${prop.asset}: ₹${proposedNotional.toFixed(2)} exceeds guarded rollout cap of ₹${config.UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR.toFixed(2)}.`
+                  );
+                  continue;
+                }
+
                 // If circuit breaker is tripped, allow SELL orders to preserve capital, but block new BUY entries
                 if (cbTripped && !isSell) {
                   continue;
@@ -705,6 +802,39 @@ export class AutonomousPilotWorker {
                 }
                 try {
                   const clientOrderId = `lm_pilot_${now}_${crypto.randomBytes(4).toString('hex')}`;
+                  const orderRole = isSell ? 'AUTONOMOUS_EXIT' : 'AUTONOMOUS_ENTRY';
+                  const orderType = prop.type.toUpperCase() as 'LIMIT' | 'MARKET';
+                  const product = (prop.product || 'MIS') as 'CNC' | 'MIS';
+                  const linkedEntry = isSell
+                    ? await db.queryOne<{ client_order_id: string }>(
+                        `SELECT client_order_id
+                         FROM exchange_orders
+                         WHERE user_id = ?
+                           AND symbol = ?
+                           AND side = 'BUY'
+                           AND order_role = 'AUTONOMOUS_ENTRY'
+                           AND status IN ('OPEN', 'PARTIALLY_FILLED', 'FILLED')
+                         ORDER BY updated_at DESC
+                         LIMIT 1`,
+                        [userId, prop.asset]
+                      )
+                    : null;
+                  const internalExecutionSignature = signAutonomousExecution(
+                    {
+                      userId,
+                      symbol: prop.asset,
+                      side: prop.side,
+                      type: orderType,
+                      quantity: prop.amount,
+                      price: prop.price,
+                      product,
+                      orderRole,
+                      parentClientOrderId: linkedEntry?.client_order_id,
+                      protectiveStopPrice: isSell ? undefined : prop.stopLoss,
+                      clientOrderId,
+                    },
+                    config.AUTONOMOUS_EXECUTION_SECRET || ''
+                  );
                   logger.info(
                     `[AutonomousPilotWorker] Executing autonomous order for ${userId}: ${prop.side.toUpperCase()} ${prop.amount} ${prop.asset} @ ₹${prop.price}`
                   );
@@ -713,16 +843,19 @@ export class AutonomousPilotWorker {
                     userId,
                     symbol: prop.asset,
                     side: prop.side.toUpperCase() as 'BUY' | 'SELL',
-                    type: prop.type.toUpperCase() as 'LIMIT' | 'MARKET',
+                    type: orderType,
                     quantity: prop.amount,
                     price: prop.price,
-                    product: (prop.product || 'MIS') as 'CNC' | 'MIS',
-                    stopPrice: prop.stopLoss,
+                    product,
+                    protectiveStopPrice: isSell ? undefined : prop.stopLoss,
+                    orderRole,
+                    parentClientOrderId: linkedEntry?.client_order_id,
                     isAutonomous: true,
                     strategyName: prop.strategyName,
                     algoTag: 'AUTOPILOT_V2',
                     idempotencyKey: clientOrderId,
                     clientOrderId,
+                    internalExecutionSignature,
                     accountMode: 'live',
                   });
 
@@ -787,6 +920,10 @@ export class AutonomousPilotWorker {
                SET fleet_state_json = ?,
                    circuit_breaker_tripped = ?,
                    circuit_breaker_reason = ?,
+                   peak_portfolio_value = ?,
+                   daily_drawdown_pct = ?,
+                   circuit_breaker_tier = ?,
+                   risk_session_date = ?,
                    execution_mode_status = ?,
                    last_server_run_at = ?,
                    updated_at = ?
@@ -795,6 +932,10 @@ export class AutonomousPilotWorker {
                 JSON.stringify(tickResult.updatedFleet),
                 cbTripped,
                 cbReason,
+                drawdownState.highWaterMark,
+                drawdownState.drawdownPct,
+                drawdownState.tier,
+                riskSessionDate,
                 modeStatus,
                 now,
                 now,

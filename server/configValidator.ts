@@ -43,6 +43,9 @@ export interface ServerConfig {
   UPSTOX_STATIC_IP?: string;
   UPSTOX_SECONDARY_STATIC_IP?: string;
   UPSTOX_LIVE_TRADING_ENABLED: boolean;
+  UPSTOX_AUTONOMOUS_LIVE_ENABLED: boolean;
+  UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR: number;
+  AUTONOMOUS_EXECUTION_SECRET?: string;
   ALLOWED_ORIGINS: string;
   RECONCILIATION_SLA_MS: number;
   SINGLE_USER_MODE: boolean;
@@ -102,6 +105,9 @@ const DEV_TEST_FALLBACKS = {
   UPSTOX_API_BASE_URL: 'https://api.upstox.com/v2',
   UPSTOX_HFT_BASE_URL: 'https://api-hft.upstox.com/v3',
   UPSTOX_LIVE_TRADING_ENABLED: false,
+  UPSTOX_AUTONOMOUS_LIVE_ENABLED: false,
+  UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR: 15_000,
+  AUTONOMOUS_EXECUTION_SECRET: 'lumen_dev_autonomous_execution_secret_2026_please_do_not_use_in_production',
 };
 
 // Known default/placeholder values that MUST be rejected in production and staging
@@ -323,6 +329,9 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     UPSTOX_STATIC_IP: z.string().optional(),
     UPSTOX_SECONDARY_STATIC_IP: z.string().optional(),
     UPSTOX_LIVE_TRADING_ENABLED: z.union([z.boolean(), z.string()]).optional(),
+    UPSTOX_AUTONOMOUS_LIVE_ENABLED: z.union([z.boolean(), z.string()]).optional(),
+    UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR: z.coerce.number().positive().optional(),
+    AUTONOMOUS_EXECUTION_SECRET: z.string().optional(),
     SINGLE_USER_MODE: z.union([z.boolean(), z.string()]).optional(),
     OWNER_EMAIL: z.string().optional(),
   });
@@ -362,11 +371,16 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   const upstoxEnv = candidate.UPSTOX_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.UPSTOX_ENV : 'sandbox');
   const upstoxApiBaseUrl = candidate.UPSTOX_API_BASE_URL || (isDev || isTest ? DEV_TEST_FALLBACKS.UPSTOX_API_BASE_URL : 'https://api.upstox.com/v2');
   const upstoxLiveTradingEnabled = candidate.UPSTOX_LIVE_TRADING_ENABLED === true || candidate.UPSTOX_LIVE_TRADING_ENABLED === 'true';
+  const upstoxAutonomousLiveEnabled = candidate.UPSTOX_AUTONOMOUS_LIVE_ENABLED === true || candidate.UPSTOX_AUTONOMOUS_LIVE_ENABLED === 'true';
+  const upstoxAutonomousLiveMaxNotionalInr = candidate.UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR
+    ? Number(candidate.UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR)
+    : DEV_TEST_FALLBACKS.UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR;
   const upstoxClientId = candidate.UPSTOX_CLIENT_ID || candidate.UPSTOX_API_KEY || '';
   const upstoxClientSecret = candidate.UPSTOX_CLIENT_SECRET || candidate.UPSTOX_API_SECRET || '';
   const upstoxRedirectUri = candidate.UPSTOX_REDIRECT_URI || '';
   const upstoxStaticIp = candidate.UPSTOX_STATIC_IP || '';
   const upstoxSecondaryStaticIp = candidate.UPSTOX_SECONDARY_STATIC_IP || '';
+  const autonomousExecutionSecret = candidate.AUTONOMOUS_EXECUTION_SECRET || (isDev || isTest ? DEV_TEST_FALLBACKS.AUTONOMOUS_EXECUTION_SECRET : '');
   const singleUserMode = candidate.SINGLE_USER_MODE === true || candidate.SINGLE_USER_MODE === 'true';
   const ownerEmail = (candidate.OWNER_EMAIL || 'ritamvarieties@gmail.com').trim().toLowerCase();
 
@@ -489,6 +503,18 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
         errors.push("UPSTOX_ENV must be 'production' when Upstox live trading is enabled.");
       }
     }
+
+    if (upstoxAutonomousLiveEnabled) {
+      if (!upstoxLiveTradingEnabled) {
+        errors.push('UPSTOX_AUTONOMOUS_LIVE_ENABLED requires UPSTOX_LIVE_TRADING_ENABLED=true.');
+      }
+      if (upstoxAutonomousLiveMaxNotionalInr > 15_000) {
+        errors.push('UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR must not exceed ₹15,000 during the guarded live rollout.');
+      }
+      if (autonomousExecutionSecret.length < 32) {
+        errors.push('AUTONOMOUS_EXECUTION_SECRET must be at least 32 characters when autonomous live trading is enabled.');
+      }
+    }
   }
 
   // Staging Fail-Closed Rules
@@ -549,6 +575,9 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     UPSTOX_STATIC_IP: candidate.UPSTOX_STATIC_IP,
     UPSTOX_SECONDARY_STATIC_IP: candidate.UPSTOX_SECONDARY_STATIC_IP,
     UPSTOX_LIVE_TRADING_ENABLED: upstoxLiveTradingEnabled,
+    UPSTOX_AUTONOMOUS_LIVE_ENABLED: upstoxAutonomousLiveEnabled,
+    UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR: upstoxAutonomousLiveMaxNotionalInr,
+    AUTONOMOUS_EXECUTION_SECRET: autonomousExecutionSecret || undefined,
     ALLOWED_ORIGINS: candidate.ALLOWED_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,https://ritamsaha001.github.io,https://87.76.191.49.nip.io,http://87.76.191.49.nip.io,http://87.76.191.49,https://87.76.191.49',
     RECONCILIATION_SLA_MS: candidate.RECONCILIATION_SLA_MS ? Number(candidate.RECONCILIATION_SLA_MS) : 300_000,
     SINGLE_USER_MODE: singleUserMode,

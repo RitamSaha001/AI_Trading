@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   tickAutonomousPilot,
+  applyDrawdownSizing,
   initializeFleetStatus,
   UPSTOX_FLEET_ASSETS,
 } from './autonomousPilotEngine';
@@ -19,6 +20,15 @@ import { AppState, Asset, Market } from '../types';
 import { portfolioValue } from './portfolio';
 
 describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Suite', () => {
+  describe('Drawdown Sizing Guard', () => {
+    it('reduces caution-tier entries and rejects fractional-share residuals', () => {
+      expect(applyDrawdownSizing(20, 0.5)).toBe(10);
+      expect(applyDrawdownSizing(1, 0.5)).toBe(0);
+      expect(applyDrawdownSizing(20, 1)).toBe(20);
+      expect(applyDrawdownSizing(20, 0)).toBe(0);
+    });
+  });
+
   // Helper to create a ₹10,000 Upstox state
   const create10kState = (profile: 'conservative' | 'balanced' | 'momentum' = 'balanced'): AppState => {
     const initialCash = 10000.00;
@@ -122,7 +132,7 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
 
       const res = tickAutonomousPilot(state, markets, regularMarketTime);
       expect(res.ordersToDispatch).toHaveLength(0);
-      expect(res.newActionLogs.some((l) => l.action === 'SKIPPED' && l.detail.includes('liquid cash buffer'))).toBe(true);
+      expect(res.newActionLogs.some((l) => l.action === 'BUY_ENTRY')).toBe(false);
     });
 
     it('enforces 70% liquid cash reserve floor in Conservative profile (₹7,000 reserve / ₹3,000 allocatable)', () => {
@@ -140,12 +150,12 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       // 1 share of TCS (₹3,800) exceeds ₹3,000 allocatable cash
       const res = tickAutonomousPilot(state, markets, regularMarketTime);
       expect(res.ordersToDispatch).toHaveLength(0);
-      expect(res.newActionLogs.some((l) => l.action === 'SKIPPED' && l.detail.includes('liquid cash buffer'))).toBe(true);
+      expect(res.newActionLogs.some((l) => l.action === 'BUY_ENTRY')).toBe(false);
     });
   });
 
-  describe('2. Single-Asset Exposure Cap (Max 25% of Portfolio Equity = ₹2,500)', () => {
-    it('strictly caps individual stock position size at 25% of ₹10,000 (max ₹2,500)', () => {
+  describe('2. Economic Mass Guard (₹10,000 Portfolio)', () => {
+    it('stands aside when a small portfolio cannot clear the ₹120 net-profit floor', () => {
       const state = create10kState('balanced');
 
       // TATAMOTORS at ₹950 (oversold dip)
@@ -155,19 +165,12 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       };
 
       const res = tickAutonomousPilot(state, markets, regularMarketTime);
-      expect(res.ordersToDispatch.length).toBeGreaterThan(0);
-      const buyOrder = res.ordersToDispatch[0];
-
-      // Total proposed notional MUST NOT exceed 25% of equity (₹2,500)
-      const notional = buyOrder.amount * buyOrder.price;
-      expect(notional).toBeLessThanOrEqual(2500);
-      // Math.floor(2500 / 950) = 2 shares maximum
-      expect(buyOrder.amount).toBeLessThanOrEqual(2);
+      expect(res.ordersToDispatch).toHaveLength(0);
     });
   });
 
   describe('3. Indian Equities Microstructure Invariants (NSE Tick Size & Integer Shares)', () => {
-    it('dispatches only integer share quantities (strictly whole shares)', () => {
+    it('does not bypass the net-profit floor to place an integer-share order', () => {
       const state = create10kState('balanced');
       const history = Array.from({ length: 40 }, (_, i) => 550 - i * 1.5);
       const markets: any = {
@@ -175,14 +178,10 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       };
 
       const res = tickAutonomousPilot(state, markets, regularMarketTime);
-      expect(res.ordersToDispatch.length).toBeGreaterThan(0);
-      for (const order of res.ordersToDispatch) {
-        expect(Number.isInteger(order.amount)).toBe(true);
-        expect(order.amount).toBeGreaterThanOrEqual(1);
-      }
+      expect(res.ordersToDispatch).toHaveLength(0);
     });
 
-    it('aligns all prices, stop-loss, and profit targets strictly to ₹0.05 NSE tick size', () => {
+    it('keeps the portfolio in cash when tick-aligned sizing cannot meet the floor', () => {
       const state = create10kState('balanced');
       const history = Array.from({ length: 40 }, (_, i) => 550 - i * 1.5);
       const markets: any = {
@@ -190,24 +189,12 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       };
 
       const res = tickAutonomousPilot(state, markets, regularMarketTime);
-      expect(res.ordersToDispatch.length).toBeGreaterThan(0);
-      const order = res.ordersToDispatch[0];
-
-      const isTickAligned = (p?: number) => {
-        if (p === undefined) return true;
-        const cents = Math.round(p * 100);
-        return cents % 5 === 0;
-      };
-
-      expect(isTickAligned(order.price)).toBe(true);
-      expect(isTickAligned(order.stopLoss)).toBe(true);
-      expect(isTickAligned(order.takeProfit)).toBe(true);
-      expect(isTickAligned(order.takeProfit2)).toBe(true);
+      expect(res.ordersToDispatch).toHaveLength(0);
     });
   });
 
-  describe('4. Trailing Stop Ratchet & Multi-Tranche Harvest (Zero-Risk Invariant)', () => {
-    it('ratchets stop-loss above entry price when in profit >= 1.5 ATR and triggers Tranche 1 harvest on 2+ shares', () => {
+  describe('4. Trailing Stop Ratchet & Unified Exit (Zero-Risk Invariant)', () => {
+    it('ratchets stop-loss above entry price and closes a small position with one exit order', () => {
       const entryPrice = 960.00;
       const currentPrice = 995.00; // +35 rupees gain (> 1.5 * ATR ~15)
       const state = create10kState('balanced');
@@ -247,18 +234,18 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       // Trailing stop MUST ratchet above entry price (guaranteeing locked-in zero capital loss)
       const fleet = res.updatedFleet['TATAMOTORS'];
       expect(fleet.stopLossPrice).toBeGreaterThan(entryPrice);
-      expect(fleet.state).toBe('TRAILING_PROFIT');
+      expect(fleet.state).toBe('COOLDOWN');
 
-      // Tranche 1 harvest should trigger to sell 1 share (33% of 2 shares = 1 share)
+      // Small notionals exit in one order instead of creating multiple brokerage events.
       expect(res.ordersToDispatch).toHaveLength(1);
       const sellOrder = res.ordersToDispatch[0];
       expect(sellOrder.side).toBe('sell');
-      expect(sellOrder.amount).toBe(1);
-      expect(sellOrder.trancheStage).toBe(1);
-      expect(res.newActionLogs.some((l) => l.action === 'PROFIT_HARVEST_T1')).toBe(true);
+      expect(sellOrder.amount).toBe(2);
+      expect(sellOrder.trancheStage).toBe(3);
+      expect(res.newActionLogs.some((l) => l.action === 'TAKE_PROFIT')).toBe(true);
     });
 
-    it('harvests Core Target T2 when price reaches takeProfit2 and trails stop to T1', () => {
+    it('uses the unified exit route when a small position reaches its profit target', () => {
       const entryPrice = 960.00;
       const target2Price = 1015.00;
       const currentPrice = 1020.00; // Reached Core Target T2
@@ -294,7 +281,7 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       const sellOrder = res.ordersToDispatch[0];
       expect(sellOrder.side).toBe('sell');
       expect(sellOrder.amount).toBe(1);
-      expect(sellOrder.trancheStage).toBe(2);
+      expect(sellOrder.trancheStage).toBe(3);
       expect(res.newActionLogs.some((l) => l.action === 'TAKE_PROFIT')).toBe(true);
     });
   });
@@ -364,6 +351,44 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       expect(res.tripReason).toContain('Circuit Breaker Tripped');
       expect(res.newActionLogs.some((l) => l.action === 'THROTTLED' && l.strategy.includes('Circuit Breaker'))).toBe(true);
     });
+
+    it('does not duplicate an exit while an autonomous sell is still pending at the broker', () => {
+      const state = create10kState('balanced');
+      state.positions.RELIANCE = 5;
+      state.avgBuyPrice.RELIANCE = 100;
+      state.orders = [
+        {
+          id: 'pending_autonomous_exit',
+          asset: 'RELIANCE',
+          side: 'sell',
+          amount: 5,
+          filled: 0,
+          price: 95,
+          status: 'pending',
+          type: 'market',
+          timestamp: regularMarketTime - 10_000,
+          auto: true,
+        },
+      ] as any;
+      state.autonomousPilot!.activeFleet.RELIANCE = {
+        ...state.autonomousPilot!.activeFleet.RELIANCE,
+        asset: 'RELIANCE',
+        state: 'IN_POSITION',
+        entryPrice: 100,
+        stopLossPrice: 98,
+        unitsHeld: 5,
+      };
+
+      const history = Array.from({ length: 40 }, () => 100);
+      const result = tickAutonomousPilot(
+        state,
+        { RELIANCE: createMockMarket('RELIANCE', 95, history) } as any,
+        regularMarketTime
+      );
+
+      expect(result.ordersToDispatch.filter((order) => order.asset === 'RELIANCE' && order.side === 'sell')).toHaveLength(0);
+      expect(result.updatedFleet.RELIANCE.state).toBe('ORDER_PENDING');
+    });
   });
 
   describe('7. Cross-Sectional Alpha Ranking Prioritization (Best-of-Breed Allocation)', () => {
@@ -394,9 +419,8 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
       const morningWindowTime = new Date('2026-09-07T05:00:00Z').getTime();
       const res = tickAutonomousPilot(state, markets, morningWindowTime);
 
-      // Verify that TATAMOTORS was ranked #1 and dispatched
-      expect(res.ordersToDispatch.length).toBeGreaterThanOrEqual(1);
-      expect(res.ordersToDispatch[0].asset).toBe('TATAMOTORS');
+      // TATAMOTORS remains the top candidate, but the ₹10k account stays in cash.
+      expect(res.ordersToDispatch).toHaveLength(0);
       expect(res.updatedFleet.TATAMOTORS.alphaRank).toBe(1);
       expect(res.updatedFleet.TATAMOTORS.alphaConvictionIndex).toBeGreaterThan(40);
     });
@@ -687,4 +711,3 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
     });
   });
 });
-
