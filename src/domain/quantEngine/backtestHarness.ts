@@ -40,7 +40,7 @@ export class LogisticRegressionModel {
   public trainingLoss = 0;
   public sampleCount = 0;
 
-  public fit(samples: TradeSample[], learningRate = 0.05, epochs = 250): void {
+  public fit(samples: TradeSample[], learningRate = 0.05, epochs = 250, l2Penalty = 0.01): void {
     if (samples.length < 5) {
       this.isFitted = false;
       return;
@@ -62,6 +62,9 @@ export class LogisticRegressionModel {
 
         for (let k = 0; k < this.weights.length; k++) {
           grads[k] += error * x[k];
+          if (k > 0) {
+            grads[k] += l2Penalty * this.weights[k];
+          }
         }
       }
 
@@ -147,6 +150,150 @@ export interface BacktestConfig {
   model?: LogisticRegressionModel;
 }
 
+export const BACKTEST_WARMUP_BARS = 35;
+
+export interface WalkForwardWindow {
+  fold: number;
+  trainingStartBar: number;
+  trainingEndBarExclusive: number;
+  testStartBar: number;
+  testEndBarExclusive: number;
+}
+
+export interface WalkForwardConfig {
+  trainingBars?: number;
+  testBars?: number;
+  stepBars?: number;
+  minTrainingTradeSamples?: number;
+  minOutOfSampleTrades?: number;
+  minProfitFactor?: number;
+  minSharpeRatio?: number;
+  maxDrawdownPct?: number;
+  minimumPassingFolds?: number;
+  backtest?: Omit<BacktestConfig, 'model'>;
+}
+
+export interface WalkForwardFoldResult {
+  window: WalkForwardWindow;
+  trainingReport: BacktestReport;
+  outOfSampleReport: BacktestReport;
+  modelFitted: boolean;
+  passed: boolean;
+  rejectionReasons: string[];
+}
+
+export interface WalkForwardValidationReport {
+  totalBars: number;
+  folds: WalkForwardFoldResult[];
+  passingFolds: number;
+  aggregateOutOfSampleNetPnl: number;
+  aggregateOutOfSampleTrades: number;
+  isPromotable: boolean;
+  rejectionReasons: string[];
+}
+
+export function createWalkForwardWindows(
+  totalBars: number,
+  trainingBars: number,
+  testBars: number,
+  stepBars: number = testBars
+): WalkForwardWindow[] {
+  if (
+    !Number.isInteger(totalBars) ||
+    !Number.isInteger(trainingBars) ||
+    !Number.isInteger(testBars) ||
+    !Number.isInteger(stepBars) ||
+    trainingBars < BACKTEST_WARMUP_BARS + 1 ||
+    testBars < BACKTEST_WARMUP_BARS + 1 ||
+    stepBars < 1
+  ) {
+    return [];
+  }
+
+  const windows: WalkForwardWindow[] = [];
+  for (let testStartBar = trainingBars, fold = 1; testStartBar + testBars <= totalBars; testStartBar += stepBars, fold++) {
+    windows.push({
+      fold,
+      trainingStartBar: Math.max(0, testStartBar - trainingBars),
+      trainingEndBarExclusive: testStartBar,
+      testStartBar,
+      testEndBarExclusive: testStartBar + testBars,
+    });
+  }
+  return windows;
+}
+
+/**
+ * Runs rolling, strictly chronological training and out-of-sample evaluation.
+ * The OOS slice receives only a fixed lookback prefix for indicator warm-up;
+ * orders begin exactly at the test boundary, so model fitting cannot see test bars.
+ */
+export function runWalkForwardValidation(
+  candles: Candle[],
+  regimeLabel: string,
+  config: WalkForwardConfig = {}
+): WalkForwardValidationReport {
+  const trainingBars = config.trainingBars ?? 240;
+  const testBars = config.testBars ?? 80;
+  const stepBars = config.stepBars ?? testBars;
+  const minTrainingTradeSamples = config.minTrainingTradeSamples ?? 20;
+  const minOutOfSampleTrades = config.minOutOfSampleTrades ?? 5;
+  const minProfitFactor = config.minProfitFactor ?? 1.10;
+  const minSharpeRatio = config.minSharpeRatio ?? 0.25;
+  const maxDrawdownPct = config.maxDrawdownPct ?? 5.0;
+  const minimumPassingFolds = config.minimumPassingFolds ?? 3;
+  const windows = createWalkForwardWindows(candles.length, trainingBars, testBars, stepBars);
+
+  const folds = windows.map((window) => {
+    const trainingCandles = candles.slice(window.trainingStartBar, window.trainingEndBarExclusive);
+    const trainingReport = runBacktest(trainingCandles, `${regimeLabel}: train fold ${window.fold}`, config.backtest);
+    const model = new LogisticRegressionModel();
+    const modelFitted = trainingReport.tradeSamples.length >= minTrainingTradeSamples;
+    if (modelFitted) {
+      model.fit(trainingReport.tradeSamples);
+    }
+
+    const warmupStart = Math.max(window.trainingStartBar, window.testStartBar - BACKTEST_WARMUP_BARS);
+    const outOfSampleCandles = candles.slice(warmupStart, window.testEndBarExclusive);
+    const outOfSampleReport = runBacktest(
+      outOfSampleCandles,
+      `${regimeLabel}: OOS fold ${window.fold}`,
+      { ...config.backtest, model: modelFitted ? model : undefined }
+    );
+    const rejectionReasons: string[] = [];
+    if (!modelFitted) rejectionReasons.push(`Only ${trainingReport.tradeSamples.length} training trade samples; minimum is ${minTrainingTradeSamples}.`);
+    if (outOfSampleReport.totalTrades < minOutOfSampleTrades) rejectionReasons.push(`Only ${outOfSampleReport.totalTrades} OOS trades; minimum is ${minOutOfSampleTrades}.`);
+    if (outOfSampleReport.netPnl <= 0) rejectionReasons.push('Out-of-sample net P&L is not positive after friction.');
+    if (outOfSampleReport.profitFactor < minProfitFactor) rejectionReasons.push(`Out-of-sample profit factor ${outOfSampleReport.profitFactor} is below ${minProfitFactor}.`);
+    if (outOfSampleReport.sharpeRatio < minSharpeRatio) rejectionReasons.push(`Out-of-sample Sharpe ${outOfSampleReport.sharpeRatio} is below ${minSharpeRatio}.`);
+    if (outOfSampleReport.maxDrawdownPct > maxDrawdownPct) rejectionReasons.push(`Out-of-sample drawdown ${outOfSampleReport.maxDrawdownPct}% exceeds ${maxDrawdownPct}%.`);
+
+    return {
+      window,
+      trainingReport,
+      outOfSampleReport,
+      modelFitted,
+      passed: rejectionReasons.length === 0,
+      rejectionReasons,
+    };
+  });
+
+  const passingFolds = folds.filter((fold) => fold.passed).length;
+  const rejectionReasons: string[] = [];
+  if (folds.length < minimumPassingFolds) rejectionReasons.push(`Only ${folds.length} chronological folds available; minimum is ${minimumPassingFolds}.`);
+  if (passingFolds < minimumPassingFolds) rejectionReasons.push(`Only ${passingFolds}/${folds.length} folds passed the OOS gate; minimum is ${minimumPassingFolds}.`);
+
+  return {
+    totalBars: candles.length,
+    folds,
+    passingFolds,
+    aggregateOutOfSampleNetPnl: +folds.reduce((sum, fold) => sum + fold.outOfSampleReport.netPnl, 0).toFixed(2),
+    aggregateOutOfSampleTrades: folds.reduce((sum, fold) => sum + fold.outOfSampleReport.totalTrades, 0),
+    isPromotable: rejectionReasons.length === 0,
+    rejectionReasons,
+  };
+}
+
 /**
  * Replays quantitative execution tick-by-tick across candle fixtures.
  * Exercises Scenarios 1 (TCA), 2 (Unified Ratchet), 3 (Timing), 4 (Regime),
@@ -208,7 +355,7 @@ export function runBacktest(
     features: SignalFeatures;
   } | null = null;
 
-  const windowSize = 35;
+  const windowSize = BACKTEST_WARMUP_BARS;
 
   for (let i = windowSize; i < candles.length; i++) {
     const window = candles.slice(i - windowSize, i + 1);

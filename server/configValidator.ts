@@ -102,7 +102,7 @@ const DEV_TEST_FALLBACKS = {
   PHONEPE_CALLBACK_PASSWORD: 'lumen_webhook_password_test_2026',
   BINANCE_ENV: 'testnet' as const,
   UPSTOX_ENV: 'sandbox' as const,
-  UPSTOX_API_BASE_URL: 'https://api.upstox.com/v2',
+  UPSTOX_API_BASE_URL: 'https://sandbox.upstox.com/v2',
   UPSTOX_HFT_BASE_URL: 'https://api-hft.upstox.com/v3',
   UPSTOX_LIVE_TRADING_ENABLED: false,
   UPSTOX_AUTONOMOUS_LIVE_ENABLED: false,
@@ -369,7 +369,12 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   const phonepeCallbackPassword = candidate.PHONEPE_CALLBACK_PASSWORD || (isDev || isTest ? DEV_TEST_FALLBACKS.PHONEPE_CALLBACK_PASSWORD : '');
   const binanceEnv = candidate.BINANCE_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.BINANCE_ENV : 'mainnet');
   const upstoxEnv = candidate.UPSTOX_ENV || (isDev || isTest ? DEV_TEST_FALLBACKS.UPSTOX_ENV : 'sandbox');
-  const upstoxApiBaseUrl = candidate.UPSTOX_API_BASE_URL || (isDev || isTest ? DEV_TEST_FALLBACKS.UPSTOX_API_BASE_URL : 'https://api.upstox.com/v2');
+  const upstoxApiBaseUrl = candidate.UPSTOX_API_BASE_URL || (
+    upstoxEnv === 'sandbox'
+      ? 'https://sandbox.upstox.com/v2'
+      : 'https://api.upstox.com/v2'
+  );
+  const upstoxHftBaseUrl = candidate.UPSTOX_HFT_BASE_URL || 'https://api-hft.upstox.com/v3';
   const upstoxLiveTradingEnabled = candidate.UPSTOX_LIVE_TRADING_ENABLED === true || candidate.UPSTOX_LIVE_TRADING_ENABLED === 'true';
   const upstoxAutonomousLiveEnabled = candidate.UPSTOX_AUTONOMOUS_LIVE_ENABLED === true || candidate.UPSTOX_AUTONOMOUS_LIVE_ENABLED === 'true';
   const upstoxAutonomousLiveMaxNotionalInr = candidate.UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR
@@ -391,6 +396,30 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   }
   if (upstoxSecondaryStaticIp && !IPV4_REGEX.test(upstoxSecondaryStaticIp.trim())) {
     errors.push('UPSTOX_SECONDARY_STATIC_IP must be a valid IPv4 address.');
+  }
+  if (upstoxEnv === 'sandbox' && !/^https:\/\/sandbox\.upstox\.com\/v2\/?$/i.test(upstoxApiBaseUrl.trim())) {
+    errors.push('UPSTOX_API_BASE_URL must use https://sandbox.upstox.com/v2 when UPSTOX_ENV=sandbox.');
+  }
+  if (upstoxEnv === 'production' && /sandbox\.upstox\.com/i.test(upstoxApiBaseUrl)) {
+    errors.push('UPSTOX_API_BASE_URL cannot point to sandbox.upstox.com when UPSTOX_ENV=production.');
+  }
+  if (upstoxEnv === 'production' && !/^https:\/\/api-hft\.upstox\.com\/v3\/?$/i.test(upstoxHftBaseUrl.trim())) {
+    errors.push('UPSTOX_HFT_BASE_URL must use https://api-hft.upstox.com/v3 when UPSTOX_ENV=production.');
+  }
+  if (upstoxLiveTradingEnabled && !isProd) {
+    errors.push('UPSTOX_LIVE_TRADING_ENABLED=true is permitted only when NODE_ENV=production.');
+  }
+  if (upstoxAutonomousLiveEnabled && !isProd) {
+    errors.push('UPSTOX_AUTONOMOUS_LIVE_ENABLED=true is permitted only when NODE_ENV=production.');
+  }
+  if (upstoxAutonomousLiveEnabled && !upstoxLiveTradingEnabled) {
+    errors.push('UPSTOX_AUTONOMOUS_LIVE_ENABLED requires UPSTOX_LIVE_TRADING_ENABLED=true.');
+  }
+  if (upstoxAutonomousLiveEnabled && upstoxAutonomousLiveMaxNotionalInr > 15_000) {
+    errors.push('UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR must not exceed ₹15,000 during the guarded live rollout.');
+  }
+  if (upstoxAutonomousLiveEnabled && autonomousExecutionSecret.length < 32) {
+    errors.push('AUTONOMOUS_EXECUTION_SECRET must be at least 32 characters when autonomous live trading is enabled.');
   }
 
   // Strict Validation: SESSION_SECRET
@@ -504,17 +533,6 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
       }
     }
 
-    if (upstoxAutonomousLiveEnabled) {
-      if (!upstoxLiveTradingEnabled) {
-        errors.push('UPSTOX_AUTONOMOUS_LIVE_ENABLED requires UPSTOX_LIVE_TRADING_ENABLED=true.');
-      }
-      if (upstoxAutonomousLiveMaxNotionalInr > 15_000) {
-        errors.push('UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR must not exceed ₹15,000 during the guarded live rollout.');
-      }
-      if (autonomousExecutionSecret.length < 32) {
-        errors.push('AUTONOMOUS_EXECUTION_SECRET must be at least 32 characters when autonomous live trading is enabled.');
-      }
-    }
   }
 
   // Staging Fail-Closed Rules
@@ -571,7 +589,7 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
     UPSTOX_REDIRECT_URI: candidate.UPSTOX_REDIRECT_URI,
     UPSTOX_ENV: upstoxEnv as 'sandbox' | 'production',
     UPSTOX_API_BASE_URL: upstoxApiBaseUrl,
-    UPSTOX_HFT_BASE_URL: candidate.UPSTOX_HFT_BASE_URL || 'https://api-hft.upstox.com/v3',
+    UPSTOX_HFT_BASE_URL: upstoxHftBaseUrl,
     UPSTOX_STATIC_IP: candidate.UPSTOX_STATIC_IP,
     UPSTOX_SECONDARY_STATIC_IP: candidate.UPSTOX_SECONDARY_STATIC_IP,
     UPSTOX_LIVE_TRADING_ENABLED: upstoxLiveTradingEnabled,

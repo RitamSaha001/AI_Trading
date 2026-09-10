@@ -19,6 +19,63 @@ export interface FrictionBreakdown {
   frictionPct: number;
 }
 
+export interface LiveMarketDataQualityResult {
+  allowed: boolean;
+  reason: string;
+}
+
+/**
+ * Rejects unsuitable live inputs before any signal, sizing, or order logic runs.
+ * It intentionally does not evaluate expected return: this is a data-integrity
+ * boundary that prevents stale, synthetic, incomplete, or malformed feeds from
+ * being treated as a tradable opportunity.
+ */
+export function evaluateLiveMarketDataQuality(
+  market: Market,
+  now: number = Date.now()
+): LiveMarketDataQualityResult {
+  if (market.isSynthetic) {
+    return { allowed: false, reason: 'Synthetic market data cannot authorize a live entry.' };
+  }
+  if (!Number.isFinite(market.price) || market.price <= 0) {
+    return { allowed: false, reason: 'Live market snapshot has an invalid price.' };
+  }
+  if (market.history.length < thresholds.MIN_ENTRY_HISTORY_POINTS) {
+    return {
+      allowed: false,
+      reason: `Insufficient price history (${market.history.length}/${thresholds.MIN_ENTRY_HISTORY_POINTS}) for a live entry.`,
+    };
+  }
+  if (market.candles.length < thresholds.MIN_ENTRY_CANDLE_COUNT) {
+    return {
+      allowed: false,
+      reason: `Insufficient OHLCV candles (${market.candles.length}/${thresholds.MIN_ENTRY_CANDLE_COUNT}) for a live entry.`,
+    };
+  }
+  if (market.lastUpdated > 0 && now >= market.lastUpdated && now - market.lastUpdated > thresholds.MAX_LIVE_MARKET_DATA_AGE_MS) {
+    return {
+      allowed: false,
+      reason: `Market snapshot is ${(now - market.lastUpdated) / 1000}s old; live-entry limit is ${thresholds.MAX_LIVE_MARKET_DATA_AGE_MS / 1000}s.`,
+    };
+  }
+
+  const recentCandles = market.candles.slice(-thresholds.MIN_ENTRY_CANDLE_COUNT);
+  const hasInvalidCandle = recentCandles.some((candle) =>
+    !Number.isFinite(candle.open) ||
+    !Number.isFinite(candle.high) ||
+    !Number.isFinite(candle.low) ||
+    !Number.isFinite(candle.close) ||
+    !Number.isFinite(candle.volume) ||
+    candle.low > candle.high ||
+    candle.volume < 0
+  );
+  if (hasInvalidCandle || market.history.some((price) => !Number.isFinite(price) || price <= 0)) {
+    return { allowed: false, reason: 'Market snapshot contains malformed price or OHLCV observations.' };
+  }
+
+  return { allowed: true, reason: 'Live market data passes completeness, freshness, and integrity checks.' };
+}
+
 /**
  * Computes exact roundtrip transaction costs and statutory clearing friction on NSE.
  * Includes Upstox flat/percentage brokerage, STT, exchange charges, SEBI turnover,

@@ -15,6 +15,7 @@ import {
   calculateHalfKellyFraction,
   calculateTTMSqueeze,
   getAssetSector,
+  thresholds,
 } from './quantEngine';
 
 export interface PilotProfileConfig {
@@ -247,7 +248,12 @@ export function evaluateMarketOpportunity(
 
   // Dynamic Half-Kelly fraction based on profile and R:R
   const estWinRate = profileKey === 'conservative' ? 0.65 : profileKey === 'balanced' ? 0.58 : 0.54;
-  const kellyRes = calculateHalfKellyFraction(estWinRate, calculatedRR, 1.25, 0.4);
+  const kellyRes = calculateHalfKellyFraction(
+    estWinRate,
+    calculatedRR,
+    thresholds.MAX_KELLY_SIZE_MULTIPLIER,
+    thresholds.MIN_KELLY_SIZE_MULTIPLIER
+  );
   const maxAllowedRiskMonetary = baseAllowedRiskMonetary * kellyRes.recommendedSizeMultiplier;
 
   // Units = Allowed Risk / Risk Per Unit

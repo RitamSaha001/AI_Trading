@@ -66,6 +66,7 @@ describe('Upstox V3 HFT & Execution Hardening Suite', () => {
 
   it('Requirement 1: placeOrder, cancelOrder, and modifyOrder route to HFT endpoint https://api-hft.upstox.com/v3', async () => {
     const requestedUrls: string[] = [];
+    const environmentSpy = vi.spyOn(config, 'UPSTOX_ENV', 'get').mockReturnValue('production');
 
     UpstoxClient.setTransport(async (url, options) => {
       requestedUrls.push(url);
@@ -110,31 +111,79 @@ describe('Upstox V3 HFT & Execution Hardening Suite', () => {
       };
     });
 
-    const placeRes = await UpstoxClient.placeOrder('test_access_token', {
-      quantity: 10,
-      product: 'D',
-      validity: 'DAY',
-      price: 2800,
-      instrument_token: 'NSE_EQ|INE002A01018',
-      order_type: 'LIMIT',
-      transaction_type: 'BUY',
+    try {
+      const placeRes = await UpstoxClient.placeOrder('test_access_token', {
+        quantity: 10,
+        product: 'D',
+        validity: 'DAY',
+        price: 2800,
+        instrument_token: 'NSE_EQ|INE002A01018',
+        order_type: 'LIMIT',
+        transaction_type: 'BUY',
+      });
+
+      expect(placeRes.order_id).toBe('24090500123456');
+      expect(requestedUrls[0]).toBe('https://api-hft.upstox.com/v3/order/place');
+
+      const cancelRes = await UpstoxClient.cancelOrder('test_access_token', '24090500123456');
+      expect(cancelRes.order_id).toBe('24090500123456');
+      expect(requestedUrls[1]).toBe('https://api-hft.upstox.com/v3/order/cancel?order_id=24090500123456');
+
+      const modifyRes = await UpstoxClient.modifyOrder('test_access_token', {
+        order_id: '24090500123456',
+        price: 2810,
+        order_type: 'LIMIT',
+        validity: 'DAY',
+      });
+      expect(modifyRes.order_id).toBe('24090500123456');
+      expect(requestedUrls[2]).toBe('https://api-hft.upstox.com/v3/order/modify');
+    } finally {
+      environmentSpy.mockRestore();
+    }
+  });
+
+  it('Requirement 1b: sandbox place, modify, and cancel use only sandbox v2 endpoints', async () => {
+    const requestedUrls: string[] = [];
+    const environmentSpy = vi.spyOn(config, 'UPSTOX_ENV', 'get').mockReturnValue('sandbox');
+    const apiBaseSpy = vi.spyOn(config, 'UPSTOX_API_BASE_URL', 'get').mockReturnValue('https://sandbox.upstox.com/v2');
+
+    UpstoxClient.setTransport(async (url) => {
+      requestedUrls.push(url);
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({ status: 'success', data: { order_id: 'sandbox_order_1' } }),
+        text: async () => '',
+      };
     });
 
-    expect(placeRes.order_id).toBe('24090500123456');
-    expect(requestedUrls[0]).toBe('https://api-hft.upstox.com/v3/order/place');
+    try {
+      await UpstoxClient.placeOrder('sandbox_access_token', {
+        quantity: 1,
+        product: 'D',
+        validity: 'DAY',
+        price: 100,
+        instrument_token: 'NSE_EQ|INE002A01018',
+        order_type: 'LIMIT',
+        transaction_type: 'BUY',
+      });
+      await UpstoxClient.modifyOrder('sandbox_access_token', {
+        order_id: 'sandbox_order_1',
+        price: 101,
+        order_type: 'LIMIT',
+        validity: 'DAY',
+      });
+      await UpstoxClient.cancelOrder('sandbox_access_token', 'sandbox_order_1');
 
-    const cancelRes = await UpstoxClient.cancelOrder('test_access_token', '24090500123456');
-    expect(cancelRes.order_id).toBe('24090500123456');
-    expect(requestedUrls[1]).toBe('https://api-hft.upstox.com/v3/order/cancel?order_id=24090500123456');
-
-    const modifyRes = await UpstoxClient.modifyOrder('test_access_token', {
-      order_id: '24090500123456',
-      price: 2810,
-      order_type: 'LIMIT',
-      validity: 'DAY',
-    });
-    expect(modifyRes.order_id).toBe('24090500123456');
-    expect(requestedUrls[2]).toBe('https://api-hft.upstox.com/v3/order/modify');
+      expect(requestedUrls).toEqual([
+        'https://sandbox.upstox.com/v2/order/place',
+        'https://sandbox.upstox.com/v2/order/modify',
+        'https://sandbox.upstox.com/v2/order/cancel?order_id=sandbox_order_1',
+      ]);
+    } finally {
+      apiBaseSpy.mockRestore();
+      environmentSpy.mockRestore();
+    }
   });
 
   it('Requirement 2: Sliced orders returning multiple order_ids are parsed and tracked with venue_order_ids', async () => {

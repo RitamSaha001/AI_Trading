@@ -5,6 +5,7 @@ dist/
 !.env.example
 .DS_Store
 *.log
+artifacts/upstox-sandbox-drills/
 
 # Android & Native Build Output
 *.apk

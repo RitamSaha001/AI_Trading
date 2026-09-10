@@ -709,5 +709,62 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
 
       expect(res.ordersToCancel).toContain('ord_partially_filled_1');
     });
+
+    it('blocks a synthetic market snapshot from creating a new live entry', () => {
+      const state = create10kState('balanced');
+      const history = Array.from({ length: 40 }, (_, index) => 2450 + index * 2);
+      const reliance = createMockMarket('RELIANCE', 2530, history);
+      reliance.isSynthetic = true;
+
+      const res = tickAutonomousPilot(state, { RELIANCE: reliance } as any, regularMarketTime);
+
+      expect(res.ordersToDispatch).toHaveLength(0);
+      expect(res.newActionLogs.some((log) => log.strategy === 'Live Market Data Quality Gate')).toBe(true);
+    });
+
+    it('freezes new entries after a flash-range candle', () => {
+      const state = create10kState('balanced');
+      const history = Array.from({ length: 40 }, (_, index) => 2450 + index * 2);
+      const reliance = createMockMarket('RELIANCE', 2530, history);
+      const lastCandle = reliance.candles[reliance.candles.length - 1];
+      lastCandle.high = reliance.price + 250;
+      lastCandle.low = reliance.price - 250;
+
+      const res = tickAutonomousPilot(state, { RELIANCE: reliance } as any, regularMarketTime);
+
+      expect(res.ordersToDispatch).toHaveLength(0);
+      expect(res.newActionLogs.some((log) => log.action === 'VOLATILITY_SHOCK' && log.status === 'BLOCKED')).toBe(true);
+    });
+
+    it('allows a protective exit even when the incoming market snapshot is synthetic', () => {
+      const state = create10kState('balanced');
+      const entryPrice = 2530;
+      state.positions = { RELIANCE: 2 } as any;
+      state.avgBuyPrice = { RELIANCE: entryPrice } as any;
+      state.autonomousPilot!.activeFleet = {
+        RELIANCE: {
+          asset: 'RELIANCE',
+          assignedStrategy: 'Titan Alpha Sentinel',
+          regimeLabel: 'Risk Defense',
+          hurst: 0.5,
+          currentPrice: entryPrice,
+          state: 'IN_POSITION',
+          entryPrice,
+          stopLossPrice: 2500,
+          takeProfitPrice: 2580,
+          unitsHeld: 2,
+          trancheStage: 0,
+        },
+      };
+      const history = Array.from({ length: 40 }, (_, index) => 2550 - index * 2);
+      const reliance = createMockMarket('RELIANCE', 2480, history);
+      reliance.isSynthetic = true;
+
+      const res = tickAutonomousPilot(state, { RELIANCE: reliance } as any, regularMarketTime);
+
+      expect(res.ordersToDispatch).toHaveLength(1);
+      expect(res.ordersToDispatch[0].side).toBe('sell');
+      expect(res.newActionLogs.some((log) => log.action === 'STOP_LOSS')).toBe(true);
+    });
   });
 });

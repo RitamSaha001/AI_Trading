@@ -19,7 +19,10 @@
 1. In the Upstox Developer App settings, set the **Redirect URI**:
    - **Production VPS**: `https://your-domain.com/api/exchange/upstox/callback`
    - **Local Development**: `http://localhost:5173/api/exchange/upstox/callback`
-2. Lumen enforces strict server-side anti-CSRF state management:
+   - **This VPS**: `https://87.76.191.49.nip.io/api/exchange/upstox/callback`
+2. Register the full callback path, not the site root. Upstox returns an authorization `code` and `state` by browser `GET`; the user must first start authorization from the signed-in application on this same HTTPS domain.
+3. Confirm that `https://87.76.191.49.nip.io` has a valid publicly trusted TLS certificate and proxies to this application before registering it. Do not register the URL until this is true.
+4. Lumen enforces strict server-side anti-CSRF state management:
    - Server generates a 64-character random state persisted in `broker_oauth_states` with a 10-minute TTL.
    - Any callback with a replayed or unrecognized state token is atomically rejected before code exchange.
 

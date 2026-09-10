@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS autonomous_pilot_state (
   execution_mode TEXT NOT NULL DEFAULT 'full_autonomous',
   profile TEXT NOT NULL DEFAULT 'conservative',
   daily_starting_value REAL NOT NULL DEFAULT 50000.0,
-  risk_per_trade_pct REAL NOT NULL DEFAULT 0.012,
+  risk_per_trade_pct REAL NOT NULL DEFAULT 0.75,
   circuit_breaker_tripped INTEGER NOT NULL DEFAULT 0,
   circuit_breaker_reason TEXT,
   last_client_heartbeat_at BIGINT NOT NULL DEFAULT 0,

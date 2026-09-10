@@ -833,20 +833,30 @@ export function buildServer(): FastifyInstance {
     return { success: true, authUrl, expiresAt };
   });
 
-  server.post('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { code: string; state: string; redirectUri?: string };
-    if (!body?.code) {
+  const completeUpstoxOAuthCallback = async (
+    userId: string,
+    payload: { code?: string; state?: string; redirectUri?: string; error?: string },
+    reply: FastifyReply
+  ) => {
+    if (payload?.error) {
+      return reply.status(400).send({
+        success: false,
+        code: 'UPSTOX_AUTH_DENIED',
+        error: 'Upstox authorization was not completed.',
+      });
+    }
+    if (!payload?.code) {
       return reply.status(400).send({ success: false, error: 'Authorization code is required' });
     }
-    if (!body?.state) {
+    if (!payload?.state) {
       return reply.status(400).send({ success: false, error: 'OAuth state parameter is required for CSRF protection' });
     }
     try {
       const broker = BrokerRegistry.get('upstox');
-      const audit = await broker.saveCredentials!(req.user!.id, {
-        code: body.code,
-        state: body.state,
-        redirectUri: body.redirectUri,
+      const audit = await broker.saveCredentials!(userId, {
+        code: payload.code,
+        state: payload.state,
+        redirectUri: payload.redirectUri,
       });
       return { success: true, audit, message: 'Upstox connected and credentials encrypted at rest.' };
     } catch (err: any) {
@@ -857,11 +867,19 @@ export function buildServer(): FastifyInstance {
         code: isSegmentInactive ? 'UPSTOX_SEGMENT_INACTIVE' : 'UPSTOX_AUTH_FAILED',
         error: isSegmentInactive
           ? 'Upstox reported that trading segments are inactive or awaiting reactivation for this account. Please reactivate segments in Upstox web/app, or paste an active access token.'
-          : err.message,
-        details: err.message,
-        accountId: '87BSJ2',
+          : 'Upstox authorization failed. Confirm the callback URL, authorization state, and account access, then try again.',
       });
     }
+  };
+
+  server.get('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const query = req.query as { code?: string; state?: string; redirectUri?: string; error?: string };
+    return completeUpstoxOAuthCallback(req.user!.id, query, reply);
+  });
+
+  server.post('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as { code?: string; state?: string; redirectUri?: string; error?: string };
+    return completeUpstoxOAuthCallback(req.user!.id, body, reply);
   });
 
   server.get('/api/exchange/upstox/token-health', { preHandler: requireAuth }, async (req: FastifyRequest) => {
