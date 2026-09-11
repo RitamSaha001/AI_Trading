@@ -32,8 +32,8 @@ export const MIN_NET_PROFIT_FRICTION_MULTIPLE = 1.2;
 export const ELEVATED_FLOOR_MULTIPLIER = 1.5;
 /** Elevated net expected profit floor (INR) required for candidate #2 in dual-position Mode 35-2 (1.5x fallback) */
 export const ELEVATED_NET_PROFIT_FLOOR_INR = 180.0;
-/** Guaranteed net cash buffer per share added to Stage 0.5 fee armor stop */
-export const FEE_ARMOR_NET_GAIN_PER_SHARE = 5.0;
+/** Guaranteed net cash buffer per share added to Stage 0.5 fee armor stop (2 ticks) */
+export const FEE_ARMOR_NET_GAIN_PER_SHARE = 0.10;
 
 /** Securities Transaction Tax (STT) for delivery buy side (0.10%) */
 export const STT_DELIVERY_BUY_PCT = 0.001;
@@ -61,21 +61,24 @@ export const NSE_TICK_SIZE_INR = 0.05;
 // ============================================================================
 // SCENARIO 2: Volatility-Adjusted Multi-Stage Profit Ratchet
 // ============================================================================
-/** Level 0.5 Micro-Shield trigger: gain threshold in ATR multiples (+0.30 ATR) */
-export const RATCHET_STAGE_0_5_ATR = 0.30;
-/** Level 1 trigger: initial expansion gain in ATR multiples (+0.70 ATR) */
-export const RATCHET_STAGE_1_ATR = 0.70;
+/** Level 0.5 Fee-Breakeven Shield trigger: gain threshold in ATR multiples (+0.75 ATR) */
+export const RATCHET_STAGE_0_5_ATR = 0.75;
+/** Level 1 trigger: initial expansion gain in ATR multiples (+1.00 ATR) */
+export const RATCHET_STAGE_1_ATR = 1.00;
 /** Level 2 trigger: Tranche 1 harvest in ATR multiples (+1.40 ATR) */
 export const RATCHET_STAGE_2_ATR = 1.40;
 /** Level 3 trigger: Core target T2 in ATR multiples (+2.00 ATR) */
 export const RATCHET_STAGE_3_ATR = 2.00;
 
-/** Locked gain for Level 1 stop: Entry + (0.25 * ATR) */
-export const RATCHET_LOCK_1_ATR = 0.25;
-/** Locked gain for Level 2 stop: Entry + (0.60 * ATR) */
-export const RATCHET_LOCK_2_ATR = 0.60;
-/** Locked gain for Level 3 stop: Entry + (1.25 * ATR) */
-export const RATCHET_LOCK_3_ATR = 1.25;
+/** Locked gain for Level 1 stop: Entry + (0.35 * ATR) */
+export const RATCHET_LOCK_1_ATR = 0.35;
+/** Locked gain for Level 2 stop: Entry + (0.75 * ATR) */
+export const RATCHET_LOCK_2_ATR = 0.75;
+/** Locked gain for Level 3 stop: Entry + (1.35 * ATR) */
+export const RATCHET_LOCK_3_ATR = 1.35;
+
+/** Unified exit trailing profit cushion from high water mark once Target 1 is cleared (0.50 ATR) */
+export const UNIFIED_EXIT_PROFIT_TRAIL_ATR = 0.50;
 
 // ============================================================================
 // SCENARIOS 3, 4, 5: Session Timing Quality & Market Windows (IST minutes from midnight)

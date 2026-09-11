@@ -427,7 +427,7 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
   });
 
   describe('8. Stepped Breakeven Defense (Zero-Risk Trailing Guarantee)', () => {
-    it('ratchets stop-loss to entry price + lock (+0.25 ATR) once gain reaches +0.8 to +1.0 ATR on 1-share holdings', () => {
+    it('ratchets stop-loss to entry price + lock (+0.35 ATR) once gain reaches +1.0 ATR on 1-share holdings', () => {
       const entryPrice = 950.00;
       const initialStop = 910.00;
       const atr = 20.00;
@@ -437,10 +437,10 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
 
       expect(ratchet.isRatcheted).toBe(true);
       expect(ratchet.stageName).toBe('STEPPED_BREAKEVEN');
-      expect(ratchet.ratchetedStopPrice).toBe(955.00); // Entry + 0.25 ATR (950 + 5 = 955)
+      expect(ratchet.ratchetedStopPrice).toBe(957.00); // Entry + 0.35 ATR (950 + 7 = 957)
     });
 
-    it('locks in banked profit (+0.60 ATR) once gain reaches +1.5 ATR', () => {
+    it('locks in banked profit (+0.75 ATR) once gain reaches +1.5 ATR', () => {
       const entryPrice = 950.00;
       const initialStop = 910.00;
       const atr = 20.00;
@@ -450,10 +450,10 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
 
       expect(ratchet.isRatcheted).toBe(true);
       expect(ratchet.stageName).toBe('LOCKED_PROFIT_T1');
-      expect(ratchet.ratchetedStopPrice).toBe(962.00); // 950 + 20 * 0.6 = 962 (profitable stop)
+      expect(ratchet.ratchetedStopPrice).toBe(965.00); // 950 + 20 * 0.75 = 965 (profitable stop)
     });
 
-    it('locks in core profit (+1.25 ATR) once gain reaches +2.2 ATR', () => {
+    it('locks in core profit (+1.35 ATR) once gain reaches +2.2 ATR', () => {
       const entryPrice = 950.00;
       const initialStop = 910.00;
       const atr = 20.00;
@@ -463,7 +463,7 @@ describe('Autonomous Quant Pilot - ₹10,000 Upstox Realistic Simulation Test Su
 
       expect(ratchet.isRatcheted).toBe(true);
       expect(ratchet.stageName).toBe('CORE_TARGET_T2');
-      expect(ratchet.ratchetedStopPrice).toBe(975.00); // 950 + 20 * 1.25 = 975
+      expect(ratchet.ratchetedStopPrice).toBe(977.00); // 950 + 20 * 1.35 = 977
     });
   });
 

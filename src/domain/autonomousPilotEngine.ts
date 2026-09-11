@@ -704,17 +704,24 @@ export function tickAutonomousPilot(
     }
 
     // Small MIS positions use one exit order. Partial exits would multiply the flat brokerage fee.
-    if (!exitOrderQueued && usesUnifiedExit && dynamicRatchet.gainAtrMultiples >= thresholds.RATCHET_STAGE_3_ATR && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    const isTarget1Cleared = dynamicRatchet.gainAtrMultiples >= thresholds.RATCHET_STAGE_2_ATR;
+    const isTarget2Hit = dynamicRatchet.gainAtrMultiples >= thresholds.RATCHET_STAGE_3_ATR;
+    const isUnifiedTrailStopHit = isTarget1Cleared && price <= (highWaterMark - atr * thresholds.UNIFIED_EXIT_PROFIT_TRAIL_ATR);
+
+    if (!exitOrderQueued && usesUnifiedExit && (isTarget2Hit || isUnifiedTrailStopHit) && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      const exitReason = isTarget2Hit
+        ? `Unified exit at +${dynamicRatchet.gainAtrMultiples} ATR. Closing all ${currentHolding} shares in one order to avoid partial-exit fee multiplication.`
+        : `Unified Target 1 Trailing Harvest: Peak +${((highWaterMark - avgBuyPrice) / atr).toFixed(2)} ATR protected at ₹${price.toFixed(2)}.`;
       ordersToDispatch.push({
         asset,
         side: 'sell',
         amount: currentHolding,
         price: alignToTickSize(price, asset),
-        type: 'limit',
+        type: isTarget2Hit ? 'limit' : 'market',
         product: 'MIS',
         strategyName: `Auto-Pilot: ${strategy} Unified Profit Exit`,
-        reason: `Unified exit at +${dynamicRatchet.gainAtrMultiples} ATR. Closing all ${currentHolding} shares in one order to avoid partial-exit fee multiplication.`,
-        trancheStage: 3,
+        reason: exitReason,
+        trancheStage: isTarget2Hit ? 3 : 2,
       });
 
       rateLimits.requestsThisMinute++;
@@ -1077,9 +1084,12 @@ export function tickAutonomousPilot(
       }
     } else if (strategy === 'Value Accumulator') {
       const rsi = indicators(market.history).rsi ?? 50;
-      if (rsi < 35) {
+      const lastCandle = market.candles && market.candles.length > 0 ? market.candles[market.candles.length - 1] : null;
+      const isReversalBar = lastCandle ? lastCandle.close >= lastCandle.open : true;
+      const isAboveVwapOrAbsorbing = (vwap > 0 && price >= vwap * 0.998) || volumeSurgeRatio >= 1.10;
+      if (rsi < 35 && isReversalBar && isAboveVwapOrAbsorbing) {
         hasEntrySignal = true;
-        entryRationale = `Value Accumulation: Depressed RSI (${rsi.toFixed(0)}) in high-quality bluechip.`;
+        entryRationale = `Value Accumulation: Oversold absorption (RSI ${rsi.toFixed(0)}, Vol ${volumeSurgeRatio.toFixed(2)}x) in high-quality bluechip.`;
       }
     } else {
       const ind = indicators(market.history, market.candles);

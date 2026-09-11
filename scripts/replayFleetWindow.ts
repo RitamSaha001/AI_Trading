@@ -437,8 +437,8 @@ async function replaySingleDay(
 
       const fleetStatus = appState.autonomousPilot?.activeFleet?.[asset];
       const entryPrice = avgBuyPrices[asset] || candle.close;
-      const stopLoss = fleetStatus?.currentStopLoss;
-      const takeProfit = fleetStatus?.currentTakeProfit;
+      const stopLoss = fleetStatus?.stopLossPrice;
+      const takeProfit = fleetStatus?.takeProfitPrice;
 
       let exitPrice: number | null = null;
       let exitReason = '';
@@ -657,6 +657,7 @@ async function replaySingleDay(
     maxDrawdownPct,
     closedTrades,
     eventsCount: replayEvents.length,
+    events: replayEvents,
   };
 }
 
@@ -666,6 +667,8 @@ async function runMultiDayWindowReplay() {
   let capital = 40000.0;
   let profile: AutonomousPilotProfile = 'balanced';
   let compounding = true;
+  let tag = '';
+  let fromDate: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -687,12 +690,20 @@ async function runMultiDayWindowReplay() {
       if (p === 'conservative' || p === 'balanced' || p === 'momentum') {
         profile = p as AutonomousPilotProfile;
       }
+    } else if (arg.startsWith('--from=')) {
+      fromDate = arg.split('=')[1].trim();
+    } else if (arg === '--from' && i + 1 < args.length) {
+      fromDate = args[++i].trim();
+    } else if (arg.startsWith('--tag=')) {
+      tag = arg.split('=')[1].trim();
+    } else if (arg === '--tag' && i + 1 < args.length) {
+      tag = args[++i].trim();
     } else if (arg === '--reset-daily') {
       compounding = false;
     }
   }
 
-  const tradingDays = getLastNTradingDays(daysCount);
+  const tradingDays = fromDate ? getLastNTradingDays(daysCount, fromDate, true) : getLastNTradingDays(daysCount);
 
   console.log('='.repeat(80));
   console.log('  AUTONOMOUS QUANT PILOT — 10-DAY ROLLING FLEET AUDIT');
@@ -790,7 +801,8 @@ async function runMultiDayWindowReplay() {
   // Save audit artifact
   const outputDir = join('artifacts', 'fleet-replay-audit');
   await mkdir(outputDir, { recursive: true });
-  const outputPath = join(outputDir, `replay-window-${daysCount}days.json`);
+  const filename = tag ? `replay-window-${daysCount}days-${tag}.json` : `replay-window-${daysCount}days.json`;
+  const outputPath = join(outputDir, filename);
   await writeFile(
     outputPath,
     JSON.stringify(

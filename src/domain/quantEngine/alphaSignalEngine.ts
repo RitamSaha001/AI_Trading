@@ -678,10 +678,10 @@ export interface DynamicProfitRatchetResult {
 
 /**
  * Scenario 2: Volatility-Adjusted Multi-Stage Profit Ratchet
- * - Level 0.5 (+0.30 ATR): Fee-Breakeven Shield (Entry + Fees + 1 tick)
- * - Level 1 (+0.70 ATR): Stepped Profit Lock (Entry + 0.25 ATR)
- * - Level 2 (+1.40 ATR): Tranche 1 Harvest (Lock +0.60 ATR)
- * - Level 3 (+2.00 ATR): Core Target T2 (Lock +1.25 ATR)
+ * - Level 0.5 (+0.75 ATR): Fee-Breakeven Shield (Entry + Fees + 1 tick)
+ * - Level 1 (+1.00 ATR): Stepped Profit Lock (Entry + 0.35 ATR)
+ * - Level 2 (+1.40 ATR): Tranche 1 Harvest (Lock +0.75 ATR)
+ * - Level 3 (+2.00 ATR): Core Target T2 (Lock +1.35 ATR)
  */
 export function calculateDynamicProfitRatchet(
   entryPrice: number,
@@ -702,7 +702,7 @@ export function calculateDynamicProfitRatchet(
 
   const feeBreakeven = entryPrice + roundtripFrictionPerShare + tickSize;
 
-  // Level 3: Core target reached (+2.00 ATR) -> Ratchet stop to max(feeBreakeven, +1.25 ATR)
+  // Level 3: Core target reached (+2.00 ATR) -> Ratchet stop to max(feeBreakeven, +1.35 ATR)
   if (gainAtrMultiples >= thresholds.RATCHET_STAGE_3_ATR) {
     const t2Lock = Math.max(feeBreakeven, entryPrice + safeAtr * thresholds.RATCHET_LOCK_3_ATR);
     if (currentPrice > t2Lock) {
@@ -710,7 +710,7 @@ export function calculateDynamicProfitRatchet(
       stageName = 'CORE_TARGET_T2';
     }
   }
-  // Level 2: Target 1 reached (+1.40 ATR) -> Ratchet stop to max(feeBreakeven, +0.60 ATR)
+  // Level 2: Target 1 reached (+1.40 ATR) -> Ratchet stop to max(feeBreakeven, +0.75 ATR)
   else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_2_ATR) {
     const t1Lock = Math.max(feeBreakeven, entryPrice + safeAtr * thresholds.RATCHET_LOCK_2_ATR);
     if (currentPrice > t1Lock) {
@@ -718,7 +718,7 @@ export function calculateDynamicProfitRatchet(
       stageName = 'LOCKED_PROFIT_T1';
     }
   }
-  // Level 1: Stepped Profit Lock (+0.70 ATR) -> Ratchet stop to max(feeBreakeven, +0.25 ATR)
+  // Level 1: Stepped Profit Lock (+1.00 ATR) -> Ratchet stop to max(feeBreakeven, +0.35 ATR)
   else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_1_ATR) {
     const steppedLock = Math.max(feeBreakeven, entryPrice + safeAtr * thresholds.RATCHET_LOCK_1_ATR);
     if (currentPrice > steppedLock) {
@@ -726,13 +726,15 @@ export function calculateDynamicProfitRatchet(
       stageName = 'STEPPED_BREAKEVEN';
     }
   }
-  // Level 0.5: Fee-Breakeven Micro-Shield (+0.30 ATR) -> Stop to Entry + Net Friction + Net Gain Armor
+  // Level 0.5: Fee-Breakeven Shield (+0.75 ATR) -> Stop to Entry + Net Friction + Net Gain Armor
   else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_0_5_ATR) {
     const feeArmorStop = entryPrice + roundtripFrictionPerShare + tickSize + (roundtripFrictionPerShare > 0 ? thresholds.FEE_ARMOR_NET_GAIN_PER_SHARE : 0);
-    if (currentPrice > feeArmorStop) {
-      ratchetedStop = Math.max(ratchetedStop, feeArmorStop);
+    const candidateStop = currentPrice > feeArmorStop ? feeArmorStop : feeBreakeven;
+    // Maintain minimum breathing room (0.25 ATR) so early normal noise does not choke position
+    if (currentPrice > candidateStop && (currentPrice - candidateStop) >= safeAtr * 0.25) {
+      ratchetedStop = Math.max(ratchetedStop, candidateStop);
       stageName = 'FEE_BREAKEVEN_SHIELD';
-    } else if (currentPrice > feeBreakeven) {
+    } else if (currentPrice > feeBreakeven && (currentPrice - feeBreakeven) >= safeAtr * 0.20) {
       ratchetedStop = Math.max(ratchetedStop, feeBreakeven);
       stageName = 'FEE_BREAKEVEN_SHIELD';
     }
