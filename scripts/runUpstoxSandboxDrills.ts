@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   if (process.env.UPSTOX_SANDBOX_CONFIRM !== CONFIRMATION_PHRASE) {
     throw new Error(`Refusing to place a sandbox order. Set UPSTOX_SANDBOX_CONFIRM=${CONFIRMATION_PHRASE} explicitly.`);
   }
-  if (config.UPSTOX_ENV !== 'sandbox' || !/^https:\/\/sandbox\.upstox\.com\/v2\/?$/i.test(config.UPSTOX_API_BASE_URL)) {
+  if (config.UPSTOX_ENV !== 'sandbox' || !/^https:\/\/(api-sandbox|sandbox)\.upstox\.com\/v2\/?$/i.test(config.UPSTOX_API_BASE_URL)) {
     throw new Error('Refusing to run: the configured Upstox endpoint is not the sandbox v2 host.');
   }
   if (config.UPSTOX_LIVE_TRADING_ENABLED || config.UPSTOX_AUTONOMOUS_LIVE_ENABLED) {
@@ -113,6 +113,8 @@ async function main(): Promise<void> {
       instrument_token: instrumentToken,
       order_type: 'LIMIT',
       transaction_type: 'BUY',
+      disclosed_quantity: 0,
+      trigger_price: 0,
     });
     orderId = placed.order_id || placed.order_ids?.[0];
     if (!orderId) {
@@ -128,6 +130,8 @@ async function main(): Promise<void> {
         price: modifiedLimitPrice,
         order_type: 'LIMIT',
         validity: 'DAY',
+        disclosed_quantity: 0,
+        trigger_price: 0,
       });
       report.steps.push({ name: 'modify', status: 'PASS', latencyMs: Date.now() - modifyStartedAt, orderId });
     } catch (error) {

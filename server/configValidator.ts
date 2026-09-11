@@ -397,7 +397,7 @@ export function validateServerConfig(rawEnv: Record<string, any>): ValidationRes
   if (upstoxSecondaryStaticIp && !IPV4_REGEX.test(upstoxSecondaryStaticIp.trim())) {
     errors.push('UPSTOX_SECONDARY_STATIC_IP must be a valid IPv4 address.');
   }
-  if (upstoxEnv === 'sandbox' && !/^https:\/\/sandbox\.upstox\.com\/v2\/?$/i.test(upstoxApiBaseUrl.trim())) {
+  if (upstoxEnv === 'sandbox' && !/^https:\/\/(api-sandbox|sandbox)\.upstox\.com\/v2\/?$/i.test(upstoxApiBaseUrl.trim())) {
     errors.push('UPSTOX_API_BASE_URL must use https://sandbox.upstox.com/v2 when UPSTOX_ENV=sandbox.');
   }
   if (upstoxEnv === 'production' && /sandbox\.upstox\.com/i.test(upstoxApiBaseUrl)) {

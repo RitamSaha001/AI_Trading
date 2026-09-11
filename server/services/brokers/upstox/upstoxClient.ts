@@ -720,11 +720,17 @@ export class UpstoxClient {
       extraHeaders['X-Algo-Name'] = String(effectiveAlgo).trim();
     }
 
+    const sanitizedPayload: UpstoxPlaceOrderPayload = {
+      disclosed_quantity: 0,
+      trigger_price: 0,
+      ...payload,
+    };
+
     const res = await this.request<any>(
       `${orderBase}/order/place`,
       'POST',
       accessToken,
-      payload,
+      sanitizedPayload,
       6000,
       extraHeaders
     );
@@ -769,11 +775,16 @@ export class UpstoxClient {
   ): Promise<UpstoxPlaceOrderResponse> {
     await UpstoxRateLimiter.throttleOrder();
     const orderBase = this.getOrderBaseUrl();
+    const sanitizedPayload: UpstoxModifyOrderPayload = {
+      disclosed_quantity: 0,
+      trigger_price: 0,
+      ...payload,
+    };
     const res = await this.request<any>(
       `${orderBase}/order/modify`,
       'PUT',
       accessToken,
-      payload
+      sanitizedPayload
     );
 
     const parsed = UpstoxPlaceOrderResponseSchema.safeParse(res.data);
