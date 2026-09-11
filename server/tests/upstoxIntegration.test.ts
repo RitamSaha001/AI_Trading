@@ -11,6 +11,7 @@ import { InstrumentRulesService } from '../services/instrumentRules';
 import { BrokerOrderRequest } from '../services/brokers/brokerTypes';
 import { StandardBrokerError } from '../services/brokers/brokerGateway';
 import { LiveOrderConfirmationService } from '../services/liveOrderConfirmationService';
+import { OtrLimiterService } from '../services/otrLimiterService';
 
 function mockResponse(status: number, data: any) {
   return {
@@ -449,6 +450,108 @@ describe('Phase 2: Upstox Broker Gateway Integration Suite', () => {
         accessToken: 'recovery_token',
         accountId: 'UCC_RECOVERY',
         environment: 'prod',
+      });
+    });
+
+    it('keeps an order OPEN when cancellation cannot authenticate before venue dispatch', async () => {
+      const clientOrderId = `LMN_CANCEL_AUTH_${Date.now()}`;
+      const db = getDb();
+      const now = Date.now();
+      await db.execute(
+        `INSERT INTO exchange_orders (
+           id, user_id, client_order_id, exchange_order_id, symbol, side, type,
+           status, orig_qty, executed_qty, price, avg_price, quote_asset, notional,
+           broker, idempotency_key, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'NSE_EQ|INE002A01018', 'BUY', 'LIMIT', 'OPEN', 10, 0, 2500.00, 0, 'INR', 25000.00, 'upstox', ?, ?, ?)`,
+        [`ord_${clientOrderId}`, testUserId, clientOrderId, 'UPSTOX_CANCEL_AUTH_1', clientOrderId, now, now]
+      );
+      await db.execute(`DELETE FROM broker_credentials WHERE user_id = ?`, [testUserId]);
+
+      await expect(adapter.cancelOrder(testUserId, clientOrderId)).rejects.toMatchObject({
+        code: 'AUTHENTICATION_FAILED',
+      });
+
+      const order = await db.queryOne<any>(
+        `SELECT status FROM exchange_orders WHERE client_order_id = ?`,
+        [clientOrderId]
+      );
+      expect(order?.status).toBe('OPEN');
+    });
+
+    it('recovers an unknown strategy-tagged order using its retained client-id suffix', async () => {
+      const clientOrderId = `LMN_TAG_RECOVERY_${Date.now()}_abcdef123456`;
+      const strategyTag = OtrLimiterService.formatStrategyTag('autonomous_momentum_strategy', clientOrderId);
+      const db = getDb();
+      const now = Date.now();
+      await db.execute(
+        `INSERT INTO exchange_orders (
+           id, user_id, client_order_id, symbol, side, type, status, orig_qty,
+           executed_qty, price, avg_price, quote_asset, notional, broker,
+           idempotency_key, created_at, updated_at
+         ) VALUES (?, ?, ?, 'NSE_EQ|INE002A01018', 'BUY', 'LIMIT', 'UNKNOWN', 5, 0, 2500.00, 0, 'INR', 12500.00, 'upstox', ?, ?, ?)`,
+        [`ord_${clientOrderId}`, testUserId, clientOrderId, clientOrderId, now, now]
+      );
+
+      UpstoxClient.setTransport(async (url) => {
+        if (url.includes('/order/retrieve-all')) {
+          return mockResponse(200, {
+            status: 'success',
+            data: [{
+              order_id: 'UPSTOX_TAG_RECOVERY_1',
+              tag: strategyTag,
+              status: 'open',
+              trading_symbol: 'RELIANCE',
+              transaction_type: 'BUY',
+              order_type: 'LIMIT',
+              quantity: 5,
+              filled_quantity: 0,
+              price: 2500,
+              average_price: 0,
+            }],
+          });
+        }
+        return mockResponse(404, {});
+      });
+
+      const reconciled = await adapter.reconcileUnknownOrder(clientOrderId, undefined, testUserId);
+      expect(reconciled.found).toBe(true);
+      expect(reconciled.status).toBe('OPEN');
+      expect(strategyTag).toMatch(/abcdef123456$/);
+    });
+
+    it('rejects an order modification below already executed quantity', async () => {
+      const clientOrderId = `LMN_MOD_QTY_${Date.now()}`;
+      const db = getDb();
+      const now = Date.now();
+      await db.execute(
+        `INSERT INTO exchange_orders (
+           id, user_id, client_order_id, exchange_order_id, symbol, side, type,
+           status, orig_qty, executed_qty, price, avg_price, quote_asset, notional,
+           broker, idempotency_key, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'NSE_EQ|INE002A01018', 'BUY', 'LIMIT', 'PARTIALLY_FILLED', 10, 5, 2500.00, 2500.00, 'INR', 25000.00, 'upstox', ?, ?, ?)`,
+        [`ord_${clientOrderId}`, testUserId, clientOrderId, 'UPSTOX_MOD_QTY_1', clientOrderId, now, now]
+      );
+
+      await expect(adapter.modifyOrder(clientOrderId, { quantity: 4 })).rejects.toMatchObject({
+        code: 'INVALID_ORDER',
+      });
+    });
+
+    it('rejects a protective-stop modification that widens a long position loss', async () => {
+      const clientOrderId = `LMN_STOP_RATCHET_${Date.now()}`;
+      const db = getDb();
+      const now = Date.now();
+      await db.execute(
+        `INSERT INTO exchange_orders (
+           id, user_id, client_order_id, exchange_order_id, symbol, side, type,
+           status, orig_qty, executed_qty, price, avg_price, quote_asset, notional,
+           broker, order_role, trigger_price, protective_stop_price, idempotency_key, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'NSE_EQ|INE002A01018', 'SELL', 'SL_M', 'OPEN', 10, 0, 0, 0, 'INR', 0, 'upstox', 'PROTECTIVE_STOP', 100, 100, ?, ?, ?)`,
+        [`ord_${clientOrderId}`, testUserId, clientOrderId, 'UPSTOX_STOP_RATCHET_1', clientOrderId, now, now]
+      );
+
+      await expect(adapter.modifyOrder(clientOrderId, { triggerPrice: 99 })).rejects.toMatchObject({
+        code: 'ORDER_REJECTED',
       });
     });
 

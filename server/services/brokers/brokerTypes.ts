@@ -8,7 +8,7 @@
 
 import { ExactDecimal } from '../precision';
 
-export type BrokerId = 'binance' | 'upstox' | (string & {});
+export type BrokerId = 'binance' | 'upstox' | 'kotak_neo' | 'flattrade' | (string & {});
 
 export type BrokerEnvironment = 'testnet' | 'mainnet' | 'sandbox' | 'production';
 
@@ -25,6 +25,23 @@ export interface BrokerCapabilities {
   supportsApiKeyAuth: boolean;
   supportsStaticIpRequirement: boolean;
   supportsClockSync: boolean;
+}
+
+export type BrokerExecutionState =
+  | 'LIVE_ENABLED'
+  | 'LIVE_GATE_REQUIRED'
+  | 'READ_ONLY'
+  | 'NOT_CONNECTED'
+  | 'AUTH_EXPIRED'
+  | 'UNSUPPORTED';
+
+export interface BrokerExecutionReadiness {
+  broker: BrokerId;
+  state: BrokerExecutionState;
+  executionEnabled: boolean;
+  connected: boolean;
+  environment?: BrokerEnvironment;
+  checks: Array<{ name: string; passed: boolean; detail: string }>;
 }
 
 export interface BrokerBalance {

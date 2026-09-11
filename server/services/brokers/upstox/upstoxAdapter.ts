@@ -530,6 +530,10 @@ export class UpstoxAdapter implements BrokerGateway {
     }
 
     const price = order.price ? Number(order.price) : (this.instrumentProvider.getEstimatedPrice(order.symbol) || 0);
+    const requestedTriggerPrice = order.triggerPrice ?? (order as any).stopPrice;
+    const initialTriggerPrice = requestedTriggerPrice !== undefined && requestedTriggerPrice !== null && Number(requestedTriggerPrice) > 0
+      ? Math.round(Number(requestedTriggerPrice) * 20) / 20
+      : null;
     const notional = ExactDecimal.from(order.quantity).times(price > 0 ? price : 1);
     const now = Date.now();
     const orderRecordId = `ord_upstox_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
@@ -539,11 +543,11 @@ export class UpstoxAdapter implements BrokerGateway {
       await tx.execute(
         `INSERT INTO exchange_orders (
           id, user_id, client_order_id, symbol, side, type, status,
-          orig_qty, executed_qty, price, avg_price, quote_asset, notional,
+          orig_qty, executed_qty, price, trigger_price, avg_price, quote_asset, notional,
           fee, reserved_cash, reserved_qty, orig_qty_exact, price_exact, notional_exact,
           broker, product, order_role, parent_client_order_id, protective_stop_price,
           idempotency_key, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 'upstox', ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTING', ?, 0, ?, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 'upstox', ?, ?, ?, ?, ?, ?, ?)`,
         [
           orderRecordId,
           order.userId,
@@ -553,6 +557,7 @@ export class UpstoxAdapter implements BrokerGateway {
           order.type,
           order.quantity,
           price,
+          initialTriggerPrice,
           instrument.quoteAsset || 'INR',
           notional.toNumber(),
           order.side === 'BUY' ? notional.toNumber() : 0,
@@ -874,8 +879,16 @@ export class UpstoxAdapter implements BrokerGateway {
       return this.mapOrderRecord(order);
     }
 
-    // Assert safe SEBI Order-to-Trade Ratio before processing cancellation
-    OtrLimiterService.assertOtrLimit(userId, order.symbol, 'CANCEL');
+    const creds = await this.getCredentials(userId);
+    if (!creds?.accessToken) {
+      throw new StandardBrokerError('AUTHENTICATION_FAILED', 'User has no valid Upstox credentials.', 'upstox');
+    }
+
+    const isProtectiveStop = order.order_role === 'PROTECTIVE_STOP';
+    if (!isProtectiveStop) {
+      OtrLimiterService.assertOtrLimit(userId, order.symbol, 'CANCEL');
+      await OtrLimiterService.assertDurableOtrLimit(userId, order.symbol, 'CANCEL');
+    }
     OtrLimiterService.recordEvent(userId, order.symbol, 'CANCEL');
 
     // Step 1: Intermediate State Transition (P0-6)
@@ -888,11 +901,6 @@ export class UpstoxAdapter implements BrokerGateway {
       `UPDATE exchange_order_children SET status = 'CANCEL_REQUESTED', updated_at = ? WHERE parent_client_order_id = ? AND status IN ('OPEN', 'SUBMITTING')`,
       [Date.now(), clientOrderId]
     );
-
-    const creds = await this.getCredentials(userId);
-    if (!creds?.accessToken) {
-      throw new StandardBrokerError('AUTHENTICATION_FAILED', 'User has no valid Upstox credentials.', 'upstox');
-    }
 
     let venueIds: string[] = [];
     if (order.venue_order_ids) {
@@ -1045,10 +1053,6 @@ export class UpstoxAdapter implements BrokerGateway {
       );
     }
 
-    // Assert safe SEBI Order-to-Trade Ratio before processing modification
-    OtrLimiterService.assertOtrLimit(order.user_id, order.symbol, 'MODIFY');
-    OtrLimiterService.recordEvent(order.user_id, order.symbol, 'MODIFY');
-
     const creds = await this.getCredentials(order.user_id);
     if (!creds || !creds.accessToken) {
       throw new StandardBrokerError('AUTHENTICATION_FAILED', 'User has no valid Upstox credentials.', 'upstox');
@@ -1061,10 +1065,31 @@ export class UpstoxAdapter implements BrokerGateway {
 
     const price = updates.price !== undefined ? Number(updates.price) : Number(order.price);
     const quantity = updates.quantity !== undefined ? Number(updates.quantity) : Number(order.orig_qty);
+    const executedQuantity = Number(order.executed_qty || 0);
+    const existingTriggerPrice = Number(order.trigger_price ?? order.protective_stop_price ?? 0);
+    const triggerPrice = updates.triggerPrice !== undefined ? Number(updates.triggerPrice) : existingTriggerPrice;
+    const isProtectiveStop = order.order_role === 'PROTECTIVE_STOP';
 
     const isStopMarket = order.type === 'STOP_LOSS' || order.type === 'SL-M' || order.type === 'SL_M';
-    if (quantity <= 0 || price < 0 || (!isStopMarket && price <= 0)) {
+    if (!Number.isFinite(quantity) || !Number.isFinite(price) || quantity <= 0 || price < 0 || (!isStopMarket && price <= 0)) {
       throw new StandardBrokerError('INVALID_ORDER', 'Modified quantity must be positive and the price must be valid for the order type.', 'upstox');
+    }
+    if (!Number.isFinite(executedQuantity) || quantity < executedQuantity) {
+      throw new StandardBrokerError(
+        'INVALID_ORDER',
+        `Modified quantity ${quantity} cannot be less than already executed quantity ${executedQuantity}.`,
+        'upstox'
+      );
+    }
+    if (isProtectiveStop) {
+      if (!Number.isFinite(triggerPrice) || triggerPrice <= 0) {
+        throw new StandardBrokerError('INVALID_ORDER', 'Protective stop modifications require a positive trigger price.', 'upstox');
+      }
+      const widensLongProtection = order.side === 'SELL' && existingTriggerPrice > 0 && triggerPrice < existingTriggerPrice;
+      const widensShortProtection = order.side === 'BUY' && existingTriggerPrice > 0 && triggerPrice > existingTriggerPrice;
+      if (widensLongProtection || widensShortProtection) {
+        throw new StandardBrokerError('ORDER_REJECTED', 'Protective stop modifications may only tighten protection; widening risk is prohibited.', 'upstox');
+      }
     }
 
     // 1. Contract & Instrument Constraints Validation (P0-5 & P0-9)
@@ -1106,19 +1131,24 @@ export class UpstoxAdapter implements BrokerGateway {
           accountType: 'trading_allocated',
           assetOrCurrency: 'INR',
           amountMinor: BigInt(Math.round(cashDelta * 100)),
-        }).catch(() => {});
+        });
         additionalReservationCreated = true;
       }
     }
 
     try {
+      if (!isProtectiveStop) {
+        OtrLimiterService.assertOtrLimit(order.user_id, order.symbol, 'MODIFY');
+        await OtrLimiterService.assertDurableOtrLimit(order.user_id, order.symbol, 'MODIFY');
+      }
+      OtrLimiterService.recordEvent(order.user_id, order.symbol, 'MODIFY');
       await UpstoxClient.modifyOrder(creds.accessToken, {
         order_id: venueOrderId,
         price,
         quantity,
         order_type: updates.type || (order.type === 'MARKET' ? 'MARKET' : order.type === 'STOP_LOSS' || order.type === 'SL-M' || order.type === 'SL_M' ? 'SL-M' : order.type === 'STOP_LOSS_LIMIT' || order.type === 'SL' ? 'SL' : 'LIMIT'),
         validity: updates.validity || order.validity || 'DAY',
-        trigger_price: updates.triggerPrice ?? (order.trigger_price ? Number(order.trigger_price) : (order.protective_stop_price ? Number(order.protective_stop_price) : undefined)),
+        trigger_price: triggerPrice > 0 ? triggerPrice : undefined,
         disclosed_quantity: updates.disclosedQuantity ?? (order.disclosed_qty ? Number(order.disclosed_qty) : undefined),
       });
     } catch (brokerErr: any) {
@@ -1143,9 +1173,17 @@ export class UpstoxAdapter implements BrokerGateway {
     const updatedReservedCash = Math.max(0, Number(order.reserved_cash || 0) + cashDelta);
     await db.execute(
       `UPDATE exchange_orders
-       SET price = ?, orig_qty = ?, reserved_cash = ?, protective_stop_price = COALESCE(?, protective_stop_price), updated_at = ?
+       SET price = ?, orig_qty = ?, reserved_cash = ?, trigger_price = COALESCE(?, trigger_price), protective_stop_price = COALESCE(?, protective_stop_price), updated_at = ?
        WHERE id = ?`,
-      [price, quantity, updatedReservedCash, updates.triggerPrice !== undefined ? Number(updates.triggerPrice) : null, Date.now(), order.id]
+      [
+        price,
+        quantity,
+        updatedReservedCash,
+        updates.triggerPrice !== undefined ? triggerPrice : null,
+        updates.triggerPrice !== undefined ? triggerPrice : null,
+        Date.now(),
+        order.id,
+      ]
     );
 
     // Update child records if present (P0-7)
@@ -1281,6 +1319,7 @@ export class UpstoxAdapter implements BrokerGateway {
     }
 
     const tag = clientOrderId.slice(-20);
+    const clientTagSuffix = clientOrderId.replace(/[^a-zA-Z0-9_]/g, '').slice(-12);
     const orderBook = await UpstoxClient.getOrderBook(creds.accessToken);
 
     // Check if child sliced orders exist in database (P0-7)
@@ -1367,8 +1406,10 @@ export class UpstoxAdapter implements BrokerGateway {
       };
     }
 
-    const venueOrder = orderBook.find(
-      (o) => o.tag === tag || (order?.exchange_order_id && o.order_id === order.exchange_order_id)
+    const venueOrder = orderBook.find((o) =>
+      o.tag === tag ||
+      (clientTagSuffix.length > 0 && String(o.tag || '').endsWith(`_${clientTagSuffix}`)) ||
+      (order?.exchange_order_id && o.order_id === order.exchange_order_id)
     );
 
     if (!venueOrder) {

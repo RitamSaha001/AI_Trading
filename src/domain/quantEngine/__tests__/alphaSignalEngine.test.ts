@@ -9,6 +9,7 @@ import {
   calculateVolumeMetrics,
   MAX_SECTOR_ALLOCATION_PCT,
   evaluateAllocationModeSwitch,
+  evaluateLiveMarketDataQuality,
   CandidateForAllocation,
 } from '../alphaSignalEngine';
 
@@ -59,6 +60,12 @@ describe('Alpha Signal & Microstructure Engine', () => {
       // Low win rate: 30% with 1:1 R:R (negative edge)
       const lowRes = calculateHalfKellyFraction(0.30, 1.0, 1.0, 0.25);
       expect(lowRes.recommendedSizeMultiplier).toBe(0.25);
+    });
+
+    it('does not inflate a moderate edge above the configured conservative floor', () => {
+      const res = calculateHalfKellyFraction(0.58, 2.2, 1.25, 0.25);
+      expect(res.recommendedSizeMultiplier).toBe(0.25);
+      expect(res.halfKelly).toBeLessThan(0.25);
     });
   });
 
@@ -151,6 +158,43 @@ describe('Alpha Signal & Microstructure Engine', () => {
       const res = calculateVolumeMetrics(candles, history);
       expect(res.vwap).toBeGreaterThan(100);
       expect(res.volumeSurgeRatio).toBeGreaterThanOrEqual(1.0);
+    });
+  });
+
+  describe('Live Market Data Quality Gate', () => {
+    const liveMarket = (overrides: Record<string, unknown> = {}) => ({
+      asset: 'RELIANCE',
+      name: 'RELIANCE',
+      symbol: 'RELIANCE',
+      price: 2500,
+      change24h: 1,
+      high24h: 2520,
+      low24h: 2470,
+      volume24h: 1_000_000,
+      history: Array.from({ length: 30 }, (_, index) => 2450 + index * 1.5),
+      candles: Array.from({ length: 20 }, (_, index) => ({
+        time: 1_000_000 + index * 60_000,
+        open: 2450 + index,
+        high: 2452 + index,
+        low: 2448 + index,
+        close: 2450 + index,
+        volume: 10_000,
+      })),
+      source: 'Upstox Live Feed',
+      isSynthetic: false,
+      lastUpdated: 2_000_000,
+      ...overrides,
+    });
+
+    it('accepts a complete, fresh, non-synthetic live snapshot', () => {
+      expect(evaluateLiveMarketDataQuality(liveMarket() as any, 2_060_000).allowed).toBe(true);
+    });
+
+    it('rejects synthetic, stale, incomplete, and malformed live inputs', () => {
+      expect(evaluateLiveMarketDataQuality(liveMarket({ isSynthetic: true }) as any, 2_060_000).allowed).toBe(false);
+      expect(evaluateLiveMarketDataQuality(liveMarket({ lastUpdated: 1_000_000 }) as any, 2_000_001).reason).toContain('old');
+      expect(evaluateLiveMarketDataQuality(liveMarket({ history: [2500] }) as any, 2_060_000).reason).toContain('Insufficient price history');
+      expect(evaluateLiveMarketDataQuality(liveMarket({ candles: [{ open: 1, high: 1, low: 2, close: 1, volume: 1 }] }) as any, 2_060_000).reason).toContain('Insufficient OHLCV candles');
     });
   });
 

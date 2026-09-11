@@ -9,6 +9,8 @@ import { BrokerGateway } from './brokerGateway';
 import { BrokerId } from './brokerTypes';
 import { BinanceAdapter } from './binance/binanceAdapter';
 import { UpstoxAdapter } from './upstox/upstoxAdapter';
+import { KotakNeoAdapter } from './kotakNeo/kotakNeoAdapter';
+import { FlattradeAdapter } from './flattrade/flattradeAdapter';
 
 export class BrokerRegistry {
   private static gateways: Map<string, BrokerGateway> = new Map();
@@ -24,6 +26,12 @@ export class BrokerRegistry {
     if (!this.gateways.has('upstox')) {
       this.register(new UpstoxAdapter());
     }
+    if (!this.gateways.has('kotak_neo')) {
+      this.register(new KotakNeoAdapter());
+    }
+    if (!this.gateways.has('flattrade')) {
+      this.register(new FlattradeAdapter());
+    }
   }
 
   /**
@@ -34,19 +42,15 @@ export class BrokerRegistry {
   }
 
   /**
-   * Retrieves a broker gateway by ID, falling back to default if not found.
+   * Retrieves a registered broker gateway. An explicit unknown ID is never
+   * routed to the default venue: that could submit an order to the wrong broker.
    */
   static get(brokerId?: BrokerId | string): BrokerGateway {
     this.ensureInitialized();
     const id = (brokerId as BrokerId) || this.defaultBrokerId;
     const gateway = this.gateways.get(id);
     if (!gateway) {
-      // Fall back to default broker gateway if registered
-      const fallback = this.gateways.get(this.defaultBrokerId);
-      if (fallback) {
-        return fallback;
-      }
-      throw new Error(`Broker gateway '${id}' is not registered and no default gateway is available.`);
+      throw new Error(`Broker gateway '${id}' is not registered.`);
     }
     return gateway;
   }
@@ -118,5 +122,7 @@ export class BrokerRegistry {
     this.isInitialized = false;
     this.register(new BinanceAdapter());
     this.register(new UpstoxAdapter());
+    this.register(new KotakNeoAdapter());
+    this.register(new FlattradeAdapter());
   }
 }

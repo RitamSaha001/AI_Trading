@@ -271,6 +271,13 @@ export const ApiClient = {
     apiKey?: string;
     apiSecret?: string;
     accessToken?: string;
+    sessionToken?: string;
+    consumerKey?: string;
+    sid?: string;
+    ucc?: string;
+    userId?: string;
+    accountId?: string;
+    accountName?: string;
     code?: string;
     environment?: string;
     broker?: string;
@@ -336,6 +343,50 @@ export const ApiClient = {
     );
   },
 
+  async getFlattradeQuotes(symbols: string[], exchange: string = 'NSE') {
+    return apiRequest<{ broker: string; quotes: Record<string, any>; executionLocked: boolean }>(
+      `/api/market/quotes/flattrade?symbols=${encodeURIComponent(symbols.join(','))}&exchange=${encodeURIComponent(exchange)}`,
+    );
+  },
+
+  async getFlattradeCandles(params: { symbol: string; exchange?: string; interval?: number; from?: string; to?: string; token?: string }) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+    return apiRequest<{ broker: string; symbol: string; count: number; candles: any[]; executionLocked: boolean }>(`/api/market/candles/flattrade?${query.toString()}`);
+  },
+
+  async getFlattradeOptionChain(params: { symbol: string; strikePrice: string; exchange?: string; count?: number }) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+    return apiRequest<{ broker: string; contracts: any[]; executionLocked: boolean }>(`/api/market/option-chain/flattrade?${query.toString()}`);
+  },
+
+  async getFlattradeOptionGreeks(params: { expiryDate: string; strikePrice: string; spotPrice: string; interestRate: string; volatility: string; optionType: 'CE' | 'PE' }) {
+    const query = new URLSearchParams(params);
+    return apiRequest<{ broker: string; greeks: any; executionLocked: boolean }>(`/api/market/option-greeks/flattrade?${query.toString()}`);
+  },
+
+  async getFlattradeStreamReadiness() {
+    return apiRequest<{ stream: any; executionLocked: boolean }>('/api/brokers/flattrade/stream-readiness');
+  },
+
+  async getFlattradeInstrumentMasterStatus() {
+    return apiRequest<{ status: any; executionLocked: boolean }>('/api/brokers/flattrade/instrument-master/status');
+  },
+
+  async getFlattradeOrderHistory(orderId: string) {
+    return apiRequest<{ history: any[]; executionLocked: boolean }>(`/api/brokers/flattrade/orders/${encodeURIComponent(orderId)}/history`);
+  },
+
+  async getFlattradeGttOrders() {
+    return apiRequest<{ gtt: { pending: any[]; enabled: any[] }; executionLocked: boolean }>('/api/brokers/flattrade/gtt');
+  },
+
+  async getFlattradeOrderMargin(input: Record<string, string | number>) {
+    return apiRequest<{ margin: any; executionLocked: boolean }>('/api/brokers/flattrade/order-margin', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+
   async getBrokerFunds(broker: string = 'upstox') {
     return apiRequest<{ funds: any }>(`/api/exchange/funds?broker=${encodeURIComponent(broker)}`);
   },
@@ -346,6 +397,23 @@ export const ApiClient = {
 
   async getBrokerHoldings(broker: string = 'upstox') {
     return apiRequest<{ holdings: any[] }>(`/api/exchange/holdings?broker=${encodeURIComponent(broker)}`);
+  },
+
+  async getBrokerOpenOrders(broker: string = 'upstox') {
+    return apiRequest<{ broker: string; orders: any[] }>(`/api/exchange/open-orders?broker=${encodeURIComponent(broker)}`);
+  },
+
+  async getBrokerTrades(broker: string = 'upstox') {
+    return apiRequest<{ broker: string; trades: any[] }>(`/api/exchange/trades?broker=${encodeURIComponent(broker)}`);
+  },
+
+  async getBrokerReadiness(broker: string) {
+    return apiRequest<{ readiness: any; capabilities: any }>(`/api/brokers/${encodeURIComponent(broker)}/readiness`);
+  },
+
+  async getBrokerInstruments(broker: 'kotak_neo' | 'flattrade', query?: string) {
+    const suffix = query?.trim() ? `?query=${encodeURIComponent(query.trim())}` : '';
+    return apiRequest<{ broker: string; executionLocked: boolean; instruments: any[] }>(`/api/brokers/${broker}/instruments${suffix}`);
   },
 
   async getExchangeListenKey() {

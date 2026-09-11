@@ -88,7 +88,7 @@ describe('Broker Abstraction Layer & Core Orchestrator Decoupling', () => {
 
       // Binance remains intact and default
       expect(BrokerRegistry.getDefault().id).toBe('binance');
-      expect(BrokerRegistry.getAll()).toHaveLength(2);
+      expect(BrokerRegistry.getAll()).toHaveLength(4);
     });
   });
 

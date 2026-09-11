@@ -8,12 +8,16 @@
 import { BrokerRegistry } from './brokerRegistry';
 import { BinanceAdapter } from './binance/binanceAdapter';
 import { UpstoxAdapter } from './upstox/upstoxAdapter';
+import { KotakNeoAdapter } from './kotakNeo/kotakNeoAdapter';
+import { FlattradeAdapter } from './flattrade/flattradeAdapter';
 
 // Register standard production adapters
 const binanceAdapter = new BinanceAdapter();
 BrokerRegistry.register(binanceAdapter);
 const upstoxAdapter = new UpstoxAdapter();
 BrokerRegistry.register(upstoxAdapter);
+BrokerRegistry.register(new KotakNeoAdapter());
+BrokerRegistry.register(new FlattradeAdapter());
 
 export * from './brokerTypes';
 export * from './brokerGateway';
@@ -26,3 +30,11 @@ export * from './upstox/upstoxInstrumentRegistry';
 export * from './upstox/indianMarketCalendar';
 export * from './upstox/upstoxConnectivityValidator';
 export * from './upstox/upstoxCandleService';
+export * from './kotakNeo/kotakNeoAdapter';
+export * from './kotakNeo/kotakNeoClient';
+export * from './flattrade/flattradeAdapter';
+export * from './flattrade/flattradeClient';
+export * from './flattrade/flattradeMarketDataService';
+export * from './flattrade/flattradeInstrumentMasterService';
+export * from './flattrade/flattradeUserStreamTransport';
+export * from './shared/brokerInstrumentCatalogService';

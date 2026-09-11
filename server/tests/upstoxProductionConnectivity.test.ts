@@ -16,6 +16,7 @@ import { UpstoxClient } from '../services/brokers/upstox/upstoxClient';
 import { UpstoxAdapter } from '../services/brokers/upstox/upstoxAdapter';
 import { UpstoxConnectivityValidator } from '../services/brokers/upstox/upstoxConnectivityValidator';
 import { StandardBrokerError } from '../services/brokers/brokerGateway';
+import { config } from '../config';
 
 describe('Phase 3: Upstox Production Connectivity & End-to-End Validation', () => {
   beforeEach(() => {
@@ -295,6 +296,11 @@ describe('Phase 3: Upstox Production Connectivity & End-to-End Validation', () =
   });
 
   describe('3. Upstox API v3 Order Contracts & Payload Validation', () => {
+    beforeEach(() => {
+      vi.spyOn(config, 'UPSTOX_ENV', 'get').mockReturnValue('production');
+      vi.spyOn(config, 'UPSTOX_HFT_BASE_URL', 'get').mockReturnValue('https://api-hft.upstox.com/v3');
+    });
+
     it('uses v3 endpoint for order placement and validates response schema', async () => {
       let requestedUrl = '';
       let requestedBody: any = null;

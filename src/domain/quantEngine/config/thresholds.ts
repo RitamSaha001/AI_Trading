@@ -118,6 +118,17 @@ export const VOLATILITY_SHOCK_ATR_MULTIPLE = 2.50;
 /** Trading freeze cooldown duration after a volatility shock (10 minutes in ms) */
 export const VOLATILITY_SHOCK_COOLDOWN_MS = 10 * 60 * 1000;
 
+/** Minimum observations required before a live entry may use the quantitative feature set. */
+export const MIN_ENTRY_HISTORY_POINTS = 30;
+/** Minimum OHLCV candles required to trust VWAP, volume, and shock checks. */
+export const MIN_ENTRY_CANDLE_COUNT = 20;
+/** Maximum age of a live market snapshot before new entries are blocked. */
+export const MAX_LIVE_MARKET_DATA_AGE_MS = 2 * 60 * 1000;
+/** Minimum last-candle volume versus its rolling average for a new live entry. */
+export const MIN_ENTRY_VOLUME_SURGE_RATIO = 0.85;
+/** Maximum distance above VWAP, in ATRs, for a non-breakout entry. */
+export const MAX_ENTRY_VWAP_EXTENSION_ATR = 1.25;
+
 // ============================================================================
 // SCENARIO 7: Stagnant Capital / Dead Trade Expiration
 // ============================================================================
@@ -177,6 +188,14 @@ export const HALF_KELLY_FRACTION = 0.50;
 export const MAX_KELLY_SIZE_MULTIPLIER = 1.25;
 /** Minimum allowable Kelly size multiplier clamp */
 export const MIN_KELLY_SIZE_MULTIPLIER = 0.25;
+/** Neutral prior used to temper uncalibrated heuristic win-rate estimates. */
+export const HEURISTIC_WIN_RATE_NEUTRAL_PRIOR = 0.50;
+/** Weight retained from a heuristic win-rate estimate until it is empirically calibrated. */
+export const HEURISTIC_WIN_RATE_SHRINKAGE = 0.50;
+/** Hard ceiling on a heuristic win-rate estimate before out-of-sample calibration. */
+export const MAX_HEURISTIC_WIN_RATE = 0.62;
+/** Hard floor on a heuristic win-rate estimate before out-of-sample calibration. */
+export const MIN_HEURISTIC_WIN_RATE = 0.45;
 /** ATR as a percentage of price threshold triggering volatility dampening (4.5%) */
 export const VOLATILITY_DAMPENER_ATR_PRICE_RATIO = 0.045;
 /** Win-rate penalty subtracted when volatility dampener is active (-6.0%) */

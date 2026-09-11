@@ -299,6 +299,7 @@ CREATE TABLE IF NOT EXISTS exchange_orders (
   orig_qty REAL NOT NULL,
   executed_qty REAL NOT NULL DEFAULT 0.0,
   price REAL NOT NULL,
+  trigger_price REAL,
   avg_price REAL NOT NULL DEFAULT 0.0,
   cumulative_quote_qty REAL NOT NULL DEFAULT 0.0,
   quote_asset TEXT NOT NULL,
@@ -408,6 +409,36 @@ CREATE TABLE IF NOT EXISTS broker_credentials (
 );
 CREATE INDEX IF NOT EXISTS idx_broker_credentials_user ON broker_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_broker_credentials_user_broker ON broker_credentials(user_id, broker);
+
+-- Broker-native instrument catalog snapshots. Reference mappings are never execution eligible.
+CREATE TABLE IF NOT EXISTS broker_instruments (
+  broker TEXT NOT NULL,
+  instrument_key TEXT NOT NULL,
+  trading_symbol TEXT NOT NULL,
+  display_name TEXT,
+  exchange TEXT NOT NULL,
+  segment TEXT NOT NULL,
+  instrument_type TEXT NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'INR',
+  instrument_token TEXT,
+  isin TEXT,
+  tick_size TEXT,
+  lot_size INTEGER,
+  min_quantity TEXT,
+  max_quantity TEXT,
+  expiry TEXT,
+  strike TEXT,
+  option_type TEXT,
+  active BOOLEAN NOT NULL DEFAULT 1,
+  execution_eligible BOOLEAN NOT NULL DEFAULT 0,
+  source TEXT NOT NULL,
+  source_version TEXT,
+  imported_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (broker, instrument_key)
+);
+CREATE INDEX IF NOT EXISTS idx_broker_instruments_lookup ON broker_instruments(broker, trading_symbol, active);
+CREATE INDEX IF NOT EXISTS idx_broker_instruments_segment ON broker_instruments(broker, exchange, segment, active);
 
 -- Anti-CSRF Server-Side OAuth State Management
 CREATE TABLE IF NOT EXISTS broker_oauth_states (
@@ -626,4 +657,3 @@ CREATE TABLE IF NOT EXISTS otr_events (
   created_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_otr_events_user_symbol_time ON otr_events(user_id, symbol, created_at);
-

@@ -11,6 +11,7 @@ import {
   BrokerBalance,
   BrokerCapabilities,
   BrokerError,
+  BrokerExecutionReadiness,
   BrokerFill,
   BrokerFunds,
   BrokerHolding,
@@ -24,6 +25,7 @@ import {
   BrokerTrade,
   ReconcileVenueResult,
 } from './brokerTypes';
+import { CatalogInstrument } from './shared/brokerInstrumentCatalogService';
 
 export interface BrokerGateway {
   readonly id: BrokerId;
@@ -36,9 +38,12 @@ export interface BrokerGateway {
   getBalances(userId: string): Promise<Record<string, BrokerBalance>>;
   getPositions?(userId: string): Promise<BrokerPosition[]>;
   getHoldings?(userId: string): Promise<BrokerHolding[]>;
+  listInstruments?(options?: { query?: string; exchange?: string; segment?: string; limit?: number }): Promise<CatalogInstrument[]>;
+  bootstrapInstrumentCatalog?(): Promise<number>;
   getCredentials?(userId: string): Promise<any>;
   saveCredentials?(userId: string, credentials: any): Promise<any>;
   disconnectAccount?(userId: string): Promise<void>;
+  getExecutionReadiness?(userId: string): Promise<BrokerExecutionReadiness>;
   createListenKey?(userId: string): Promise<string | null>;
 
   // Orders & Trading

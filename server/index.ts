@@ -18,7 +18,7 @@ import { LedgerService } from './services/ledgerService';
 import { PaymentService } from './services/paymentService';
 import { ExactDecimal } from './services/precision';
 import { BinanceGateway } from './services/binanceGateway';
-import { BrokerRegistry, BrokerGateway, UpstoxClient, UpstoxConnectivityValidator, UpstoxInstrumentRegistry, UpstoxAdapter, UpstoxCandleService } from './services/brokers';
+import { BrokerRegistry, BrokerGateway, FlattradeAdapter, UpstoxClient, UpstoxConnectivityValidator, UpstoxInstrumentRegistry, UpstoxAdapter, UpstoxCandleService } from './services/brokers';
 import { ServerRiskEngine } from './services/riskEngine';
 import { ReconciliationWorker } from './services/reconciliationWorker';
 import { OrderRecoveryService } from './services/orderRecoveryService';
@@ -797,14 +797,27 @@ export function buildServer(): FastifyInstance {
   // ==========================================================================
 
   server.post('/api/exchange/connect', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { apiKey?: string; apiSecret?: string; accessToken?: string; code?: string; environment?: string; broker?: string };
+    const body = req.body as {
+      apiKey?: string; apiSecret?: string; accessToken?: string; code?: string; environment?: string; broker?: string;
+      consumerKey?: string; sessionToken?: string; sid?: string; ucc?: string; userId?: string; accountId?: string;
+    };
     const brokerId = body?.broker || 'binance';
+
+    if (!BrokerRegistry.has(brokerId)) {
+      return reply.status(400).send({ success: false, error: `Unsupported broker: ${brokerId}` });
+    }
 
     if (brokerId === 'binance' && (!body?.apiKey || !body.apiSecret)) {
       return reply.status(400).send({ success: false, error: 'API Key and Secret required for Binance' });
     }
     if (brokerId === 'upstox' && !body?.accessToken && !body?.code) {
       return reply.status(400).send({ success: false, error: 'Upstox Access Token or Authorization Code required' });
+    }
+    if (brokerId === 'kotak_neo' && (!body?.consumerKey || !(body?.sessionToken || body?.accessToken) || !body?.sid || !(body?.ucc || body?.accountId))) {
+      return reply.status(400).send({ success: false, error: 'Kotak Neo requires Consumer Key, UCC, session token, and SID from an authenticated Neo session' });
+    }
+    if (brokerId === 'flattrade' && (!(body?.accessToken || body?.sessionToken) || !(body?.userId || body?.ucc || body?.accountId))) {
+      return reply.status(400).send({ success: false, error: 'Flattrade requires a current Pi access token and user/account ID after browser authorization' });
     }
 
     try {
@@ -833,20 +846,30 @@ export function buildServer(): FastifyInstance {
     return { success: true, authUrl, expiresAt };
   });
 
-  server.post('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { code: string; state: string; redirectUri?: string };
-    if (!body?.code) {
+  const completeUpstoxOAuthCallback = async (
+    userId: string,
+    payload: { code?: string; state?: string; redirectUri?: string; error?: string },
+    reply: FastifyReply
+  ) => {
+    if (payload?.error) {
+      return reply.status(400).send({
+        success: false,
+        code: 'UPSTOX_AUTH_DENIED',
+        error: 'Upstox authorization was not completed.',
+      });
+    }
+    if (!payload?.code) {
       return reply.status(400).send({ success: false, error: 'Authorization code is required' });
     }
-    if (!body?.state) {
+    if (!payload?.state) {
       return reply.status(400).send({ success: false, error: 'OAuth state parameter is required for CSRF protection' });
     }
     try {
       const broker = BrokerRegistry.get('upstox');
-      const audit = await broker.saveCredentials!(req.user!.id, {
-        code: body.code,
-        state: body.state,
-        redirectUri: body.redirectUri,
+      const audit = await broker.saveCredentials!(userId, {
+        code: payload.code,
+        state: payload.state,
+        redirectUri: payload.redirectUri,
       });
       return { success: true, audit, message: 'Upstox connected and credentials encrypted at rest.' };
     } catch (err: any) {
@@ -857,11 +880,19 @@ export function buildServer(): FastifyInstance {
         code: isSegmentInactive ? 'UPSTOX_SEGMENT_INACTIVE' : 'UPSTOX_AUTH_FAILED',
         error: isSegmentInactive
           ? 'Upstox reported that trading segments are inactive or awaiting reactivation for this account. Please reactivate segments in Upstox web/app, or paste an active access token.'
-          : err.message,
-        details: err.message,
-        accountId: '87BSJ2',
+          : 'Upstox authorization failed. Confirm the callback URL, authorization state, and account access, then try again.',
       });
     }
+  };
+
+  server.get('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const query = req.query as { code?: string; state?: string; redirectUri?: string; error?: string };
+    return completeUpstoxOAuthCallback(req.user!.id, query, reply);
+  });
+
+  server.post('/api/exchange/upstox/callback', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as { code?: string; state?: string; redirectUri?: string; error?: string };
+    return completeUpstoxOAuthCallback(req.user!.id, body, reply);
   });
 
   server.get('/api/exchange/upstox/token-health', { preHandler: requireAuth }, async (req: FastifyRequest) => {
@@ -884,6 +915,53 @@ export function buildServer(): FastifyInstance {
   server.get('/api/market/instruments/upstox', async () => {
     const instruments = UpstoxInstrumentRegistry.getAll();
     return { success: true, instruments };
+  });
+
+  server.get('/api/brokers/:broker/instruments', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { broker } = req.params as { broker: string };
+    if (!['kotak_neo', 'flattrade'].includes(broker)) {
+      return reply.status(400).send({ success: false, error: 'Instrument catalog is available only for Kotak Neo or Flattrade.' });
+    }
+    const query = (req.query as { query?: string; exchange?: string; segment?: string; limit?: string }) || {};
+    const gateway = BrokerRegistry.get(broker);
+    let instruments = await gateway.listInstruments!(query);
+    if (instruments.length === 0) {
+      await gateway.bootstrapInstrumentCatalog!();
+      instruments = await gateway.listInstruments!(query);
+    }
+    return {
+      success: true,
+      broker,
+      executionLocked: true,
+      instruments,
+    };
+  });
+
+  server.post('/api/brokers/:broker/instruments/bootstrap', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { broker } = req.params as { broker: string };
+    if (!['kotak_neo', 'flattrade'].includes(broker)) {
+      return reply.status(400).send({ success: false, error: 'Instrument catalog bootstrap is available only for Kotak Neo or Flattrade.' });
+    }
+    const imported = await BrokerRegistry.get(broker).bootstrapInstrumentCatalog!();
+    return { success: true, broker, imported, executionLocked: true, source: 'REFERENCE_MAPPING' };
+  });
+
+  server.get('/api/brokers/:broker/readiness', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { broker: brokerId } = req.params as { broker: string };
+    if (!BrokerRegistry.has(brokerId)) {
+      return reply.status(400).send({ success: false, error: `Unsupported broker: ${brokerId}` });
+    }
+    const broker = BrokerRegistry.get(brokerId);
+    const readiness = broker.getExecutionReadiness
+      ? await broker.getExecutionReadiness(req.user!.id)
+      : {
+        broker: broker.id,
+        state: broker.capabilities.supportsTrading ? 'LIVE_GATE_REQUIRED' : 'UNSUPPORTED',
+        executionEnabled: false,
+        connected: Boolean(await broker.getAccount(req.user!.id)),
+        checks: [{ name: 'execution-gate', passed: false, detail: 'Use the broker-specific live-order gate.' }],
+      };
+    return { success: true, readiness, capabilities: broker.capabilities };
   });
 
   async function getAuthoritativeUpstoxCred(userId?: string): Promise<{ userId: string; accessTokenEncrypted: string } | null> {
@@ -1024,6 +1102,123 @@ export function buildServer(): FastifyInstance {
     return { success: true, timeframe, count: Object.keys(candleMap).length, candles: candleMap };
   });
 
+  server.get('/api/market/quotes/flattrade', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = req.query as { symbols?: string; exchange?: string };
+      const symbols = String(query.symbols || '').split(',').map((symbol) => symbol.trim()).filter(Boolean);
+      if (symbols.length === 0 || symbols.length > 50) {
+        return reply.status(400).send({ success: false, error: 'Provide between 1 and 50 comma-separated symbols.' });
+      }
+      const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+      const quotes = await adapter.getMarketQuotesBatch(symbols, req.user!.id, String(query.exchange || 'NSE').toUpperCase());
+      return { success: true, broker: 'flattrade', quotes, executionLocked: true };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/market/candles/flattrade', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = req.query as { symbol?: string; exchange?: string; interval?: string; from?: string; to?: string; token?: string };
+      const symbol = String(query.symbol || '').trim();
+      if (!symbol) return reply.status(400).send({ success: false, error: 'symbol is required.' });
+      const from = query.from ? new Date(query.from) : undefined;
+      const to = query.to ? new Date(query.to) : undefined;
+      if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+        return reply.status(400).send({ success: false, error: 'from and to must be valid ISO dates.' });
+      }
+      const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+      const candles = await adapter.getCandles(req.user!.id, {
+        symbol,
+        exchange: String(query.exchange || 'NSE').toUpperCase(),
+        intervalMinutes: Number(query.interval || 5),
+        from,
+        to,
+        instrumentToken: query.token,
+      });
+      return { success: true, broker: 'flattrade', symbol, count: candles.length, candles, executionLocked: true };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/market/option-chain/flattrade', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = req.query as { symbol?: string; exchange?: string; strikePrice?: string; count?: string };
+      if (!query.symbol || !query.strikePrice) {
+        return reply.status(400).send({ success: false, error: 'symbol and strikePrice are required.' });
+      }
+      const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+      const contracts = await adapter.getOptionChain(req.user!.id, {
+        exchange: String(query.exchange || 'NFO').toUpperCase(),
+        symbol: query.symbol,
+        strikePrice: query.strikePrice,
+        count: Math.min(Math.max(Number(query.count) || 5, 1), 20),
+      });
+      return { success: true, broker: 'flattrade', contracts, executionLocked: true };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/market/option-greeks/flattrade', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = req.query as Record<string, string | undefined>;
+      const required = ['expiryDate', 'strikePrice', 'spotPrice', 'interestRate', 'volatility', 'optionType'];
+      if (required.some((key) => !query[key])) {
+        return reply.status(400).send({ success: false, error: 'expiryDate, strikePrice, spotPrice, interestRate, volatility, and optionType are required.' });
+      }
+      if (query.optionType !== 'CE' && query.optionType !== 'PE') {
+        return reply.status(400).send({ success: false, error: 'optionType must be CE or PE.' });
+      }
+      const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+      const greeks = await adapter.getOptionGreeks(req.user!.id, {
+        expiryDate: query.expiryDate!, strikePrice: query.strikePrice!, spotPrice: query.spotPrice!,
+        interestRate: query.interestRate!, volatility: query.volatility!, optionType: query.optionType,
+      });
+      return { success: true, broker: 'flattrade', greeks, executionLocked: true };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/brokers/flattrade/stream-readiness', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+    return { success: true, stream: await adapter.getStreamReadiness(req.user!.id), executionLocked: true };
+  });
+
+  server.get('/api/brokers/flattrade/instrument-master/status', { preHandler: requireAuth }, async () => {
+    const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+    return { success: true, status: adapter.getInstrumentMasterStatus(), executionLocked: true };
+  });
+
+  server.get('/api/brokers/flattrade/orders/:orderId/history', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { orderId } = req.params as { orderId: string };
+      if (!orderId.trim()) return reply.status(400).send({ success: false, error: 'orderId is required.' });
+      const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+      return { success: true, history: await adapter.getOrderHistory(req.user!.id, orderId), executionLocked: true };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/brokers/flattrade/gtt', { preHandler: requireAuth }, async (req: FastifyRequest) => {
+    const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+    return { success: true, gtt: await adapter.getGttOrders(req.user!.id), executionLocked: true };
+  });
+
+  server.post('/api/brokers/flattrade/order-margin', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = (req.body || {}) as Record<string, unknown>;
+      const input = Object.fromEntries(Object.entries(body).map(([key, value]) => [key, String(value)]));
+      const adapter = BrokerRegistry.get('flattrade') as FlattradeAdapter;
+      return { success: true, margin: await adapter.getOrderMargin(req.user!.id, input), executionLocked: true };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
   // --- AUTONOMOUS QUANT PILOT DUAL-MODE DAEMON ENDPOINTS ---
   async function resolveRequestUserId(req: FastifyRequest): Promise<string> {
     const token = extractSessionToken(req);
@@ -1160,9 +1355,34 @@ export function buildServer(): FastifyInstance {
     }
   });
 
+  server.get('/api/exchange/open-orders', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const brokerParam = (req.query as any)?.broker || 'upstox';
+      const symbol = (req.query as any)?.symbol as string | undefined;
+      const broker = BrokerRegistry.get(brokerParam);
+      return { success: true, broker: broker.id, orders: await broker.getOpenOrders(req.user!.id, symbol) };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
+  server.get('/api/exchange/trades', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const brokerParam = (req.query as any)?.broker || 'upstox';
+      const symbol = (req.query as any)?.symbol as string | undefined;
+      const broker = BrokerRegistry.get(brokerParam);
+      return { success: true, broker: broker.id, trades: await broker.getTrades(req.user!.id, symbol) };
+    } catch (err: any) {
+      return reply.status(400).send({ success: false, error: err.message });
+    }
+  });
+
   server.post('/api/exchange/listen-key', { preHandler: requireActive }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const broker = BrokerRegistry.get((req.body as any)?.broker || 'binance');
+      if (!broker.createListenKey) {
+        return reply.status(400).send({ success: false, error: `${broker.name} does not provide a listen-key endpoint.` });
+      }
       const listenKey = await broker.createListenKey!(req.user!.id);
       if (!listenKey) {
         return reply.status(400).send({ success: false, error: 'Could not create listenKey. Verify exchange credentials.' });
@@ -1181,10 +1401,22 @@ export function buildServer(): FastifyInstance {
     if (!body.product) {
       return reply.status(400).send({ success: false, error: 'Explicit product selection is strictly required (CNC/D, MIS/I, MTF).' });
     }
+    const brokerId = body.broker || 'upstox';
+    if (!BrokerRegistry.has(brokerId)) {
+      return reply.status(400).send({ success: false, error: `Unsupported broker: ${brokerId}` });
+    }
+    const requestedBroker = BrokerRegistry.get(brokerId);
+    if (!requestedBroker.capabilities.supportsTrading) {
+      return reply.status(409).send({
+        success: false,
+        code: 'BROKER_EXECUTION_LOCKED',
+        error: `${requestedBroker.name} is connected for reconciliation only; live-order proposals are disabled.`,
+      });
+    }
     try {
       const confirmation = await LiveOrderConfirmationService.proposeLiveOrder({
         userId: req.user!.id,
-        broker: body.broker || 'upstox',
+        broker: brokerId,
         symbol: body.symbol,
         side: body.side,
         type: body.type || 'LIMIT',
@@ -1235,6 +1467,9 @@ export function buildServer(): FastifyInstance {
       // Defense-in-depth: Execute the server-stored, frozen proposal record
       // Ignore client parameter mutations and bind strictly to the verified proposal
       const broker = BrokerRegistry.get(confirmation.broker || 'upstox');
+      if (!broker.capabilities.supportsTrading) {
+        return reply.status(409).send({ success: false, code: 'BROKER_EXECUTION_LOCKED', error: `${broker.name} execution is disabled.` });
+      }
       const order = await broker.placeOrder({
         userId: req.user!.id,
         broker: broker.id,
@@ -1343,6 +1578,13 @@ export function buildServer(): FastifyInstance {
 
     try {
       const broker = BrokerRegistry.get(brokerId);
+      if (accountMode === 'live' && !broker.capabilities.supportsTrading) {
+        return reply.status(409).send({
+          success: false,
+          code: 'BROKER_EXECUTION_LOCKED',
+          error: `${broker.name} is read-only and cannot accept live orders.`,
+        });
+      }
       const quoteAsset = body.quoteAsset || (broker.id === 'upstox' ? 'INR' : 'USDT');
       const order = await broker.placeOrder({
         userId: req.user!.id,

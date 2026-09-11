@@ -409,4 +409,41 @@ describe('Upstox RBAC, Broker Routing & Execution Integrity Suite', () => {
       expect(riskResult.rejectReason).toContain('Execution market data is stale');
     });
   });
+
+  describe('5. OAuth Browser Callback', () => {
+    it('accepts the Upstox GET redirect only for the authenticated initiating user', async () => {
+      const upstoxBroker = BrokerRegistry.get('upstox');
+      const saveCredentials = vi.spyOn(upstoxBroker, 'saveCredentials').mockResolvedValue({
+        event: 'CREDENTIALS_SAVED',
+        userId: traderUserId,
+      } as any);
+
+      const res = await server.inject({
+        method: 'GET',
+        url: '/api/exchange/upstox/callback?code=authorization_code&state=csrf_state',
+        headers: { authorization: `Bearer ${traderToken}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject({ success: true });
+      expect(saveCredentials).toHaveBeenCalledWith(traderUserId, {
+        code: 'authorization_code',
+        state: 'csrf_state',
+        redirectUri: undefined,
+      });
+    });
+
+    it('rejects an unauthenticated browser callback before consuming OAuth state', async () => {
+      const upstoxBroker = BrokerRegistry.get('upstox');
+      const saveCredentials = vi.spyOn(upstoxBroker, 'saveCredentials');
+
+      const res = await server.inject({
+        method: 'GET',
+        url: '/api/exchange/upstox/callback?code=authorization_code&state=csrf_state',
+      });
+
+      expect(res.statusCode).toBe(401);
+      expect(saveCredentials).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -12,6 +12,7 @@ import { UserProfileDrawer } from './components/UserProfileDrawer';
 import { GrievanceModal } from './components/GrievanceModal';
 import { LegalFooter } from './components/LegalFooter';
 import { UpstoxTerminalDrawer } from './components/UpstoxTerminalDrawer';
+import { IndianBrokerTerminalDrawer } from './components/IndianBrokerTerminalDrawer';
 import { LiveOrderConfirmationModal } from './components/LiveOrderConfirmationModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import {
@@ -131,6 +132,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [search, setSearch] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [indianBrokerDrawerOpen, setIndianBrokerDrawerOpen] = useState(false);
 
   useEffect(() => {
     // Intercept Upstox OAuth redirect: /?code=...&state=... or #/?code=...
@@ -454,6 +456,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <span>Upstox</span>
                 <span className="hidden md:inline text-[10px] text-zinc-400 font-normal">NSE</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setIndianBrokerDrawerOpen(true)}
+                className="px-2.5 py-1 text-[11px] rounded-lg transition-all flex items-center gap-1.5 font-medium text-zinc-500 hover:text-zinc-900"
+                title="Connect Kotak Neo or Flattrade for read-only account reconciliation"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>More</span>
+              </button>
             </div>
 
             {/* Funds Pill */}
@@ -667,6 +678,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Upstox Terminal Drawer */}
       <UpstoxTerminalDrawer open={upstoxDrawerOpen} onClose={closeUpstoxDrawer} />
+      <IndianBrokerTerminalDrawer open={indianBrokerDrawerOpen} onClose={() => setIndianBrokerDrawerOpen(false)} />
 
 
       {/* AI Safety Authorization Gate Modal */}

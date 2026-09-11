@@ -340,6 +340,24 @@ describe('Phase 6 Institutional Real-Money Remediation Suite', () => {
       expect(tagExtended.length).toBeLessThanOrEqual(40);
       expect(/^[a-zA-Z0-9_]+$/.test(tagExtended)).toBe(true);
     });
+
+    it('enforces persisted OTR limits after in-memory state is cleared', async () => {
+      const symbol = 'HDFCBANK';
+      const db = getDb();
+      const createdAt = Date.now();
+      for (let index = 0; index < 20; index++) {
+        await db.execute(
+          `INSERT INTO otr_events (id, user_id, symbol, event_type, created_at) VALUES (?, ?, ?, 'PLACE', ?)`,
+          [`otr_restart_${testUserId}_${index}_${createdAt}`, testUserId, symbol, createdAt]
+        );
+      }
+
+      OtrLimiterService.reset();
+
+      await expect(
+        OtrLimiterService.assertDurableOtrLimit(testUserId, symbol, 'PLACE')
+      ).rejects.toMatchObject({ code: 'OTR_LIMIT_EXCEEDED' });
+    });
   });
 
   describe('6. Panic Square-Off Concurrency Lock', () => {

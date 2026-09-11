@@ -28,6 +28,7 @@ import {
   calculateRoundtripFriction,
   passesFrictionHurdle,
   passesNetProfitFloor,
+  evaluateLiveMarketDataQuality,
   classifyRegimeScenario,
   evaluateAllocationModeSwitch,
   CandidateForAllocation,
@@ -923,6 +924,8 @@ export function tickAutonomousPilot(
       hasInstitutionalVolume,
     } = determineAssetStrategyAndRegime(market);
 
+    const liveDataQuality = isLiveUpstox ? evaluateLiveMarketDataQuality(market, now) : { allowed: true, reason: '' };
+
     let fleetStatus: AssetFleetStatus = updatedFleet[asset] || {
       asset,
       assignedStrategy: strategy,
@@ -960,6 +963,77 @@ export function tickAutonomousPilot(
         };
         continue;
       }
+    }
+
+    if (!liveDataQuality.allowed) {
+      const recentDataSkip = state.autonomousPilot?.actionLogs?.find(
+        (log) => log.asset === asset && log.action === 'SKIPPED' && log.strategy === 'Live Market Data Quality Gate' && now - log.timestamp < 5 * 60 * 1000
+      );
+      if (!recentDataSkip) {
+        newActionLogs.push({
+          id: `log_data_quality_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'SKIPPED',
+          strategy: 'Live Market Data Quality Gate',
+          detail: liveDataQuality.reason,
+          price,
+          status: 'BLOCKED',
+        });
+      }
+      updatedFleet[asset] = {
+        ...fleetStatus,
+        assignedStrategy: strategy,
+        regimeLabel,
+        hurst,
+        currentPrice: price,
+        state: 'MONITORING',
+        unitsHeld: 0,
+        sector,
+        squeezeStatus,
+        vwap,
+        volumeSurgeRatio,
+      };
+      continue;
+    }
+
+    const latestCandle = market.candles[market.candles.length - 1];
+    const lastShockAt = Math.max(
+      0,
+      ...getTodayPilotActionLogs(state, now)
+        .filter((log) => log.asset === asset && log.action === 'VOLATILITY_SHOCK')
+        .map((log) => log.timestamp)
+    );
+    const shockCheck = lastShockAt > 0 && now - lastShockAt < thresholds.VOLATILITY_SHOCK_COOLDOWN_MS
+      ? { isFrozen: true, newShockDetected: false, cooldownRemainingMs: thresholds.VOLATILITY_SHOCK_COOLDOWN_MS - (now - lastShockAt) }
+      : volatilityShockFreeze(latestCandle, atr, 0, now);
+    if (shockCheck.isFrozen) {
+      newActionLogs.push({
+        id: `log_volatility_shock_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'VOLATILITY_SHOCK',
+        strategy: 'Volatility Shock Freeze',
+        detail: shockCheck.newShockDetected
+          ? `Latest candle exceeded ${thresholds.VOLATILITY_SHOCK_ATR_MULTIPLE} ATR. New entries frozen for ${Math.ceil(shockCheck.cooldownRemainingMs / 60000)} minutes.`
+          : `Volatility-shock cooldown active for ${Math.ceil(shockCheck.cooldownRemainingMs / 60000)} more minutes.`,
+        price,
+        status: 'BLOCKED',
+      });
+      updatedFleet[asset] = {
+        ...fleetStatus,
+        assignedStrategy: strategy,
+        regimeLabel,
+        hurst,
+        currentPrice: price,
+        state: 'MONITORING',
+        unitsHeld: 0,
+        sector,
+        squeezeStatus,
+        vwap,
+        volumeSurgeRatio,
+      };
+      continue;
     }
 
     // Session Timing Check for New Entries in live Upstox mode
@@ -1019,6 +1093,18 @@ export function tickAutonomousPilot(
     if (hasEntrySignal && isLiveUpstox && timingQuality.phase === 'MIDDAY_CONSOLIDATION') {
       if (volumeSurgeRatio < timingQuality.minVolumeSurgeRequired && squeezeStatus !== 'SQUEEZE_OFF' && hurst < 0.60) {
         hasEntrySignal = false; // Filter low-volume midday whipsaws
+      }
+    }
+
+    if (hasEntrySignal) {
+      const extensionAboveVwapAtr = vwap > 0 && atr > 0 ? (price - vwap) / atr : 0;
+      const isFreshBreakout = squeezeStatus === 'SQUEEZE_OFF' && hasInstitutionalVolume;
+      if (volumeSurgeRatio < thresholds.MIN_ENTRY_VOLUME_SURGE_RATIO) {
+        hasEntrySignal = false;
+        entryRationale = `Entry rejected: last-candle volume is only ${volumeSurgeRatio.toFixed(2)}x average.`;
+      } else if (!isFreshBreakout && extensionAboveVwapAtr > thresholds.MAX_ENTRY_VWAP_EXTENSION_ATR) {
+        hasEntrySignal = false;
+        entryRationale = `Entry rejected: price is extended ${extensionAboveVwapAtr.toFixed(2)} ATR above VWAP.`;
       }
     }
 
@@ -1225,20 +1311,34 @@ export function tickAutonomousPilot(
     if (riskPerShare <= 0) continue;
 
     // Dynamic Multi-Factor Kelly Win Rate Calibration
-    let estWinRate = profileKey === 'conservative' ? 0.65 : profileKey === 'momentum' ? 0.54 : 0.58;
-    if (cand.hasInstitutionalVolume) estWinRate += 0.04;
-    if (cand.squeezeStatus === 'SQUEEZE_OFF') estWinRate += 0.04;
-    if (cand.hurst > 0.60) estWinRate += 0.03;
-    if ((ranked?.relativeStrengthPct || 0) > 0) estWinRate += 0.03;
-    if ((ranked?.alphaConvictionIndex || 0) >= 75) estWinRate += 0.03;
+    let estimatedWinRate = profileKey === 'conservative' ? 0.65 : profileKey === 'momentum' ? 0.54 : 0.58;
+    if (cand.hasInstitutionalVolume) estimatedWinRate += 0.04;
+    if (cand.squeezeStatus === 'SQUEEZE_OFF') estimatedWinRate += 0.04;
+    if (cand.hurst > 0.60) estimatedWinRate += 0.03;
+    if ((ranked?.relativeStrengthPct || 0) > 0) estimatedWinRate += 0.03;
+    if ((ranked?.alphaConvictionIndex || 0) >= 75) estimatedWinRate += 0.03;
 
     // Adaptive Volatility Shock Dampener: In high-volatility chop (ATR/P > 4.5%), dampen Kelly sizing
     if (atr / price > 0.045) {
-      estWinRate -= 0.06;
+      estimatedWinRate -= 0.06;
     }
 
+    const estWinRate = Math.max(
+      thresholds.MIN_HEURISTIC_WIN_RATE,
+      Math.min(
+        thresholds.MAX_HEURISTIC_WIN_RATE,
+        thresholds.HEURISTIC_WIN_RATE_NEUTRAL_PRIOR +
+          (estimatedWinRate - thresholds.HEURISTIC_WIN_RATE_NEUTRAL_PRIOR) * thresholds.HEURISTIC_WIN_RATE_SHRINKAGE
+      )
+    );
+
     const rrRatio = (takeProfitPrice - limitPrice) / riskPerShare;
-    const kellyRes = calculateHalfKellyFraction(estWinRate, rrRatio, 1.25, 0.4);
+    const kellyRes = calculateHalfKellyFraction(
+      estWinRate,
+      rrRatio,
+      thresholds.MAX_KELLY_SIZE_MULTIPLIER,
+      thresholds.MIN_KELLY_SIZE_MULTIPLIER
+    );
 
     // Sizing via Fractional Risk Budget multiplied by Half-Kelly multiplier
     const baseRiskCapital = pv * (profile.maxRiskPerTradePct / 100);

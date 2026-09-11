@@ -33,6 +33,7 @@ export interface MtmEvaluationResult {
 export class InFlightMtmService {
   private static timer: NodeJS.Timeout | null = null;
   private static isRunning = false;
+  private static isEvaluating = false;
 
   /**
    * Evaluates a user's open positions for margin health and stop-out triggers.
@@ -215,6 +216,13 @@ export class InFlightMtmService {
    * Executes a single evaluation pass across all active live users.
    */
   public static async runEvaluationPass(): Promise<MtmEvaluationResult[]> {
+    if (this.isEvaluating) {
+      logger.warn('[InFlightMtmService] Skipping overlapping MTM evaluation pass.');
+      return [];
+    }
+
+    this.isEvaluating = true;
+    try {
     const db = getDb();
     const results: MtmEvaluationResult[] = [];
 
@@ -281,6 +289,9 @@ export class InFlightMtmService {
     }
 
     return results;
+    } finally {
+      this.isEvaluating = false;
+    }
   }
 
   /**

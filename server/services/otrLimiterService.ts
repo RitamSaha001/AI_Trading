@@ -7,7 +7,7 @@
  */
 
 import crypto from 'node:crypto';
-import { getDb } from '../db';
+import { DBClient, getDb } from '../db';
 import { StandardBrokerError } from './brokers/brokerGateway';
 import { logger, AuditService } from './auditService';
 
@@ -106,9 +106,8 @@ export class OtrLimiterService {
   /**
    * Computes authoritative OTR stats directly from durable database storage.
    */
-  public static async getDurableStats(userId: string, symbol: string): Promise<OtrStats> {
+  public static async getDurableStats(userId: string, symbol: string, db: DBClient = getDb()): Promise<OtrStats> {
     try {
-      const db = getDb();
       const cutoff = Date.now() - this.WINDOW_MS;
       const rows = await db.query<{ event_type: string; count: number }>(
         `SELECT event_type, COUNT(*) as count FROM otr_events 
@@ -150,7 +149,43 @@ export class OtrLimiterService {
    * Throws a StandardBrokerError if throttled.
    */
   public static assertOtrLimit(userId: string, symbol: string, action: 'PLACE' | 'MODIFY' | 'CANCEL'): void {
-    const stats = this.getStats(userId, symbol);
+    this.assertStatsWithinLimit(userId, symbol, action, this.getStats(userId, symbol));
+  }
+
+  public static async assertDurableOtrLimit(
+    userId: string,
+    symbol: string,
+    action: 'PLACE' | 'MODIFY' | 'CANCEL',
+    db: DBClient = getDb()
+  ): Promise<void> {
+    const durableStats = await this.getDurableStats(userId, symbol, db);
+    const localStats = this.getStats(userId, symbol);
+    const stats = this.combineStats(durableStats, localStats);
+    this.assertStatsWithinLimit(userId, symbol, action, stats);
+  }
+
+  private static combineStats(first: OtrStats, second: OtrStats): OtrStats {
+    const ordersPlaced = Math.max(first.ordersPlaced, second.ordersPlaced);
+    const ordersModified = Math.max(first.ordersModified, second.ordersModified);
+    const ordersCancelled = Math.max(first.ordersCancelled, second.ordersCancelled);
+    const ordersFilled = Math.max(first.ordersFilled, second.ordersFilled);
+    const nonExecutionCount = ordersModified + ordersCancelled;
+
+    return {
+      ordersPlaced,
+      ordersModified,
+      ordersCancelled,
+      ordersFilled,
+      ratio: ordersFilled > 0 ? nonExecutionCount / ordersFilled : nonExecutionCount,
+    };
+  }
+
+  private static assertStatsWithinLimit(
+    userId: string,
+    symbol: string,
+    action: 'PLACE' | 'MODIFY' | 'CANCEL',
+    stats: OtrStats
+  ): void {
 
     if (action === 'PLACE') {
       const placementRatio = stats.ordersFilled > 0 ? stats.ordersPlaced / stats.ordersFilled : stats.ordersPlaced;
@@ -196,9 +231,17 @@ export class OtrLimiterService {
    */
   public static formatStrategyTag(rawStrategyId?: string, clientOrderId?: string, maxLen: number = 30): string {
     const cleanId = (rawStrategyId || 'quant_core').replace(/[^a-zA-Z0-9_]/g, '');
-    const cleanClient = clientOrderId ? `_${clientOrderId.replace(/[^a-zA-Z0-9_]/g, '')}` : '';
-    const tag = `algo_${cleanId}${cleanClient}`;
-    return tag.slice(0, Math.min(maxLen, 40));
+    const limit = Math.max(10, Math.min(maxLen, 40));
+    const cleanClient = clientOrderId?.replace(/[^a-zA-Z0-9_]/g, '') || '';
+
+    if (!cleanClient) {
+      return `algo_${cleanId.slice(0, Math.max(1, limit - 5))}`;
+    }
+
+    const clientSuffixLength = Math.min(12, Math.max(1, limit - 7));
+    const clientSuffix = cleanClient.slice(-clientSuffixLength);
+    const suffix = `_${clientSuffix}`;
+    const strategyLimit = Math.max(1, limit - 5 - suffix.length);
+    return `algo_${cleanId.slice(0, strategyLimit) || 'q'}${suffix}`.slice(0, limit);
   }
 }
-

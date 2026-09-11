@@ -211,6 +211,18 @@ export class UpstoxClient {
   }
 
   /**
+   * Routes sandbox order drills to the documented sandbox v2 endpoint and
+   * production orders to the HFT v3 endpoint. This boundary prevents a
+   * sandbox configuration from silently sending an order to production.
+   */
+  public static getOrderBaseUrl(): string {
+    if (config.UPSTOX_ENV === 'sandbox') {
+      return config.UPSTOX_API_BASE_URL.replace(/\/+$/, '');
+    }
+    return this.getHftBaseUrl();
+  }
+
+  /**
    * Generates the OAuth 2.0 authorization dialog URL.
    * Strictly bound to server-configured UPSTOX_REDIRECT_URI or caller origin.
    */
@@ -238,10 +250,14 @@ export class UpstoxClient {
     const state = crypto.randomBytes(32).toString('hex');
     let rUri = config.UPSTOX_REDIRECT_URI || '';
 
-    if (customRedirectUri && typeof customRedirectUri === 'string') {
+    if (!rUri && customRedirectUri && typeof customRedirectUri === 'string') {
       try {
         const u = new URL(customRedirectUri);
-        if (config.ALLOWED_ORIGINS.includes(u.origin) || u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+        const allowedOrigins = config.ALLOWED_ORIGINS
+          .split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean);
+        if (allowedOrigins.includes(u.origin) || u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
           rUri = customRedirectUri;
         }
       } catch {
@@ -687,7 +703,7 @@ export class UpstoxClient {
   }
 
   /**
-   * Places an order with Upstox via recommended v3 HFT endpoint (/order/place).
+   * Places an order with Upstox via v3 HFT in production or v2 sandbox in sandbox.
    * Supports auto-slicing via `slice` flag, returning single or multi-slice order_ids.
    * Injects SEBI exchange-approved X-Algo-Name header when algoName is supplied or configured.
    */
@@ -697,7 +713,7 @@ export class UpstoxClient {
     algoName?: string
   ): Promise<UpstoxPlaceOrderResponse> {
     await UpstoxRateLimiter.throttleOrder();
-    const hftBase = this.getHftBaseUrl();
+    const orderBase = this.getOrderBaseUrl();
     const extraHeaders: Record<string, string> = {};
     const effectiveAlgo = algoName || payload.algoName || (config as any).UPSTOX_ALGO_NAME;
     if (effectiveAlgo) {
@@ -705,7 +721,7 @@ export class UpstoxClient {
     }
 
     const res = await this.request<any>(
-      `${hftBase}/order/place`,
+      `${orderBase}/order/place`,
       'POST',
       accessToken,
       payload,
@@ -725,17 +741,17 @@ export class UpstoxClient {
   }
 
   /**
-   * Cancels an order with Upstox via recommended v3 HFT endpoint (/order/cancel?order_id=...).
+   * Cancels an order with Upstox via production HFT or the sandbox order endpoint.
    */
   public static async cancelOrder(
     accessToken: string,
     orderId: string
   ): Promise<UpstoxPlaceOrderResponse> {
     await UpstoxRateLimiter.throttleOrder();
-    const hftBase = this.getHftBaseUrl();
+    const orderBase = this.getOrderBaseUrl();
     const query = new URLSearchParams({ order_id: orderId });
     const res = await this.request<any>(
-      `${hftBase}/order/cancel?${query.toString()}`,
+      `${orderBase}/order/cancel?${query.toString()}`,
       'DELETE',
       accessToken
     );
@@ -745,16 +761,16 @@ export class UpstoxClient {
   }
 
   /**
-   * Modifies an existing open order with Upstox via recommended v3 HFT endpoint (/order/modify).
+   * Modifies an open order with Upstox via production HFT or the sandbox order endpoint.
    */
   public static async modifyOrder(
     accessToken: string,
     payload: UpstoxModifyOrderPayload
   ): Promise<UpstoxPlaceOrderResponse> {
     await UpstoxRateLimiter.throttleOrder();
-    const hftBase = this.getHftBaseUrl();
+    const orderBase = this.getOrderBaseUrl();
     const res = await this.request<any>(
-      `${hftBase}/order/modify`,
+      `${orderBase}/order/modify`,
       'PUT',
       accessToken,
       payload

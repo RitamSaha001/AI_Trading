@@ -203,6 +203,39 @@ describe('Production Server Configuration & Secret Security Boundary', () => {
     expect(res.data?.ENCRYPTION_MASTER_KEY.length).toBe(64);
     expect(res.data?.UPSTOX_AUTONOMOUS_LIVE_ENABLED).toBe(false);
     expect(res.data?.UPSTOX_AUTONOMOUS_LIVE_MAX_NOTIONAL_INR).toBe(15_000);
+    expect(res.data?.UPSTOX_API_BASE_URL).toBe('https://sandbox.upstox.com/v2');
+  });
+
+  it('rejects an Upstox environment and API host mismatch', () => {
+    const sandboxWithProductionHost = validateServerConfig({
+      NODE_ENV: 'test',
+      UPSTOX_ENV: 'sandbox',
+      UPSTOX_API_BASE_URL: 'https://api.upstox.com/v2',
+    });
+    expect(sandboxWithProductionHost.success).toBe(false);
+    expect(sandboxWithProductionHost.errors).toContain(
+      'UPSTOX_API_BASE_URL must use https://sandbox.upstox.com/v2 when UPSTOX_ENV=sandbox.'
+    );
+
+    const productionWithSandboxHost = validateServerConfig({
+      ...validProductionBaseEnv,
+      UPSTOX_ENV: 'production',
+      UPSTOX_API_BASE_URL: 'https://sandbox.upstox.com/v2',
+    });
+    expect(productionWithSandboxHost.success).toBe(false);
+    expect(productionWithSandboxHost.errors).toContain(
+      'UPSTOX_API_BASE_URL cannot point to sandbox.upstox.com when UPSTOX_ENV=production.'
+    );
+
+    const productionWithUntrustedOrderHost = validateServerConfig({
+      ...validProductionBaseEnv,
+      UPSTOX_ENV: 'production',
+      UPSTOX_HFT_BASE_URL: 'https://orders.example.test/v3',
+    });
+    expect(productionWithUntrustedOrderHost.success).toBe(false);
+    expect(productionWithUntrustedOrderHost.errors).toContain(
+      'UPSTOX_HFT_BASE_URL must use https://api-hft.upstox.com/v3 when UPSTOX_ENV=production.'
+    );
   });
 
   it('rejects autonomous live trading unless manual live execution is explicitly enabled', () => {
@@ -213,6 +246,27 @@ describe('Production Server Configuration & Secret Security Boundary', () => {
 
     expect(res.success).toBe(false);
     expect(res.errors).toContain('UPSTOX_AUTONOMOUS_LIVE_ENABLED requires UPSTOX_LIVE_TRADING_ENABLED=true.');
+  });
+
+  it('permits no live execution flags outside production', () => {
+    const liveInTest = validateServerConfig({
+      NODE_ENV: 'test',
+      UPSTOX_ENV: 'production',
+      UPSTOX_LIVE_TRADING_ENABLED: 'true',
+    });
+    expect(liveInTest.success).toBe(false);
+    expect(liveInTest.errors).toContain(
+      'UPSTOX_LIVE_TRADING_ENABLED=true is permitted only when NODE_ENV=production.'
+    );
+
+    const autonomousInDevelopment = validateServerConfig({
+      NODE_ENV: 'development',
+      UPSTOX_AUTONOMOUS_LIVE_ENABLED: 'true',
+    });
+    expect(autonomousInDevelopment.success).toBe(false);
+    expect(autonomousInDevelopment.errors).toContain(
+      'UPSTOX_AUTONOMOUS_LIVE_ENABLED=true is permitted only when NODE_ENV=production.'
+    );
   });
 
   it('rejects an autonomous live notional cap above the guarded rollout limit', () => {

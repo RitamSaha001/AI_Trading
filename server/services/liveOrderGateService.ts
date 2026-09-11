@@ -236,8 +236,9 @@ export class LiveOrderGateService {
     }
 
     // SEBI Order-to-Trade Ratio (OTR) Pre-Submission Check (Component 4)
-    if (!order.isSystemPanic) {
+    if (!order.isSystemPanic && order.orderRole !== 'PROTECTIVE_STOP') {
       OtrLimiterService.assertOtrLimit(order.userId, order.symbol, 'PLACE');
+      await OtrLimiterService.assertDurableOtrLimit(order.userId, order.symbol, 'PLACE', options?.tx);
     }
 
     // 10. Authoritative Instrument Rules, Price Bands & Freeze Limits (Findings 1 & 8)

@@ -667,7 +667,8 @@ export interface PilotActionLog {
     | 'DISARMED'
     | 'ALPHA_SCAN'
     | 'ORDER_FILLED'
-    | 'STALE_ORDER_CANCELLED';
+    | 'STALE_ORDER_CANCELLED'
+    | 'VOLATILITY_SHOCK';
   strategy: string;
   detail: string;
   price: number;
@@ -810,4 +811,3 @@ export interface UnifiedLedgerEntry {
   sha256Proof: string;        // Hash chain verification
   grievanceTicketId?: string; // If disputed
 }
-
