@@ -20,9 +20,17 @@ export const BROKERAGE_FLAT_INR = 20.0;
 export const BROKERAGE_PCT = 0.001;
 /** Minimum order notional floor (INR) to prevent flat brokerage fee drag on small accounts */
 export const MIN_TRADE_NOTIONAL_INR = 12000.0;
-/** Minimum net expected profit floor (INR) after roundtrip brokerage and all statutory taxes */
+/** Minimum net expected profit floor (INR) base fallback default */
 export const MIN_NET_PROFIT_FLOOR_INR = 120.0;
-/** Elevated net expected profit floor (INR) required for candidate #2 in dual-position Mode 35-2 (1.5x) */
+/** Base absolute minimum net profit floor (INR) to protect against adverse 1-tick slippage */
+export const BASE_NET_PROFIT_FLOOR_INR = 60.0;
+/** Net profit hurdle as a percentage of trade notional (0.40% yield) */
+export const MIN_NET_PROFIT_NOTIONAL_PCT = 0.004;
+/** Net profit hurdle as a multiple of roundtrip friction (1.2x of total fees) */
+export const MIN_NET_PROFIT_FRICTION_MULTIPLE = 1.2;
+/** Elevated net expected profit floor multiplier for candidate #2 in dual-position Mode 35-2 */
+export const ELEVATED_FLOOR_MULTIPLIER = 1.5;
+/** Elevated net expected profit floor (INR) required for candidate #2 in dual-position Mode 35-2 (1.5x fallback) */
 export const ELEVATED_NET_PROFIT_FLOOR_INR = 180.0;
 /** Guaranteed net cash buffer per share added to Stage 0.5 fee armor stop */
 export const FEE_ARMOR_NET_GAIN_PER_SHARE = 5.0;

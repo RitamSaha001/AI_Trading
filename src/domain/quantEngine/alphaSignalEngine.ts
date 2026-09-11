@@ -150,8 +150,35 @@ export function passesFrictionHurdle(
 }
 
 /**
+ * Computes a dynamic minimum net expected profit floor (INR) scaled to trade notional and friction:
+ * dynamicFloor = Math.max(
+ *   roundtripFriction * frictionMultiple,
+ *   notional * notionalPct,
+ *   baseFloor
+ * )
+ */
+export function calculateDynamicNetProfitFloor(
+  roundtripFriction: number,
+  notional: number = 0,
+  options?: {
+    frictionMultiple?: number;
+    notionalPct?: number;
+    baseFloor?: number;
+  }
+): number {
+  const frictionMultiple = options?.frictionMultiple ?? thresholds.MIN_NET_PROFIT_FRICTION_MULTIPLE;
+  const notionalPct = options?.notionalPct ?? thresholds.MIN_NET_PROFIT_NOTIONAL_PCT;
+  const baseFloor = options?.baseFloor ?? thresholds.BASE_NET_PROFIT_FLOOR_INR;
+
+  const frictionComponent = Math.max(0, roundtripFriction || 0) * frictionMultiple;
+  const notionalComponent = Math.max(0, notional || 0) * notionalPct;
+
+  return Math.max(frictionComponent, notionalComponent, baseFloor);
+}
+
+/**
  * Validates that realistic near-term gain (capped at 1.25 ATR) clears all roundtrip
- * friction with at least the statutory minimum net rupee profit floor.
+ * friction with at least the statutory/dynamic minimum net rupee profit floor.
  */
 export function passesNetProfitFloor(
   realisticGrossProfit: number,
@@ -1252,6 +1279,8 @@ export interface CandidateForAllocation {
   realisticGrossProfit: number;
   roundtripFriction: number;
   realisticNetProfit: number;
+  notional?: number;
+  minNetProfitFloor?: number;
   history?: number[];
   regimeScenario?: MarketRegimeScenario;
 }
@@ -1271,10 +1300,10 @@ export interface DynamicAllocationDecision {
 /**
  * Executes the 7-Step Sequential Decision Engine for conditions-based mode switching:
  * Step 1: Regime classifier says Scenario C (choppy) or D (vol shock) -> Stand aside (0 positions)
- * Step 2: Fewer than 2 candidate signals clear MIN_NET_PROFIT_FLOOR (₹120) -> Force 40-1
+ * Step 2: Fewer than 2 candidate signals clear dynamic MIN_NET_PROFIT_FLOOR -> Force 40-1
  * Step 3 & 4: Is signal #2's conviction score >= 85% of signal #1's? If no -> Force 40-1
  * Step 5: Are #1 and #2 in different sectors (or rolling correlation < 0.50)? If no -> Force 40-1
- * Step 6: Does signal #2 clear elevated floor (1.5x = ₹180)? If no -> Force 40-1
+ * Step 6: Does signal #2 clear elevated dynamic floor (1.5x)? If no -> Force 40-1
  * Post-Loss Dampener: If dayHasLoss is true -> Force 40-1
  * Step 7: All pass -> Mode 35-2 activates (35% per asset, 2 positions, 30% cash buffer)
  */
@@ -1311,34 +1340,50 @@ export function evaluateAllocationModeSwitch(
     };
   }
 
-  // Step 2: Candidates clearing base MIN_NET_PROFIT_FLOOR (₹120.0)
-  const qualifying = sorted.filter(
-    (c) =>
-      c.realisticNetProfit >= thresholds.MIN_NET_PROFIT_FLOOR_INR &&
+  // Step 2: Candidates clearing dynamic MIN_NET_PROFIT_FLOOR
+  const qualifying = sorted.filter((c) => {
+    const floor =
+      c.minNetProfitFloor ??
+      (c.roundtripFriction > 0
+        ? calculateDynamicNetProfitFloor(c.roundtripFriction, c.notional)
+        : thresholds.MIN_NET_PROFIT_FLOOR_INR);
+    return (
+      c.realisticNetProfit >= floor &&
       c.regimeScenario !== 'C_CHOP' &&
       c.regimeScenario !== 'D_VOL_SHOCK'
-  );
+    );
+  });
 
   if (qualifying.length === 0) {
+    const topFloor =
+      sorted[0].minNetProfitFloor ??
+      (sorted[0].roundtripFriction > 0
+        ? calculateDynamicNetProfitFloor(sorted[0].roundtripFriction, sorted[0].notional)
+        : thresholds.MIN_NET_PROFIT_FLOOR_INR);
     return {
       mode: 'STAND_ASIDE',
       selectedCandidates: [],
       maxPositions: 0,
       assetAllocationPct: 0,
       cashBufferPct: 100,
-      rationale: 'Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash.',
+      rationale: `Step 2: No candidates cleared the dynamic net profit floor (₹${topFloor.toFixed(2)}). Standing aside in cash.`,
       stepTriggered: 2,
     };
   }
 
   if (qualifying.length < 2) {
+    const topFloor =
+      qualifying[0].minNetProfitFloor ??
+      (qualifying[0].roundtripFriction > 0
+        ? calculateDynamicNetProfitFloor(qualifying[0].roundtripFriction, qualifying[0].notional)
+        : thresholds.MIN_NET_PROFIT_FLOOR_INR);
     return {
       mode: 'MODE_40_1',
       selectedCandidates: [qualifying[0]],
       maxPositions: 1,
       assetAllocationPct: thresholds.MODE_40_1_ASSET_ALLOCATION_PCT,
       cashBufferPct: 60,
-      rationale: 'Step 2: Fewer than 2 candidate signals clear MIN_NET_PROFIT_FLOOR (₹120.00). Only one qualifying idea exists; forcing Mode 40-1.',
+      rationale: `Step 2: Fewer than 2 candidate signals clear dynamic net profit floor (₹${topFloor.toFixed(2)}). Only one qualifying idea exists; forcing Mode 40-1.`,
       stepTriggered: 2,
     };
   }
@@ -1379,15 +1424,25 @@ export function evaluateAllocationModeSwitch(
     };
   }
 
-  // Step 6: Elevated Profit Floor for #2 (>= ₹180.0)
-  if (cand2.realisticNetProfit < thresholds.ELEVATED_NET_PROFIT_FLOOR_INR) {
+  // Step 6: Elevated Profit Floor for #2 (Dynamic: >= 1.5x candidate #2 base floor)
+  const cand2BaseFloor =
+    cand2.minNetProfitFloor ??
+    (cand2.roundtripFriction > 0
+      ? calculateDynamicNetProfitFloor(cand2.roundtripFriction, cand2.notional)
+      : thresholds.MIN_NET_PROFIT_FLOOR_INR);
+  const cand2ElevatedFloor = Math.max(
+    cand2BaseFloor * thresholds.ELEVATED_FLOOR_MULTIPLIER,
+    thresholds.BASE_NET_PROFIT_FLOOR_INR * thresholds.ELEVATED_FLOOR_MULTIPLIER
+  );
+
+  if (cand2.realisticNetProfit < cand2ElevatedFloor) {
     return {
       mode: 'MODE_40_1',
       selectedCandidates: [cand1],
       maxPositions: 1,
       assetAllocationPct: thresholds.MODE_40_1_ASSET_ALLOCATION_PCT,
       cashBufferPct: 60,
-      rationale: `Step 6: Candidate #2 (${cand2.asset}) net expected profit (₹${cand2.realisticNetProfit.toFixed(2)}) is below the elevated safety floor (₹${thresholds.ELEVATED_NET_PROFIT_FLOOR_INR.toFixed(2)}). Forcing Mode 40-1.`,
+      rationale: `Step 6: Candidate #2 (${cand2.asset}) net expected profit (₹${cand2.realisticNetProfit.toFixed(2)}) is below the elevated safety floor (₹${cand2ElevatedFloor.toFixed(2)}). Forcing Mode 40-1.`,
       stepTriggered: 6,
     };
   }

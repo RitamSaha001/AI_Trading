@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateRoundtripFriction,
+  calculateDynamicNetProfitFloor,
   passesFrictionHurdle,
   passesNetProfitFloor,
 } from '../alphaSignalEngine';
@@ -108,9 +109,35 @@ describe('Scenario 1: Transaction Cost & Statutory Friction Engine', () => {
       expect(passesNetProfitFloor(149.99, 30)).toBe(false);
     });
 
+    it('supports custom/dynamic net profit floor parameter', () => {
+      // With dynamic floor of ₹65.00:
+      expect(passesNetProfitFloor(120, 50, 65)).toBe(true); // Net = 70 >= 65
+      expect(passesNetProfitFloor(110, 50, 65)).toBe(false); // Net = 60 < 65
+    });
+
     it('rejects non-positive values', () => {
       expect(passesNetProfitFloor(0, 20)).toBe(false);
       expect(passesNetProfitFloor(150, 0)).toBe(false);
+    });
+  });
+
+  describe('calculateDynamicNetProfitFloor', () => {
+    it('scales with friction for smaller notional trades', () => {
+      // 16,000 notional: notional * 0.004 = ₹64. Friction = ₹55: 55 * 1.2 = ₹66
+      const floor = calculateDynamicNetProfitFloor(55, 16000);
+      expect(floor).toBeCloseTo(66, 1);
+    });
+
+    it('scales with notional for larger capital trades', () => {
+      // 200,000 notional: notional * 0.004 = ₹800. Friction = ₹55: 55 * 1.2 = ₹66
+      const floor = calculateDynamicNetProfitFloor(55, 200000);
+      expect(floor).toBe(800);
+    });
+
+    it('respects the base slippage cushion floor of ₹60', () => {
+      // Low friction (₹20) and tiny notional (₹5,000)
+      const floor = calculateDynamicNetProfitFloor(20, 5000);
+      expect(floor).toBe(60);
     });
   });
 });

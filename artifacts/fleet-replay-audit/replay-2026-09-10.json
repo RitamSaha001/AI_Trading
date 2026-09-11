@@ -2,10 +2,10 @@
   "sessionDate": "2026-09-10",
   "isToday": false,
   "profile": "balanced",
-  "replayedAt": "2026-09-11T06:19:25.708Z",
+  "replayedAt": "2026-09-11T06:27:53.832Z",
   "totalBars": 375,
-  "startingCapital": 100000,
-  "endingNav": 100000,
+  "startingCapital": 40000,
+  "endingNav": 40000,
   "netPnl": 0,
   "netReturnPct": 0,
   "maxDrawdownPct": 0,
@@ -108,18 +108,18 @@
       "timeStr": "2026-09-10T12:09:00+05:30",
       "asset": "SBIN",
       "type": "SKIPPED",
-      "price": 1006.7,
+      "price": 1007.3,
       "qty": 0,
-      "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹151.61 leaves less than ₹120.00 after ₹57.91 in roundtrip fees. Setup rejected."
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
     },
     {
       "minute": 179,
       "timeStr": "2026-09-10T12:14:00+05:30",
       "asset": "SBIN",
       "type": "SKIPPED",
-      "price": 1007.8,
+      "price": 1008.4,
       "qty": 0,
-      "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹155.09 leaves less than ₹120.00 after ₹57.94 in roundtrip fees. Setup rejected."
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
     },
     {
       "minute": 236,
@@ -128,16 +128,16 @@
       "type": "SKIPPED",
       "price": 334.65,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
     },
     {
       "minute": 265,
       "timeStr": "2026-09-10T13:40:00+05:30",
       "asset": "BHARTIARTL",
       "type": "SKIPPED",
-      "price": 1843.65,
+      "price": 1845,
       "qty": 0,
-      "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹156.00 leaves less than ₹120.00 after ₹56.34 in roundtrip fees. Setup rejected."
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
     }
   ]
 }

@@ -238,5 +238,19 @@ describe('Alpha Signal & Microstructure Engine', () => {
       expect(decision.mode).toBe('MODE_35_2');
       expect(decision.assetAllocationPct).toBe(35);
     });
+
+    it('dynamically clears candidates with realistic net profit below 120 when scaled to smaller notional and friction', () => {
+      // With friction 50 and notional 16,000, dynamic floor is max(60, 64, 60) = 64.
+      // A candidate with net profit 85 clears the dynamic floor (85 >= 64) but would have failed a rigid 120 floor.
+      const smallAccountCandidate = candidate({
+        realisticGrossProfit: 135,
+        roundtripFriction: 50,
+        realisticNetProfit: 85,
+        notional: 16000,
+      });
+      const decision = evaluateAllocationModeSwitch([smallAccountCandidate]);
+      expect(decision.mode).toBe('MODE_40_1');
+      expect(decision.selectedCandidates[0].asset).toBe('RELIANCE');
+    });
   });
 });

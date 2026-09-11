@@ -1,0 +1,251 @@
+{
+  "sessionDate": "2026-09-11",
+  "isToday": true,
+  "profile": "balanced",
+  "replayedAt": "2026-09-11T06:22:24.379Z",
+  "totalBars": 157,
+  "startingCapital": 100000,
+  "endingNav": 100000,
+  "netPnl": 0,
+  "netReturnPct": 0,
+  "maxDrawdownPct": 0,
+  "totalFeeBurn": 0,
+  "closedTrades": [],
+  "eventsCount": 26,
+  "events": [
+    {
+      "minute": 0,
+      "timeStr": "2026-09-11T09:15:00+05:30",
+      "asset": "TCS",
+      "type": "VOLATILITY_SHOCK",
+      "price": 2222,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 1,
+      "timeStr": "2026-09-11T09:16:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "VOLATILITY_SHOCK",
+      "price": 181.03,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 3,
+      "timeStr": "2026-09-11T09:18:00+05:30",
+      "asset": "INFY",
+      "type": "VOLATILITY_SHOCK",
+      "price": 1043.3,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 3,
+      "timeStr": "2026-09-11T09:18:00+05:30",
+      "asset": "BEL",
+      "type": "SKIPPED",
+      "price": 402.05,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹154.08 leaves less than ₹120.00 after ₹56.46 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 8,
+      "timeStr": "2026-09-11T09:23:00+05:30",
+      "asset": "BEL",
+      "type": "SKIPPED",
+      "price": 401.9,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹154.08 leaves less than ₹120.00 after ₹56.46 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 8,
+      "timeStr": "2026-09-11T09:23:00+05:30",
+      "asset": "TATAMOTORS",
+      "type": "SKIPPED",
+      "price": 297.65,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹155.65 leaves less than ₹120.00 after ₹55.45 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 10,
+      "timeStr": "2026-09-11T09:25:00+05:30",
+      "asset": "TCS",
+      "type": "VOLATILITY_SHOCK",
+      "price": 2208.8,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 11,
+      "timeStr": "2026-09-11T09:26:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "VOLATILITY_SHOCK",
+      "price": 182.17,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 13,
+      "timeStr": "2026-09-11T09:28:00+05:30",
+      "asset": "INFY",
+      "type": "VOLATILITY_SHOCK",
+      "price": 1039.9,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 13,
+      "timeStr": "2026-09-11T09:28:00+05:30",
+      "asset": "BEL",
+      "type": "SKIPPED",
+      "price": 401.5,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹154.08 leaves less than ₹120.00 after ₹56.45 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 13,
+      "timeStr": "2026-09-11T09:28:00+05:30",
+      "asset": "TATAMOTORS",
+      "type": "SKIPPED",
+      "price": 297.35,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹155.65 leaves less than ₹120.00 after ₹55.43 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 18,
+      "timeStr": "2026-09-11T09:33:00+05:30",
+      "asset": "BEL",
+      "type": "SKIPPED",
+      "price": 400.85,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹154.08 leaves less than ₹120.00 after ₹56.44 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 18,
+      "timeStr": "2026-09-11T09:33:00+05:30",
+      "asset": "TATAMOTORS",
+      "type": "SKIPPED",
+      "price": 296.95,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹155.65 leaves less than ₹120.00 after ₹55.41 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 20,
+      "timeStr": "2026-09-11T09:35:00+05:30",
+      "asset": "TCS",
+      "type": "VOLATILITY_SHOCK",
+      "price": 2214.4,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 21,
+      "timeStr": "2026-09-11T09:36:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "VOLATILITY_SHOCK",
+      "price": 182.27,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 23,
+      "timeStr": "2026-09-11T09:38:00+05:30",
+      "asset": "INFY",
+      "type": "VOLATILITY_SHOCK",
+      "price": 1042.6,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 23,
+      "timeStr": "2026-09-11T09:38:00+05:30",
+      "asset": "HAL",
+      "type": "SKIPPED",
+      "price": 4900.25,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹118.47 leaves less than ₹120.00 after ₹39.91 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 25,
+      "timeStr": "2026-09-11T09:40:00+05:30",
+      "asset": "BEL",
+      "type": "SKIPPED",
+      "price": 401.25,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹154.08 leaves less than ₹120.00 after ₹56.45 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 47,
+      "timeStr": "2026-09-11T10:02:00+05:30",
+      "asset": "TATAMOTORS",
+      "type": "SKIPPED",
+      "price": 296.75,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹157.03 leaves less than ₹120.00 after ₹56.26 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 52,
+      "timeStr": "2026-09-11T10:07:00+05:30",
+      "asset": "TATAMOTORS",
+      "type": "SKIPPED",
+      "price": 296.95,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹154.88 leaves less than ₹120.00 after ₹56.05 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 57,
+      "timeStr": "2026-09-11T10:12:00+05:30",
+      "asset": "TATAMOTORS",
+      "type": "SKIPPED",
+      "price": 297.3,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹156.00 leaves less than ₹120.00 after ₹56.05 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 58,
+      "timeStr": "2026-09-11T10:13:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 260.4,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹151.41 leaves less than ₹120.00 after ₹58.19 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 86,
+      "timeStr": "2026-09-11T10:41:00+05:30",
+      "asset": "SBIN",
+      "type": "SKIPPED",
+      "price": 994.1,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹153.56 leaves less than ₹120.00 after ₹56.73 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 118,
+      "timeStr": "2026-09-11T11:13:00+05:30",
+      "asset": "SBIN",
+      "type": "SKIPPED",
+      "price": 996.7,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹156.46 leaves less than ₹120.00 after ₹56.75 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 143,
+      "timeStr": "2026-09-11T11:38:00+05:30",
+      "asset": "HAL",
+      "type": "SKIPPED",
+      "price": 4896.6,
+      "qty": 0,
+      "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹146.65 leaves less than ₹120.00 after ₹55.88 in roundtrip fees. Setup rejected."
+    },
+    {
+      "minute": 145,
+      "timeStr": "2026-09-11T11:40:00+05:30",
+      "asset": "HAL",
+      "type": "SKIPPED",
+      "price": 4899.1,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate HAL is in Scenario D (Volatility Shock). Zero edge; standing aside in cash to avoid fee bleed."
+    }
+  ]
+}

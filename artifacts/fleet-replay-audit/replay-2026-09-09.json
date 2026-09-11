@@ -2,1060 +2,286 @@
   "sessionDate": "2026-09-09",
   "isToday": false,
   "profile": "balanced",
-  "replayedAt": "2026-09-11T06:17:52.592Z",
+  "replayedAt": "2026-09-11T06:28:42.806Z",
   "totalBars": 375,
-  "startingCapital": 100000,
-  "endingNav": 100000,
+  "startingCapital": 40000,
+  "endingNav": 40000,
   "netPnl": 0,
   "netReturnPct": 0,
   "maxDrawdownPct": 0,
   "totalFeeBurn": 0,
   "closedTrades": [],
-  "eventsCount": 116,
+  "eventsCount": 30,
   "events": [
+    {
+      "minute": 1,
+      "timeStr": "2026-09-09T09:16:00+05:30",
+      "asset": "TCS",
+      "type": "VOLATILITY_SHOCK",
+      "price": 2207.9,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 1,
+      "timeStr": "2026-09-09T09:16:00+05:30",
+      "asset": "INFY",
+      "type": "VOLATILITY_SHOCK",
+      "price": 1044.2,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 1,
+      "timeStr": "2026-09-09T09:16:00+05:30",
+      "asset": "BHARTIARTL",
+      "type": "SKIPPED",
+      "price": 1817,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate BHARTIARTL is in Scenario D (Volatility Shock). Zero edge; standing aside in cash to avoid fee bleed."
+    },
+    {
+      "minute": 2,
+      "timeStr": "2026-09-09T09:17:00+05:30",
+      "asset": "BHARTIARTL",
+      "type": "VOLATILITY_SHOCK",
+      "price": 1816.1,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 5,
+      "timeStr": "2026-09-09T09:20:00+05:30",
+      "asset": "LT",
+      "type": "VOLATILITY_SHOCK",
+      "price": 3996.9,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 6,
+      "timeStr": "2026-09-09T09:21:00+05:30",
+      "asset": "SBIN",
+      "type": "SKIPPED",
+      "price": 999.8,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
     {
       "minute": 11,
       "timeStr": "2026-09-09T09:26:00+05:30",
-      "asset": "ICICIBANK",
-      "type": "SKIPPED",
-      "price": 1389.9,
+      "asset": "TCS",
+      "type": "VOLATILITY_SHOCK",
+      "price": 2201.4,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 11,
+      "timeStr": "2026-09-09T09:26:00+05:30",
+      "asset": "INFY",
+      "type": "VOLATILITY_SHOCK",
+      "price": 1045.8,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 11,
+      "timeStr": "2026-09-09T09:26:00+05:30",
+      "asset": "RELIANCE",
+      "type": "SKIPPED",
+      "price": 1281.3,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
+    {
+      "minute": 12,
+      "timeStr": "2026-09-09T09:27:00+05:30",
+      "asset": "BHARTIARTL",
+      "type": "VOLATILITY_SHOCK",
+      "price": 1823.6,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 15,
+      "timeStr": "2026-09-09T09:30:00+05:30",
+      "asset": "LT",
+      "type": "VOLATILITY_SHOCK",
+      "price": 4015,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 16,
+      "timeStr": "2026-09-09T09:31:00+05:30",
+      "asset": "NTPC",
+      "type": "SKIPPED",
+      "price": 334.4,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹7022.40 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 18,
+      "timeStr": "2026-09-09T09:33:00+05:30",
+      "asset": "TATAMOTORS",
+      "type": "SKIPPED",
+      "price": 302.35,
+      "qty": 0,
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹8465.80 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 21,
+      "timeStr": "2026-09-09T09:36:00+05:30",
+      "asset": "TCS",
+      "type": "VOLATILITY_SHOCK",
+      "price": 2202.1,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 21,
+      "timeStr": "2026-09-09T09:36:00+05:30",
+      "asset": "INFY",
+      "type": "VOLATILITY_SHOCK",
+      "price": 1047.3,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 21,
+      "timeStr": "2026-09-09T09:36:00+05:30",
+      "asset": "NTPC",
+      "type": "SKIPPED",
+      "price": 336,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹7056.00 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
       "minute": 22,
       "timeStr": "2026-09-09T09:37:00+05:30",
-      "asset": "INFY",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1052.2,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 28,
-      "timeStr": "2026-09-09T09:43:00+05:30",
-      "asset": "TATASTEEL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 185.4,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 28,
-      "timeStr": "2026-09-09T09:43:00+05:30",
-      "asset": "RELIANCE",
-      "type": "SKIPPED",
-      "price": 1288.7,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate RELIANCE is in Scenario D (Volatility Shock). Zero edge; standing aside in cash to avoid fee bleed."
-    },
-    {
-      "minute": 33,
-      "timeStr": "2026-09-09T09:48:00+05:30",
-      "asset": "ITC",
-      "type": "SKIPPED",
-      "price": 262.7,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 39,
-      "timeStr": "2026-09-09T09:54:00+05:30",
-      "asset": "RELIANCE",
-      "type": "SKIPPED",
-      "price": 1286,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 43,
-      "timeStr": "2026-09-09T09:58:00+05:30",
-      "asset": "ICICIBANK",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1390.9,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 44,
-      "timeStr": "2026-09-09T09:59:00+05:30",
-      "asset": "SBIN",
-      "type": "SKIPPED",
-      "price": 1006.9,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 49,
-      "timeStr": "2026-09-09T10:04:00+05:30",
-      "asset": "TATASTEEL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 183.9,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 49,
-      "timeStr": "2026-09-09T10:04:00+05:30",
-      "asset": "HDFCBANK",
-      "type": "SKIPPED",
-      "price": 691.3,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate HDFCBANK is in Scenario D (Volatility Shock). Zero edge; standing aside in cash to avoid fee bleed."
-    },
-    {
-      "minute": 54,
-      "timeStr": "2026-09-09T10:09:00+05:30",
-      "asset": "TCS",
-      "type": "SKIPPED",
-      "price": 2205,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 60,
-      "timeStr": "2026-09-09T10:15:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "SKIPPED",
-      "price": 1877.4,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate SUNPHARMA is in Scenario D (Volatility Shock). Zero edge; standing aside in cash to avoid fee bleed."
-    },
-    {
-      "minute": 61,
-      "timeStr": "2026-09-09T10:16:00+05:30",
-      "asset": "ITC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 262.2,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 64,
-      "timeStr": "2026-09-09T10:19:00+05:30",
-      "asset": "TATASTEEL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 185.55,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 65,
-      "timeStr": "2026-09-09T10:20:00+05:30",
       "asset": "BHARTIARTL",
-      "type": "SKIPPED",
-      "price": 1824.3,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 67,
-      "timeStr": "2026-09-09T10:22:00+05:30",
-      "asset": "BEL",
       "type": "VOLATILITY_SHOCK",
-      "price": 407.9,
+      "price": 1823.9,
       "qty": 0,
       "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
     },
     {
-      "minute": 68,
-      "timeStr": "2026-09-09T10:23:00+05:30",
-      "asset": "RELIANCE",
+      "minute": 24,
+      "timeStr": "2026-09-09T09:39:00+05:30",
+      "asset": "SBIN",
       "type": "VOLATILITY_SHOCK",
-      "price": 1288,
+      "price": 1005.9,
       "qty": 0,
       "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
     },
     {
-      "minute": 71,
-      "timeStr": "2026-09-09T10:26:00+05:30",
-      "asset": "INFY",
-      "type": "SKIPPED",
-      "price": 1044.1,
+      "minute": 25,
+      "timeStr": "2026-09-09T09:40:00+05:30",
+      "asset": "LT",
+      "type": "VOLATILITY_SHOCK",
+      "price": 4005.8,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
     },
     {
-      "minute": 74,
-      "timeStr": "2026-09-09T10:29:00+05:30",
+      "minute": 26,
+      "timeStr": "2026-09-09T09:41:00+05:30",
       "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 336.4,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 75,
-      "timeStr": "2026-09-09T10:30:00+05:30",
-      "asset": "SBIN",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1011.5,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 75,
-      "timeStr": "2026-09-09T10:30:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1881.2,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 76,
-      "timeStr": "2026-09-09T10:31:00+05:30",
-      "asset": "BHARTIARTL",
       "type": "SKIPPED",
-      "price": 1825,
+      "price": 336,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹7056.00 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
-      "minute": 84,
-      "timeStr": "2026-09-09T10:39:00+05:30",
-      "asset": "BHARTIARTL",
+      "minute": 27,
+      "timeStr": "2026-09-09T09:42:00+05:30",
+      "asset": "TATAMOTORS",
       "type": "SKIPPED",
-      "price": 1825.3,
+      "price": 302.2,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 85,
-      "timeStr": "2026-09-09T10:40:00+05:30",
-      "asset": "INFY",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1039.7,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 86,
-      "timeStr": "2026-09-09T10:41:00+05:30",
-      "asset": "TCS",
-      "type": "VOLATILITY_SHOCK",
-      "price": 2197.4,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 86,
-      "timeStr": "2026-09-09T10:41:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1823,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹8461.60 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
       "minute": 88,
       "timeStr": "2026-09-09T10:43:00+05:30",
       "asset": "TATASTEEL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 188.17,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 90,
-      "timeStr": "2026-09-09T10:45:00+05:30",
-      "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 337.35,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 100,
-      "timeStr": "2026-09-09T10:55:00+05:30",
-      "asset": "RELIANCE",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1285.9,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 104,
-      "timeStr": "2026-09-09T10:59:00+05:30",
-      "asset": "ITC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 261.8,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 104,
-      "timeStr": "2026-09-09T10:59:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1876.8,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 105,
-      "timeStr": "2026-09-09T11:00:00+05:30",
-      "asset": "LT",
       "type": "SKIPPED",
-      "price": 3997,
+      "price": 187.9,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 106,
-      "timeStr": "2026-09-09T11:01:00+05:30",
-      "asset": "SBIN",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1007.1,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 108,
-      "timeStr": "2026-09-09T11:03:00+05:30",
-      "asset": "HDFCBANK",
-      "type": "VOLATILITY_SHOCK",
-      "price": 695.45,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹4697.50 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
       "minute": 110,
       "timeStr": "2026-09-09T11:05:00+05:30",
       "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 336.8,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 112,
-      "timeStr": "2026-09-09T11:07:00+05:30",
-      "asset": "TCS",
       "type": "SKIPPED",
-      "price": 2201.2,
+      "price": 336.5,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹8076.00 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
-      "minute": 117,
-      "timeStr": "2026-09-09T11:12:00+05:30",
-      "asset": "LT",
-      "type": "VOLATILITY_SHOCK",
-      "price": 3987.3,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 119,
-      "timeStr": "2026-09-09T11:14:00+05:30",
-      "asset": "ICICIBANK",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1392.8,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 120,
-      "timeStr": "2026-09-09T11:15:00+05:30",
-      "asset": "RELIANCE",
+      "minute": 118,
+      "timeStr": "2026-09-09T11:13:00+05:30",
+      "asset": "TATASTEEL",
       "type": "SKIPPED",
-      "price": 1290.6,
+      "price": 187.9,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5261.20 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
-      "minute": 121,
-      "timeStr": "2026-09-09T11:16:00+05:30",
-      "asset": "TATAMOTORS",
-      "type": "VOLATILITY_SHOCK",
-      "price": 302.3,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 122,
-      "timeStr": "2026-09-09T11:17:00+05:30",
-      "asset": "RELIANCE",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1292,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 125,
-      "timeStr": "2026-09-09T11:20:00+05:30",
-      "asset": "BHARTIARTL",
+      "minute": 143,
+      "timeStr": "2026-09-09T11:38:00+05:30",
+      "asset": "TATASTEEL",
       "type": "SKIPPED",
-      "price": 1824.4,
+      "price": 187.8,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5446.20 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
-      "minute": 132,
-      "timeStr": "2026-09-09T11:27:00+05:30",
-      "asset": "LT",
-      "type": "VOLATILITY_SHOCK",
-      "price": 3973.4,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 136,
-      "timeStr": "2026-09-09T11:31:00+05:30",
-      "asset": "SBIN",
+      "minute": 148,
+      "timeStr": "2026-09-09T11:43:00+05:30",
+      "asset": "TATASTEEL",
       "type": "SKIPPED",
-      "price": 1006.9,
+      "price": 187.8,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5446.20 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
-      "minute": 140,
-      "timeStr": "2026-09-09T11:35:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1871,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 141,
-      "timeStr": "2026-09-09T11:36:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1825.3,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 142,
-      "timeStr": "2026-09-09T11:37:00+05:30",
-      "asset": "ICICIBANK",
+      "minute": 174,
+      "timeStr": "2026-09-09T12:09:00+05:30",
+      "asset": "TATASTEEL",
       "type": "SKIPPED",
-      "price": 1394.1,
+      "price": 187.35,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 145,
-      "timeStr": "2026-09-09T11:40:00+05:30",
-      "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 334.65,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 149,
-      "timeStr": "2026-09-09T11:44:00+05:30",
-      "asset": "TATAMOTORS",
-      "type": "VOLATILITY_SHOCK",
-      "price": 303.2,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 152,
-      "timeStr": "2026-09-09T11:47:00+05:30",
-      "asset": "HDFCBANK",
-      "type": "SKIPPED",
-      "price": 694.65,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 157,
-      "timeStr": "2026-09-09T11:52:00+05:30",
-      "asset": "HDFCBANK",
-      "type": "VOLATILITY_SHOCK",
-      "price": 693.6,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 159,
-      "timeStr": "2026-09-09T11:54:00+05:30",
-      "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 333.4,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 160,
-      "timeStr": "2026-09-09T11:55:00+05:30",
-      "asset": "TATAMOTORS",
-      "type": "SKIPPED",
-      "price": 303.6,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 164,
-      "timeStr": "2026-09-09T11:59:00+05:30",
-      "asset": "LT",
-      "type": "VOLATILITY_SHOCK",
-      "price": 3971.5,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 167,
-      "timeStr": "2026-09-09T12:02:00+05:30",
-      "asset": "INFY",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1037.7,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 168,
-      "timeStr": "2026-09-09T12:03:00+05:30",
-      "asset": "ITC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 260.8,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 172,
-      "timeStr": "2026-09-09T12:07:00+05:30",
-      "asset": "HAL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 5032,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5245.80 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
       "minute": 179,
       "timeStr": "2026-09-09T12:14:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "SKIPPED",
-      "price": 1825.2,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 184,
-      "timeStr": "2026-09-09T12:19:00+05:30",
-      "asset": "ICICIBANK",
-      "type": "SKIPPED",
-      "price": 1393.9,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 189,
-      "timeStr": "2026-09-09T12:24:00+05:30",
-      "asset": "ITC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 261.55,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 189,
-      "timeStr": "2026-09-09T12:24:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "SKIPPED",
-      "price": 1825.3,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 191,
-      "timeStr": "2026-09-09T12:26:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1827.9,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 192,
-      "timeStr": "2026-09-09T12:27:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1873.8,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 194,
-      "timeStr": "2026-09-09T12:29:00+05:30",
-      "asset": "RELIANCE",
-      "type": "SKIPPED",
-      "price": 1286,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 197,
-      "timeStr": "2026-09-09T12:32:00+05:30",
-      "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 334.2,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 198,
-      "timeStr": "2026-09-09T12:33:00+05:30",
-      "asset": "SBIN",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1009.6,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 199,
-      "timeStr": "2026-09-09T12:34:00+05:30",
-      "asset": "HAL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 5057,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 199,
-      "timeStr": "2026-09-09T12:34:00+05:30",
-      "asset": "RELIANCE",
-      "type": "SKIPPED",
-      "price": 1287.5,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 208,
-      "timeStr": "2026-09-09T12:43:00+05:30",
-      "asset": "INFY",
-      "type": "SKIPPED",
-      "price": 1036,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 214,
-      "timeStr": "2026-09-09T12:49:00+05:30",
-      "asset": "ITC",
-      "type": "SKIPPED",
-      "price": 262.5,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 217,
-      "timeStr": "2026-09-09T12:52:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1869.2,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 220,
-      "timeStr": "2026-09-09T12:55:00+05:30",
-      "asset": "ITC",
-      "type": "SKIPPED",
-      "price": 262.5,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 221,
-      "timeStr": "2026-09-09T12:56:00+05:30",
       "asset": "TATASTEEL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 189.99,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 225,
-      "timeStr": "2026-09-09T13:00:00+05:30",
-      "asset": "TATAMOTORS",
       "type": "SKIPPED",
-      "price": 304.45,
+      "price": 187.8,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5258.40 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
-      "minute": 230,
-      "timeStr": "2026-09-09T13:05:00+05:30",
+      "minute": 263,
+      "timeStr": "2026-09-09T13:38:00+05:30",
       "asset": "NTPC",
       "type": "SKIPPED",
-      "price": 335.1,
+      "price": 335.35,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹8048.40 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     },
     {
-      "minute": 231,
-      "timeStr": "2026-09-09T13:06:00+05:30",
-      "asset": "RELIANCE",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1287.1,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 231,
-      "timeStr": "2026-09-09T13:06:00+05:30",
-      "asset": "TATASTEEL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 189.82,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 235,
-      "timeStr": "2026-09-09T13:10:00+05:30",
-      "asset": "BEL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 407.55,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 236,
-      "timeStr": "2026-09-09T13:11:00+05:30",
+      "minute": 268,
+      "timeStr": "2026-09-09T13:43:00+05:30",
       "asset": "NTPC",
       "type": "SKIPPED",
-      "price": 335.1,
+      "price": 335.3,
       "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 242,
-      "timeStr": "2026-09-09T13:17:00+05:30",
-      "asset": "TCS",
-      "type": "SKIPPED",
-      "price": 2213.3,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 245,
-      "timeStr": "2026-09-09T13:20:00+05:30",
-      "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 335.05,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 246,
-      "timeStr": "2026-09-09T13:21:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1829.1,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 247,
-      "timeStr": "2026-09-09T13:22:00+05:30",
-      "asset": "RELIANCE",
-      "type": "SKIPPED",
-      "price": 1288.2,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 249,
-      "timeStr": "2026-09-09T13:24:00+05:30",
-      "asset": "BEL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 407.9,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 250,
-      "timeStr": "2026-09-09T13:25:00+05:30",
-      "asset": "TATAMOTORS",
-      "type": "VOLATILITY_SHOCK",
-      "price": 304.5,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 252,
-      "timeStr": "2026-09-09T13:27:00+05:30",
-      "asset": "RELIANCE",
-      "type": "SKIPPED",
-      "price": 1290.1,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 257,
-      "timeStr": "2026-09-09T13:32:00+05:30",
-      "asset": "TCS",
-      "type": "SKIPPED",
-      "price": 2214.3,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 259,
-      "timeStr": "2026-09-09T13:34:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1873,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 264,
-      "timeStr": "2026-09-09T13:39:00+05:30",
-      "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 335.55,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 264,
-      "timeStr": "2026-09-09T13:39:00+05:30",
-      "asset": "TATAMOTORS",
-      "type": "SKIPPED",
-      "price": 304.4,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 274,
-      "timeStr": "2026-09-09T13:49:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1827.3,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 277,
-      "timeStr": "2026-09-09T13:52:00+05:30",
-      "asset": "ITC",
-      "type": "SKIPPED",
-      "price": 262.3,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 279,
-      "timeStr": "2026-09-09T13:54:00+05:30",
-      "asset": "HAL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 5034.9,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 281,
-      "timeStr": "2026-09-09T13:56:00+05:30",
-      "asset": "HDFCBANK",
-      "type": "VOLATILITY_SHOCK",
-      "price": 694.65,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 281,
-      "timeStr": "2026-09-09T13:56:00+05:30",
-      "asset": "SBIN",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1006.2,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 283,
-      "timeStr": "2026-09-09T13:58:00+05:30",
-      "asset": "ICICIBANK",
-      "type": "SKIPPED",
-      "price": 1399.5,
-      "qty": 0,
-      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the minimum net profit floor (₹120.00). Standing aside in cash."
-    },
-    {
-      "minute": 289,
-      "timeStr": "2026-09-09T14:04:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1872.7,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 297,
-      "timeStr": "2026-09-09T14:12:00+05:30",
-      "asset": "TATAMOTORS",
-      "type": "VOLATILITY_SHOCK",
-      "price": 304.95,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 298,
-      "timeStr": "2026-09-09T14:13:00+05:30",
-      "asset": "HDFCBANK",
-      "type": "VOLATILITY_SHOCK",
-      "price": 694.1,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 300,
-      "timeStr": "2026-09-09T14:15:00+05:30",
-      "asset": "LT",
-      "type": "VOLATILITY_SHOCK",
-      "price": 3965.1,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 301,
-      "timeStr": "2026-09-09T14:16:00+05:30",
-      "asset": "SBIN",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1006,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 303,
-      "timeStr": "2026-09-09T14:18:00+05:30",
-      "asset": "RELIANCE",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1288,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 310,
-      "timeStr": "2026-09-09T14:25:00+05:30",
-      "asset": "INFY",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1032.7,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 334,
-      "timeStr": "2026-09-09T14:49:00+05:30",
-      "asset": "SBIN",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1004.4,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 338,
-      "timeStr": "2026-09-09T14:53:00+05:30",
-      "asset": "RELIANCE",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1286.5,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 346,
-      "timeStr": "2026-09-09T15:01:00+05:30",
-      "asset": "HDFCBANK",
-      "type": "VOLATILITY_SHOCK",
-      "price": 690.8,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 346,
-      "timeStr": "2026-09-09T15:01:00+05:30",
-      "asset": "TATAMOTORS",
-      "type": "VOLATILITY_SHOCK",
-      "price": 303.85,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 347,
-      "timeStr": "2026-09-09T15:02:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1823.1,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 349,
-      "timeStr": "2026-09-09T15:04:00+05:30",
-      "asset": "INFY",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1028,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 354,
-      "timeStr": "2026-09-09T15:09:00+05:30",
-      "asset": "NTPC",
-      "type": "VOLATILITY_SHOCK",
-      "price": 333.9,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 357,
-      "timeStr": "2026-09-09T15:12:00+05:30",
-      "asset": "LT",
-      "type": "VOLATILITY_SHOCK",
-      "price": 3939.8,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 357,
-      "timeStr": "2026-09-09T15:12:00+05:30",
-      "asset": "HAL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 5008.6,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 359,
-      "timeStr": "2026-09-09T15:14:00+05:30",
-      "asset": "RELIANCE",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1285.7,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 359,
-      "timeStr": "2026-09-09T15:14:00+05:30",
-      "asset": "ICICIBANK",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1392.1,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 359,
-      "timeStr": "2026-09-09T15:14:00+05:30",
-      "asset": "BHARTIARTL",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1821.3,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-    },
-    {
-      "minute": 359,
-      "timeStr": "2026-09-09T15:14:00+05:30",
-      "asset": "SUNPHARMA",
-      "type": "VOLATILITY_SHOCK",
-      "price": 1867,
-      "qty": 0,
-      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹8047.20 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
     }
   ]
 }

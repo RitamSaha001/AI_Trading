@@ -26,6 +26,7 @@ import {
   calculateCrossSectionalAlphaRanking,
   calculateSmartLimitPrice,
   calculateRoundtripFriction,
+  calculateDynamicNetProfitFloor,
   passesFrictionHurdle,
   passesNetProfitFloor,
   evaluateLiveMarketDataQuality,
@@ -1185,6 +1186,7 @@ export function tickAutonomousPilot(
     const projectedQuantity = Math.max(1, Math.floor(projectedNotional / limitPrice));
     const friction = calculateRoundtripFriction(limitPrice, projectedQuantity, false);
     const realisticGrossProfit = Math.min(cand.atr * 1.25, limitPrice * 0.08) * projectedQuantity;
+    const dynamicFloor = calculateDynamicNetProfitFloor(friction.totalRoundtripFriction, projectedNotional);
     const rsi = indicators(cand.market.history, cand.market.candles).rsi ?? 50;
 
     return {
@@ -1199,6 +1201,8 @@ export function tickAutonomousPilot(
       realisticGrossProfit,
       roundtripFriction: friction.totalRoundtripFriction,
       realisticNetProfit: realisticGrossProfit - friction.totalRoundtripFriction,
+      notional: projectedNotional,
+      minNetProfitFloor: dynamicFloor,
       history: cand.market.history,
       regimeScenario: classifyRegimeScenario(cand.price, cand.atr, cand.hurst, cand.squeezeStatus, cand.volumeSurgeRatio, rsi),
     };
@@ -1492,9 +1496,13 @@ export function tickAutonomousPilot(
     const orderFriction = calculateRoundtripFriction(limitPrice, unitsToBuy, isDeliveryOrder);
     const realisticTargetMove = Math.min(takeProfitPrice - limitPrice, atr * 1.25);
     const realisticGrossProfit = realisticTargetMove * unitsToBuy;
+    const dynamicNetFloor = calculateDynamicNetProfitFloor(
+      orderFriction.totalRoundtripFriction,
+      proposedNotional
+    );
 
     const passesOverallTarget = passesFrictionHurdle(expectedGrossProfit, orderFriction.totalRoundtripFriction, thresholds.MIN_FRICTION_PROFIT_MULTIPLE);
-    const passesRealisticTarget = passesNetProfitFloor(realisticGrossProfit, orderFriction.totalRoundtripFriction);
+    const passesRealisticTarget = passesNetProfitFloor(realisticGrossProfit, orderFriction.totalRoundtripFriction, dynamicNetFloor);
 
     if (!passesOverallTarget || !passesRealisticTarget) {
       const recentTcaSkip = state.autonomousPilot?.actionLogs?.find(
@@ -1507,7 +1515,7 @@ export function tickAutonomousPilot(
           asset,
           action: 'SKIPPED',
           strategy,
-          detail: `TCA Friction Hurdle: Realistic intraday gain ₹${realisticGrossProfit.toFixed(2)} leaves less than ₹${thresholds.MIN_NET_PROFIT_FLOOR_INR.toFixed(2)} after ₹${orderFriction.totalRoundtripFriction.toFixed(2)} in roundtrip fees. Setup rejected.`,
+          detail: `TCA Friction Hurdle: Realistic intraday gain ₹${realisticGrossProfit.toFixed(2)} leaves less than dynamic floor ₹${dynamicNetFloor.toFixed(2)} after ₹${orderFriction.totalRoundtripFriction.toFixed(2)} in roundtrip fees. Setup rejected.`,
           price: limitPrice,
           status: 'BLOCKED',
         });
