@@ -94,10 +94,22 @@ async function setCachedJson(filename: string, data: any): Promise<void> {
   } catch {}
 }
 
-async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  return res.json();
+async function fetchJson(url: string, retries = 5, delayMs = 300): Promise<any> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (res.status === 429 || res.status >= 500) {
+        if (attempt === retries) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        await new Promise((r) => setTimeout(r, delayMs * Math.pow(2, attempt - 1)));
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      return await res.json();
+    } catch (err: any) {
+      if (attempt === retries) throw err;
+      await new Promise((r) => setTimeout(r, delayMs * Math.pow(2, attempt - 1)));
+    }
+  }
 }
 
 function getTodayIstDateStr(): string {

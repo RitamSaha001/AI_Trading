@@ -1,0 +1,151 @@
+{
+  "windowDays": 1,
+  "startDate": "2025-09-15",
+  "endDate": "2025-09-15",
+  "profile": "balanced",
+  "startingCapital": 40000,
+  "endingNav": 40000,
+  "totalNetPnl": 0,
+  "totalNetReturnPct": 0,
+  "maxWindowDrawdownPct": 0,
+  "totalFeeBurn": 0,
+  "totalTrades": 0,
+  "totalWins": 0,
+  "totalLosses": 0,
+  "winRatePct": 0,
+  "profitFactor": 0,
+  "dailyDistribution": {
+    "greenDays": 0,
+    "flatDays": 1,
+    "redDays": 0
+  },
+  "dailyBreakdown": [
+    {
+      "date": "2025-09-15",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 12,
+      "events": [
+        {
+          "minute": 1,
+          "timeStr": "2025-09-15T09:16:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1509,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 3,
+          "timeStr": "2025-09-15T09:18:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1601.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 8,
+          "timeStr": "2025-09-15T09:23:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 720.05,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2025-09-15T09:26:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1506.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2025-09-15T09:28:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1605.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2025-09-15T09:33:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 719.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2025-09-15T09:36:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1506.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2025-09-15T09:38:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1604.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-09-15T09:43:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 717.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 41,
+          "timeStr": "2025-09-15T09:56:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 3601.9,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 46,
+          "timeStr": "2025-09-15T10:01:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 3606.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 57,
+          "timeStr": "2025-09-15T10:12:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 3602.6,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        }
+      ]
+    }
+  ],
+  "allClosedTrades": []
+}
