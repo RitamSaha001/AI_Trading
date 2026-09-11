@@ -12,9 +12,14 @@ import {
   Octagon,
   Trash2,
   AlertTriangle,
-  Layers,
   Activity,
   CheckCircle2,
+  ArrowUpRight,
+  ArrowDownRight,
+  DollarSign,
+  Filter,
+  Shield,
+  Layers,
 } from 'lucide-react';
 import { useLumen } from '../store';
 import {
@@ -58,7 +63,28 @@ export function AutonomousQuantPilot() {
   const opportunities = autonomousPilot?.activeOpportunities || [];
   const activeFleet = autonomousPilot?.activeFleet || initializeFleetStatus();
   const rateLimitStatus = autonomousPilot?.rateLimitStatus || createDefaultRateLimitStatus();
+  const [logFilterCategory, setLogFilterCategory] = useState<'all' | 'trades' | 'ratchets' | 'risk' | 'system'>('all');
+  const [logSelectedAsset, setLogSelectedAsset] = useState<string>('ALL');
+
   const actionLogs = autonomousPilot?.actionLogs || [];
+
+  const tradeActions = ['BUY_ENTRY', 'TAKE_PROFIT', 'PROFIT_HARVEST_T1', 'PROFIT_HARVEST_T2', 'CHANDELIER_EXIT', 'STOP_LOSS', 'SESSION_CLOSE', 'DEAD_TRADE_EXIT'];
+  const ratchetActions = ['TRAILING_RATCHET'];
+  const riskActions = ['SKIPPED', 'THROTTLED', 'SECTOR_CAP_DEFENSE', 'CORRELATION_DEFENSE', 'VOLATILITY_SHOCK', 'CIRCUIT_BREAKER'];
+  const systemActions = ['AUTONOMOUS_ENGAGED', 'DISARMED', 'ALPHA_SCAN', 'RESET'];
+
+  const tradeCount = actionLogs.filter((l) => tradeActions.includes(l.action)).length;
+  const ratchetCount = actionLogs.filter((l) => ratchetActions.includes(l.action)).length;
+  const riskCount = actionLogs.filter((l) => riskActions.includes(l.action)).length;
+
+  const filteredActionLogs = actionLogs.filter((log) => {
+    if (logSelectedAsset !== 'ALL' && log.asset !== logSelectedAsset) return false;
+    if (logFilterCategory === 'trades') return tradeActions.includes(log.action);
+    if (logFilterCategory === 'ratchets') return ratchetActions.includes(log.action);
+    if (logFilterCategory === 'risk') return riskActions.includes(log.action);
+    if (logFilterCategory === 'system') return systemActions.includes(log.action);
+    return true;
+  });
 
   const pv = portfolioValue(state, markets);
   const currentCash = state.accountMode === 'upstox'
@@ -938,30 +964,125 @@ export function AutonomousQuantPilot() {
 
       {/* 7. TAB 3: AUDIT & EXECUTION STREAM */}
       {activeTab === 'logs' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs text-zinc-500 px-1">
-            <span>
-              Deterministic execution &amp; safety invariant audit stream recorded in real time
-            </span>
-            <span className="text-[11px] text-zinc-400">
-              SEBI Capital Protection Verifier
-            </span>
+        <div className="space-y-3.5">
+          {/* Top Metric Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="p-2.5 rounded-xl bg-white/80 border border-black/[0.05] shadow-2xs">
+              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">Total Log Events</span>
+              <span className="text-sm font-bold text-zinc-900 font-mono">{actionLogs.length}</span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white/80 border border-black/[0.05] shadow-2xs">
+              <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider block">Orders & Fills</span>
+              <span className="text-sm font-bold text-emerald-700 font-mono">{tradeCount}</span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white/80 border border-black/[0.05] shadow-2xs">
+              <span className="text-[10px] font-semibold text-teal-600 uppercase tracking-wider block">Trailing Ratchets</span>
+              <span className="text-sm font-bold text-teal-700 font-mono">{ratchetCount}</span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white/80 border border-black/[0.05] shadow-2xs">
+              <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider block">Risk Guards & Skips</span>
+              <span className="text-sm font-bold text-amber-700 font-mono">{riskCount}</span>
+            </div>
           </div>
 
-          {actionLogs.length === 0 ? (
+          {/* Filter Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-zinc-50 border border-black/[0.04]">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setLogFilterCategory('all')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  logFilterCategory === 'all'
+                    ? 'bg-zinc-900 text-white shadow-2xs'
+                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-black/[0.04]'
+                }`}
+              >
+                All ({actionLogs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilterCategory('trades')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  logFilterCategory === 'trades'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-black/[0.04]'
+                }`}
+              >
+                Fills &amp; Exits ({tradeCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilterCategory('ratchets')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  logFilterCategory === 'ratchets'
+                    ? 'bg-teal-600 text-white shadow-2xs'
+                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-black/[0.04]'
+                }`}
+              >
+                Defense Ratchets ({ratchetCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilterCategory('risk')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  logFilterCategory === 'risk'
+                    ? 'bg-amber-600 text-white shadow-2xs'
+                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-black/[0.04]'
+                }`}
+              >
+                Risk Guards ({riskCount})
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={logSelectedAsset}
+                onChange={(e) => setLogSelectedAsset(e.target.value)}
+                className="text-[11px] font-semibold bg-white border border-black/[0.08] text-zinc-700 rounded-lg px-2.5 py-1 outline-hidden shadow-2xs cursor-pointer"
+              >
+                <option value="ALL">All Assets</option>
+                {UPSTOX_FLEET_ASSETS.map((ast) => (
+                  <option key={ast} value={ast}>
+                    {ast}
+                  </option>
+                ))}
+              </select>
+
+              {actionLogs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearPilotLogs}
+                  className="text-[11px] text-zinc-500 hover:text-rose-600 flex items-center gap-1 transition-colors px-2 py-1 rounded-md hover:bg-rose-50"
+                  title="Clear in-memory action logs"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Empty State */}
+          {filteredActionLogs.length === 0 ? (
             <div className="p-8 rounded-2xl bg-white/50 border border-black/[0.05] text-center space-y-2">
               <div className="w-9 h-9 rounded-xl bg-zinc-100 text-zinc-400 flex items-center justify-center mx-auto">
                 <Clock className="w-4 h-4" />
               </div>
               <h4 className="text-xs font-bold text-zinc-900">
-                {isEnabled ? 'Monitoring Market Signals' : 'Desk on Standby'}
+                {actionLogs.length === 0
+                  ? isEnabled
+                    ? 'Monitoring Market Signals'
+                    : 'Desk on Standby'
+                  : 'No logs match the selected filter'}
               </h4>
               <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                {isEnabled
-                  ? 'The engine is scanning the 10 bluechip fleet. When market setups qualify, entries, trailing ratchets, and profit harvests will be recorded here.'
-                  : 'Autopilot is currently idle. Click "Engage Autopilot" to activate multi-factor quantitative scanning.'}
+                {actionLogs.length === 0
+                  ? (isEnabled
+                    ? 'The engine is scanning the 10 bluechip fleet. When market setups qualify, entries, trailing ratchets, and profit harvests will be recorded here.'
+                    : 'Autopilot is currently idle. Click "Engage Autopilot" to activate multi-factor quantitative scanning.')
+                  : 'Try selecting "All" or choosing another asset to see your logged actions.'}
               </p>
-              {!isEnabled && (
+              {!isEnabled && actionLogs.length === 0 && (
                 <div className="pt-2">
                   <button
                     type="button"
@@ -976,47 +1097,119 @@ export function AutonomousQuantPilot() {
             </div>
           ) : (
             <div className="space-y-2">
-              {actionLogs.map((log) => {
-                let badgeStyle = 'bg-zinc-100 text-zinc-700';
-                if (log.action === 'BUY_ENTRY') badgeStyle = 'bg-emerald-100 text-emerald-800 font-bold';
-                if (log.action === 'TAKE_PROFIT') badgeStyle = 'bg-indigo-100 text-indigo-800 font-bold';
-                if (log.action === 'PROFIT_HARVEST_T1') badgeStyle = 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
-                if (log.action === 'PROFIT_HARVEST_T2') badgeStyle = 'bg-teal-100 text-teal-800 font-bold border border-teal-300';
-                if (log.action === 'CHANDELIER_EXIT') badgeStyle = 'bg-purple-100 text-purple-800 font-bold border border-purple-300';
-                if (log.action === 'STOP_LOSS') badgeStyle = 'bg-rose-100 text-rose-800 font-bold';
-                if (log.action === 'TRAILING_RATCHET') badgeStyle = 'bg-teal-100 text-teal-800 font-bold';
-                if (log.action === 'THROTTLED') badgeStyle = 'bg-amber-100 text-amber-800 font-bold';
-                if (log.action === 'SECTOR_CAP_DEFENSE') badgeStyle = 'bg-amber-100 text-amber-900 font-bold border border-amber-300';
-                if (log.action === 'STAGNATION_EXIT') badgeStyle = 'bg-zinc-200 text-zinc-800 font-bold';
-                if (log.action === 'AUTONOMOUS_ENGAGED') badgeStyle = 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
-                if (log.action === 'DISARMED') badgeStyle = 'bg-rose-100 text-rose-800 font-bold border border-rose-300';
-                if (log.action === 'ALPHA_SCAN') badgeStyle = 'bg-sky-100 text-sky-800 font-bold border border-sky-300';
-                if (log.action === 'SKIPPED') badgeStyle = 'bg-zinc-100 text-zinc-600 font-medium';
+              {filteredActionLogs.map((log) => {
+                const isTrade = tradeActions.includes(log.action);
+                const isRatchet = log.action === 'TRAILING_RATCHET';
+                const isRisk = riskActions.includes(log.action);
+
+                let iconNode = <Activity className="w-4 h-4 text-zinc-600" />;
+                let iconBg = 'bg-zinc-100 border-zinc-200';
+                let actionBadgeStyle = 'bg-zinc-100 text-zinc-700 border-zinc-200';
+
+                if (log.action === 'BUY_ENTRY') {
+                  iconNode = <ArrowUpRight className="w-4 h-4 text-emerald-600" />;
+                  iconBg = 'bg-emerald-50 border-emerald-200';
+                  actionBadgeStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold';
+                } else if (log.action === 'TAKE_PROFIT' || log.action === 'PROFIT_HARVEST_T1' || log.action === 'PROFIT_HARVEST_T2') {
+                  iconNode = <DollarSign className="w-4 h-4 text-teal-600" />;
+                  iconBg = 'bg-teal-50 border-teal-200';
+                  actionBadgeStyle = 'bg-teal-100 text-teal-800 border-teal-300 font-bold';
+                } else if (log.action === 'CHANDELIER_EXIT') {
+                  iconNode = <TrendingUp className="w-4 h-4 text-purple-600" />;
+                  iconBg = 'bg-purple-50 border-purple-200';
+                  actionBadgeStyle = 'bg-purple-100 text-purple-800 border-purple-300 font-bold';
+                } else if (log.action === 'STOP_LOSS') {
+                  iconNode = <ArrowDownRight className="w-4 h-4 text-rose-600" />;
+                  iconBg = 'bg-rose-50 border-rose-200';
+                  actionBadgeStyle = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
+                } else if (log.action === 'TRAILING_RATCHET') {
+                  iconNode = <TrendingUp className="w-4 h-4 text-emerald-600" />;
+                  iconBg = 'bg-emerald-50 border-emerald-200';
+                  actionBadgeStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold';
+                } else if (log.action === 'SESSION_CLOSE' || log.action === 'DEAD_TRADE_EXIT') {
+                  iconNode = <Clock className="w-4 h-4 text-amber-600" />;
+                  iconBg = 'bg-amber-50 border-amber-200';
+                  actionBadgeStyle = 'bg-amber-100 text-amber-800 border-amber-300 font-semibold';
+                } else if (isRisk) {
+                  iconNode = <ShieldAlert className="w-4 h-4 text-amber-600" />;
+                  iconBg = 'bg-amber-50 border-amber-200';
+                  actionBadgeStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-medium';
+                }
+
+                const status = log.status || (isTrade ? 'EXECUTED' : isRisk ? 'BLOCKED' : 'EXECUTED');
+                let statusBadge = (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <CheckCircle2 className="w-2.5 h-2.5" />
+                    <span>EXECUTED</span>
+                  </span>
+                );
+                if (status === 'BLOCKED') {
+                  statusBadge = (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                      <Shield className="w-2.5 h-2.5" />
+                      <span>BLOCKED</span>
+                    </span>
+                  );
+                } else if (status === 'THROTTLED') {
+                  statusBadge = (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                      <AlertTriangle className="w-2.5 h-2.5" />
+                      <span>THROTTLED</span>
+                    </span>
+                  );
+                } else if (status === 'PENDING') {
+                  statusBadge = (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                      <Clock className="w-2.5 h-2.5" />
+                      <span>PENDING</span>
+                    </span>
+                  );
+                }
+
+                // Format friendly action title
+                const actionTitle = log.action.replaceAll('_', ' ');
 
                 return (
                   <div
                     key={log.id}
-                    className="p-3 rounded-xl bg-white/90 border border-black/[0.05] shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                    className="p-3.5 rounded-xl bg-white border border-black/[0.06] shadow-2xs hover:shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className={`text-[10px] uppercase px-2 py-0.5 rounded-md ${badgeStyle}`}>
-                        {log.action.replace('_', ' ')}
-                      </span>
-                      <span className="font-bold text-zinc-900">
-                        {log.asset}
-                      </span>
-                      <span className="text-zinc-600">
-                        {log.detail}
-                      </span>
+                    <div className="flex items-start gap-3">
+                      <div className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center border ${iconBg} mt-0.5`}>
+                        {iconNode}
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`text-[10px] uppercase px-2 py-0.5 rounded-md border ${actionBadgeStyle}`}>
+                            {actionTitle}
+                          </span>
+                          <span className="font-bold text-zinc-950 font-mono">
+                            {log.asset}
+                          </span>
+                          {log.strategy && (
+                            <span className="text-[10px] font-medium text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded-sm">
+                              {log.strategy}
+                            </span>
+                          )}
+                          {statusBadge}
+                        </div>
+
+                        <p className="text-zinc-600 text-[11px] leading-relaxed max-w-2xl">
+                          {log.detail}
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0 text-[11px] text-zinc-400">
-                      {log.price > 0 && (
-                        <span className="font-mono text-zinc-700 font-medium">
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between shrink-0 text-right gap-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-black/[0.04]">
+                      {log.price > 0 ? (
+                        <span className="font-mono text-zinc-900 font-bold text-xs">
                           {moneyINR(log.price)}
                         </span>
+                      ) : (
+                        <span className="text-zinc-300 text-[11px] font-mono">&mdash;</span>
                       )}
-                      <span>
+                      <span className="text-[10px] text-zinc-400 font-mono">
                         {new Date(log.timestamp).toLocaleTimeString()}
                       </span>
                     </div>

@@ -1213,16 +1213,21 @@ export function tickAutonomousPilot(
   let dispatchedMisEntries = 0;
 
   if (candidatePool.length > 0 && allocationDecision.mode === 'STAND_ASIDE') {
-    newActionLogs.push({
-      id: `log_allocation_stand_aside_${now}`,
-      timestamp: now,
-      asset: candidatePool[0].asset,
-      action: 'SKIPPED',
-      strategy: 'Conditions-Based Allocation Gate',
-      detail: allocationDecision.rationale,
-      price: candidatePool[0].price,
-      status: 'BLOCKED',
-    });
+    const recentStandAside = state.autonomousPilot?.actionLogs?.find(
+      (l) => l.action === 'SKIPPED' && l.strategy === 'Conditions-Based Allocation Gate' && now - l.timestamp < 300_000
+    );
+    if (!recentStandAside) {
+      newActionLogs.push({
+        id: `log_allocation_stand_aside_${now}`,
+        timestamp: now,
+        asset: candidatePool[0].asset,
+        action: 'SKIPPED',
+        strategy: 'Conditions-Based Allocation Gate',
+        detail: allocationDecision.rationale,
+        price: candidatePool[0].price,
+        status: 'BLOCKED',
+      });
+    }
   }
 
   // Iterate in order of highest conviction alpha rank
@@ -1242,29 +1247,39 @@ export function tickAutonomousPilot(
 
     if (!selectedAllocationAssets.has(asset)) continue;
     if (dailyMisEntries + dispatchedMisEntries >= thresholds.MAX_DAILY_MIS_ENTRIES) {
-      newActionLogs.push({
-        id: `log_daily_entry_cap_${asset}_${now}`,
-        timestamp: now,
-        asset,
-        action: 'SKIPPED',
-        strategy,
-        detail: `Daily MIS entry governor: ${thresholds.MAX_DAILY_MIS_ENTRIES} entries already dispatched today. No new intraday position.`,
-        price,
-        status: 'BLOCKED',
-      });
+      const recentDailyCap = state.autonomousPilot?.actionLogs?.find(
+        (l) => l.asset === asset && l.action === 'SKIPPED' && l.detail?.includes('Daily MIS entry governor') && now - l.timestamp < 300_000
+      );
+      if (!recentDailyCap) {
+        newActionLogs.push({
+          id: `log_daily_entry_cap_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'SKIPPED',
+          strategy,
+          detail: `Daily MIS entry governor: ${thresholds.MAX_DAILY_MIS_ENTRIES} entries already dispatched today. No new intraday position.`,
+          price,
+          status: 'BLOCKED',
+        });
+      }
       continue;
     }
     if (dispatchedMisEntries >= maxNewEntries) {
-      newActionLogs.push({
-        id: `log_concurrency_cap_${asset}_${now}`,
-        timestamp: now,
-        asset,
-        action: 'SKIPPED',
-        strategy,
-        detail: `MIS concurrency limiter: allocation mode permits ${allocationDecision.maxPositions} new positions and ${activePositionCount} are already active.`,
-        price,
-        status: 'BLOCKED',
-      });
+      const recentConcurrencyCap = state.autonomousPilot?.actionLogs?.find(
+        (l) => l.asset === asset && l.action === 'SKIPPED' && l.detail?.includes('MIS concurrency limiter') && now - l.timestamp < 300_000
+      );
+      if (!recentConcurrencyCap) {
+        newActionLogs.push({
+          id: `log_concurrency_cap_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'SKIPPED',
+          strategy,
+          detail: `MIS concurrency limiter: allocation mode permits ${allocationDecision.maxPositions} new positions and ${activePositionCount} are already active.`,
+          price,
+          status: 'BLOCKED',
+        });
+      }
       continue;
     }
 
@@ -1272,16 +1287,21 @@ export function tickAutonomousPilot(
     const rateCheck = evaluateRateLimitAllowance(rateLimits, now);
     if (!rateCheck.allowed) {
       rateLimits.isThrottled = true;
-      newActionLogs.push({
-        id: `log_throttle_${asset}_${now}`,
-        timestamp: now,
-        asset,
-        action: 'THROTTLED',
-        strategy,
-        detail: rateCheck.reason || 'Upstox rate limiter active.',
-        price,
-        status: 'THROTTLED',
-      });
+      const recentThrottle = state.autonomousPilot?.actionLogs?.find(
+        (l) => l.asset === asset && l.action === 'THROTTLED' && now - l.timestamp < 60_000
+      );
+      if (!recentThrottle) {
+        newActionLogs.push({
+          id: `log_throttle_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'THROTTLED',
+          strategy,
+          detail: rateCheck.reason || 'Upstox rate limiter active.',
+          price,
+          status: 'THROTTLED',
+        });
+      }
       continue;
     }
 
@@ -1361,16 +1381,21 @@ export function tickAutonomousPilot(
     if (cbCheck.sizingMultiplier < 1) {
       unitsToBuy = applyDrawdownSizing(unitsToBuy, cbCheck.sizingMultiplier);
       if (unitsToBuy < 1) {
-        newActionLogs.push({
-          id: `log_drawdown_size_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'SKIPPED',
-          strategy,
-          detail: `Drawdown caution tier (${cbCheck.drawdownPct}%): reduced size falls below one share; entry skipped.`,
-          price: limitPrice,
-          status: 'BLOCKED',
-        });
+        const recentDrawdownSkip = state.autonomousPilot?.actionLogs?.find(
+          (l) => l.asset === asset && l.action === 'SKIPPED' && l.detail?.includes('Drawdown caution tier') && now - l.timestamp < 300_000
+        );
+        if (!recentDrawdownSkip) {
+          newActionLogs.push({
+            id: `log_drawdown_size_${asset}_${now}`,
+            timestamp: now,
+            asset,
+            action: 'SKIPPED',
+            strategy,
+            detail: `Drawdown caution tier (${cbCheck.drawdownPct}%): reduced size falls below one share; entry skipped.`,
+            price: limitPrice,
+            status: 'BLOCKED',
+          });
+        }
         continue;
       }
       proposedNotional = unitsToBuy * limitPrice;

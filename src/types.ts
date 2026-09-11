@@ -668,11 +668,13 @@ export interface PilotActionLog {
     | 'ALPHA_SCAN'
     | 'ORDER_FILLED'
     | 'STALE_ORDER_CANCELLED'
+    | 'SESSION_CLOSE'
+    | 'DEAD_TRADE_EXIT'
     | 'VOLATILITY_SHOCK';
   strategy: string;
   detail: string;
   price: number;
-  status: 'EXECUTED' | 'THROTTLED' | 'BLOCKED';
+  status: 'EXECUTED' | 'THROTTLED' | 'BLOCKED' | 'PENDING';
 }
 
 export interface AutonomousPilotState {
