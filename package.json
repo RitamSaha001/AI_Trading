@@ -18,6 +18,7 @@
     "verify:upstox-ip": "tsx scripts/verifyUpstoxEgressIp.ts",
     "verify:upstox-connectivity": "tsx scripts/verifyUpstoxConnectivity.ts",
     "drill:upstox-sandbox": "tsx scripts/runUpstoxSandboxDrills.ts",
+    "replay:fleet": "tsx scripts/replayFleetSession.ts",
     "build:android": "vite build && npx cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
