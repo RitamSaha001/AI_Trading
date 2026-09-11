@@ -1,0 +1,305 @@
+{
+  "sessionDate": "2026-09-01",
+  "isToday": false,
+  "profile": "balanced",
+  "replayedAt": "2026-09-11T06:41:15.248Z",
+  "totalBars": 375,
+  "startingCapital": 40000,
+  "endingNav": 40000,
+  "netPnl": 0,
+  "netReturnPct": 0,
+  "maxDrawdownPct": 0,
+  "totalFeeBurn": 0,
+  "closedTrades": [],
+  "eventsCount": 32,
+  "events": [
+    {
+      "minute": 2,
+      "timeStr": "2026-09-01T09:17:00+05:30",
+      "asset": "TCS",
+      "type": "SKIPPED",
+      "price": 2334,
+      "qty": 0,
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹4668.00 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 7,
+      "timeStr": "2026-09-01T09:22:00+05:30",
+      "asset": "TCS",
+      "type": "SKIPPED",
+      "price": 2341.1,
+      "qty": 0,
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹4682.20 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 11,
+      "timeStr": "2026-09-01T09:26:00+05:30",
+      "asset": "SUNPHARMA",
+      "type": "SKIPPED",
+      "price": 1938.8,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate SUNPHARMA is in Scenario D (Volatility Shock). Zero edge; standing aside in cash to avoid fee bleed."
+    },
+    {
+      "minute": 12,
+      "timeStr": "2026-09-01T09:27:00+05:30",
+      "asset": "TCS",
+      "type": "SKIPPED",
+      "price": 2352.6,
+      "qty": 0,
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹4705.20 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 16,
+      "timeStr": "2026-09-01T09:31:00+05:30",
+      "asset": "SUNPHARMA",
+      "type": "SKIPPED",
+      "price": 1939.9,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate SUNPHARMA is in Scenario D (Volatility Shock). Zero edge; standing aside in cash to avoid fee bleed."
+    },
+    {
+      "minute": 19,
+      "timeStr": "2026-09-01T09:34:00+05:30",
+      "asset": "TCS",
+      "type": "SKIPPED",
+      "price": 2349.3,
+      "qty": 0,
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹4698.60 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 21,
+      "timeStr": "2026-09-01T09:36:00+05:30",
+      "asset": "SUNPHARMA",
+      "type": "SKIPPED",
+      "price": 1945.8,
+      "qty": 0,
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹5837.40 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 24,
+      "timeStr": "2026-09-01T09:39:00+05:30",
+      "asset": "TCS",
+      "type": "SKIPPED",
+      "price": 2343.2,
+      "qty": 0,
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹4686.40 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 29,
+      "timeStr": "2026-09-01T09:44:00+05:30",
+      "asset": "TCS",
+      "type": "SKIPPED",
+      "price": 2341.5,
+      "qty": 0,
+      "detail": "[Value Accumulator] Anti-Fee-Trap Guard: Proposed size ₹4683.00 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 116,
+      "timeStr": "2026-09-01T11:11:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "SKIPPED",
+      "price": 185.7,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5571.00 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 118,
+      "timeStr": "2026-09-01T11:13:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "VOLATILITY_SHOCK",
+      "price": 187.27,
+      "qty": 0,
+      "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+    },
+    {
+      "minute": 118,
+      "timeStr": "2026-09-01T11:13:00+05:30",
+      "asset": "NTPC",
+      "type": "SKIPPED",
+      "price": 326.75,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
+    {
+      "minute": 128,
+      "timeStr": "2026-09-01T11:23:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "SKIPPED",
+      "price": 186.15,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5770.65 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 133,
+      "timeStr": "2026-09-01T11:28:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "SKIPPED",
+      "price": 186.15,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5770.65 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 138,
+      "timeStr": "2026-09-01T11:33:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "SKIPPED",
+      "price": 186.4,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5778.40 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 143,
+      "timeStr": "2026-09-01T11:38:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "SKIPPED",
+      "price": 185.9,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5762.90 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 148,
+      "timeStr": "2026-09-01T11:43:00+05:30",
+      "asset": "TATASTEEL",
+      "type": "SKIPPED",
+      "price": 185.8,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹5759.80 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 166,
+      "timeStr": "2026-09-01T12:01:00+05:30",
+      "asset": "NTPC",
+      "type": "SKIPPED",
+      "price": 327.75,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
+    {
+      "minute": 167,
+      "timeStr": "2026-09-01T12:02:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 265.05,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6361.20 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 172,
+      "timeStr": "2026-09-01T12:07:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 266.05,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6119.15 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 177,
+      "timeStr": "2026-09-01T12:12:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 265.95,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6116.85 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 202,
+      "timeStr": "2026-09-01T12:37:00+05:30",
+      "asset": "LT",
+      "type": "SKIPPED",
+      "price": 4032,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
+    {
+      "minute": 207,
+      "timeStr": "2026-09-01T12:42:00+05:30",
+      "asset": "LT",
+      "type": "SKIPPED",
+      "price": 4032.6,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
+    {
+      "minute": 225,
+      "timeStr": "2026-09-01T13:00:00+05:30",
+      "asset": "NTPC",
+      "type": "SKIPPED",
+      "price": 327.75,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
+    {
+      "minute": 230,
+      "timeStr": "2026-09-01T13:05:00+05:30",
+      "asset": "NTPC",
+      "type": "SKIPPED",
+      "price": 327.7,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
+    {
+      "minute": 235,
+      "timeStr": "2026-09-01T13:10:00+05:30",
+      "asset": "NTPC",
+      "type": "SKIPPED",
+      "price": 327.6,
+      "qty": 0,
+      "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+    },
+    {
+      "minute": 242,
+      "timeStr": "2026-09-01T13:17:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 266.9,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6405.60 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 247,
+      "timeStr": "2026-09-01T13:22:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 266.95,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6406.80 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 252,
+      "timeStr": "2026-09-01T13:27:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 267.2,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6412.80 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 257,
+      "timeStr": "2026-09-01T13:32:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 267.4,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6417.60 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 262,
+      "timeStr": "2026-09-01T13:37:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 267.15,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6411.60 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    },
+    {
+      "minute": 267,
+      "timeStr": "2026-09-01T13:42:00+05:30",
+      "asset": "ITC",
+      "type": "SKIPPED",
+      "price": 267,
+      "qty": 0,
+      "detail": "[Hurst Trend Rider] Anti-Fee-Trap Guard: Proposed size ₹6408.00 is below minimum viable threshold ₹12000.00. Rejected to prevent flat brokerage fee drag."
+    }
+  ]
+}
