@@ -536,6 +536,13 @@ async function replaySingleDay(
       }
     }
 
+    // Process Cancelled Orders (Stale Limit Buy Sweeper)
+    for (const cancelId of tickResult.ordersToCancel || []) {
+      openEntryOrders.delete(cancelId);
+      const o = appState.orders.find((ord) => ord.id === cancelId);
+      if (o) o.status = 'cancelled';
+    }
+
     // Process Dispatched Orders
     for (const prop of tickResult.ordersToDispatch) {
       if (prop.side === 'buy') {

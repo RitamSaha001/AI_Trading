@@ -1071,10 +1071,12 @@ export function tickAutonomousPilot(
       const isBreakout = price > (ind.s10 ?? price) && (ind.s10 ?? 0) >= (ind.s30 ?? 0);
       const isHealthyRsi = (ind.rsi ?? 50) >= 45 && (ind.rsi ?? 50) <= 68;
       const isSqueezeRelease = squeezeStatus === 'SQUEEZE_OFF';
+      const isAboveVwap = vwap > 0 ? price >= vwap * 0.999 : true;
+      const isPersistentHurst = timingQuality.phase === 'OPENING_VOLATILITY' ? hurst >= 0.58 : hurst >= 0.54;
 
-      if (isBreakout && (isHealthyRsi || isSqueezeRelease)) {
+      if (isBreakout && (isHealthyRsi || isSqueezeRelease) && isAboveVwap && isPersistentHurst) {
         hasEntrySignal = true;
-        entryRationale = `Hurst Trend Breakout (H=${hurst.toFixed(2)}${isSqueezeRelease ? ' + Squeeze Release' : ''}): Momentum alignment with RSI ${(ind.rsi ?? 50).toFixed(0)}.`;
+        entryRationale = `Hurst Trend Breakout (H=${hurst.toFixed(2)}${isSqueezeRelease ? ' + Squeeze Release' : ''}): Momentum alignment with RSI ${(ind.rsi ?? 50).toFixed(0)} & VWAP.`;
       }
     } else if (strategy === 'OU Mean Reversion') {
       const rsi = indicators(market.history).rsi ?? 50;
