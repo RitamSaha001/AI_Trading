@@ -1419,22 +1419,38 @@ export function tickAutonomousPilot(
     // to overcome flat ~₹49 round-trip broker commission and statutory taxes.
     const effectiveMinNotional = Math.min(pv * 0.30, thresholds.MIN_TRADE_NOTIONAL_INR);
     if (proposedNotional < effectiveMinNotional && pv >= 25000) {
-      const recentFeeSkip = state.autonomousPilot?.actionLogs?.find(
-        (l) => l.asset === asset && l.action === 'SKIPPED' && now - l.timestamp < 300_000
-      );
-      if (!recentFeeSkip) {
-        newActionLogs.push({
-          id: `log_fee_drag_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'SKIPPED',
-          strategy,
-          detail: `Anti-Fee-Trap Guard: Proposed size ₹${proposedNotional.toFixed(2)} is below minimum viable threshold ₹${effectiveMinNotional.toFixed(2)}. Rejected to prevent flat brokerage fee drag.`,
-          price: limitPrice,
-          status: 'BLOCKED',
-        });
+      // For accounts >= ₹25,000, elevate units to meet effectiveMinNotional if total risk
+      // stays within safe risk budget (<= 1.5x profile max risk) and allocatable cash.
+      const minUnitsForViability = Math.ceil(effectiveMinNotional / limitPrice);
+      const elevatedNotional = minUnitsForViability * limitPrice;
+      const elevatedRisk = minUnitsForViability * riskPerShare;
+      const maxAllowedRisk = pv * (profile.maxRiskPerTradePct * 1.5 / 100);
+
+      if (
+        elevatedNotional <= maxAssetExposure &&
+        elevatedNotional <= allocatableCash &&
+        elevatedRisk <= maxAllowedRisk
+      ) {
+        unitsToBuy = minUnitsForViability;
+        proposedNotional = elevatedNotional;
+      } else {
+        const recentFeeSkip = state.autonomousPilot?.actionLogs?.find(
+          (l) => l.asset === asset && l.action === 'SKIPPED' && now - l.timestamp < 300_000
+        );
+        if (!recentFeeSkip) {
+          newActionLogs.push({
+            id: `log_fee_drag_${asset}_${now}`,
+            timestamp: now,
+            asset,
+            action: 'SKIPPED',
+            strategy,
+            detail: `Anti-Fee-Trap Guard: Proposed size ₹${proposedNotional.toFixed(2)} is below minimum viable threshold ₹${effectiveMinNotional.toFixed(2)}. Rejected to prevent flat brokerage fee drag.`,
+            price: limitPrice,
+            status: 'BLOCKED',
+          });
+        }
+        continue;
       }
-      continue;
     }
 
     // Check cash liquidity constraint: must preserve mandatory cash reserve floor
