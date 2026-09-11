@@ -2326,7 +2326,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
                     takeProfit: prop.takeProfit,
                     auto: true,
                     strategyName: prop.strategyName,
-                    product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
+                    product: prop.product || (isIndianAsset(prop.asset) ? 'CNC' : undefined),
                     live: isLiveUpstox,
                     accountMode: isLiveUpstox ? 'upstox' : 'paper',
                   }
@@ -3636,7 +3636,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
                     takeProfit: prop.takeProfit,
                     auto: true,
                     strategyName: prop.strategyName,
-                    product: isIndianAsset(prop.asset) ? 'CNC' : undefined,
+                    product: prop.product || (isIndianAsset(prop.asset) ? 'CNC' : undefined),
                     live: isLiveUpstox,
                     accountMode: isLiveUpstox ? 'upstox' : 'paper',
                   });
