@@ -135,16 +135,26 @@ function parseCliArgs() {
   let capital = 100000.0;
   let profile: AutonomousPilotProfile = 'balanced';
 
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     if (arg.startsWith('--capital=')) {
       capital = Number(arg.split('=')[1]) || 100000;
+    } else if (arg === '--capital' && i + 1 < args.length) {
+      capital = Number(args[++i]) || 100000;
     } else if (arg.startsWith('--profile=')) {
       const p = arg.split('=')[1].toLowerCase();
       if (p === 'conservative' || p === 'balanced' || p === 'momentum') {
         profile = p as AutonomousPilotProfile;
       }
+    } else if (arg === '--profile' && i + 1 < args.length) {
+      const p = args[++i].toLowerCase();
+      if (p === 'conservative' || p === 'balanced' || p === 'momentum') {
+        profile = p as AutonomousPilotProfile;
+      }
     } else if (arg.startsWith('--date=')) {
       dateInput = arg.split('=')[1].trim();
+    } else if (arg === '--date' && i + 1 < args.length) {
+      dateInput = args[++i].trim();
     } else if (!arg.startsWith('--')) {
       dateInput = arg.trim();
     }
