@@ -328,11 +328,33 @@ async function runUniversalFleetReplay() {
       const hist30m = assetHistoricalMap.get(asset) || [];
       if (!c) continue;
 
-      const fullHistory = [
-        ...hist30m.map((h) => h.close),
-        ...accumulated.map((a) => a.close),
-      ];
+      // Aggregate accumulated 1m bars of today into running 30m institutional bars
+      const today30mBars: { time: string; open: number; high: number; low: number; close: number; volume: number }[] = [];
+      let current30m: { time: string; open: number; high: number; low: number; close: number; volume: number } | null = null;
+      let currentWindow = -1;
 
+      for (const bar of accumulated) {
+        const d = new Date(bar.timestamp);
+        const mins = d.getHours() * 60 + d.getMinutes();
+        const windowIdx = Math.floor((mins - (9 * 60 + 15)) / 30);
+        if (windowIdx !== currentWindow) {
+          if (current30m) today30mBars.push(current30m);
+          currentWindow = windowIdx;
+          current30m = { time: bar.timeStr, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume };
+        } else if (current30m) {
+          current30m.high = Math.max(current30m.high, bar.high);
+          current30m.low = Math.min(current30m.low, bar.low);
+          current30m.close = bar.close;
+          current30m.volume += bar.volume;
+        }
+      }
+      if (current30m) today30mBars.push(current30m);
+
+      const institutionalCandles = [
+        ...hist30m.map((h) => ({ time: h.timeStr, open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume })),
+        ...today30mBars,
+      ];
+      const institutionalHistory = institutionalCandles.map((c) => c.close);
       const high24h = Math.max(...accumulated.map((a) => a.high), c.high);
       const low24h = Math.min(...accumulated.map((a) => a.low), c.low);
       const volume24h = accumulated.reduce((sum, a) => sum + a.volume, 0);
@@ -346,11 +368,8 @@ async function runUniversalFleetReplay() {
         high24h,
         low24h,
         volume24h,
-        history: fullHistory,
-        candles: [
-          ...hist30m.map((h) => ({ time: h.timeStr, open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume })),
-          ...accumulated.map((a) => ({ time: a.timeStr, open: a.open, high: a.high, low: a.low, close: a.close, volume: a.volume })),
-        ],
+        history: institutionalHistory,
+        candles: institutionalCandles,
         source: 'upstox',
         isSynthetic: false,
         lastUpdated: timestamp,

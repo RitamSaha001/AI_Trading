@@ -1001,25 +1001,25 @@ export function tickAutonomousPilot(
     const lastShockAt = Math.max(
       0,
       ...getTodayPilotActionLogs(state, now)
-        .filter((log) => log.asset === asset && log.action === 'VOLATILITY_SHOCK')
+        .filter((log) => log.asset === asset && log.action === 'VOLATILITY_SHOCK' && log.detail?.includes('Latest candle exceeded'))
         .map((log) => log.timestamp)
     );
     const shockCheck = lastShockAt > 0 && now - lastShockAt < thresholds.VOLATILITY_SHOCK_COOLDOWN_MS
       ? { isFrozen: true, newShockDetected: false, cooldownRemainingMs: thresholds.VOLATILITY_SHOCK_COOLDOWN_MS - (now - lastShockAt) }
       : volatilityShockFreeze(latestCandle, atr, 0, now);
     if (shockCheck.isFrozen) {
-      newActionLogs.push({
-        id: `log_volatility_shock_${asset}_${now}`,
-        timestamp: now,
-        asset,
-        action: 'VOLATILITY_SHOCK',
-        strategy: 'Volatility Shock Freeze',
-        detail: shockCheck.newShockDetected
-          ? `Latest candle exceeded ${thresholds.VOLATILITY_SHOCK_ATR_MULTIPLE} ATR. New entries frozen for ${Math.ceil(shockCheck.cooldownRemainingMs / 60000)} minutes.`
-          : `Volatility-shock cooldown active for ${Math.ceil(shockCheck.cooldownRemainingMs / 60000)} more minutes.`,
-        price,
-        status: 'BLOCKED',
-      });
+      if (shockCheck.newShockDetected) {
+        newActionLogs.push({
+          id: `log_volatility_shock_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'VOLATILITY_SHOCK',
+          strategy: 'Volatility Shock Freeze',
+          detail: `Latest candle exceeded ${thresholds.VOLATILITY_SHOCK_ATR_MULTIPLE} ATR. New entries frozen for ${Math.ceil(shockCheck.cooldownRemainingMs / 60000)} minutes.`,
+          price,
+          status: 'BLOCKED',
+        });
+      }
       updatedFleet[asset] = {
         ...fleetStatus,
         assignedStrategy: strategy,
