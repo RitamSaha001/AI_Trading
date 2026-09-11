@@ -181,14 +181,21 @@ export const CORRELATION_LOOKBACK_BARS = 30;
 // ============================================================================
 /** Trade notional ceiling below which multi-tranche partial exits are disabled in favor of unified single exit (INR) */
 export const UNIFIED_EXIT_NOTIONAL_CEILING = 35000.0;
-/** Fraction of position harvested at Tranche 1 (33%) */
-export const TRANCHE_1_HARVEST_FRACTION = 0.33;
+/** Fraction of position harvested at Tranche 1 (33% or 50% on large positions) */
+export const TRANCHE_1_HARVEST_FRACTION = 0.50;
 /** Fraction of remaining position harvested at Tranche 2 (50%) */
 export const TRANCHE_2_HARVEST_FRACTION = 0.50;
 /** Lookback period for Chandelier Exit */
 export const CHANDELIER_PERIODS = 22;
 /** ATR multiplier for Chandelier trailing stop (1.8x ATR) */
 export const CHANDELIER_ATR_MULTIPLIER = 1.80;
+/** Tighter ATR multiplier for Chandelier runner protection (1.25x ATR) */
+export const CHANDELIER_RUNNER_TRAIL_ATR = 1.25;
+
+/** Maximum intraday MIS margin leverage multiplier for high-conviction breakouts */
+export const INTRADAY_MAX_MIS_LEVERAGE = 3.0;
+/** Active morning expansion liquid cash reserve floor (20.0% instead of 45.0%) */
+export const ACTIVE_MORNING_CASH_BUFFER_PCT = 20.0;
 
 // ============================================================================
 // SCENARIO 10: Half-Kelly Volatility-Adaptive Capital Sizing

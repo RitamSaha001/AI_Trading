@@ -198,13 +198,19 @@ async function fetchIntraday1m(instrumentKey: string, targetDateStr: string): Pr
 async function replaySingleDay(
   targetDate: string,
   startingCapital: number,
-  profile: AutonomousPilotProfile
+  profile: AutonomousPilotProfile,
+  broker: 'upstox' | 'flattrade' = 'upstox'
 ): Promise<DayReplaySummary> {
   const assetHistoricalMap: Map<Asset, RawCandle[]> = new Map();
   const assetIntradayMap: Map<Asset, RawCandle[]> = new Map();
   const candleMapByTime: Map<number, Map<Asset, RawCandle>> = new Map();
   const allTimestampsSet: Set<number> = new Set();
   const timeToStringMap: Map<number, string> = new Map();
+
+  // Zero-Brokerage Venue (FlatTrade) vs Traditional Discount Broker (Upstox):
+  // FlatTrade: ₹0 brokerage for delivery & intraday MIS, statutory taxes ~ 0.025% (2.5 bps)
+  // Upstox: ₹20/order or 0.05% brokerage + statutory taxes ~ 0.08% (8 bps)
+  const feeRate = broker === 'flattrade' ? 0.00025 : 0.0008;
 
   // Download/Load fleet data in parallel
   await Promise.all(
@@ -260,7 +266,8 @@ async function replaySingleDay(
 
   const positions: Partial<Record<Asset, number>> = {};
   const avgBuyPrices: Partial<Record<Asset, number>> = {};
-  const openEntryOrders: Map<string, { order: Order; candleEntered: number }> = new Map();
+  const borrowedMargin: Partial<Record<Asset, number>> = {};
+  const openEntryOrders: Map<string, { order: Order; candleEntered: number; marginMultiplier?: number }> = new Map();
   const entryTimestamps: Partial<Record<Asset, number>> = {};
   const entryStrategies: Partial<Record<Asset, string>> = {};
   const closedTrades: ReplayTrade[] = [];
@@ -280,7 +287,8 @@ async function replaySingleDay(
     orders: [],
     alerts: [],
     strategies: [],
-    accountMode: 'upstox',
+    accountMode: broker,
+    broker: broker as any,
     upstoxAccount: {
       connected: true,
       environment: 'production',
@@ -389,7 +397,7 @@ async function replaySingleDay(
     }
 
     // Match Pending Buy Limit Orders
-    for (const [orderId, { order }] of Array.from(openEntryOrders.entries())) {
+    for (const [orderId, { order, marginMultiplier }] of Array.from(openEntryOrders.entries())) {
       const candle = minuteCandles.get(order.asset as Asset);
       if (!candle) continue;
 
@@ -397,10 +405,15 @@ async function replaySingleDay(
         const fillPrice = Math.min(order.limitPrice || order.price, candle.open);
         const fillQty = order.amount;
         const totalCost = fillPrice * fillQty;
-        const fee = totalCost * 0.0008;
+        const fee = totalCost * feeRate;
 
-        currentCash -= (totalCost + fee);
+        const mult = marginMultiplier || 1.0;
+        const marginBlocked = totalCost / mult;
+        const borrowed = totalCost - marginBlocked;
+
+        currentCash -= (marginBlocked + fee);
         totalFeeBurn += fee;
+        borrowedMargin[order.asset as Asset] = (borrowedMargin[order.asset as Asset] || 0) + borrowed;
 
         const prevQty = positions[order.asset as Asset] || 0;
         const prevAvg = avgBuyPrices[order.asset as Asset] || fillPrice;
@@ -453,11 +466,13 @@ async function replaySingleDay(
 
       if (exitPrice !== null) {
         const proceeds = exitPrice * qty;
-        const fee = proceeds * 0.0008;
+        const fee = proceeds * feeRate;
         const tradePnl = (exitPrice - entryPrice) * qty - fee;
         const tradePnlPct = ((exitPrice - entryPrice) / entryPrice) * 100;
 
-        currentCash += (proceeds - fee);
+        const borrowed = borrowedMargin[asset] || 0;
+        currentCash += (proceeds - borrowed - fee);
+        delete borrowedMargin[asset];
         totalFeeBurn += fee;
         realizedPnl += tradePnl;
 
@@ -479,6 +494,20 @@ async function replaySingleDay(
         delete positions[asset];
         delete avgBuyPrices[asset];
 
+        appState.autonomousPilot!.actionLogs = [
+          {
+            id: `log_exit_${asset}_${timestamp}`,
+            timestamp,
+            asset,
+            action: tradePnl >= 0 ? 'TAKE_PROFIT' : 'STOP_LOSS',
+            strategy: closedRecord.strategy,
+            detail: `${exitReason}: P&L ${tradePnl >= 0 ? '+' : ''}₹${tradePnl.toFixed(2)}`,
+            price: exitPrice,
+            status: 'EXECUTED',
+          },
+          ...(appState.autonomousPilot!.actionLogs || []),
+        ].slice(0, 100);
+
         replayEvents.push({
           minute: minuteIdx,
           timeStr,
@@ -497,7 +526,8 @@ async function replaySingleDay(
       if (qty && qty > 0) {
         const c = minuteCandles.get(assetStr as Asset);
         const price = c?.close || avgBuyPrices[assetStr as Asset] || 0;
-        currentEquity += qty * price;
+        const borrowed = borrowedMargin[assetStr as Asset] || 0;
+        currentEquity += (qty * price - borrowed);
       }
     }
 
@@ -556,7 +586,7 @@ async function replaySingleDay(
           amount: prop.amount,
           price: prop.price,
           limitPrice: prop.price,
-          fee: prop.price * prop.amount * 0.0008,
+          fee: prop.price * prop.amount * feeRate,
           notional: prop.price * prop.amount,
           auto: true,
           strategyName: prop.strategyName,
@@ -564,11 +594,15 @@ async function replaySingleDay(
           stopLoss: prop.stopLoss,
           takeProfit: prop.takeProfit,
           product: 'MIS',
-          broker: 'upstox',
-          accountMode: 'upstox',
+          broker: broker,
+          accountMode: broker,
         };
 
-        openEntryOrders.set(clientOrderId, { order: newOrder, candleEntered: minuteIdx });
+        openEntryOrders.set(clientOrderId, {
+          order: newOrder,
+          candleEntered: minuteIdx,
+          marginMultiplier: prop.marginMultiplier || 1.0,
+        });
         appState.orders.push(newOrder);
 
         replayEvents.push({
@@ -588,17 +622,22 @@ async function replaySingleDay(
         const entryP = avgBuyPrices[prop.asset] || prop.price;
         const exitPrice = prop.price;
         const proceeds = exitPrice * exitQty;
-        const fee = proceeds * 0.0008;
+        const fee = proceeds * feeRate;
         const tradePnl = (exitPrice - entryP) * exitQty - fee;
         const tradePnlPct = ((exitPrice - entryP) / entryP) * 100;
 
-        currentCash += (proceeds - fee);
+        const totalBorrowed = borrowedMargin[prop.asset] || 0;
+        const borrowedToRepay = (exitQty / currentHolding) * totalBorrowed;
+        currentCash += (proceeds - borrowedToRepay - fee);
+        borrowedMargin[prop.asset] = Math.max(0, totalBorrowed - borrowedToRepay);
+
         totalFeeBurn += fee;
 
         const remaining = currentHolding - exitQty;
         if (remaining <= 0) {
           delete positions[prop.asset];
           delete avgBuyPrices[prop.asset];
+          delete borrowedMargin[prop.asset];
         } else {
           positions[prop.asset] = remaining;
         }
@@ -617,7 +656,7 @@ async function replaySingleDay(
           quantity: exitQty,
           pnl: tradePnl,
           pnlPct: tradePnlPct,
-          exitReason: prop.reason || (isProfit ? 'Profit Target' : 'Protective Stop'),
+          exitReason: prop.comment || 'Quant Engine Exit Dispatched',
         };
         closedTrades.push(closedRecord);
 
@@ -639,7 +678,8 @@ async function replaySingleDay(
     if (qty && qty > 0) {
       const lastCandle = assetIntradayMap.get(asset as Asset)?.slice(-1)[0];
       const p = lastCandle?.close || avgBuyPrices[asset as Asset] || 0;
-      finalPositionsValue += qty * p;
+      const borrowed = borrowedMargin[asset as Asset] || 0;
+      finalPositionsValue += (qty * p - borrowed);
     }
   }
 
@@ -674,6 +714,7 @@ async function runMultiDayWindowReplay() {
   let capital = 40000.0;
   let profile: AutonomousPilotProfile = 'balanced';
   let compounding = true;
+  let broker: 'upstox' | 'flattrade' = 'flattrade';
   let tag = '';
   let fromDate: string | undefined;
 
@@ -697,6 +738,16 @@ async function runMultiDayWindowReplay() {
       if (p === 'conservative' || p === 'balanced' || p === 'momentum') {
         profile = p as AutonomousPilotProfile;
       }
+    } else if (arg.startsWith('--broker=')) {
+      const b = arg.split('=')[1].toLowerCase();
+      if (b === 'flattrade' || b === 'upstox') {
+        broker = b as any;
+      }
+    } else if (arg === '--broker' && i + 1 < args.length) {
+      const b = args[++i].toLowerCase();
+      if (b === 'flattrade' || b === 'upstox') {
+        broker = b as any;
+      }
     } else if (arg.startsWith('--from=')) {
       fromDate = arg.split('=')[1].trim();
     } else if (arg === '--from' && i + 1 < args.length) {
@@ -713,8 +764,9 @@ async function runMultiDayWindowReplay() {
   const tradingDays = fromDate ? getLastNTradingDays(daysCount, fromDate, true) : getLastNTradingDays(daysCount);
 
   console.log('='.repeat(80));
-  console.log('  AUTONOMOUS QUANT PILOT — 10-DAY ROLLING FLEET AUDIT');
+  console.log(`  AUTONOMOUS QUANT PILOT — ${daysCount}-DAY ROLLING FLEET AUDIT`);
   console.log('='.repeat(80));
+  console.log(`Execution Venue:      ${broker.toUpperCase()} (${broker === 'flattrade' ? 'Zero Brokerage Retail-Algo Engine' : 'Traditional Discount Broker'})`);
   console.log(`Window Scope:         ${daysCount} Completed Indian Market Trading Sessions`);
   console.log(`Dates Range:          ${tradingDays[0]} → ${tradingDays[tradingDays.length - 1]}`);
   console.log(`Initial Capital:      ₹${capital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
@@ -736,7 +788,7 @@ async function runMultiDayWindowReplay() {
     process.stdout.write(`  [Day ${String(idx + 1).padStart(2)}/${daysCount}] ${day} ... `);
 
     const startTime = Date.now();
-    const result = await replaySingleDay(day, sessionCapital, profile);
+    const result = await replaySingleDay(day, sessionCapital, profile, broker);
     const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
 
     dayResults.push(result);

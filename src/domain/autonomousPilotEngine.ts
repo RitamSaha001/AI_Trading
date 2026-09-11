@@ -23,6 +23,7 @@ import {
   calculateVolumeMetrics,
   calculateDynamicProfitRatchet,
   evaluateSessionTimingQuality,
+  SessionTimingQuality,
   calculateCrossSectionalAlphaRanking,
   calculateSmartLimitPrice,
   calculateRoundtripFriction,
@@ -101,6 +102,7 @@ export interface AutonomousPilotOrderProposal {
   strategyName: string;
   reason: string;
   trancheStage?: number;
+  marginMultiplier?: number;
 }
 
 export interface AutonomousPilotTickResult {
@@ -269,6 +271,47 @@ export function determineAssetStrategyAndRegime(
 }
 
 /**
+ * Evaluates conditions-based intraday buying power and margin multiplier.
+ * Under SEBI regulations, intraday equity MIS offers up to 5x leverage.
+ * The engine dynamically selects leverage (1.0x to 3.0x) based on conviction,
+ * session timing, and time-series persistence, while stop-loss risk remains strictly capped.
+ */
+export function evaluateDynamicBuyingPower(
+  timingQuality: SessionTimingQuality,
+  strategy: PilotStrategyKind,
+  hurst: number,
+  alphaConviction: number,
+  isDeliveryHolding: boolean
+): number {
+  if (isDeliveryHolding) return 1.0;
+
+  const isExpansionWindow =
+    timingQuality.phase === 'MORNING_EXPANSION' ||
+    timingQuality.phase === 'AFTERNOON_EXPANSION';
+
+  // High-Conviction Institutional Breakout in Prime Expansion Windows (09:30-11:30 & 13:15-14:00 IST):
+  // Persistent trending time series (Hurst >= 0.54)
+  if (
+    isExpansionWindow &&
+    hurst >= 0.54 &&
+    (strategy === 'Hurst Trend Rider' || strategy === 'Titan Alpha Sentinel' || strategy === 'Value Accumulator')
+  ) {
+    if (alphaConviction >= 55 || hurst >= 0.58) {
+      return thresholds.INTRADAY_MAX_MIS_LEVERAGE; // 3.0x
+    }
+    return 2.0; // 2.0x
+  }
+
+  // Normal Expansion Window:
+  if (isExpansionWindow && hurst >= 0.52) {
+    return 2.0; // 2.0x
+  }
+
+  // Midday / Low Persistence / Chop:
+  return 1.0; // 1.0x spot cash
+}
+
+/**
  * Checks Indian Market Hours & Cutoffs.
  * 09:15 to 15:30 IST. New MIS entries blocked after 15:00 IST.
  */
@@ -404,8 +447,8 @@ export function tickAutonomousPilot(
     };
   }
 
-  // 2. Market Hours & Timing Quality Check (for live Upstox mode)
-  const isLiveUpstox = state.accountMode === 'upstox';
+  // 2. Market Hours & Timing Quality Check (for live Upstox/FlatTrade Indian venues)
+  const isLiveUpstox = state.accountMode === 'upstox' || state.accountMode === 'flattrade' || (state as any).broker === 'flattrade' || (state as any).broker === 'kotak_neo';
   const session = isMarketSessionOpen(now);
   const timingQuality = evaluateSessionTimingQuality(now);
 
@@ -425,7 +468,11 @@ export function tickAutonomousPilot(
     ? state.upstoxAccount.funds.availableCash
     : state.cash;
 
-  const minCashFloorPct = Math.max(15, profile.targetCashBufferPct);
+  // Adaptive Cash Buffer Floor: In active morning expansion (09:30 - 11:30 IST),
+  // lower cash buffer floor to 20% to allow dual-slot allocation (Mode 35-2) while preserving safety
+  const minCashFloorPct = timingQuality.phase === 'MORNING_EXPANSION'
+    ? Math.min(profile.targetCashBufferPct, thresholds.ACTIVE_MORNING_CASH_BUFFER_PCT)
+    : Math.max(15, profile.targetCashBufferPct);
   const minRequiredCash = pv * (minCashFloorPct / 100);
   let allocatableCash = Math.max(0, currentCash - minRequiredCash);
 
@@ -550,7 +597,9 @@ export function tickAutonomousPilot(
     const exitProduct: 'CNC' | 'MIS' = isDeliveryHolding ? 'CNC' : 'MIS';
     const roundtripFriction = calculateRoundtripFriction(avgBuyPrice, currentHolding, isDeliveryHolding);
     const highWaterMark = Math.max(fleetStatus.highWaterMark || avgBuyPrice, price);
+    const isZeroBrokerageVenue = state.accountMode === 'flattrade' || (state as any).broker === 'flattrade' || (state as any).broker === 'kotak_neo';
     const usesUnifiedExit = !isDeliveryHolding
+      && !isZeroBrokerageVenue
       && avgBuyPrice * currentHolding < thresholds.UNIFIED_EXIT_NOTIONAL_CEILING;
 
     // Stepped Trailing Defense: Level 0.5 Micro-Shield (+0.30 ATR -> Breakeven + Fees), Level 1 (+0.70 ATR), Level 2 (+1.40 ATR), Level 3 (+2.00 ATR)
@@ -740,9 +789,9 @@ export function tickAutonomousPilot(
         status: 'EXECUTED',
       });
     }
-    // Tranche 1 Profit Harvest: Take partial profit (33%) at +1.5 ATR
+    // Tranche 1 Profit Harvest: Take partial profit (50%) at +1.5 ATR
     else if (!exitOrderQueued && !usesUnifiedExit && trancheStage === 0 && price >= t1Price && currentHolding >= 2 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
-      const exitQty = Math.max(1, Math.floor(currentHolding * 0.33));
+      const exitQty = Math.max(1, Math.floor(currentHolding * thresholds.TRANCHE_1_HARVEST_FRACTION));
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -758,7 +807,7 @@ export function tickAutonomousPilot(
       rateLimits.requestsThisMinute++;
       rateLimits.lastDispatchedAt = now;
       trancheStage = 1;
-      currentStop = alignToTickSize(Math.max(currentStop, avgBuyPrice + atr * 0.5), asset);
+      currentStop = alignToTickSize(Math.max(currentStop, avgBuyPrice + roundtripFriction.frictionPerShare), asset);
       lifecycleState = 'TRAILING_PROFIT';
 
       newActionLogs.push({
@@ -767,7 +816,7 @@ export function tickAutonomousPilot(
         asset,
         action: 'PROFIT_HARVEST_T1',
         strategy,
-        detail: `Harvested Tranche 1 (33% = ${exitQty} shares) at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Stop moved to ₹${currentStop.toFixed(2)}.`,
+        detail: `Harvested Tranche 1 (${(thresholds.TRANCHE_1_HARVEST_FRACTION * 100).toFixed(0)}% = ${exitQty} shares) at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Stop moved to ₹${currentStop.toFixed(2)}.`,
         price,
         status: 'EXECUTED',
       });
@@ -1017,6 +1066,12 @@ export function tickAutonomousPilot(
       : volatilityShockFreeze(latestCandle, atr, 0, now);
     if (shockCheck.isFrozen) {
       if (shockCheck.newShockDetected) {
+        // Cancel any pending entry orders for this asset to avoid getting filled during a market dump
+        for (const order of state.orders) {
+          if (order.asset === asset && order.side === 'buy' && order.status === 'pending') {
+            ordersToCancel.push(order.id);
+          }
+        }
         newActionLogs.push({
           id: `log_volatility_shock_${asset}_${now}`,
           timestamp: now,
@@ -1102,10 +1157,16 @@ export function tickAutonomousPilot(
       }
     }
 
-    // Session-Aware Midday Noise Filtration
-    if (hasEntrySignal && isLiveUpstox && timingQuality.phase === 'MIDDAY_CONSOLIDATION') {
-      if (volumeSurgeRatio < timingQuality.minVolumeSurgeRequired && squeezeStatus !== 'SQUEEZE_OFF' && hurst < 0.60) {
-        hasEntrySignal = false; // Filter low-volume midday whipsaws
+    // Session-Aware Timing Noise Filtration
+    if (hasEntrySignal && isLiveUpstox) {
+      if (timingQuality.phase === 'OPENING_VOLATILITY') {
+        if (!hasInstitutionalVolume && volumeSurgeRatio < thresholds.OPENING_MIN_VOLUME_SURGE) {
+          hasEntrySignal = false; // Filter erratic opening 15-minute whipsaws unless backed by institutional volume
+        }
+      } else if (timingQuality.phase === 'MIDDAY_CONSOLIDATION') {
+        if (volumeSurgeRatio < timingQuality.minVolumeSurgeRequired && squeezeStatus !== 'SQUEEZE_OFF' && hurst < 0.60) {
+          hasEntrySignal = false; // Filter low-volume midday whipsaws
+        }
       }
     }
 
@@ -1262,6 +1323,24 @@ export function tickAutonomousPilot(
     }
 
     if (!selectedAllocationAssets.has(asset)) continue;
+
+    // Filter low-conviction entries during opening volatility and midday consolidation
+    if (timingQuality.phase === 'OPENING_VOLATILITY' && (ranked?.alphaConvictionIndex || 0) < 60) {
+      continue;
+    }
+    if (timingQuality.phase === 'MIDDAY_CONSOLIDATION' && (ranked?.alphaConvictionIndex || 0) < 55) {
+      continue;
+    }
+
+    // Intraday Single-Asset Lockout: Never re-enter an asset that already entered or exited today
+    const alreadyTradedToday = (state.orders || []).some(
+      (o) => o.asset === asset && o.side === 'buy' && o.status !== 'cancelled'
+    ) || todayActions.some(
+      (l) => l.asset === asset && (l.action === 'STOP_LOSS' || (l.action as string) === 'DEAD_TRADE_EXIT' || (l.action as string) === 'TAKE_PROFIT' || l.action === 'BUY_ENTRY')
+    );
+    if (alreadyTradedToday) {
+      continue;
+    }
     if (dailyMisEntries + dispatchedMisEntries >= thresholds.MAX_DAILY_MIS_ENTRIES) {
       const recentDailyCap = state.autonomousPilot?.actionLogs?.find(
         (l) => l.asset === asset && l.action === 'SKIPPED' && l.detail?.includes('Daily MIS entry governor') && now - l.timestamp < 300_000
@@ -1330,8 +1409,22 @@ export function tickAutonomousPilot(
       ranked?.alphaConvictionIndex
     );
 
+    // Conditions-Based Dynamic Intraday Margin Leverage (1.0x to 3.0x)
+    const marginMultiplier = evaluateDynamicBuyingPower(
+      timingQuality,
+      strategy,
+      cand.hurst,
+      ranked?.alphaConvictionIndex || 50,
+      false
+    );
+
     // Stop and Target Brackets
-    const stopLossDist = Math.max(limitPrice * 0.008, atr * profile.stopLossAtrMultiplier);
+    // For high-conviction margin breakouts (2.0x-3.0x), use a focused 1.0 - 1.25 ATR stop
+    // so notional can safely expand while total rupee risk is strictly anchored to <= ₹400
+    const effectiveStopAtrMult = marginMultiplier >= 2.0
+      ? Math.min(profile.stopLossAtrMultiplier, 1.25)
+      : profile.stopLossAtrMultiplier;
+    const stopLossDist = Math.max(limitPrice * 0.008, atr * effectiveStopAtrMult);
     const stopLossPrice = alignToTickSize(limitPrice - stopLossDist, asset);
     const takeProfitPrice = alignToTickSize(limitPrice + stopLossDist * profile.minRiskReward, asset);
     // Adaptive Trend Expansion: In confirmed high-Hurst super-trends (H >= 0.62) with Squeeze Release,
@@ -1381,11 +1474,9 @@ export function tickAutonomousPilot(
     const maxRiskCapital = baseRiskCapital * kellyRes.recommendedSizeMultiplier;
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
 
-    // Allocation mode is the final asset-cap ceiling: 40% for the concentrated mode and 35% per asset in split mode.
-    const maxAssetExposure = Math.min(
-      pv * (thresholds.MAX_SINGLE_ASSET_ALLOCATION_PCT / 100),
-      pv * (allocationDecision.assetAllocationPct / 100)
-    );
+    // Allocation mode asset-cap ceiling scaled by dynamic margin multiplier
+    const baseExposurePct = allocationDecision.assetAllocationPct || thresholds.MAX_SINGLE_ASSET_ALLOCATION_PCT;
+    const maxAssetExposure = pv * (baseExposurePct / 100) * marginMultiplier;
     let proposedNotional = unitsToBuy * limitPrice;
     if (proposedNotional > maxAssetExposure) {
       unitsToBuy = Math.max(1, Math.floor(maxAssetExposure / limitPrice));
@@ -1428,9 +1519,10 @@ export function tickAutonomousPilot(
       const elevatedRisk = minUnitsForViability * riskPerShare;
       const maxAllowedRisk = pv * (profile.maxRiskPerTradePct * 1.5 / 100);
 
+      const requiredCashForElevation = elevatedNotional / marginMultiplier;
       if (
         elevatedNotional <= maxAssetExposure &&
-        elevatedNotional <= allocatableCash &&
+        requiredCashForElevation <= allocatableCash &&
         elevatedRisk <= maxAllowedRisk
       ) {
         unitsToBuy = minUnitsForViability;
@@ -1467,7 +1559,7 @@ export function tickAutonomousPilot(
       continue; // Server already rejected a BUY for this asset recently — wait out the cooldown
     }
 
-    const requiredOrderCash = unitsToBuy * limitPrice;
+    const requiredOrderCash = (unitsToBuy * limitPrice) / marginMultiplier;
     if (requiredOrderCash > allocatableCash || allocatableCash <= 0) {
       const recentCashSkip = state.autonomousPilot?.actionLogs?.find(
         (l) => l.asset === asset && (l.action === 'SKIPPED' || l.action === 'THROTTLED') && now - l.timestamp < CASH_COOLDOWN_MS
@@ -1479,7 +1571,7 @@ export function tickAutonomousPilot(
           asset,
           action: 'SKIPPED',
           strategy,
-          detail: `Preserving mandatory ${minCashFloorPct}% liquid cash buffer. Required: ₹${requiredOrderCash.toFixed(2)}, Allocatable: ₹${allocatableCash.toFixed(2)}.`,
+          detail: `Preserving mandatory ${minCashFloorPct}% liquid cash buffer. Required margin: ₹${requiredOrderCash.toFixed(2)}, Allocatable: ₹${allocatableCash.toFixed(2)}.`,
           price: limitPrice,
           status: 'BLOCKED',
         });
@@ -1587,6 +1679,7 @@ export function tickAutonomousPilot(
       product: 'MIS',
       strategyName: `Auto-Pilot: ${strategy} [Rank #${ranked?.rank || 1} ACI:${ranked?.alphaConvictionIndex || 0}]`,
       reason: `${cand.entryRationale} [Rank #${ranked?.rank || 1}, ACI:${ranked?.alphaConvictionIndex || 0}, Half-Kelly: ${kellyRes.recommendedSizeMultiplier}x, Drawdown: ${cbCheck.sizingMultiplier}x, Sector: ${sector}]`,
+      marginMultiplier,
     });
 
     // Update internal pacing and cash
