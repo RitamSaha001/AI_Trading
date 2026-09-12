@@ -296,4 +296,39 @@ describe('Autonomous Strategy Master Brain & 216+ Scenario Matrix', () => {
     expect(directive.trancheTargets.tranche1Atr).toBe(1.10);
     expect(directive.trancheTargets.runnerMode).toBe('TIGHT_RATCHET');
   });
+
+  it('triggers anti-giveback circuit breaker when intraday peak reached >= ₹60 and P&L slips to <= 0', () => {
+    const inputs: MasterBrainInputs = {
+      istMinutes: 11 * 60 + 15,
+      marketPrice: 1005,
+      dayOpenPrice: 995,
+      vwap: 1000,
+      atr: 10,
+      hurst: 0.65,
+      squeezeStatus: 'SQUEEZE_OFF',
+      ouZScore: 0.1,
+      macroBreadth: baseBreadth,
+      sectorRank: 1,
+      sectorAvgChange: 1.0,
+      sectorAdvanceRatio: 0.7,
+      intradayPnlContext: {
+        dailyRealizedPnl: -10,
+        dailyUnrealizedPnl: 0,
+        dailyNetPnl: -10,
+        dailyWinsCount: 1,
+        dailyLossCount: 1,
+        dailyTradesCount: 2,
+        activePositionCount: 0,
+        targetProfitGoal: 100,
+        dailyPeakNetPnl: 78.5, // Reached +₹78.50 earlier today
+      },
+    };
+
+    const directive = evaluateStrategyMasterBrain(inputs);
+    expect(directive.actionPermission).toBe('BLOCKED_DAILY_LOSS_GUARD');
+    expect(directive.dailyPnlRegime).toBe('LOSS_GUARD_HALT');
+    expect(directive.riskBudgetMultiplier).toBe(0.0);
+    expect(directive.minAciThreshold).toBe(999);
+    expect(directive.rationale).toContain('Profit Preservation Circuit');
+  });
 });

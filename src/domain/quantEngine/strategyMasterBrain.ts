@@ -58,6 +58,7 @@ export interface IntradayDailyPnlContext {
   dailyTradesCount: number;       // Total trades closed today
   activePositionCount: number;    // Open positions currently active
   targetProfitGoal?: number;      // Target goal (defaults to ₹100.00/day)
+  dailyPeakNetPnl?: number;       // Peak intraday net P&L reached today (INR)
 }
 
 export interface TrancheTargetConfig {
@@ -314,13 +315,28 @@ export function applyIntradayPnlSupervisor(
     };
   }
 
+  // RULE A2: Anti-Giveback Circuit Breaker (Protecting Green Days)
+  // If intraday peak reached >= ₹60 (60% of goal), and P&L slips to <= 0,
+  // freeze entries immediately to eliminate green-to-red giveback days.
+  if ((pnlCtx.dailyPeakNetPnl || 0) >= 60.0 && dailyNetPnl <= 0.0) {
+    return {
+      ...baseDirective,
+      actionPermission: 'BLOCKED_DAILY_LOSS_GUARD',
+      dailyPnlRegime: 'LOSS_GUARD_HALT',
+      allowedStrategies: [],
+      preferredStrategy: null,
+      marginMultiplier: 1.0,
+      riskBudgetMultiplier: 0.0,
+      minAciThreshold: 999,
+      rationale: `[Profit Preservation Circuit] Intraday peak reached +₹${pnlCtx.dailyPeakNetPnl?.toFixed(2)}, currently at ₹${dailyNetPnl.toFixed(2)}. Further entries halted to prevent green-to-red giveback.`,
+    };
+  }
+
   // RULE B: Daily Profit Vault & Surplus Harvester Mode
-  // When daily net P&L has reached the daily target (>= ₹100):
-  // 1. If daily profit is tight to target (< ₹150) and 0 positions are open, lock capital in cash!
-  // 2. If market momentum provides strong surplus (>= ₹150), allow prime institutional sniper trades
-  //    (ACI >= 67) with halved risk budget (0.50x) to compound the daily win!
-  if (dailyNetPnl >= targetProfitGoal) {
-    if (dailyNetPnl < targetProfitGoal + 50 && activePositionCount === 0) {
+  // When daily net P&L has reached near target (>= ₹85):
+  // If activePositionCount === 0, lock capital in cash to prevent giving back profits to afternoon chop!
+  if (dailyNetPnl >= Math.min(85.0, targetProfitGoal)) {
+    if (activePositionCount === 0) {
       return {
         ...baseDirective,
         actionPermission: 'BLOCKED_DAILY_PROFIT_LOCKED',
@@ -330,16 +346,16 @@ export function applyIntradayPnlSupervisor(
         marginMultiplier: 1.0,
         riskBudgetMultiplier: 0.0,
         minAciThreshold: 999,
-        rationale: `[Daily Profit Goal Locked] Banked +₹${dailyNetPnl.toFixed(2)} (>= ₹${targetProfitGoal.toFixed(2)} target). Capital locked in cash to eliminate giveback.`,
+        rationale: `[Daily Profit Goal Locked] Banked +₹${dailyNetPnl.toFixed(2)} (Target ₹${targetProfitGoal.toFixed(2)}). Capital locked in cash to eliminate giveback.`,
       };
     }
 
     const modifiedDirective: BrainDirective = {
       ...baseDirective,
       dailyPnlRegime: 'PROFIT_LOCKED',
-      riskBudgetMultiplier: Math.min(baseDirective.riskBudgetMultiplier, 0.50),
+      riskBudgetMultiplier: Math.min(baseDirective.riskBudgetMultiplier, 0.40),
       marginMultiplier: Math.min(baseDirective.marginMultiplier, 3.5),
-      minAciThreshold: Math.max(baseDirective.minAciThreshold, 67),
+      minAciThreshold: Math.max(baseDirective.minAciThreshold, 68),
       trancheTargets: {
         ...baseDirective.trancheTargets,
         tranche1Atr: 1.15,
@@ -595,7 +611,7 @@ function buildBrainDirective(
         preferredStrategy: 'Hurst Trend Rider',
         marginMultiplier: isLeader ? 4.5 : 3.5, // 4.5x dynamic buying power under SEBI 5x MIS
         riskBudgetMultiplier: isLeader ? 1.25 : 1.0,
-        minAciThreshold: isLeader ? 52 : 55,
+        minAciThreshold: isLeader ? 62 : 65,
         maxVwapExtensionAtr: 0.85,
         requireGreenOnDay: true,
         downsizingAllowed: true, // Graceful downsizing to never miss winners
@@ -777,7 +793,7 @@ function buildBrainDirective(
         preferredStrategy: 'VWAP Band Mean Reversion',
         marginMultiplier: 3.5,
         riskBudgetMultiplier: 1.0,
-        minAciThreshold: 55,
+        minAciThreshold: 62,
         maxVwapExtensionAtr: 0.40,
         requireGreenOnDay: false, // Buying oversold dip
         downsizingAllowed: true,

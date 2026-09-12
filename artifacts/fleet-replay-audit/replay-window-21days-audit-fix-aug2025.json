@@ -1,0 +1,3648 @@
+{
+  "windowDays": 21,
+  "startDate": "2025-08-01",
+  "endDate": "2025-08-29",
+  "profile": "balanced",
+  "startingCapital": 40000,
+  "endingNav": 40380.63961249999,
+  "totalNetPnl": 380.6396124999883,
+  "totalNetReturnPct": 0.9515990312499707,
+  "maxWindowDrawdownPct": 0.9317602187500416,
+  "totalFeeBurn": 416.31038749999993,
+  "totalTrades": 22,
+  "totalWins": 16,
+  "totalLosses": 6,
+  "winRatePct": 72.72727272727273,
+  "profitFactor": 1.5091172801066823,
+  "dailyDistribution": {
+    "greenDays": 7,
+    "flatDays": 8,
+    "redDays": 6
+  },
+  "dailyBreakdown": [
+    {
+      "date": "2025-08-01",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 26,
+      "events": [
+        {
+          "minute": 0,
+          "timeStr": "2025-08-01T09:15:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1648.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 0,
+          "timeStr": "2025-08-01T09:15:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2626.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 3,
+          "timeStr": "2025-08-01T09:18:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1638.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 3,
+          "timeStr": "2025-08-01T09:18:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2630.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 6,
+          "timeStr": "2025-08-01T09:21:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1629.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 6,
+          "timeStr": "2025-08-01T09:21:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2620.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2025-08-01T09:24:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1618.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2025-08-01T09:24:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2619.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2025-08-01T09:27:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1609,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2025-08-01T09:27:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2611,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2025-08-01T09:29:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1091.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2025-08-01T09:30:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1616.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2025-08-01T09:30:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2614.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2025-08-01T09:32:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1102.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2025-08-01T09:33:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1639.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2025-08-01T09:33:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2621.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2025-08-01T09:35:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1103.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2025-08-01T09:36:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1644.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2025-08-01T09:36:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2608.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2025-08-01T09:38:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1107.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2025-08-01T09:39:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1644.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2025-08-01T09:39:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2613.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2025-08-01T09:41:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1106.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-08-01T09:42:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1638.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-08-01T09:42:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2607,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2025-08-01T09:44:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1104.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2025-08-04",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39729.255399999995,
+      "netPnl": -270.74460000000545,
+      "netReturnPct": -0.6768615000000137,
+      "feeBurn": 23.544600000000003,
+      "tradesCount": 1,
+      "winsCount": 0,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.7904484997037241,
+      "closedTrades": [
+        {
+          "day": "2025-08-04",
+          "asset": "SIEMENS",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:78]",
+          "entryTime": "10:44:00 am",
+          "exitTime": "10:49:00 am",
+          "entryPrice": 2950.8,
+          "exitPrice": 2935.35,
+          "quantity": 16,
+          "pnl": -258.94140000000436,
+          "pnlPct": -0.5235868239121686,
+          "exitReason": "Stop Loss Triggered"
+        }
+      ],
+      "eventsCount": 14,
+      "events": [
+        {
+          "minute": 1,
+          "timeStr": "2025-08-04T09:16:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 194.12,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 4,
+          "timeStr": "2025-08-04T09:19:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 193.03,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2025-08-04T09:22:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 193.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2025-08-04T09:25:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 193.19,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2025-08-04T09:28:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 193.77,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2025-08-04T09:31:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 194.32,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2025-08-04T09:34:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 194.92,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2025-08-04T09:37:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 195.61,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2025-08-04T09:40:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 195.38,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-08-04T09:43:00+05:30",
+          "asset": "FEDERALBNK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 194.89,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 47,
+          "timeStr": "2025-08-04T10:02:00+05:30",
+          "asset": "LTTS",
+          "type": "ENTRY_QUEUED",
+          "price": 4227.05,
+          "qty": 13,
+          "detail": "Queued Limit BUY 13 @ ₹4227.05 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:58]] SL: ₹4210.55 TP: ₹4256.50"
+        },
+        {
+          "minute": 87,
+          "timeStr": "2025-08-04T10:42:00+05:30",
+          "asset": "SIEMENS",
+          "type": "ENTRY_QUEUED",
+          "price": 2950.8,
+          "qty": 16,
+          "detail": "Queued Limit BUY 16 @ ₹2950.80 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:78]] SL: ₹2935.35 TP: ₹2978.40"
+        },
+        {
+          "minute": 89,
+          "timeStr": "2025-08-04T10:44:00+05:30",
+          "asset": "SIEMENS",
+          "type": "ORDER_FILLED",
+          "price": 2950.8,
+          "qty": 16,
+          "detail": "Limit Buy FILLED for 16 shs @ ₹2950.80 (Limit was ₹2950.80). Fee: ₹11.80"
+        },
+        {
+          "minute": 94,
+          "timeStr": "2025-08-04T10:49:00+05:30",
+          "asset": "SIEMENS",
+          "type": "STOP_LOSS_EXIT",
+          "price": 2935.35,
+          "qty": 16,
+          "detail": "Stop Loss Triggered on 16 shs @ ₹2935.35: P&L ₹-258.94 (-0.52%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-05",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 0,
+      "events": []
+    },
+    {
+      "date": "2025-08-06",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 23,
+      "events": [
+        {
+          "minute": 4,
+          "timeStr": "2025-08-06T09:19:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6717,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 5,
+          "timeStr": "2025-08-06T09:20:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1846,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2025-08-06T09:22:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6756,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 8,
+          "timeStr": "2025-08-06T09:23:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1857.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2025-08-06T09:25:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6704.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2025-08-06T09:26:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1861.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2025-08-06T09:28:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6710.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2025-08-06T09:29:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1860.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2025-08-06T09:31:00+05:30",
+          "asset": "BOSCHLTD",
+          "type": "VOLATILITY_SHOCK",
+          "price": 38820,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2025-08-06T09:31:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6717,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2025-08-06T09:32:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1867.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2025-08-06T09:34:00+05:30",
+          "asset": "BOSCHLTD",
+          "type": "VOLATILITY_SHOCK",
+          "price": 38730,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2025-08-06T09:34:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6695.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2025-08-06T09:35:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1864.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2025-08-06T09:37:00+05:30",
+          "asset": "BOSCHLTD",
+          "type": "VOLATILITY_SHOCK",
+          "price": 38720,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2025-08-06T09:37:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6698.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2025-08-06T09:38:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1864.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2025-08-06T09:40:00+05:30",
+          "asset": "BOSCHLTD",
+          "type": "VOLATILITY_SHOCK",
+          "price": 38835,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2025-08-06T09:40:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6684,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2025-08-06T09:41:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1864.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-08-06T09:43:00+05:30",
+          "asset": "BOSCHLTD",
+          "type": "VOLATILITY_SHOCK",
+          "price": 38830,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-08-06T09:43:00+05:30",
+          "asset": "POLYCAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6692.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2025-08-06T09:44:00+05:30",
+          "asset": "LUPIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1853.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2025-08-07",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39898.04051249999,
+      "netPnl": -101.95948750001116,
+      "netReturnPct": -0.2548987187500279,
+      "feeBurn": 42.4094875,
+      "tradesCount": 2,
+      "winsCount": 1,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.5715273538216479,
+      "closedTrades": [
+        {
+          "day": "2025-08-07",
+          "asset": "SAIL",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+          "entryTime": "10:01:00 am",
+          "exitTime": "10:03:00 am",
+          "entryPrice": 121.95,
+          "exitPrice": 122.1,
+          "quantity": 454,
+          "pnl": 54.24164999999613,
+          "pnlPct": 0.12300123001229313,
+          "exitReason": "Breakout Failed: Price (₹122.10) broke below institutional VWAP support (₹129.79). Micro-loss capital defense exit."
+        },
+        {
+          "day": "2025-08-07",
+          "asset": "INDUSINDBK",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+          "entryTime": "10:28:00 am",
+          "exitTime": "11:51:00 am",
+          "entryPrice": 796.85,
+          "exitPrice": 793.4,
+          "quantity": 37,
+          "pnl": -134.9889500000017,
+          "pnlPct": -0.4329547593650054,
+          "exitReason": "Stop Loss Triggered"
+        }
+      ],
+      "eventsCount": 24,
+      "events": [
+        {
+          "minute": 17,
+          "timeStr": "2025-08-07T09:32:00+05:30",
+          "asset": "BAJAJ-AUTO",
+          "type": "VOLATILITY_SHOCK",
+          "price": 8212,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2025-08-07T09:35:00+05:30",
+          "asset": "BAJAJ-AUTO",
+          "type": "VOLATILITY_SHOCK",
+          "price": 8180.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2025-08-07T09:38:00+05:30",
+          "asset": "BAJAJ-AUTO",
+          "type": "VOLATILITY_SHOCK",
+          "price": 8195.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2025-08-07T09:41:00+05:30",
+          "asset": "BAJAJ-AUTO",
+          "type": "VOLATILITY_SHOCK",
+          "price": 8172.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2025-08-07T09:44:00+05:30",
+          "asset": "BAJAJ-AUTO",
+          "type": "VOLATILITY_SHOCK",
+          "price": 8140,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 44,
+          "timeStr": "2025-08-07T09:59:00+05:30",
+          "asset": "SAIL",
+          "type": "ENTRY_QUEUED",
+          "price": 121.95,
+          "qty": 454,
+          "detail": "Queued Limit BUY 454 @ ₹121.95 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]] SL: ₹121.40 TP: ₹122.95"
+        },
+        {
+          "minute": 46,
+          "timeStr": "2025-08-07T10:01:00+05:30",
+          "asset": "SAIL",
+          "type": "ORDER_FILLED",
+          "price": 121.95,
+          "qty": 454,
+          "detail": "Limit Buy FILLED for 454 shs @ ₹121.95 (Limit was ₹121.95). Fee: ₹13.84"
+        },
+        {
+          "minute": 46,
+          "timeStr": "2025-08-07T10:01:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "SKIPPED",
+          "price": 1911.9,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹217.80 leaves less than dynamic floor ₹168.25 after ₹62.12 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 48,
+          "timeStr": "2025-08-07T10:03:00+05:30",
+          "asset": "SAIL",
+          "type": "PROFIT_HARVEST",
+          "price": 122.1,
+          "qty": 454,
+          "detail": "Breakout Failed: Price (₹122.10) broke below institutional VWAP support (₹129.79). Micro-loss capital defense exit. on 454 shs @ ₹122.10: P&L +₹54.24 (0.12%)"
+        },
+        {
+          "minute": 53,
+          "timeStr": "2025-08-07T10:08:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "ENTRY_QUEUED",
+          "price": 796.85,
+          "qty": 37,
+          "detail": "Queued Limit BUY 37 @ ₹796.85 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]] SL: ₹793.40 TP: ₹802.25"
+        },
+        {
+          "minute": 54,
+          "timeStr": "2025-08-07T10:09:00+05:30",
+          "asset": "TATAPOWER",
+          "type": "SKIPPED",
+          "price": 381.5,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 55,
+          "timeStr": "2025-08-07T10:10:00+05:30",
+          "asset": "JIOFIN",
+          "type": "SKIPPED",
+          "price": 321.25,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 56,
+          "timeStr": "2025-08-07T10:11:00+05:30",
+          "asset": "BHEL",
+          "type": "SKIPPED",
+          "price": 225.95,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 73,
+          "timeStr": "2025-08-07T10:28:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "ORDER_FILLED",
+          "price": 796.85,
+          "qty": 37,
+          "detail": "Limit Buy FILLED for 37 shs @ ₹796.85 (Limit was ₹796.85). Fee: ₹7.37"
+        },
+        {
+          "minute": 74,
+          "timeStr": "2025-08-07T10:29:00+05:30",
+          "asset": "INFY",
+          "type": "SKIPPED",
+          "price": 1427.9,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 81,
+          "timeStr": "2025-08-07T10:36:00+05:30",
+          "asset": "INFY",
+          "type": "SKIPPED",
+          "price": 1426.4,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 82,
+          "timeStr": "2025-08-07T10:37:00+05:30",
+          "asset": "BHEL",
+          "type": "SKIPPED",
+          "price": 223.56,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 86,
+          "timeStr": "2025-08-07T10:41:00+05:30",
+          "asset": "INFY",
+          "type": "SKIPPED",
+          "price": 1425.5,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 88,
+          "timeStr": "2025-08-07T10:43:00+05:30",
+          "asset": "BHEL",
+          "type": "SKIPPED",
+          "price": 223.19,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 105,
+          "timeStr": "2025-08-07T11:00:00+05:30",
+          "asset": "M&M",
+          "type": "SKIPPED",
+          "price": 3191,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 113,
+          "timeStr": "2025-08-07T11:08:00+05:30",
+          "asset": "APOLLOHOSP",
+          "type": "SKIPPED",
+          "price": 7064.5,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 115,
+          "timeStr": "2025-08-07T11:10:00+05:30",
+          "asset": "M&M",
+          "type": "SKIPPED",
+          "price": 3186.3,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 142,
+          "timeStr": "2025-08-07T11:37:00+05:30",
+          "asset": "BAJAJFINSV",
+          "type": "SKIPPED",
+          "price": 1899.5,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BAJAJFINSV net expected profit (₹57.48) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 156,
+          "timeStr": "2025-08-07T11:51:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "STOP_LOSS_EXIT",
+          "price": 793.4,
+          "qty": 37,
+          "detail": "Stop Loss Triggered on 37 shs @ ₹793.40: P&L ₹-134.99 (-0.43%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-08",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 10,
+      "events": [
+        {
+          "minute": 0,
+          "timeStr": "2025-08-08T09:15:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 548.55,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 3,
+          "timeStr": "2025-08-08T09:18:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 549.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 6,
+          "timeStr": "2025-08-08T09:21:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 549.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2025-08-08T09:24:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 550.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2025-08-08T09:27:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 550.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2025-08-08T09:30:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 551.05,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2025-08-08T09:33:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 551.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2025-08-08T09:36:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 551.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2025-08-08T09:39:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 551.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-08-08T09:42:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 552.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2025-08-11",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40179.25891250001,
+      "netPnl": 179.2589125000086,
+      "netReturnPct": 0.4481472812500215,
+      "feeBurn": 51.0910875,
+      "tradesCount": 2,
+      "winsCount": 2,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.6493921005767082,
+      "closedTrades": [
+        {
+          "day": "2025-08-11",
+          "asset": "MUTHOOTFIN",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:61]",
+          "entryTime": "10:01:00 am",
+          "exitTime": "11:16:00 am",
+          "entryPrice": 2562.05,
+          "exitPrice": 2565.75,
+          "quantity": 18,
+          "pnl": 55.05412499999672,
+          "pnlPct": 0.1444156046915485,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        },
+        {
+          "day": "2025-08-11",
+          "asset": "VEDL",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:74]",
+          "entryTime": "11:45:00 am",
+          "exitTime": "1:17:00 pm",
+          "entryPrice": 427.1,
+          "exitPrice": 428.35,
+          "quantity": 131,
+          "pnl": 149.7215375,
+          "pnlPct": 0.29267150550222426,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 14,
+      "events": [
+        {
+          "minute": 44,
+          "timeStr": "2025-08-11T09:59:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "ENTRY_QUEUED",
+          "price": 2562.05,
+          "qty": 18,
+          "detail": "Queued Limit BUY 18 @ ₹2562.05 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:61]] SL: ₹2548.35 TP: ₹2586.50"
+        },
+        {
+          "minute": 46,
+          "timeStr": "2025-08-11T10:01:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "ORDER_FILLED",
+          "price": 2562.05,
+          "qty": 18,
+          "detail": "Limit Buy FILLED for 18 shs @ ₹2562.05 (Limit was ₹2562.05). Fee: ₹11.53"
+        },
+        {
+          "minute": 54,
+          "timeStr": "2025-08-11T10:09:00+05:30",
+          "asset": "ABB",
+          "type": "ENTRY_QUEUED",
+          "price": 5000.7,
+          "qty": 7,
+          "detail": "Queued Limit BUY 7 @ ₹5000.70 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]] SL: ₹4976.05 TP: ₹5041.15"
+        },
+        {
+          "minute": 121,
+          "timeStr": "2025-08-11T11:16:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "PROFIT_HARVEST",
+          "price": 2565.75,
+          "qty": 18,
+          "detail": "Trailing Ratchet Stop Triggered on 18 shs @ ₹2565.75: P&L +₹55.05 (0.14%)"
+        },
+        {
+          "minute": 141,
+          "timeStr": "2025-08-11T11:36:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "SKIPPED",
+          "price": 1851.6,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹283.50 leaves less than dynamic floor ₹222.19 after ₹66.91 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 147,
+          "timeStr": "2025-08-11T11:42:00+05:30",
+          "asset": "VEDL",
+          "type": "ENTRY_QUEUED",
+          "price": 427.1,
+          "qty": 131,
+          "detail": "Queued Limit BUY 131 @ ₹427.10 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:74]] SL: ₹425.25 TP: ₹430.00"
+        },
+        {
+          "minute": 150,
+          "timeStr": "2025-08-11T11:45:00+05:30",
+          "asset": "VEDL",
+          "type": "ORDER_FILLED",
+          "price": 427.1,
+          "qty": 131,
+          "detail": "Limit Buy FILLED for 131 shs @ ₹427.10 (Limit was ₹427.10). Fee: ₹13.99"
+        },
+        {
+          "minute": 174,
+          "timeStr": "2025-08-11T12:09:00+05:30",
+          "asset": "MOTHERSON",
+          "type": "SKIPPED",
+          "price": 90.1,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate MOTHERSON net expected profit (₹0.46) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 179,
+          "timeStr": "2025-08-11T12:14:00+05:30",
+          "asset": "MOTHERSON",
+          "type": "SKIPPED",
+          "price": 90.04,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate MOTHERSON net expected profit (₹0.47) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 242,
+          "timeStr": "2025-08-11T13:17:00+05:30",
+          "asset": "VEDL",
+          "type": "PROFIT_HARVEST",
+          "price": 428.35,
+          "qty": 131,
+          "detail": "Trailing Ratchet Stop Triggered on 131 shs @ ₹428.35: P&L +₹149.72 (0.29%)"
+        },
+        {
+          "minute": 374,
+          "timeStr": "2025-08-11T15:29:00+05:30",
+          "asset": "KOTAKBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 392.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2025-08-11T15:29:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1611.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2025-08-11T15:29:00+05:30",
+          "asset": "HCLTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1484.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2025-08-11T15:29:00+05:30",
+          "asset": "TECHM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1481,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2025-08-12",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40049.1031625,
+      "netPnl": 49.103162500003236,
+      "netReturnPct": 0.1227579062500081,
+      "feeBurn": 27.7468375,
+      "tradesCount": 1,
+      "winsCount": 1,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.2895231106511514,
+      "closedTrades": [
+        {
+          "day": "2025-08-12",
+          "asset": "BAJAJFINSV",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+          "entryTime": "10:31:00 am",
+          "exitTime": "11:17:00 am",
+          "entryPrice": 1912.25,
+          "exitPrice": 1914.9,
+          "quantity": 29,
+          "pnl": 62.966975000002634,
+          "pnlPct": 0.13858020656295414,
+          "exitReason": "Breakout Failed: Price (₹1914.90) broke below institutional VWAP support (₹1979.88). Micro-loss capital defense exit."
+        }
+      ],
+      "eventsCount": 15,
+      "events": [
+        {
+          "minute": 75,
+          "timeStr": "2025-08-12T10:30:00+05:30",
+          "asset": "BAJAJFINSV",
+          "type": "ENTRY_QUEUED",
+          "price": 1912.25,
+          "qty": 29,
+          "detail": "Queued Limit BUY 29 @ ₹1912.25 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]] SL: ₹1904.95 TP: ₹1925.30"
+        },
+        {
+          "minute": 76,
+          "timeStr": "2025-08-12T10:31:00+05:30",
+          "asset": "BAJAJFINSV",
+          "type": "ORDER_FILLED",
+          "price": 1912.25,
+          "qty": 29,
+          "detail": "Limit Buy FILLED for 29 shs @ ₹1912.25 (Limit was ₹1912.25). Fee: ₹13.86"
+        },
+        {
+          "minute": 88,
+          "timeStr": "2025-08-12T10:43:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1070.6,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate AXISBANK net expected profit (₹192.54) is below dynamic net floor (₹219.53). Standing aside in cash."
+        },
+        {
+          "minute": 113,
+          "timeStr": "2025-08-12T11:08:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "SKIPPED",
+          "price": 1853.2,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BHARTIARTL net expected profit (₹143.99) is below dynamic net floor (₹219.74). Standing aside in cash."
+        },
+        {
+          "minute": 118,
+          "timeStr": "2025-08-12T11:13:00+05:30",
+          "asset": "COLPAL",
+          "type": "SKIPPED",
+          "price": 2207.1,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate COLPAL net expected profit (₹147.27) is below dynamic net floor (₹170.88). Standing aside in cash."
+        },
+        {
+          "minute": 122,
+          "timeStr": "2025-08-12T11:17:00+05:30",
+          "asset": "BAJAJFINSV",
+          "type": "PROFIT_HARVEST",
+          "price": 1914.9,
+          "qty": 29,
+          "detail": "Breakout Failed: Price (₹1914.90) broke below institutional VWAP support (₹1979.88). Micro-loss capital defense exit. on 29 shs @ ₹1914.90: P&L +₹62.97 (0.14%)"
+        },
+        {
+          "minute": 138,
+          "timeStr": "2025-08-12T11:33:00+05:30",
+          "asset": "HAVELLS",
+          "type": "ENTRY_QUEUED",
+          "price": 1452.2,
+          "qty": 19,
+          "detail": "Queued Limit BUY 19 @ ₹1452.20 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]] SL: ₹1445.65 TP: ₹1462.50"
+        },
+        {
+          "minute": 140,
+          "timeStr": "2025-08-12T11:35:00+05:30",
+          "asset": "COLPAL",
+          "type": "SKIPPED",
+          "price": 2204.1,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate COLPAL net expected profit (₹193.75) is below dynamic net floor (₹224.27). Standing aside in cash."
+        },
+        {
+          "minute": 168,
+          "timeStr": "2025-08-12T12:03:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "SKIPPED",
+          "price": 2496.2,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 175,
+          "timeStr": "2025-08-12T12:10:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "SKIPPED",
+          "price": 2493,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 196,
+          "timeStr": "2025-08-12T12:31:00+05:30",
+          "asset": "BOSCHLTD",
+          "type": "SKIPPED",
+          "price": 38715,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BOSCHLTD net expected profit (₹118.09) is below dynamic net floor (₹288.35). Standing aside in cash."
+        },
+        {
+          "minute": 201,
+          "timeStr": "2025-08-12T12:36:00+05:30",
+          "asset": "BOSCHLTD",
+          "type": "SKIPPED",
+          "price": 38700,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BOSCHLTD net expected profit (₹119.44) is below dynamic net floor (₹288.35). Standing aside in cash."
+        },
+        {
+          "minute": 206,
+          "timeStr": "2025-08-12T12:41:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "SKIPPED",
+          "price": 1098.7,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 207,
+          "timeStr": "2025-08-12T12:42:00+05:30",
+          "asset": "BOSCHLTD",
+          "type": "SKIPPED",
+          "price": 38700,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BOSCHLTD net expected profit (₹119.44) is below dynamic net floor (₹288.35). Standing aside in cash."
+        },
+        {
+          "minute": 239,
+          "timeStr": "2025-08-12T13:14:00+05:30",
+          "asset": "ZYDUSLIFE",
+          "type": "SKIPPED",
+          "price": 951.6,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        }
+      ]
+    },
+    {
+      "date": "2025-08-13",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40101.590200000006,
+      "netPnl": 101.590200000006,
+      "netReturnPct": 0.253975500000015,
+      "feeBurn": 28.0098,
+      "tradesCount": 1,
+      "winsCount": 1,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.46904547119189144,
+      "closedTrades": [
+        {
+          "day": "2025-08-13",
+          "asset": "GAIL",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:57]",
+          "entryTime": "10:09:00 am",
+          "exitTime": "11:28:00 am",
+          "entryPrice": 172.7,
+          "exitPrice": 173.1,
+          "quantity": 324,
+          "pnl": 115.57890000000184,
+          "pnlPct": 0.23161551823972537,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 4,
+      "events": [
+        {
+          "minute": 52,
+          "timeStr": "2025-08-13T10:07:00+05:30",
+          "asset": "GAIL",
+          "type": "ENTRY_QUEUED",
+          "price": 172.7,
+          "qty": 324,
+          "detail": "Queued Limit BUY 324 @ ₹172.70 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:57]] SL: ₹172.10 TP: ₹173.70"
+        },
+        {
+          "minute": 53,
+          "timeStr": "2025-08-13T10:08:00+05:30",
+          "asset": "SHREECEM",
+          "type": "SKIPPED",
+          "price": 30305,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate SHREECEM net expected profit (₹118.39) is below dynamic net floor (₹224.00). Standing aside in cash."
+        },
+        {
+          "minute": 54,
+          "timeStr": "2025-08-13T10:09:00+05:30",
+          "asset": "GAIL",
+          "type": "ORDER_FILLED",
+          "price": 172.7,
+          "qty": 324,
+          "detail": "Limit Buy FILLED for 324 shs @ ₹172.70 (Limit was ₹172.70). Fee: ₹13.99"
+        },
+        {
+          "minute": 133,
+          "timeStr": "2025-08-13T11:28:00+05:30",
+          "asset": "GAIL",
+          "type": "PROFIT_HARVEST",
+          "price": 173.1,
+          "qty": 324,
+          "detail": "Trailing Ratchet Stop Triggered on 324 shs @ ₹173.10: P&L +₹115.58 (0.23%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-14",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 14,
+      "events": [
+        {
+          "minute": 6,
+          "timeStr": "2025-08-14T09:21:00+05:30",
+          "asset": "NMDC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 69.57,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2025-08-14T09:24:00+05:30",
+          "asset": "NMDC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 69.51,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2025-08-14T09:27:00+05:30",
+          "asset": "NMDC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 69.08,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2025-08-14T09:28:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1109.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2025-08-14T09:30:00+05:30",
+          "asset": "NMDC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 69.27,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2025-08-14T09:31:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1110.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2025-08-14T09:33:00+05:30",
+          "asset": "NMDC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 69.35,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2025-08-14T09:34:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1109.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2025-08-14T09:36:00+05:30",
+          "asset": "NMDC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 69.24,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2025-08-14T09:37:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1105.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2025-08-14T09:39:00+05:30",
+          "asset": "NMDC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 69.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2025-08-14T09:40:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1102.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-08-14T09:42:00+05:30",
+          "asset": "NMDC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 69.53,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-08-14T09:43:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1102.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2025-08-15",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 0,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 0
+    },
+    {
+      "date": "2025-08-18",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39945.8995,
+      "netPnl": -54.100500000000466,
+      "netReturnPct": -0.13525125000000116,
+      "feeBurn": 33.1005,
+      "tradesCount": 2,
+      "winsCount": 1,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.8610589168458339,
+      "closedTrades": [
+        {
+          "day": "2025-08-18",
+          "asset": "DABUR",
+          "strategy": "Auto-Pilot: Candle Price Action [Rank #1 ACI:70]",
+          "entryTime": "10:17:00 am",
+          "exitTime": "10:21:00 am",
+          "entryPrice": 524.9,
+          "exitPrice": 522.1,
+          "quantity": 60,
+          "pnl": -175.83149999999728,
+          "pnlPct": -0.5334349399885606,
+          "exitReason": "Stop Loss Triggered"
+        },
+        {
+          "day": "2025-08-18",
+          "asset": "NESTLEIND",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:65]",
+          "entryTime": "10:12:00 am",
+          "exitTime": "11:20:00 am",
+          "entryPrice": 1157.25,
+          "exitPrice": 1162.15,
+          "quantity": 30,
+          "pnl": 138.28387500000272,
+          "pnlPct": 0.42341758479153946,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 22,
+      "events": [
+        {
+          "minute": 0,
+          "timeStr": "2025-08-18T09:15:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5439,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 3,
+          "timeStr": "2025-08-18T09:18:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5435.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 6,
+          "timeStr": "2025-08-18T09:21:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5456,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2025-08-18T09:24:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5435,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2025-08-18T09:27:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5445.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2025-08-18T09:30:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5453,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2025-08-18T09:33:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5459.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2025-08-18T09:35:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 914.05,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2025-08-18T09:36:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5461.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2025-08-18T09:38:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 915.05,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2025-08-18T09:39:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5466,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2025-08-18T09:39:00+05:30",
+          "asset": "SHREECEM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 31840,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2025-08-18T09:41:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 914.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-08-18T09:42:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5468,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-08-18T09:42:00+05:30",
+          "asset": "SHREECEM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 31765,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2025-08-18T09:44:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 915.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 56,
+          "timeStr": "2025-08-18T10:11:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "ENTRY_QUEUED",
+          "price": 1157.25,
+          "qty": 30,
+          "detail": "Queued Limit BUY 30 @ ₹1157.25 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:65]] SL: ₹1149.05 TP: ₹1172.55"
+        },
+        {
+          "minute": 57,
+          "timeStr": "2025-08-18T10:12:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "ORDER_FILLED",
+          "price": 1157.25,
+          "qty": 30,
+          "detail": "Limit Buy FILLED for 30 shs @ ₹1157.25 (Limit was ₹1157.25). Fee: ₹8.68"
+        },
+        {
+          "minute": 59,
+          "timeStr": "2025-08-18T10:14:00+05:30",
+          "asset": "DABUR",
+          "type": "ENTRY_QUEUED",
+          "price": 524.9,
+          "qty": 60,
+          "detail": "Queued Limit BUY 60 @ ₹524.90 [Auto-Pilot: Candle Price Action [Rank #1 ACI:70]] SL: ₹522.10 TP: ₹529.50"
+        },
+        {
+          "minute": 62,
+          "timeStr": "2025-08-18T10:17:00+05:30",
+          "asset": "DABUR",
+          "type": "ORDER_FILLED",
+          "price": 524.9,
+          "qty": 60,
+          "detail": "Limit Buy FILLED for 60 shs @ ₹524.90 (Limit was ₹524.90). Fee: ₹7.87"
+        },
+        {
+          "minute": 66,
+          "timeStr": "2025-08-18T10:21:00+05:30",
+          "asset": "DABUR",
+          "type": "STOP_LOSS_EXIT",
+          "price": 522.1,
+          "qty": 60,
+          "detail": "Stop Loss Triggered on 60 shs @ ₹522.10: P&L ₹-175.83 (-0.53%)"
+        },
+        {
+          "minute": 125,
+          "timeStr": "2025-08-18T11:20:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "PROFIT_HARVEST",
+          "price": 1162.15,
+          "qty": 30,
+          "detail": "Trailing Ratchet Stop Triggered on 30 shs @ ₹1162.15: P&L +₹138.28 (0.42%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-19",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40435.364024999995,
+      "netPnl": 435.3640249999953,
+      "netReturnPct": 1.0884100624999882,
+      "feeBurn": 27.835975,
+      "tradesCount": 3,
+      "winsCount": 3,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.17713691399801954,
+      "closedTrades": [
+        {
+          "day": "2025-08-19",
+          "asset": "INDUSINDBK",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+          "entryTime": "10:44:00 am",
+          "exitTime": "11:09:00 am",
+          "entryPrice": 780.85,
+          "exitPrice": 786.55,
+          "quantity": 35,
+          "pnl": 192.6176874999976,
+          "pnlPct": 0.729973746558229,
+          "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹786.55 (+0.73%). Locking partial profit."
+        },
+        {
+          "day": "2025-08-19",
+          "asset": "INDUSINDBK",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+          "entryTime": "10:44:00 am",
+          "exitTime": "11:19:00 am",
+          "entryPrice": 780.85,
+          "exitPrice": 789.15,
+          "quantity": 18,
+          "pnl": 145.84882499999918,
+          "pnlPct": 1.0629442274444458,
+          "exitReason": "Core Target T2 reached at ₹789.15 (+1.06%). Harvesting core gain."
+        },
+        {
+          "day": "2025-08-19",
+          "asset": "INDUSINDBK",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+          "entryTime": "10:44:00 am",
+          "exitTime": "2:15:00 pm",
+          "entryPrice": 780.85,
+          "exitPrice": 787.2,
+          "quantity": 18,
+          "pnl": 110.75760000000041,
+          "pnlPct": 0.8132163667797941,
+          "exitReason": "Stop hit at ₹787.20. Protecting capital."
+        }
+      ],
+      "eventsCount": 13,
+      "events": [
+        {
+          "minute": 84,
+          "timeStr": "2025-08-19T10:39:00+05:30",
+          "asset": "NTPC",
+          "type": "SKIPPED",
+          "price": 335.05,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate NTPC net expected profit (₹205.83) is below dynamic net floor (₹224.00). Standing aside in cash."
+        },
+        {
+          "minute": 88,
+          "timeStr": "2025-08-19T10:43:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "ENTRY_QUEUED",
+          "price": 780.85,
+          "qty": 71,
+          "detail": "Queued Limit BUY 71 @ ₹780.85 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]] SL: ₹778.10 TP: ₹785.10"
+        },
+        {
+          "minute": 89,
+          "timeStr": "2025-08-19T10:44:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "ORDER_FILLED",
+          "price": 780.85,
+          "qty": 71,
+          "detail": "Limit Buy FILLED for 71 shs @ ₹780.85 (Limit was ₹780.85). Fee: ₹13.86"
+        },
+        {
+          "minute": 102,
+          "timeStr": "2025-08-19T10:57:00+05:30",
+          "asset": "BAJAJFINSV",
+          "type": "SKIPPED",
+          "price": 1972.1,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BAJAJFINSV net expected profit (₹145.49) is below dynamic net floor (₹170.58). Standing aside in cash."
+        },
+        {
+          "minute": 107,
+          "timeStr": "2025-08-19T11:02:00+05:30",
+          "asset": "BAJAJFINSV",
+          "type": "SKIPPED",
+          "price": 1971.1,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BAJAJFINSV net expected profit (₹203.19) is below dynamic net floor (₹218.94). Standing aside in cash."
+        },
+        {
+          "minute": 114,
+          "timeStr": "2025-08-19T11:09:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "PROFIT_HARVEST",
+          "price": 786.55,
+          "qty": 35,
+          "detail": "Tranche 1 (+1.5 ATR) reached at ₹786.55 (+0.73%). Locking partial profit. on 35 shs @ ₹786.55: P&L +₹192.62 (0.73%)"
+        },
+        {
+          "minute": 124,
+          "timeStr": "2025-08-19T11:19:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "PROFIT_HARVEST",
+          "price": 789.15,
+          "qty": 18,
+          "detail": "Core Target T2 reached at ₹789.15 (+1.06%). Harvesting core gain. on 18 shs @ ₹789.15: P&L +₹145.85 (1.06%)"
+        },
+        {
+          "minute": 140,
+          "timeStr": "2025-08-19T11:35:00+05:30",
+          "asset": "POWERGRID",
+          "type": "SKIPPED",
+          "price": 288.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate POWERGRID net expected profit (₹158.38) is below dynamic net floor (₹190.22). Standing aside in cash."
+        },
+        {
+          "minute": 166,
+          "timeStr": "2025-08-19T12:01:00+05:30",
+          "asset": "POWERGRID",
+          "type": "SKIPPED",
+          "price": 288.1,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate POWERGRID net expected profit (₹153.97) is below dynamic net floor (₹190.05). Standing aside in cash."
+        },
+        {
+          "minute": 171,
+          "timeStr": "2025-08-19T12:06:00+05:30",
+          "asset": "POWERGRID",
+          "type": "SKIPPED",
+          "price": 288.05,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate POWERGRID net expected profit (₹153.97) is below dynamic net floor (₹190.07). Standing aside in cash."
+        },
+        {
+          "minute": 178,
+          "timeStr": "2025-08-19T12:13:00+05:30",
+          "asset": "POWERGRID",
+          "type": "SKIPPED",
+          "price": 287.75,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate POWERGRID net expected profit (₹217.95) is below dynamic net floor (₹244.35). Standing aside in cash."
+        },
+        {
+          "minute": 208,
+          "timeStr": "2025-08-19T12:43:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "SKIPPED",
+          "price": 6115,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate DIVISLAB net expected profit (₹171.06) is below dynamic net floor (₹190.09). Standing aside in cash."
+        },
+        {
+          "minute": 300,
+          "timeStr": "2025-08-19T14:15:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "PROFIT_HARVEST",
+          "price": 787.2,
+          "qty": 18,
+          "detail": "Stop hit at ₹787.20. Protecting capital. on 18 shs @ ₹787.20: P&L +₹110.76 (0.81%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-20",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40266.843312499994,
+      "netPnl": 266.8433124999938,
+      "netReturnPct": 0.6671082812499844,
+      "feeBurn": 34.6066875,
+      "tradesCount": 3,
+      "winsCount": 3,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.17287348657039267,
+      "closedTrades": [
+        {
+          "day": "2025-08-20",
+          "asset": "AUROPHARMA",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]",
+          "entryTime": "10:33:00 am",
+          "exitTime": "10:38:00 am",
+          "entryPrice": 1046.7,
+          "exitPrice": 1049,
+          "quantity": 38,
+          "pnl": 77.43449999999827,
+          "pnlPct": 0.2197382248972919,
+          "exitReason": "Breakout Failed: Price (₹1049.00) broke below institutional VWAP support (₹1096.33). Micro-loss capital defense exit."
+        },
+        {
+          "day": "2025-08-20",
+          "asset": "MUTHOOTFIN",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]",
+          "entryTime": "10:48:00 am",
+          "exitTime": "11:59:00 am",
+          "entryPrice": 2662.55,
+          "exitPrice": 2682.5,
+          "quantity": 5,
+          "pnl": 96.39687499999908,
+          "pnlPct": 0.7492817036299719,
+          "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹2682.50 (+0.75%). Locking partial profit."
+        },
+        {
+          "day": "2025-08-20",
+          "asset": "MUTHOOTFIN",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]",
+          "entryTime": "10:48:00 am",
+          "exitTime": "2:18:00 pm",
+          "entryPrice": 2662.55,
+          "exitPrice": 2681.6,
+          "quantity": 6,
+          "pnl": 110.27759999999836,
+          "pnlPct": 0.7154795215113228,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 20,
+      "events": [
+        {
+          "minute": 15,
+          "timeStr": "2025-08-20T09:30:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2686.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2025-08-20T09:30:00+05:30",
+          "asset": "MOTHERSON",
+          "type": "VOLATILITY_SHOCK",
+          "price": 98.07,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2025-08-20T09:33:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2686,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2025-08-20T09:33:00+05:30",
+          "asset": "MOTHERSON",
+          "type": "VOLATILITY_SHOCK",
+          "price": 97.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2025-08-20T09:36:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2691.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2025-08-20T09:36:00+05:30",
+          "asset": "MOTHERSON",
+          "type": "VOLATILITY_SHOCK",
+          "price": 98.13,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2025-08-20T09:39:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2688.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2025-08-20T09:39:00+05:30",
+          "asset": "MOTHERSON",
+          "type": "VOLATILITY_SHOCK",
+          "price": 98.01,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-08-20T09:42:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2691.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-08-20T09:42:00+05:30",
+          "asset": "MOTHERSON",
+          "type": "VOLATILITY_SHOCK",
+          "price": 97.97,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 57,
+          "timeStr": "2025-08-20T10:12:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "ENTRY_QUEUED",
+          "price": 1046.7,
+          "qty": 38,
+          "detail": "Queued Limit BUY 38 @ ₹1046.70 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]] SL: ₹1040.25 TP: ₹1058.20"
+        },
+        {
+          "minute": 78,
+          "timeStr": "2025-08-20T10:33:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "ORDER_FILLED",
+          "price": 1046.7,
+          "qty": 38,
+          "detail": "Limit Buy FILLED for 38 shs @ ₹1046.70 (Limit was ₹1046.70). Fee: ₹9.94"
+        },
+        {
+          "minute": 83,
+          "timeStr": "2025-08-20T10:38:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "PROFIT_HARVEST",
+          "price": 1049,
+          "qty": 38,
+          "detail": "Breakout Failed: Price (₹1049.00) broke below institutional VWAP support (₹1096.33). Micro-loss capital defense exit. on 38 shs @ ₹1049.00: P&L +₹77.43 (0.22%)"
+        },
+        {
+          "minute": 89,
+          "timeStr": "2025-08-20T10:44:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "ENTRY_QUEUED",
+          "price": 2662.55,
+          "qty": 11,
+          "detail": "Queued Limit BUY 11 @ ₹2662.55 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]] SL: ₹2651.20 TP: ₹2680.35"
+        },
+        {
+          "minute": 93,
+          "timeStr": "2025-08-20T10:48:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "ORDER_FILLED",
+          "price": 2662.55,
+          "qty": 11,
+          "detail": "Limit Buy FILLED for 11 shs @ ₹2662.55 (Limit was ₹2662.55). Fee: ₹7.32"
+        },
+        {
+          "minute": 142,
+          "timeStr": "2025-08-20T11:37:00+05:30",
+          "asset": "PNB",
+          "type": "SKIPPED",
+          "price": 107.29,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate PNB net expected profit (₹20.46) is below dynamic net floor (₹75.35). Standing aside in cash."
+        },
+        {
+          "minute": 147,
+          "timeStr": "2025-08-20T11:42:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "SKIPPED",
+          "price": 5964,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate DIVISLAB net expected profit (₹73.34) is below dynamic net floor (₹75.50). Standing aside in cash."
+        },
+        {
+          "minute": 164,
+          "timeStr": "2025-08-20T11:59:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "PROFIT_HARVEST",
+          "price": 2682.5,
+          "qty": 5,
+          "detail": "Tranche 1 (+1.5 ATR) reached at ₹2682.50 (+0.75%). Locking partial profit. on 5 shs @ ₹2682.50: P&L +₹96.40 (0.75%)"
+        },
+        {
+          "minute": 207,
+          "timeStr": "2025-08-20T12:42:00+05:30",
+          "asset": "INDUSINDBK",
+          "type": "SKIPPED",
+          "price": 780.05,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate INDUSINDBK net expected profit (₹146.29) is below dynamic net floor (₹172.56). Standing aside in cash."
+        },
+        {
+          "minute": 303,
+          "timeStr": "2025-08-20T14:18:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "PROFIT_HARVEST",
+          "price": 2681.6,
+          "qty": 6,
+          "detail": "Trailing Ratchet Stop Triggered on 6 shs @ ₹2681.60: P&L +₹110.28 (0.72%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-21",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39765.731700000004,
+      "netPnl": -234.2682999999961,
+      "netReturnPct": -0.5856707499999901,
+      "feeBurn": 27.868299999999998,
+      "tradesCount": 1,
+      "winsCount": 0,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.8707665493156901,
+      "closedTrades": [
+        {
+          "day": "2025-08-21",
+          "asset": "JIOFIN",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]",
+          "entryTime": "11:59:00 am",
+          "exitTime": "12:29:00 pm",
+          "entryPrice": 324.65,
+          "exitPrice": 323.45,
+          "quantity": 172,
+          "pnl": -220.30834999999806,
+          "pnlPct": -0.36962883104881833,
+          "exitReason": "Stop Loss Triggered"
+        }
+      ],
+      "eventsCount": 11,
+      "events": [
+        {
+          "minute": 29,
+          "timeStr": "2025-08-21T09:44:00+05:30",
+          "asset": "SHREECEM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 30420,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 139,
+          "timeStr": "2025-08-21T11:34:00+05:30",
+          "asset": "GAIL",
+          "type": "SKIPPED",
+          "price": 177.28,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate GAIL net expected profit (₹191.37) is below dynamic net floor (₹224.00). Standing aside in cash."
+        },
+        {
+          "minute": 146,
+          "timeStr": "2025-08-21T11:41:00+05:30",
+          "asset": "GAIL",
+          "type": "SKIPPED",
+          "price": 177.26,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate GAIL net expected profit (₹191.37) is below dynamic net floor (₹224.00). Standing aside in cash."
+        },
+        {
+          "minute": 161,
+          "timeStr": "2025-08-21T11:56:00+05:30",
+          "asset": "POWERGRID",
+          "type": "SKIPPED",
+          "price": 284.85,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate POWERGRID net expected profit (₹190.25) is below dynamic net floor (₹224.00). Standing aside in cash."
+        },
+        {
+          "minute": 163,
+          "timeStr": "2025-08-21T11:58:00+05:30",
+          "asset": "JIOFIN",
+          "type": "ENTRY_QUEUED",
+          "price": 324.65,
+          "qty": 172,
+          "detail": "Queued Limit BUY 172 @ ₹324.65 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]] SL: ₹323.45 TP: ₹326.50"
+        },
+        {
+          "minute": 164,
+          "timeStr": "2025-08-21T11:59:00+05:30",
+          "asset": "JIOFIN",
+          "type": "ORDER_FILLED",
+          "price": 324.65,
+          "qty": 172,
+          "detail": "Limit Buy FILLED for 172 shs @ ₹324.65 (Limit was ₹324.65). Fee: ₹13.96"
+        },
+        {
+          "minute": 166,
+          "timeStr": "2025-08-21T12:01:00+05:30",
+          "asset": "TATAPOWER",
+          "type": "SKIPPED",
+          "price": 388.4,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate TATAPOWER net expected profit (₹0.73) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 171,
+          "timeStr": "2025-08-21T12:06:00+05:30",
+          "asset": "NTPC",
+          "type": "SKIPPED",
+          "price": 337.9,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate NTPC net expected profit (₹1.24) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 176,
+          "timeStr": "2025-08-21T12:11:00+05:30",
+          "asset": "BHARATFORG",
+          "type": "SKIPPED",
+          "price": 1158.9,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BHARATFORG net expected profit (₹6.68) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 191,
+          "timeStr": "2025-08-21T12:26:00+05:30",
+          "asset": "NHPC",
+          "type": "SKIPPED",
+          "price": 82.35,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate NHPC net expected profit (₹0.21) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 194,
+          "timeStr": "2025-08-21T12:29:00+05:30",
+          "asset": "JIOFIN",
+          "type": "STOP_LOSS_EXIT",
+          "price": 323.45,
+          "qty": 172,
+          "detail": "Stop Loss Triggered on 172 shs @ ₹323.45: P&L ₹-220.31 (-0.37%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-22",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40144.84228749999,
+      "netPnl": 144.84228749998874,
+      "netReturnPct": 0.3621057187499718,
+      "feeBurn": 43.007712500000004,
+      "tradesCount": 2,
+      "winsCount": 2,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.2907620786626607,
+      "closedTrades": [
+        {
+          "day": "2025-08-22",
+          "asset": "SAIL",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:58]",
+          "entryTime": "10:05:00 am",
+          "exitTime": "10:13:00 am",
+          "entryPrice": 121.9,
+          "exitPrice": 122.1,
+          "quantity": 459,
+          "pnl": 77.78902499999478,
+          "pnlPct": 0.1640689089417462,
+          "exitReason": "Breakout Failed: Price (₹122.10) broke below institutional VWAP support (₹126.21). Micro-loss capital defense exit."
+        },
+        {
+          "day": "2025-08-22",
+          "asset": "SHREECEM",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+          "entryTime": "10:59:00 am",
+          "exitTime": "12:25:00 pm",
+          "entryPrice": 29969.4,
+          "exitPrice": 30065.45,
+          "quantity": 1,
+          "pnl": 88.53363749999927,
+          "pnlPct": 0.32049357010817453,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 21,
+      "events": [
+        {
+          "minute": 16,
+          "timeStr": "2025-08-22T09:31:00+05:30",
+          "asset": "VEDL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 444.35,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2025-08-22T09:34:00+05:30",
+          "asset": "VEDL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 444.85,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2025-08-22T09:37:00+05:30",
+          "asset": "VEDL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 444.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2025-08-22T09:40:00+05:30",
+          "asset": "VEDL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 445.15,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-08-22T09:43:00+05:30",
+          "asset": "VEDL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 445.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 47,
+          "timeStr": "2025-08-22T10:02:00+05:30",
+          "asset": "SAIL",
+          "type": "SKIPPED",
+          "price": 122.07,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate SAIL net expected profit (₹219.80) is below dynamic net floor (₹224.00). Standing aside in cash."
+        },
+        {
+          "minute": 49,
+          "timeStr": "2025-08-22T10:04:00+05:30",
+          "asset": "SAIL",
+          "type": "ENTRY_QUEUED",
+          "price": 121.9,
+          "qty": 459,
+          "detail": "Queued Limit BUY 459 @ ₹121.90 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:58]] SL: ₹121.45 TP: ₹122.55"
+        },
+        {
+          "minute": 50,
+          "timeStr": "2025-08-22T10:05:00+05:30",
+          "asset": "SAIL",
+          "type": "ORDER_FILLED",
+          "price": 121.9,
+          "qty": 459,
+          "detail": "Limit Buy FILLED for 459 shs @ ₹121.90 (Limit was ₹121.90). Fee: ₹13.99"
+        },
+        {
+          "minute": 54,
+          "timeStr": "2025-08-22T10:09:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "SKIPPED",
+          "price": 1649.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate SUNPHARMA net expected profit (₹175.79) is below dynamic net floor (₹216.10). Standing aside in cash."
+        },
+        {
+          "minute": 58,
+          "timeStr": "2025-08-22T10:13:00+05:30",
+          "asset": "SAIL",
+          "type": "PROFIT_HARVEST",
+          "price": 122.1,
+          "qty": 459,
+          "detail": "Breakout Failed: Price (₹122.10) broke below institutional VWAP support (₹126.21). Micro-loss capital defense exit. on 459 shs @ ₹122.10: P&L +₹77.79 (0.16%)"
+        },
+        {
+          "minute": 59,
+          "timeStr": "2025-08-22T10:14:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "SKIPPED",
+          "price": 1649.6,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate SUNPHARMA net expected profit (₹252.44) is below dynamic net floor (₹288.46). Standing aside in cash."
+        },
+        {
+          "minute": 77,
+          "timeStr": "2025-08-22T10:32:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1071,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate AXISBANK net expected profit (₹126.65) is below dynamic net floor (₹224.36). Standing aside in cash."
+        },
+        {
+          "minute": 102,
+          "timeStr": "2025-08-22T10:57:00+05:30",
+          "asset": "SHREECEM",
+          "type": "ENTRY_QUEUED",
+          "price": 29969.4,
+          "qty": 1,
+          "detail": "Queued Limit BUY 1 @ ₹29969.40 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]] SL: ₹29826.65 TP: ₹30193.70"
+        },
+        {
+          "minute": 104,
+          "timeStr": "2025-08-22T10:59:00+05:30",
+          "asset": "SHREECEM",
+          "type": "ORDER_FILLED",
+          "price": 29969.4,
+          "qty": 1,
+          "detail": "Limit Buy FILLED for 1 shs @ ₹29969.40 (Limit was ₹29969.40). Fee: ₹7.49"
+        },
+        {
+          "minute": 106,
+          "timeStr": "2025-08-22T11:01:00+05:30",
+          "asset": "AMBUJACEM",
+          "type": "SKIPPED",
+          "price": 578.7,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 128,
+          "timeStr": "2025-08-22T11:23:00+05:30",
+          "asset": "ADANIGREEN",
+          "type": "SKIPPED",
+          "price": 954.7,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 134,
+          "timeStr": "2025-08-22T11:29:00+05:30",
+          "asset": "ADANIGREEN",
+          "type": "SKIPPED",
+          "price": 955.3,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 139,
+          "timeStr": "2025-08-22T11:34:00+05:30",
+          "asset": "ADANIGREEN",
+          "type": "SKIPPED",
+          "price": 954.95,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 173,
+          "timeStr": "2025-08-22T12:08:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 3601.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate LT net expected profit (₹20.86) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 178,
+          "timeStr": "2025-08-22T12:13:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 3600.7,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate LT net expected profit (₹20.90) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 190,
+          "timeStr": "2025-08-22T12:25:00+05:30",
+          "asset": "SHREECEM",
+          "type": "PROFIT_HARVEST",
+          "price": 30065.45,
+          "qty": 1,
+          "detail": "Trailing Ratchet Stop Triggered on 1 shs @ ₹30065.45: P&L +₹88.53 (0.32%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-25",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39779.051125,
+      "netPnl": -220.94887500000186,
+      "netReturnPct": -0.5523721875000047,
+      "feeBurn": 21.448875,
+      "tradesCount": 1,
+      "winsCount": 0,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.6734279991037859,
+      "closedTrades": [
+        {
+          "day": "2025-08-25",
+          "asset": "KPITTECH",
+          "strategy": "Auto-Pilot: Candle Price Action [Rank #1 ACI:61]",
+          "entryTime": "10:45:00 am",
+          "exitTime": "11:37:00 am",
+          "entryPrice": 1228.5,
+          "exitPrice": 1222.8,
+          "quantity": 35,
+          "pnl": -210.1995000000016,
+          "pnlPct": -0.4639804639804677,
+          "exitReason": "Breakout Failed: Price (₹1222.80) broke below institutional VWAP support (₹1224.91). Micro-loss capital defense exit."
+        }
+      ],
+      "eventsCount": 22,
+      "events": [
+        {
+          "minute": 4,
+          "timeStr": "2025-08-25T09:19:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3262.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2025-08-25T09:22:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3264.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2025-08-25T09:25:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3271.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2025-08-25T09:26:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 373.35,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2025-08-25T09:28:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3278.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2025-08-25T09:29:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 374.65,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2025-08-25T09:31:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3276,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2025-08-25T09:32:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 374.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2025-08-25T09:34:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3278.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2025-08-25T09:35:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 374.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2025-08-25T09:37:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3280.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2025-08-25T09:38:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 375.25,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2025-08-25T09:40:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3285.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2025-08-25T09:41:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 374.95,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-08-25T09:43:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3286.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2025-08-25T09:44:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 374.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 78,
+          "timeStr": "2025-08-25T10:33:00+05:30",
+          "asset": "KPITTECH",
+          "type": "ENTRY_QUEUED",
+          "price": 1228.5,
+          "qty": 35,
+          "detail": "Queued Limit BUY 35 @ ₹1228.50 [Auto-Pilot: Candle Price Action [Rank #1 ACI:61]] SL: ₹1221.50 TP: ₹1241.55"
+        },
+        {
+          "minute": 90,
+          "timeStr": "2025-08-25T10:45:00+05:30",
+          "asset": "KPITTECH",
+          "type": "ORDER_FILLED",
+          "price": 1228.5,
+          "qty": 35,
+          "detail": "Limit Buy FILLED for 35 shs @ ₹1228.50 (Limit was ₹1228.50). Fee: ₹10.75"
+        },
+        {
+          "minute": 108,
+          "timeStr": "2025-08-25T11:03:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "SKIPPED",
+          "price": 159.36,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate TATASTEEL net expected profit (₹280.18) is below dynamic net floor (₹307.66). Standing aside in cash."
+        },
+        {
+          "minute": 118,
+          "timeStr": "2025-08-25T11:13:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "SKIPPED",
+          "price": 159.45,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate TATASTEEL net expected profit (₹280.16) is below dynamic net floor (₹307.73). Standing aside in cash."
+        },
+        {
+          "minute": 133,
+          "timeStr": "2025-08-25T11:28:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "SKIPPED",
+          "price": 159.4,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate TATASTEEL net expected profit (₹271.79) is below dynamic net floor (₹308.07). Standing aside in cash."
+        },
+        {
+          "minute": 142,
+          "timeStr": "2025-08-25T11:37:00+05:30",
+          "asset": "KPITTECH",
+          "type": "STOP_LOSS_EXIT",
+          "price": 1222.8,
+          "qty": 35,
+          "detail": "Breakout Failed: Price (₹1222.80) broke below institutional VWAP support (₹1224.91). Micro-loss capital defense exit. on 35 shs @ ₹1222.80: P&L ₹-210.20 (-0.46%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-26",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40255.666900000004,
+      "netPnl": 255.6669000000038,
+      "netReturnPct": 0.6391672500000095,
+      "feeBurn": 27.7331,
+      "tradesCount": 2,
+      "winsCount": 2,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.38182447206080156,
+      "closedTrades": [
+        {
+          "day": "2025-08-26",
+          "asset": "MARICO",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+          "entryTime": "11:49:00 am",
+          "exitTime": "12:27:00 pm",
+          "entryPrice": 718.5,
+          "exitPrice": 723.7,
+          "quantity": 38,
+          "pnl": 190.72485000000174,
+          "pnlPct": 0.7237299930410641,
+          "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹723.70 (+0.72%). Locking partial profit."
+        },
+        {
+          "day": "2025-08-26",
+          "asset": "MARICO",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+          "entryTime": "11:49:00 am",
+          "exitTime": "12:55:00 pm",
+          "entryPrice": 718.5,
+          "exitPrice": 720.7,
+          "quantity": 39,
+          "pnl": 78.77317500000177,
+          "pnlPct": 0.30619345859429997,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 10,
+      "events": [
+        {
+          "minute": 25,
+          "timeStr": "2025-08-26T09:40:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6133,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-08-26T09:43:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6130,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 127,
+          "timeStr": "2025-08-26T11:22:00+05:30",
+          "asset": "MARICO",
+          "type": "ENTRY_QUEUED",
+          "price": 718.5,
+          "qty": 77,
+          "detail": "Queued Limit BUY 77 @ ₹718.50 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]] SL: ₹715.50 TP: ₹723.85"
+        },
+        {
+          "minute": 154,
+          "timeStr": "2025-08-26T11:49:00+05:30",
+          "asset": "MARICO",
+          "type": "ORDER_FILLED",
+          "price": 718.5,
+          "qty": 77,
+          "detail": "Limit Buy FILLED for 77 shs @ ₹718.50 (Limit was ₹718.50). Fee: ₹13.83"
+        },
+        {
+          "minute": 192,
+          "timeStr": "2025-08-26T12:27:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 234.41,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate ONGC net expected profit (₹0.47) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 192,
+          "timeStr": "2025-08-26T12:27:00+05:30",
+          "asset": "MARICO",
+          "type": "PROFIT_HARVEST",
+          "price": 723.7,
+          "qty": 38,
+          "detail": "Tranche 1 (+1.5 ATR) reached at ₹723.70 (+0.72%). Locking partial profit. on 38 shs @ ₹723.70: P&L +₹190.72 (0.72%)"
+        },
+        {
+          "minute": 198,
+          "timeStr": "2025-08-26T12:33:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 234.29,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate ONGC net expected profit (₹35.76) is below dynamic net floor (₹70.34). Standing aside in cash."
+        },
+        {
+          "minute": 204,
+          "timeStr": "2025-08-26T12:39:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 234.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate ONGC net expected profit (₹52.32) is below dynamic net floor (₹90.30). Standing aside in cash."
+        },
+        {
+          "minute": 209,
+          "timeStr": "2025-08-26T12:44:00+05:30",
+          "asset": "BEL",
+          "type": "SKIPPED",
+          "price": 365.35,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BEL net expected profit (₹52.91) is below dynamic net floor (₹70.36). Standing aside in cash."
+        },
+        {
+          "minute": 220,
+          "timeStr": "2025-08-26T12:55:00+05:30",
+          "asset": "MARICO",
+          "type": "PROFIT_HARVEST",
+          "price": 720.7,
+          "qty": 39,
+          "detail": "Trailing Ratchet Stop Triggered on 39 shs @ ₹720.70: P&L +₹78.77 (0.31%)"
+        }
+      ]
+    },
+    {
+      "date": "2025-08-27",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 0,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 0
+    },
+    {
+      "date": "2025-08-28",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 9,
+      "events": [
+        {
+          "minute": 4,
+          "timeStr": "2025-08-28T09:19:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6138.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2025-08-28T09:22:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6122,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2025-08-28T09:25:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6124,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2025-08-28T09:28:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6125.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2025-08-28T09:31:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6125.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2025-08-28T09:34:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6125,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2025-08-28T09:37:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6127.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2025-08-28T09:40:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6150.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2025-08-28T09:43:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "VOLATILITY_SHOCK",
+          "price": 6142,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2025-08-29",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39829.992575000004,
+      "netPnl": -170.00742499999615,
+      "netReturnPct": -0.42501856249999037,
+      "feeBurn": 27.907425000000003,
+      "tradesCount": 1,
+      "winsCount": 0,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.6223044680023633,
+      "closedTrades": [
+        {
+          "day": "2025-08-29",
+          "asset": "IOC",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+          "entryTime": "12:32:00 pm",
+          "exitTime": "2:02:00 pm",
+          "entryPrice": 137.65,
+          "exitPrice": 137.3,
+          "quantity": 406,
+          "pnl": -156.03594999999768,
+          "pnlPct": -0.2542680711950558,
+          "exitReason": "Dead Trade Stagnancy Exit: Position active for 90 mins within +/-0.45 ATR with fading volume (0.40x avg). Liquidating to free capital."
+        }
+      ],
+      "eventsCount": 24,
+      "events": [
+        {
+          "minute": 5,
+          "timeStr": "2025-08-29T09:20:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2340.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 8,
+          "timeStr": "2025-08-29T09:23:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5862.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 8,
+          "timeStr": "2025-08-29T09:23:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2351.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2025-08-29T09:26:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5863.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2025-08-29T09:26:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2352.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2025-08-29T09:29:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5872,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2025-08-29T09:29:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2352,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2025-08-29T09:32:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5872.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2025-08-29T09:32:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2343,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2025-08-29T09:35:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5856.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2025-08-29T09:35:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2322.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2025-08-29T09:38:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5836.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2025-08-29T09:38:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2320,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2025-08-29T09:41:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5837,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2025-08-29T09:41:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2319.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2025-08-29T09:44:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5830,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2025-08-29T09:44:00+05:30",
+          "asset": "COLPAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2320,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 196,
+          "timeStr": "2025-08-29T12:31:00+05:30",
+          "asset": "IOC",
+          "type": "ENTRY_QUEUED",
+          "price": 137.65,
+          "qty": 406,
+          "detail": "Queued Limit BUY 406 @ ₹137.65 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]] SL: ₹137.10 TP: ₹138.55"
+        },
+        {
+          "minute": 197,
+          "timeStr": "2025-08-29T12:32:00+05:30",
+          "asset": "IOC",
+          "type": "ORDER_FILLED",
+          "price": 137.65,
+          "qty": 406,
+          "detail": "Limit Buy FILLED for 406 shs @ ₹137.65 (Limit was ₹137.65). Fee: ₹13.97"
+        },
+        {
+          "minute": 204,
+          "timeStr": "2025-08-29T12:39:00+05:30",
+          "asset": "DIVISLAB",
+          "type": "SKIPPED",
+          "price": 6108.5,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate DIVISLAB net expected profit (₹28.16) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 209,
+          "timeStr": "2025-08-29T12:44:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 955.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate HDFCBANK net expected profit (₹1.62) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 239,
+          "timeStr": "2025-08-29T13:14:00+05:30",
+          "asset": "M&M",
+          "type": "SKIPPED",
+          "price": 3201.4,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate M&M net expected profit (₹21.43) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 287,
+          "timeStr": "2025-08-29T14:02:00+05:30",
+          "asset": "IOC",
+          "type": "STOP_LOSS_EXIT",
+          "price": 137.3,
+          "qty": 406,
+          "detail": "Dead Trade Stagnancy Exit: Position active for 90 mins within +/-0.45 ATR with fading volume (0.40x avg). Liquidating to free capital. on 406 shs @ ₹137.30: P&L ₹-156.04 (-0.25%)"
+        },
+        {
+          "minute": 328,
+          "timeStr": "2025-08-29T14:43:00+05:30",
+          "asset": "RELIANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1354.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    }
+  ],
+  "allClosedTrades": [
+    {
+      "day": "2025-08-04",
+      "asset": "SIEMENS",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:78]",
+      "entryTime": "10:44:00 am",
+      "exitTime": "10:49:00 am",
+      "entryPrice": 2950.8,
+      "exitPrice": 2935.35,
+      "quantity": 16,
+      "pnl": -258.94140000000436,
+      "pnlPct": -0.5235868239121686,
+      "exitReason": "Stop Loss Triggered"
+    },
+    {
+      "day": "2025-08-07",
+      "asset": "SAIL",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+      "entryTime": "10:01:00 am",
+      "exitTime": "10:03:00 am",
+      "entryPrice": 121.95,
+      "exitPrice": 122.1,
+      "quantity": 454,
+      "pnl": 54.24164999999613,
+      "pnlPct": 0.12300123001229313,
+      "exitReason": "Breakout Failed: Price (₹122.10) broke below institutional VWAP support (₹129.79). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2025-08-07",
+      "asset": "INDUSINDBK",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+      "entryTime": "10:28:00 am",
+      "exitTime": "11:51:00 am",
+      "entryPrice": 796.85,
+      "exitPrice": 793.4,
+      "quantity": 37,
+      "pnl": -134.9889500000017,
+      "pnlPct": -0.4329547593650054,
+      "exitReason": "Stop Loss Triggered"
+    },
+    {
+      "day": "2025-08-11",
+      "asset": "MUTHOOTFIN",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:61]",
+      "entryTime": "10:01:00 am",
+      "exitTime": "11:16:00 am",
+      "entryPrice": 2562.05,
+      "exitPrice": 2565.75,
+      "quantity": 18,
+      "pnl": 55.05412499999672,
+      "pnlPct": 0.1444156046915485,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2025-08-11",
+      "asset": "VEDL",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:74]",
+      "entryTime": "11:45:00 am",
+      "exitTime": "1:17:00 pm",
+      "entryPrice": 427.1,
+      "exitPrice": 428.35,
+      "quantity": 131,
+      "pnl": 149.7215375,
+      "pnlPct": 0.29267150550222426,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2025-08-12",
+      "asset": "BAJAJFINSV",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+      "entryTime": "10:31:00 am",
+      "exitTime": "11:17:00 am",
+      "entryPrice": 1912.25,
+      "exitPrice": 1914.9,
+      "quantity": 29,
+      "pnl": 62.966975000002634,
+      "pnlPct": 0.13858020656295414,
+      "exitReason": "Breakout Failed: Price (₹1914.90) broke below institutional VWAP support (₹1979.88). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2025-08-13",
+      "asset": "GAIL",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:57]",
+      "entryTime": "10:09:00 am",
+      "exitTime": "11:28:00 am",
+      "entryPrice": 172.7,
+      "exitPrice": 173.1,
+      "quantity": 324,
+      "pnl": 115.57890000000184,
+      "pnlPct": 0.23161551823972537,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2025-08-18",
+      "asset": "DABUR",
+      "strategy": "Auto-Pilot: Candle Price Action [Rank #1 ACI:70]",
+      "entryTime": "10:17:00 am",
+      "exitTime": "10:21:00 am",
+      "entryPrice": 524.9,
+      "exitPrice": 522.1,
+      "quantity": 60,
+      "pnl": -175.83149999999728,
+      "pnlPct": -0.5334349399885606,
+      "exitReason": "Stop Loss Triggered"
+    },
+    {
+      "day": "2025-08-18",
+      "asset": "NESTLEIND",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:65]",
+      "entryTime": "10:12:00 am",
+      "exitTime": "11:20:00 am",
+      "entryPrice": 1157.25,
+      "exitPrice": 1162.15,
+      "quantity": 30,
+      "pnl": 138.28387500000272,
+      "pnlPct": 0.42341758479153946,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2025-08-19",
+      "asset": "INDUSINDBK",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+      "entryTime": "10:44:00 am",
+      "exitTime": "11:09:00 am",
+      "entryPrice": 780.85,
+      "exitPrice": 786.55,
+      "quantity": 35,
+      "pnl": 192.6176874999976,
+      "pnlPct": 0.729973746558229,
+      "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹786.55 (+0.73%). Locking partial profit."
+    },
+    {
+      "day": "2025-08-19",
+      "asset": "INDUSINDBK",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+      "entryTime": "10:44:00 am",
+      "exitTime": "11:19:00 am",
+      "entryPrice": 780.85,
+      "exitPrice": 789.15,
+      "quantity": 18,
+      "pnl": 145.84882499999918,
+      "pnlPct": 1.0629442274444458,
+      "exitReason": "Core Target T2 reached at ₹789.15 (+1.06%). Harvesting core gain."
+    },
+    {
+      "day": "2025-08-19",
+      "asset": "INDUSINDBK",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+      "entryTime": "10:44:00 am",
+      "exitTime": "2:15:00 pm",
+      "entryPrice": 780.85,
+      "exitPrice": 787.2,
+      "quantity": 18,
+      "pnl": 110.75760000000041,
+      "pnlPct": 0.8132163667797941,
+      "exitReason": "Stop hit at ₹787.20. Protecting capital."
+    },
+    {
+      "day": "2025-08-20",
+      "asset": "AUROPHARMA",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]",
+      "entryTime": "10:33:00 am",
+      "exitTime": "10:38:00 am",
+      "entryPrice": 1046.7,
+      "exitPrice": 1049,
+      "quantity": 38,
+      "pnl": 77.43449999999827,
+      "pnlPct": 0.2197382248972919,
+      "exitReason": "Breakout Failed: Price (₹1049.00) broke below institutional VWAP support (₹1096.33). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2025-08-20",
+      "asset": "MUTHOOTFIN",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]",
+      "entryTime": "10:48:00 am",
+      "exitTime": "11:59:00 am",
+      "entryPrice": 2662.55,
+      "exitPrice": 2682.5,
+      "quantity": 5,
+      "pnl": 96.39687499999908,
+      "pnlPct": 0.7492817036299719,
+      "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹2682.50 (+0.75%). Locking partial profit."
+    },
+    {
+      "day": "2025-08-20",
+      "asset": "MUTHOOTFIN",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:70]",
+      "entryTime": "10:48:00 am",
+      "exitTime": "2:18:00 pm",
+      "entryPrice": 2662.55,
+      "exitPrice": 2681.6,
+      "quantity": 6,
+      "pnl": 110.27759999999836,
+      "pnlPct": 0.7154795215113228,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2025-08-21",
+      "asset": "JIOFIN",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]",
+      "entryTime": "11:59:00 am",
+      "exitTime": "12:29:00 pm",
+      "entryPrice": 324.65,
+      "exitPrice": 323.45,
+      "quantity": 172,
+      "pnl": -220.30834999999806,
+      "pnlPct": -0.36962883104881833,
+      "exitReason": "Stop Loss Triggered"
+    },
+    {
+      "day": "2025-08-22",
+      "asset": "SAIL",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:58]",
+      "entryTime": "10:05:00 am",
+      "exitTime": "10:13:00 am",
+      "entryPrice": 121.9,
+      "exitPrice": 122.1,
+      "quantity": 459,
+      "pnl": 77.78902499999478,
+      "pnlPct": 0.1640689089417462,
+      "exitReason": "Breakout Failed: Price (₹122.10) broke below institutional VWAP support (₹126.21). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2025-08-22",
+      "asset": "SHREECEM",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+      "entryTime": "10:59:00 am",
+      "exitTime": "12:25:00 pm",
+      "entryPrice": 29969.4,
+      "exitPrice": 30065.45,
+      "quantity": 1,
+      "pnl": 88.53363749999927,
+      "pnlPct": 0.32049357010817453,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2025-08-25",
+      "asset": "KPITTECH",
+      "strategy": "Auto-Pilot: Candle Price Action [Rank #1 ACI:61]",
+      "entryTime": "10:45:00 am",
+      "exitTime": "11:37:00 am",
+      "entryPrice": 1228.5,
+      "exitPrice": 1222.8,
+      "quantity": 35,
+      "pnl": -210.1995000000016,
+      "pnlPct": -0.4639804639804677,
+      "exitReason": "Breakout Failed: Price (₹1222.80) broke below institutional VWAP support (₹1224.91). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2025-08-26",
+      "asset": "MARICO",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+      "entryTime": "11:49:00 am",
+      "exitTime": "12:27:00 pm",
+      "entryPrice": 718.5,
+      "exitPrice": 723.7,
+      "quantity": 38,
+      "pnl": 190.72485000000174,
+      "pnlPct": 0.7237299930410641,
+      "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹723.70 (+0.72%). Locking partial profit."
+    },
+    {
+      "day": "2025-08-26",
+      "asset": "MARICO",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+      "entryTime": "11:49:00 am",
+      "exitTime": "12:55:00 pm",
+      "entryPrice": 718.5,
+      "exitPrice": 720.7,
+      "quantity": 39,
+      "pnl": 78.77317500000177,
+      "pnlPct": 0.30619345859429997,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2025-08-29",
+      "asset": "IOC",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+      "entryTime": "12:32:00 pm",
+      "exitTime": "2:02:00 pm",
+      "entryPrice": 137.65,
+      "exitPrice": 137.3,
+      "quantity": 406,
+      "pnl": -156.03594999999768,
+      "pnlPct": -0.2542680711950558,
+      "exitReason": "Dead Trade Stagnancy Exit: Position active for 90 mins within +/-0.45 ATR with fading volume (0.40x avg). Liquidating to free capital."
+    }
+  ]
+}
