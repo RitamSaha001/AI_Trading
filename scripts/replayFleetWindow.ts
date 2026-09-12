@@ -94,10 +94,13 @@ async function setCachedJson(filename: string, data: any): Promise<void> {
   } catch {}
 }
 
-async function fetchJson(url: string, retries = 5, delayMs = 300): Promise<any> {
+async function fetchJson(url: string, retries = 3, delayMs = 300): Promise<any> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (res.status === 404 || res.status === 400) {
+        return null;
+      }
       if (res.status === 429 || res.status >= 500) {
         if (attempt === retries) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         await new Promise((r) => setTimeout(r, delayMs * Math.pow(2, attempt - 1)));
@@ -140,11 +143,27 @@ function getLastNTradingDays(n = 10, fromDateStr = getTodayIstDateStr(), include
   return days.reverse();
 }
 
+function getTradingDaysBetween(startDateStr: string, endDateStr: string): string[] {
+  const days: string[] = [];
+  let d = new Date(`${startDateStr}T12:00:00+05:30`);
+  const end = new Date(`${endDateStr}T12:00:00+05:30`);
+  while (d <= end) {
+    const ist = IndianMarketCalendar.toIST(d);
+    const isWk = IndianMarketCalendar.isWeekend(d);
+    const isHol = IndianMarketCalendar.isHoliday(d).isHoliday;
+    if (!isWk && !isHol) {
+      days.push(ist.dateStr);
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return days;
+}
+
 async function fetchBaseline30m(instrumentKey: string, targetDateStr: string): Promise<RawCandle[]> {
   const safeKey = instrumentKey.replace(/[^a-zA-Z0-9]/g, '_');
   const cacheFile = `${safeKey}_${targetDateStr}_30m.json`;
   const cached = await getCachedJson(cacheFile);
-  if (cached && Array.isArray(cached) && cached.length > 0) {
+  if (cached !== null && Array.isArray(cached)) {
     return cached;
   }
 
@@ -166,11 +185,10 @@ async function fetchBaseline30m(instrumentKey: string, targetDateStr: string): P
       close: Number(c[4]),
       volume: Number(c[5]),
     }));
-    if (parsed.length > 0) {
-      await setCachedJson(cacheFile, parsed);
-    }
+    await setCachedJson(cacheFile, parsed);
     return parsed;
   } catch {
+    await setCachedJson(cacheFile, []);
     return [];
   }
 }
@@ -179,7 +197,7 @@ async function fetchIntraday1m(instrumentKey: string, targetDateStr: string): Pr
   const safeKey = instrumentKey.replace(/[^a-zA-Z0-9]/g, '_');
   const cacheFile = `${safeKey}_${targetDateStr}_1m.json`;
   const cached = await getCachedJson(cacheFile);
-  if (cached && Array.isArray(cached) && cached.length > 0) {
+  if (cached !== null && Array.isArray(cached)) {
     return cached;
   }
 
@@ -198,11 +216,10 @@ async function fetchIntraday1m(instrumentKey: string, targetDateStr: string): Pr
       close: Number(c[4]),
       volume: Number(c[5]),
     }));
-    if (parsed.length > 0) {
-      await setCachedJson(cacheFile, parsed);
-    }
+    await setCachedJson(cacheFile, parsed);
     return parsed;
   } catch {
+    await setCachedJson(cacheFile, []);
     return [];
   }
 }
@@ -224,9 +241,17 @@ async function replaySingleDay(
   // Upstox: ₹20/order or 0.05% brokerage + statutory taxes ~ 0.08% (8 bps)
   const feeRate = broker === 'flattrade' ? 0.00025 : 0.0008;
 
+  // Monitored fleet for this day: assets that have cached 1m candles for targetDate
+  const availableFleet: Asset[] = UPSTOX_FLEET_ASSETS.filter((asset) => {
+    const inst = UpstoxInstrumentRegistry.get(asset);
+    if (!inst) return false;
+    const safeKey = inst.instrumentKey.replace(/[^a-zA-Z0-9]/g, '_');
+    return existsSync(join(CACHE_DIR, `${safeKey}_${targetDate}_1m.json`));
+  });
+
   // Download/Load fleet data in parallel
   await Promise.all(
-    UPSTOX_FLEET_ASSETS.map(async (asset) => {
+    availableFleet.map(async (asset) => {
       const inst = UpstoxInstrumentRegistry.get(asset);
       if (!inst) return;
       const [hist30m, intraday1m] = await Promise.all([
@@ -295,7 +320,7 @@ async function replaySingleDay(
     positions: positions as any,
     avgBuyPrice: avgBuyPrices as any,
     averageBuyPrices: avgBuyPrices as any,
-    watchlist: [...UPSTOX_FLEET_ASSETS],
+    watchlist: [...availableFleet],
     orders: [],
     alerts: [],
     strategies: [],
@@ -324,7 +349,7 @@ async function replaySingleDay(
       profile,
       dailyStartingValue: startingCapital,
       peakPortfolioValue: startingCapital,
-      activeFleet: initializeFleetStatus(),
+      activeFleet: initializeFleetStatus(availableFleet),
       rateLimitStatus: createDefaultRateLimitStatus(),
     },
     settings: {
@@ -337,11 +362,25 @@ async function replaySingleDay(
     },
     notifications: [],
     timeframe: '1D',
-    selectedAsset: 'RELIANCE',
+    selectedAsset: availableFleet[0] || 'RELIANCE',
   };
 
-  const cumulativeIntradayCandles: Map<Asset, RawCandle[]> = new Map();
-  for (const asset of UPSTOX_FLEET_ASSETS) cumulativeIntradayCandles.set(asset, []);
+  const assetStats24h: Map<Asset, { high: number; low: number; volume: number; firstOpen: number }> = new Map();
+  const asset30mBars: Map<Asset, Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>> = new Map();
+  const assetCurrent30m: Map<Asset, { windowIdx: number; bar: { time: string; open: number; high: number; low: number; close: number; volume: number } }> = new Map();
+  const assetHist30mBars: Map<Asset, Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>> = new Map();
+  const assetToday1mBars: Map<Asset, Candle[]> = new Map();
+
+  for (const asset of availableFleet) {
+    assetStats24h.set(asset, { high: 0, low: Infinity, volume: 0, firstOpen: 0 });
+    asset30mBars.set(asset, []);
+    assetToday1mBars.set(asset, []);
+    const hist30m = assetHistoricalMap.get(asset) || [];
+    assetHist30mBars.set(
+      asset,
+      hist30m.map((h) => ({ time: h.timeStr, open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume }))
+    );
+  }
 
   // Minute-by-Minute Replay Loop
   for (let minuteIdx = 0; minuteIdx < sortedTimestamps.length; minuteIdx++) {
@@ -350,58 +389,70 @@ async function replaySingleDay(
     const minuteCandles = candleMapByTime.get(timestamp);
     if (!minuteCandles) continue;
 
-    for (const [asset, c] of minuteCandles.entries()) {
-      cumulativeIntradayCandles.get(asset)!.push(c);
-    }
-
     const currentMarkets: Partial<Record<Asset, Market>> = {};
-    for (const asset of UPSTOX_FLEET_ASSETS) {
+    for (const asset of availableFleet) {
       const c = minuteCandles.get(asset);
-      const accumulated = cumulativeIntradayCandles.get(asset) || [];
-      const hist30m = assetHistoricalMap.get(asset) || [];
       if (!c) continue;
 
-      const today30mBars: { time: string; open: number; high: number; low: number; close: number; volume: number }[] = [];
-      let current30m: { time: string; open: number; high: number; low: number; close: number; volume: number } | null = null;
-      let currentWindow = -1;
-
-      for (const bar of accumulated) {
-        const dBar = new Date(bar.timestamp);
-        const mins = dBar.getHours() * 60 + dBar.getMinutes();
-        const windowIdx = Math.floor((mins - (9 * 60 + 15)) / 30);
-        if (windowIdx !== currentWindow) {
-          if (current30m) today30mBars.push(current30m);
-          currentWindow = windowIdx;
-          current30m = { time: bar.timeStr, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume };
-        } else if (current30m) {
-          current30m.high = Math.max(current30m.high, bar.high);
-          current30m.low = Math.min(current30m.low, bar.low);
-          current30m.close = bar.close;
-          current30m.volume += bar.volume;
-        }
+      const stats = assetStats24h.get(asset)!;
+      if (stats.volume === 0) {
+        stats.firstOpen = c.open;
+        stats.high = c.high;
+        stats.low = c.low;
+      } else {
+        if (c.high > stats.high) stats.high = c.high;
+        if (c.low < stats.low) stats.low = c.low;
       }
-      if (current30m) today30mBars.push(current30m);
+      stats.volume += c.volume;
 
-      const institutionalCandles = [
-        ...hist30m.map((h) => ({ time: h.timeStr, open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume })),
-        ...today30mBars,
-      ];
+      const dBar = new Date(c.timestamp);
+      const mins = dBar.getHours() * 60 + dBar.getMinutes();
+      const windowIdx = Math.floor((mins - (9 * 60 + 15)) / 30);
+      const cur30m = assetCurrent30m.get(asset);
+
+      if (!cur30m || cur30m.windowIdx !== windowIdx) {
+        if (cur30m) {
+          asset30mBars.get(asset)!.push(cur30m.bar);
+        }
+        assetCurrent30m.set(asset, {
+          windowIdx,
+          bar: { time: c.timeStr, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume },
+        });
+      } else {
+        cur30m.bar.high = Math.max(cur30m.bar.high, c.high);
+        cur30m.bar.low = Math.min(cur30m.bar.low, c.low);
+        cur30m.bar.close = c.close;
+        cur30m.bar.volume += c.volume;
+      }
+
+      const today1m = assetToday1mBars.get(asset)!;
+      today1m.push({
+        time: c.timestamp,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume,
+      });
+
+      const today30m = asset30mBars.get(asset)!;
+      const curBar = assetCurrent30m.get(asset)!.bar;
+      const preHist = assetHist30mBars.get(asset)!;
+      const institutionalCandles = [...preHist, ...today30m, curBar];
       const institutionalHistory = institutionalCandles.map((cand) => cand.close);
-      const high24h = Math.max(...accumulated.map((a) => a.high), c.high);
-      const low24h = Math.min(...accumulated.map((a) => a.low), c.low);
-      const volume24h = accumulated.reduce((sum, a) => sum + a.volume, 0);
 
       currentMarkets[asset] = {
         asset,
         name: asset,
         symbol: asset,
         price: c.close,
-        change24h: ((c.close - (accumulated[0]?.open || c.open)) / (accumulated[0]?.open || c.open)) * 100,
-        high24h,
-        low24h,
-        volume24h,
+        change24h: stats.firstOpen > 0 ? ((c.close - stats.firstOpen) / stats.firstOpen) * 100 : 0,
+        high24h: stats.high,
+        low24h: stats.low,
+        volume24h: stats.volume,
         history: institutionalHistory,
         candles: institutionalCandles,
+        intradayCandles: today1m,
         source: 'upstox',
         isSynthetic: false,
         lastUpdated: timestamp,
@@ -437,6 +488,14 @@ async function replaySingleDay(
         entryTimestamps[order.asset as Asset] = timestamp;
         entryStrategies[order.asset as Asset] = order.strategyName || 'Algorithmic Alpha';
 
+        // Authoritative AppState synchronization so tickAutonomousPilot manages position lifecycle
+        appState.positions[order.asset as Asset] = newQty;
+        if (!appState.avgBuyPrice) appState.avgBuyPrice = {};
+        appState.avgBuyPrice[order.asset as Asset] = newAvg;
+        if (appState.autonomousPilot?.activeFleet?.[order.asset as Asset]) {
+          appState.autonomousPilot.activeFleet[order.asset as Asset].entryTimestamp = timestamp;
+        }
+
         openEntryOrders.delete(orderId);
         const orderInApp = appState.orders.find((o) => o.id === orderId);
         if (orderInApp) orderInApp.status = 'filled';
@@ -453,7 +512,7 @@ async function replaySingleDay(
       }
     }
 
-    // Check Open Position Trailing Stops & Profit Targets
+    // Check Open Position Intra-Bar Stop Loss
     for (const [assetStr, qty] of Object.entries(positions)) {
       const asset = assetStr as Asset;
       if (!qty || qty <= 0) continue;
@@ -463,20 +522,12 @@ async function replaySingleDay(
       const fleetStatus = appState.autonomousPilot?.activeFleet?.[asset];
       const entryPrice = avgBuyPrices[asset] || candle.close;
       const stopLoss = fleetStatus?.stopLossPrice;
-      const takeProfit = fleetStatus?.takeProfitPrice;
 
-      let exitPrice: number | null = null;
-      let exitReason = '';
-
+      // Note: Profit target ladder (Tranche 1, Tranche 2, Chandelier) is managed by tickAutonomousPilot ordersToDispatch.
+      // We only check if intra-bar low breached the stopLossPrice (SL-M trigger at broker).
       if (stopLoss && candle.low <= stopLoss) {
-        exitPrice = Math.min(candle.open, stopLoss);
-        exitReason = 'Trailing Stop Triggered';
-      } else if (takeProfit && candle.high >= takeProfit) {
-        exitPrice = Math.max(candle.open, takeProfit);
-        exitReason = 'Profit Target Triggered';
-      }
-
-      if (exitPrice !== null) {
+        const exitPrice = Math.min(candle.open, stopLoss);
+        const exitReason = stopLoss >= entryPrice ? 'Trailing Ratchet Stop Triggered' : 'Stop Loss Triggered';
         const proceeds = exitPrice * qty;
         const fee = proceeds * feeRate;
         const tradePnl = (exitPrice - entryPrice) * qty - fee;
@@ -505,6 +556,8 @@ async function replaySingleDay(
 
         delete positions[asset];
         delete avgBuyPrices[asset];
+        delete appState.positions[asset];
+        if (appState.avgBuyPrice) delete appState.avgBuyPrice[asset];
 
         appState.autonomousPilot!.actionLogs = [
           {
@@ -650,8 +703,11 @@ async function replaySingleDay(
           delete positions[prop.asset];
           delete avgBuyPrices[prop.asset];
           delete borrowedMargin[prop.asset];
+          delete appState.positions[prop.asset];
+          if (appState.avgBuyPrice) delete appState.avgBuyPrice[prop.asset];
         } else {
           positions[prop.asset] = remaining;
+          appState.positions[prop.asset] = remaining;
         }
 
         realizedPnl += tradePnl;
@@ -668,7 +724,7 @@ async function replaySingleDay(
           quantity: exitQty,
           pnl: tradePnl,
           pnlPct: tradePnlPct,
-          exitReason: prop.comment || 'Quant Engine Exit Dispatched',
+          exitReason: (prop as any).reason || prop.comment || 'Quant Engine Exit Dispatched',
         };
         closedTrades.push(closedRecord);
 
@@ -729,6 +785,8 @@ async function runMultiDayWindowReplay() {
   let broker: 'upstox' | 'flattrade' = 'flattrade';
   let tag = '';
   let fromDate: string | undefined;
+  let startDate: string | undefined;
+  let endDate: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -764,6 +822,14 @@ async function runMultiDayWindowReplay() {
       fromDate = arg.split('=')[1].trim();
     } else if (arg === '--from' && i + 1 < args.length) {
       fromDate = args[++i].trim();
+    } else if (arg.startsWith('--start=')) {
+      startDate = arg.split('=')[1].trim();
+    } else if (arg === '--start' && i + 1 < args.length) {
+      startDate = args[++i].trim();
+    } else if (arg.startsWith('--end=')) {
+      endDate = arg.split('=')[1].trim();
+    } else if (arg === '--end' && i + 1 < args.length) {
+      endDate = args[++i].trim();
     } else if (arg.startsWith('--tag=')) {
       tag = arg.split('=')[1].trim();
     } else if (arg === '--tag' && i + 1 < args.length) {
@@ -773,7 +839,15 @@ async function runMultiDayWindowReplay() {
     }
   }
 
-  const tradingDays = fromDate ? getLastNTradingDays(daysCount, fromDate, true) : getLastNTradingDays(daysCount);
+  let tradingDays: string[];
+  if (startDate && endDate) {
+    tradingDays = getTradingDaysBetween(startDate, endDate);
+    daysCount = tradingDays.length;
+  } else if (fromDate) {
+    tradingDays = getLastNTradingDays(daysCount, fromDate, true);
+  } else {
+    tradingDays = getLastNTradingDays(daysCount);
+  }
 
   console.log('='.repeat(80));
   console.log(`  AUTONOMOUS QUANT PILOT — ${daysCount}-DAY ROLLING FLEET AUDIT`);
@@ -784,9 +858,9 @@ async function runMultiDayWindowReplay() {
   console.log(`Initial Capital:      ₹${capital.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
   console.log(`Capital Mode:         ${compounding ? 'Compounding NAV (Equity carries over daily)' : 'Static Daily Re-allocation'}`);
   console.log(`Risk Profile:         ${PILOT_PROFILES[profile].name} (${PILOT_PROFILES[profile].maxRiskPerTradePct}% risk/trade)`);
-  console.log(`Monitored Fleet:      ${UPSTOX_FLEET_ASSETS.length} Institutional Bluechips`);
+  console.log(`Monitored Fleet:      ${UPSTOX_FLEET_ASSETS.length} Indian Equities (NIFTY 100 Universe)`);
   console.log('='.repeat(80));
-  console.log('\nStarting sequential intraday simulation across all 15 fleet assets...\n');
+  console.log('\nStarting sequential intraday simulation across monitored fleet assets...\n');
 
   let currentNav = capital;
   let peakWindowNav = capital;
@@ -805,7 +879,7 @@ async function runMultiDayWindowReplay() {
 
     dayResults.push(result);
     allClosedTrades.push(...result.closedTrades);
-    currentNav = result.endingNav;
+    currentNav = compounding ? result.endingNav : currentNav + result.netPnl;
 
     if (currentNav > peakWindowNav) peakWindowNav = currentNav;
     const windowDd = peakWindowNav > 0 ? ((peakWindowNav - currentNav) / peakWindowNav) * 100 : 0;
@@ -847,17 +921,77 @@ async function runMultiDayWindowReplay() {
   console.log(`Daily Distribution:    ${greenDays} Green / ${flatDays} Flat (Cash Preserved) / ${redDays} Red`);
   console.log('='.repeat(80));
 
-  console.log('\nDAILY BREAKDOWN:');
-  console.log('-'.repeat(80));
-  console.log(' Date       Day  Start NAV    End NAV      Net P&L    Return %  Trades  Fees');
-  console.log('-'.repeat(80));
+  // Monthly Breakdown
+  interface MonthSummary {
+    month: string;
+    tradingDaysCount: number;
+    startNav: number;
+    endNav: number;
+    netPnl: number;
+    returnPct: number;
+    tradesCount: number;
+    winsCount: number;
+    lossesCount: number;
+    feeBurn: number;
+  }
+
+  const monthlyMap = new Map<string, MonthSummary>();
   for (const d of dayResults) {
-    const sign = d.netPnl >= 0 ? '+' : '';
+    const mKey = d.date.substring(0, 7); // YYYY-MM
+    let m = monthlyMap.get(mKey);
+    if (!m) {
+      m = {
+        month: mKey,
+        tradingDaysCount: 0,
+        startNav: d.startingNav,
+        endNav: d.endingNav,
+        netPnl: 0,
+        returnPct: 0,
+        tradesCount: 0,
+        winsCount: 0,
+        lossesCount: 0,
+        feeBurn: 0,
+      };
+      monthlyMap.set(mKey, m);
+    }
+    m.tradingDaysCount++;
+    m.endNav = d.endingNav;
+    m.netPnl += d.netPnl;
+    m.tradesCount += d.tradesCount;
+    m.winsCount += d.winsCount;
+    m.lossesCount += d.lossesCount;
+    m.feeBurn += d.feeBurn;
+  }
+  for (const m of monthlyMap.values()) {
+    m.returnPct = m.startNav > 0 ? (m.netPnl / m.startNav) * 100 : 0;
+  }
+
+  console.log('\nMONTHLY PERFORMANCE BREAKDOWN:');
+  console.log('-'.repeat(85));
+  console.log(' Month    Days  Start NAV     End NAV       Net P&L     Return %  Trades  Win Rate   Fees');
+  console.log('-'.repeat(85));
+  for (const m of monthlyMap.values()) {
+    const sign = m.netPnl >= 0 ? '+' : '';
+    const mWinRate = m.tradesCount > 0 ? ((m.winsCount / m.tradesCount) * 100).toFixed(1) + '%' : 'N/A';
     console.log(
-      ` ${d.date}  ${d.dayOfWeek.padEnd(3)}  ₹${d.startingNav.toFixed(2).padStart(10)}  ₹${d.endingNav.toFixed(2).padStart(10)}  ${(sign + '₹' + d.netPnl.toFixed(2)).padStart(10)}  ${(sign + d.netReturnPct.toFixed(2) + '%').padStart(8)}  ${String(d.tradesCount).padStart(6)}  ₹${d.feeBurn.toFixed(2).padStart(6)}`
+      ` ${m.month}   ${String(m.tradingDaysCount).padStart(2)}   ₹${m.startNav.toFixed(2).padStart(10)}  ₹${m.endNav.toFixed(2).padStart(10)}  ${(sign + '₹' + m.netPnl.toFixed(2)).padStart(11)}  ${(sign + m.returnPct.toFixed(2) + '%').padStart(8)}  ${String(m.tradesCount).padStart(6)}  ${mWinRate.padStart(8)}  ₹${m.feeBurn.toFixed(2).padStart(6)}`
     );
   }
-  console.log('-'.repeat(80));
+  console.log('-'.repeat(85));
+
+  if (dayResults.length <= 30) {
+    console.log('\nDAILY BREAKDOWN:');
+    console.log('-'.repeat(80));
+    console.log(' Date       Day  Start NAV    End NAV      Net P&L    Return %  Trades  Fees');
+    console.log('-'.repeat(80));
+    for (const d of dayResults) {
+      const sign = d.netPnl >= 0 ? '+' : '';
+      console.log(
+        ` ${d.date}  ${d.dayOfWeek.padEnd(3)}  ₹${d.startingNav.toFixed(2).padStart(10)}  ₹${d.endingNav.toFixed(2).padStart(10)}  ${(sign + '₹' + d.netPnl.toFixed(2)).padStart(10)}  ${(sign + d.netReturnPct.toFixed(2) + '%').padStart(8)}  ${String(d.tradesCount).padStart(6)}  ₹${d.feeBurn.toFixed(2).padStart(6)}`
+      );
+    }
+    console.log('-'.repeat(80));
+  }
 
   if (allClosedTrades.length > 0) {
     console.log('\nALL CLOSED TRADES EXECUTED IN 10-DAY WINDOW:');

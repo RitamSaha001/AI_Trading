@@ -1,0 +1,779 @@
+{
+  "windowDays": 10,
+  "startDate": "2026-08-28",
+  "endDate": "2026-09-10",
+  "profile": "balanced",
+  "startingCapital": 40000,
+  "endingNav": 40000,
+  "totalNetPnl": 0,
+  "totalNetReturnPct": 0,
+  "maxWindowDrawdownPct": 0.35712022749229894,
+  "totalFeeBurn": 30.476499999999998,
+  "totalTrades": 5,
+  "totalWins": 2,
+  "totalLosses": 3,
+  "winRatePct": 40,
+  "profitFactor": 0.2648612894500332,
+  "dailyDistribution": {
+    "greenDays": 1,
+    "flatDays": 6,
+    "redDays": 3
+  },
+  "dailyBreakdown": [
+    {
+      "date": "2026-08-28",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39946.42862499999,
+      "netPnl": -53.57137500000681,
+      "netReturnPct": -0.13392843750001704,
+      "feeBurn": 6.271375,
+      "tradesCount": 1,
+      "winsCount": 0,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.1567450688001283,
+      "closedTrades": [
+        {
+          "day": "2026-08-28",
+          "asset": "INFY",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:66]",
+          "entryTime": "1:12:00 pm",
+          "exitTime": "2:15:00 pm",
+          "entryPrice": 1142.4,
+          "exitPrice": 1138.1,
+          "quantity": 11,
+          "pnl": -50.429775000002,
+          "pnlPct": -0.3764005602241055,
+          "exitReason": "Stop hit at ₹1138.10. Protecting capital."
+        }
+      ],
+      "eventsCount": 5,
+      "events": [
+        {
+          "minute": 23,
+          "timeStr": "2026-08-28T09:38:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2333.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-08-28T09:43:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2331.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 235,
+          "timeStr": "2026-08-28T13:10:00+05:30",
+          "asset": "INFY",
+          "type": "ENTRY_QUEUED",
+          "price": 1142.4,
+          "qty": 11,
+          "detail": "Queued Limit BUY 11 @ ₹1142.40 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:66]] SL: ₹1130.20 TP: ₹1169.25"
+        },
+        {
+          "minute": 237,
+          "timeStr": "2026-08-28T13:12:00+05:30",
+          "asset": "INFY",
+          "type": "ORDER_FILLED",
+          "price": 1142.4,
+          "qty": 11,
+          "detail": "Limit Buy FILLED for 11 shs @ ₹1142.40 (Limit was ₹1142.40). Fee: ₹3.14"
+        },
+        {
+          "minute": 300,
+          "timeStr": "2026-08-28T14:15:00+05:30",
+          "asset": "INFY",
+          "type": "STOP_LOSS_EXIT",
+          "price": 1138.1,
+          "qty": 11,
+          "detail": "Stop hit at ₹1138.10. Protecting capital. on 11 shs @ ₹1138.10: P&L ₹-50.43 (-0.38%)"
+        }
+      ]
+    },
+    {
+      "date": "2026-08-31",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 13,
+      "events": [
+        {
+          "minute": 3,
+          "timeStr": "2026-08-31T09:18:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1118.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-08-31T09:28:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1119,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-08-31T09:31:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 182.07,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-08-31T09:33:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1115.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-08-31T09:37:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 181.97,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-08-31T09:38:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1113.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-08-31T09:42:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 181.95,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-08-31T09:43:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1113.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 202,
+          "timeStr": "2026-08-31T12:37:00+05:30",
+          "asset": "ICICIBANK",
+          "type": "ENTRY_QUEUED",
+          "price": 1432.35,
+          "qty": 9,
+          "detail": "Queued Limit BUY 9 @ ₹1432.35 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:60]] SL: ₹1417.20 TP: ₹1465.65"
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "RELIANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1277,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1811.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "ITC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 255.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 308.85,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-01",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40036.1668125,
+      "netPnl": 36.16681249999965,
+      "netReturnPct": 0.09041703124999913,
+      "feeBurn": 6.0831875,
+      "tradesCount": 1,
+      "winsCount": 1,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.13082736012982876,
+      "closedTrades": [
+        {
+          "day": "2026-09-01",
+          "asset": "TATASTEEL",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]",
+          "entryTime": "11:14:00 am",
+          "exitTime": "11:18:00 am",
+          "entryPrice": 186.85,
+          "exitPrice": 187.5,
+          "quantity": 65,
+          "pnl": 39.20312500000037,
+          "pnlPct": 0.34787262510035094,
+          "exitReason": "Trailing Stop Triggered"
+        }
+      ],
+      "eventsCount": 5,
+      "events": [
+        {
+          "minute": 117,
+          "timeStr": "2026-09-01T11:12:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ENTRY_QUEUED",
+          "price": 186.85,
+          "qty": 65,
+          "detail": "Queued Limit BUY 65 @ ₹186.85 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]] SL: ₹184.70 TP: ₹191.55"
+        },
+        {
+          "minute": 119,
+          "timeStr": "2026-09-01T11:14:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ORDER_FILLED",
+          "price": 186.85,
+          "qty": 65,
+          "detail": "Limit Buy FILLED for 65 shs @ ₹186.85 (Limit was ₹186.85). Fee: ₹3.04"
+        },
+        {
+          "minute": 123,
+          "timeStr": "2026-09-01T11:18:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "PROFIT_HARVEST",
+          "price": 187.5,
+          "qty": 65,
+          "detail": "Trailing Stop Triggered on 65 shs @ ₹187.50: P&L +₹39.20 (0.35%)"
+        },
+        {
+          "minute": 202,
+          "timeStr": "2026-09-01T12:37:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 4032,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹39.37). Standing aside in cash."
+        },
+        {
+          "minute": 207,
+          "timeStr": "2026-09-01T12:42:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 4032.6,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹39.37). Standing aside in cash."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-02",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 5,
+      "events": [
+        {
+          "minute": 7,
+          "timeStr": "2026-09-02T09:22:00+05:30",
+          "asset": "HAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4713,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2026-09-02T09:22:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 702.45,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹50.32). Standing aside in cash."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-02T09:27:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 703.8,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹50.41). Standing aside in cash."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-02T09:32:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 702.35,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹50.29). Standing aside in cash."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-02T09:39:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 704,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹50.42). Standing aside in cash."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-03",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39893.1895625,
+      "netPnl": -106.81043749999662,
+      "netReturnPct": -0.2670260937499916,
+      "feeBurn": 6.060437500000001,
+      "tradesCount": 1,
+      "winsCount": 0,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.28860659946386136,
+      "closedTrades": [
+        {
+          "day": "2026-09-03",
+          "asset": "TATASTEEL",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:58]",
+          "entryTime": "9:31:00 am",
+          "exitTime": "9:45:00 am",
+          "entryPrice": 187.25,
+          "exitPrice": 185.7,
+          "quantity": 65,
+          "pnl": -103.76762500000073,
+          "pnlPct": -0.827770360480647,
+          "exitReason": "Trailing Stop Triggered"
+        }
+      ],
+      "eventsCount": 9,
+      "events": [
+        {
+          "minute": 8,
+          "timeStr": "2026-09-03T09:23:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1128.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2026-09-03T09:24:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2321.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-09-03T09:28:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-09-03T09:30:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ENTRY_QUEUED",
+          "price": 187.25,
+          "qty": 65,
+          "detail": "Queued Limit BUY 65 @ ₹187.25 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:58]] SL: ₹185.70 TP: ₹190.65"
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-09-03T09:31:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ORDER_FILLED",
+          "price": 187.25,
+          "qty": 65,
+          "detail": "Limit Buy FILLED for 65 shs @ ₹187.25 (Limit was ₹187.25). Fee: ₹3.04"
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-09-03T09:33:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-09-03T09:38:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-03T09:43:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 30,
+          "timeStr": "2026-09-03T09:45:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "STOP_LOSS_EXIT",
+          "price": 185.7,
+          "qty": 65,
+          "detail": "Trailing Stop Triggered on 65 shs @ ₹185.70: P&L ₹-103.77 (-0.83%)"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-04",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 1,
+      "events": [
+        {
+          "minute": 267,
+          "timeStr": "2026-09-04T13:42:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ENTRY_QUEUED",
+          "price": 186.5,
+          "qty": 65,
+          "detail": "Queued Limit BUY 65 @ ₹186.50 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:49]] SL: ₹184.55 TP: ₹190.75"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-07",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 0,
+      "events": []
+    },
+    {
+      "date": "2026-09-08",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 3,
+      "events": [
+        {
+          "minute": 1,
+          "timeStr": "2026-09-08T09:16:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1081.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 6,
+          "timeStr": "2026-09-08T09:21:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1080.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-09-08T09:30:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1081.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-09",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 39990.73850000001,
+      "netPnl": -9.261499999993248,
+      "netReturnPct": -0.02315374999998312,
+      "feeBurn": 12.061499999999999,
+      "tradesCount": 2,
+      "winsCount": 1,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.21726548448100244,
+      "closedTrades": [
+        {
+          "day": "2026-09-09",
+          "asset": "NTPC",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:51]",
+          "entryTime": "9:37:00 am",
+          "exitTime": "10:36:00 am",
+          "entryPrice": 336,
+          "exitPrice": 335.9,
+          "quantity": 36,
+          "pnl": -6.623100000000818,
+          "pnlPct": -0.02976190476191153,
+          "exitReason": "Dead Trade Stagnancy Exit: Position active for 60 mins within +/-0.05 ATR with fading volume (0.26x avg). Liquidating to free capital."
+        },
+        {
+          "day": "2026-09-09",
+          "asset": "TATASTEEL",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]",
+          "entryTime": "10:48:00 am",
+          "exitTime": "11:45:00 am",
+          "entryPrice": 187.9,
+          "exitPrice": 188,
+          "quantity": 64,
+          "pnl": 3.391999999999636,
+          "pnlPct": 0.053219797764765465,
+          "exitReason": "Dead Trade Stagnancy Exit: Position active for 62 mins within +/-0.07 ATR with fading volume (0.03x avg). Liquidating to free capital."
+        }
+      ],
+      "eventsCount": 8,
+      "events": [
+        {
+          "minute": 12,
+          "timeStr": "2026-09-09T09:27:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2200,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-09T09:32:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2198.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 5 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-09T09:36:00+05:30",
+          "asset": "NTPC",
+          "type": "ENTRY_QUEUED",
+          "price": 336,
+          "qty": 36,
+          "detail": "Queued Limit BUY 36 @ ₹336.00 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:51]] SL: ₹333.10 TP: ₹342.40"
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-09T09:37:00+05:30",
+          "asset": "NTPC",
+          "type": "ORDER_FILLED",
+          "price": 336,
+          "qty": 36,
+          "detail": "Limit Buy FILLED for 36 shs @ ₹336.00 (Limit was ₹336.00). Fee: ₹3.02"
+        },
+        {
+          "minute": 81,
+          "timeStr": "2026-09-09T10:36:00+05:30",
+          "asset": "NTPC",
+          "type": "STOP_LOSS_EXIT",
+          "price": 335.9,
+          "qty": 36,
+          "detail": "Dead Trade Stagnancy Exit: Position active for 60 mins within +/-0.05 ATR with fading volume (0.26x avg). Liquidating to free capital. on 36 shs @ ₹335.90: P&L ₹-6.62 (-0.03%)"
+        },
+        {
+          "minute": 88,
+          "timeStr": "2026-09-09T10:43:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ENTRY_QUEUED",
+          "price": 187.9,
+          "qty": 64,
+          "detail": "Queued Limit BUY 64 @ ₹187.90 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]] SL: ₹185.50 TP: ₹193.15"
+        },
+        {
+          "minute": 93,
+          "timeStr": "2026-09-09T10:48:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ORDER_FILLED",
+          "price": 187.9,
+          "qty": 64,
+          "detail": "Limit Buy FILLED for 64 shs @ ₹187.90 (Limit was ₹187.90). Fee: ₹3.01"
+        },
+        {
+          "minute": 150,
+          "timeStr": "2026-09-09T11:45:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "PROFIT_HARVEST",
+          "price": 188,
+          "qty": 64,
+          "detail": "Dead Trade Stagnancy Exit: Position active for 62 mins within +/-0.07 ATR with fading volume (0.03x avg). Liquidating to free capital. on 64 shs @ ₹188.00: P&L +₹3.39 (0.05%)"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 0,
+      "events": []
+    }
+  ],
+  "allClosedTrades": [
+    {
+      "day": "2026-08-28",
+      "asset": "INFY",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:66]",
+      "entryTime": "1:12:00 pm",
+      "exitTime": "2:15:00 pm",
+      "entryPrice": 1142.4,
+      "exitPrice": 1138.1,
+      "quantity": 11,
+      "pnl": -50.429775000002,
+      "pnlPct": -0.3764005602241055,
+      "exitReason": "Stop hit at ₹1138.10. Protecting capital."
+    },
+    {
+      "day": "2026-09-01",
+      "asset": "TATASTEEL",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]",
+      "entryTime": "11:14:00 am",
+      "exitTime": "11:18:00 am",
+      "entryPrice": 186.85,
+      "exitPrice": 187.5,
+      "quantity": 65,
+      "pnl": 39.20312500000037,
+      "pnlPct": 0.34787262510035094,
+      "exitReason": "Trailing Stop Triggered"
+    },
+    {
+      "day": "2026-09-03",
+      "asset": "TATASTEEL",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:58]",
+      "entryTime": "9:31:00 am",
+      "exitTime": "9:45:00 am",
+      "entryPrice": 187.25,
+      "exitPrice": 185.7,
+      "quantity": 65,
+      "pnl": -103.76762500000073,
+      "pnlPct": -0.827770360480647,
+      "exitReason": "Trailing Stop Triggered"
+    },
+    {
+      "day": "2026-09-09",
+      "asset": "NTPC",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:51]",
+      "entryTime": "9:37:00 am",
+      "exitTime": "10:36:00 am",
+      "entryPrice": 336,
+      "exitPrice": 335.9,
+      "quantity": 36,
+      "pnl": -6.623100000000818,
+      "pnlPct": -0.02976190476191153,
+      "exitReason": "Dead Trade Stagnancy Exit: Position active for 60 mins within +/-0.05 ATR with fading volume (0.26x avg). Liquidating to free capital."
+    },
+    {
+      "day": "2026-09-09",
+      "asset": "TATASTEEL",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]",
+      "entryTime": "10:48:00 am",
+      "exitTime": "11:45:00 am",
+      "entryPrice": 187.9,
+      "exitPrice": 188,
+      "quantity": 64,
+      "pnl": 3.391999999999636,
+      "pnlPct": 0.053219797764765465,
+      "exitReason": "Dead Trade Stagnancy Exit: Position active for 62 mins within +/-0.07 ATR with fading volume (0.03x avg). Liquidating to free capital."
+    }
+  ]
+}

@@ -61,8 +61,8 @@ export const NSE_TICK_SIZE_INR = 0.05;
 // ============================================================================
 // SCENARIO 2: Volatility-Adjusted Multi-Stage Profit Ratchet
 // ============================================================================
-/** Level 0.5 Fee-Breakeven Shield trigger: gain threshold in ATR multiples (+0.75 ATR) */
-export const RATCHET_STAGE_0_5_ATR = 0.75;
+/** Level 0.5 Fee-Breakeven Shield trigger: gain threshold in ATR multiples (+0.85 ATR) */
+export const RATCHET_STAGE_0_5_ATR = 0.85;
 /** Level 1 trigger: initial expansion gain in ATR multiples (+1.00 ATR) */
 export const RATCHET_STAGE_1_ATR = 1.00;
 /** Level 2 trigger: Tranche 1 harvest in ATR multiples (+1.40 ATR) */
@@ -70,10 +70,10 @@ export const RATCHET_STAGE_2_ATR = 1.40;
 /** Level 3 trigger: Core target T2 in ATR multiples (+2.00 ATR) */
 export const RATCHET_STAGE_3_ATR = 2.00;
 
-/** Locked gain for Level 1 stop: Entry + (0.35 * ATR) */
-export const RATCHET_LOCK_1_ATR = 0.35;
-/** Locked gain for Level 2 stop: Entry + (0.75 * ATR) */
-export const RATCHET_LOCK_2_ATR = 0.75;
+/** Locked gain for Level 1 stop: Entry + (0.50 * ATR) */
+export const RATCHET_LOCK_1_ATR = 0.50;
+/** Locked gain for Level 2 stop: Entry + (0.85 * ATR) */
+export const RATCHET_LOCK_2_ATR = 0.85;
 /** Locked gain for Level 3 stop: Entry + (1.35 * ATR) */
 export const RATCHET_LOCK_3_ATR = 1.35;
 
@@ -124,10 +124,10 @@ export const LATE_DAY_LOSS_STOP_COMPRESSION_ATR = 0.40;
 // ============================================================================
 // SCENARIO 6: Volatility Shock & Flash Gap Dampener
 // ============================================================================
-/** Single candle ATR multiple that triggers a volatility shock freeze (2.5x ATR) */
-export const VOLATILITY_SHOCK_ATR_MULTIPLE = 2.50;
-/** Trading freeze cooldown duration after a volatility shock (10 minutes in ms) */
-export const VOLATILITY_SHOCK_COOLDOWN_MS = 10 * 60 * 1000;
+/** Single candle ATR multiple that triggers a volatility shock freeze (3.50x ATR) */
+export const VOLATILITY_SHOCK_ATR_MULTIPLE = 3.50;
+/** Trading freeze cooldown duration after a volatility shock (3 minutes in ms) */
+export const VOLATILITY_SHOCK_COOLDOWN_MS = 3 * 60 * 1000;
 
 /** Minimum observations required before a live entry may use the quantitative feature set. */
 export const MIN_ENTRY_HISTORY_POINTS = 30;
@@ -136,7 +136,7 @@ export const MIN_ENTRY_CANDLE_COUNT = 20;
 /** Maximum age of a live market snapshot before new entries are blocked. */
 export const MAX_LIVE_MARKET_DATA_AGE_MS = 2 * 60 * 1000;
 /** Minimum last-candle volume versus its rolling average for a new live entry. */
-export const MIN_ENTRY_VOLUME_SURGE_RATIO = 0.85;
+export const MIN_ENTRY_VOLUME_SURGE_RATIO = 1.10;
 /** Maximum distance above VWAP, in ATRs, for a non-breakout entry. */
 export const MAX_ENTRY_VWAP_EXTENSION_ATR = 1.25;
 
@@ -168,7 +168,13 @@ export const MAX_PAIRWISE_CORRELATION_MODE_B = 0.50;
 /** Maximum concurrent active intraday MIS positions permitted on accounts < ₹100k */
 export const MAX_CONCURRENT_MIS_POSITIONS = 2;
 /** Maximum number of new intraday MIS entries permitted per calendar day */
-export const MAX_DAILY_MIS_ENTRIES = 2;
+export const MAX_DAILY_MIS_ENTRIES = 4;
+/** Daily realized net profit target to bank and protect gains for the session (INR) */
+export const DAILY_PROFIT_TARGET_INR = 120.0;
+/** Length of the Opening Range Breakout (ORB) initial balance window in minutes (15 min: 09:15-09:30 IST) */
+export const ORB_INITIAL_BALANCE_MINUTES = 15;
+/** Minimum volume surge required for an ORB breakout entry (1.25x) */
+export const ORB_MIN_VOLUME_SURGE = 1.25;
 /** Minimum pause after a completed autonomous exit before the same symbol can re-enter. */
 export const EXIT_REENTRY_COOLDOWN_MS = 20 * 60 * 1000;
 /** Maximum rolling correlation permitted between an asset and existing portfolio (0.75) */
@@ -192,10 +198,10 @@ export const CHANDELIER_ATR_MULTIPLIER = 1.80;
 /** Tighter ATR multiplier for Chandelier runner protection (1.25x ATR) */
 export const CHANDELIER_RUNNER_TRAIL_ATR = 1.25;
 
-/** Maximum intraday MIS margin leverage multiplier for high-conviction breakouts */
-export const INTRADAY_MAX_MIS_LEVERAGE = 3.0;
-/** Active morning expansion liquid cash reserve floor (20.0% instead of 45.0%) */
-export const ACTIVE_MORNING_CASH_BUFFER_PCT = 20.0;
+/** Maximum intraday MIS margin leverage multiplier for high-conviction breakouts (4.5x under SEBI 5x framework) */
+export const INTRADAY_MAX_MIS_LEVERAGE = 4.5;
+/** Active morning expansion liquid cash reserve floor (15.0% instead of 45.0%) */
+export const ACTIVE_MORNING_CASH_BUFFER_PCT = 15.0;
 
 // ============================================================================
 // SCENARIO 10: Half-Kelly Volatility-Adaptive Capital Sizing

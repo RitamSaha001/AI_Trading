@@ -211,6 +211,7 @@ describe('Alpha Signal & Microstructure Engine', () => {
       realisticGrossProfit: 180,
       roundtripFriction: 20,
       realisticNetProfit: 160,
+      notional: 16000,
       history: Array.from({ length: 20 }, (_, index) => 100 + index * 2),
       regimeScenario: 'A_EXPANSION',
       ...overrides,

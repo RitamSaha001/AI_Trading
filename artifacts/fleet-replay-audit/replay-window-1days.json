@@ -1,7 +1,7 @@
 {
   "windowDays": 1,
-  "startDate": "2025-09-15",
-  "endDate": "2025-09-15",
+  "startDate": "2025-12-15",
+  "endDate": "2025-12-15",
   "profile": "balanced",
   "startingCapital": 40000,
   "endingNav": 40000,
@@ -21,7 +21,7 @@
   },
   "dailyBreakdown": [
     {
-      "date": "2025-09-15",
+      "date": "2025-12-15",
       "dayOfWeek": "Mon",
       "barsEvaluated": 375,
       "startingNav": 40000,
@@ -34,115 +34,196 @@
       "lossesCount": 0,
       "maxDrawdownPct": 0,
       "closedTrades": [],
-      "eventsCount": 12,
+      "eventsCount": 21,
       "events": [
         {
-          "minute": 1,
-          "timeStr": "2025-09-15T09:16:00+05:30",
-          "asset": "INFY",
+          "minute": 0,
+          "timeStr": "2025-12-15T09:15:00+05:30",
+          "asset": "HDFCBANK",
           "type": "VOLATILITY_SHOCK",
-          "price": 1509,
+          "price": 1001.2,
           "qty": 0,
           "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
         },
         {
-          "minute": 3,
-          "timeStr": "2025-09-15T09:18:00+05:30",
+          "minute": 0,
+          "timeStr": "2025-12-15T09:15:00+05:30",
+          "asset": "ICICIBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1367,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 0,
+          "timeStr": "2025-12-15T09:15:00+05:30",
           "asset": "SUNPHARMA",
           "type": "VOLATILITY_SHOCK",
-          "price": 1601.2,
+          "price": 1786.4,
           "qty": 0,
           "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
         },
         {
-          "minute": 8,
-          "timeStr": "2025-09-15T09:23:00+05:30",
-          "asset": "TATAMOTORS",
+          "minute": 5,
+          "timeStr": "2025-12-15T09:20:00+05:30",
+          "asset": "BEL",
           "type": "VOLATILITY_SHOCK",
-          "price": 720.05,
+          "price": 391.95,
           "qty": 0,
           "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
         },
         {
-          "minute": 11,
-          "timeStr": "2025-09-15T09:26:00+05:30",
-          "asset": "INFY",
+          "minute": 10,
+          "timeStr": "2025-12-15T09:25:00+05:30",
+          "asset": "HDFCBANK",
           "type": "VOLATILITY_SHOCK",
-          "price": 1506.5,
+          "price": 996.5,
           "qty": 0,
           "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
         },
         {
-          "minute": 13,
-          "timeStr": "2025-09-15T09:28:00+05:30",
+          "minute": 10,
+          "timeStr": "2025-12-15T09:25:00+05:30",
+          "asset": "ICICIBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1363.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2025-12-15T09:25:00+05:30",
           "asset": "SUNPHARMA",
           "type": "VOLATILITY_SHOCK",
-          "price": 1605.7,
+          "price": 1781.7,
           "qty": 0,
           "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
         },
         {
-          "minute": 18,
-          "timeStr": "2025-09-15T09:33:00+05:30",
-          "asset": "TATAMOTORS",
+          "minute": 15,
+          "timeStr": "2025-12-15T09:30:00+05:30",
+          "asset": "BEL",
           "type": "VOLATILITY_SHOCK",
-          "price": 719.6,
+          "price": 390.05,
           "qty": 0,
           "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
         },
         {
-          "minute": 21,
-          "timeStr": "2025-09-15T09:36:00+05:30",
-          "asset": "INFY",
+          "minute": 20,
+          "timeStr": "2025-12-15T09:35:00+05:30",
+          "asset": "HDFCBANK",
           "type": "VOLATILITY_SHOCK",
-          "price": 1506.8,
+          "price": 995.5,
           "qty": 0,
           "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
         },
         {
-          "minute": 23,
-          "timeStr": "2025-09-15T09:38:00+05:30",
+          "minute": 20,
+          "timeStr": "2025-12-15T09:35:00+05:30",
+          "asset": "ICICIBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1360.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2025-12-15T09:35:00+05:30",
           "asset": "SUNPHARMA",
           "type": "VOLATILITY_SHOCK",
-          "price": 1604.1,
+          "price": 1780.3,
           "qty": 0,
           "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
         },
         {
-          "minute": 28,
-          "timeStr": "2025-09-15T09:43:00+05:30",
-          "asset": "TATAMOTORS",
-          "type": "VOLATILITY_SHOCK",
-          "price": 717.3,
-          "qty": 0,
-          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
-        },
-        {
-          "minute": 41,
-          "timeStr": "2025-09-15T09:56:00+05:30",
-          "asset": "LT",
+          "minute": 22,
+          "timeStr": "2025-12-15T09:37:00+05:30",
+          "asset": "BHARTIARTL",
           "type": "SKIPPED",
-          "price": 3601.9,
+          "price": 2071.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹192.00). Standing aside in cash."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2025-12-15T09:40:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 390.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2025-12-15T09:42:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "SKIPPED",
+          "price": 2071.1,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹192.00). Standing aside in cash."
+        },
+        {
+          "minute": 156,
+          "timeStr": "2025-12-15T11:51:00+05:30",
+          "asset": "SBIN",
+          "type": "SKIPPED",
+          "price": 966.5,
           "qty": 0,
           "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
         },
         {
-          "minute": 46,
-          "timeStr": "2025-09-15T10:01:00+05:30",
-          "asset": "LT",
+          "minute": 161,
+          "timeStr": "2025-12-15T11:56:00+05:30",
+          "asset": "SBIN",
           "type": "SKIPPED",
-          "price": 3606.3,
+          "price": 966.15,
           "qty": 0,
           "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
         },
         {
-          "minute": 57,
-          "timeStr": "2025-09-15T10:12:00+05:30",
-          "asset": "LT",
+          "minute": 166,
+          "timeStr": "2025-12-15T12:01:00+05:30",
+          "asset": "SBIN",
           "type": "SKIPPED",
-          "price": 3602.6,
+          "price": 968.7,
           "qty": 0,
           "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 171,
+          "timeStr": "2025-12-15T12:06:00+05:30",
+          "asset": "SBIN",
+          "type": "SKIPPED",
+          "price": 967.95,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 176,
+          "timeStr": "2025-12-15T12:11:00+05:30",
+          "asset": "SBIN",
+          "type": "SKIPPED",
+          "price": 967.45,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 205,
+          "timeStr": "2025-12-15T12:40:00+05:30",
+          "asset": "SBIN",
+          "type": "SKIPPED",
+          "price": 966.45,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 266,
+          "timeStr": "2025-12-15T13:41:00+05:30",
+          "asset": "SBIN",
+          "type": "SKIPPED",
+          "price": 967.35,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹192.00). Standing aside in cash."
         }
       ]
     }

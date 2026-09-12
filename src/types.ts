@@ -1,8 +1,19 @@
 export const INDIAN_ASSETS = [
   'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'BHARTIARTL',
   'ITC', 'KOTAKBANK', 'LT', 'TATAMOTORS', 'AXISBANK', 'MARUTI', 'SUNPHARMA',
-  'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC',
-  'HAL', 'BEL', 'TATASTEEL',
+  'TITAN', 'BAJFINANCE', 'HINDUNILVR', 'WIPRO', 'NTPC', 'ONGC', 'HAL',
+  'BEL', 'TATASTEEL', 'INDUSINDBK', 'BANKBARODA', 'PNB', 'CANBK', 'UNIONBANK',
+  'IDFCFIRSTB', 'FEDERALBNK', 'BAJAJFINSV', 'CHOLAFIN', 'SHRIRAMFIN', 'JIOFIN', 'MUTHOOTFIN',
+  'HCLTECH', 'TECHM', 'LTM', 'PERSISTENT', 'COFORGE', 'LTTS', 'MPHASIS',
+  'TATAELXSI', 'KPITTECH', 'POWERGRID', 'COALINDIA', 'BPCL', 'IOC', 'GAIL',
+  'ADANIGREEN', 'ADANIPOWER', 'TATAPOWER', 'NHPC', 'M&M', 'BAJAJ-AUTO', 'EICHERMOT',
+  'HEROMOTOCO', 'TVSMOTOR', 'BHARATFORG', 'MOTHERSON', 'BOSCHLTD', 'MRF', 'NESTLEIND',
+  'BRITANNIA', 'TATACONSUM', 'VBL', 'GODREJCP', 'DABUR', 'MARICO', 'COLPAL',
+  'CIPLA', 'DRREDDY', 'DIVISLAB', 'APOLLOHOSP', 'MANKIND', 'TORNTPHARM', 'LUPIN',
+  'ZYDUSLIFE', 'AUROPHARMA', 'JSWSTEEL', 'HINDALCO', 'VEDL', 'JINDALSTEL', 'NMDC',
+  'SAIL', 'SIEMENS', 'ABB', 'BHEL', 'HAVELLS', 'POLYCAB', 'TRENT',
+  'DMART', 'INDHOTEL', 'ASIANPAINT', 'BERGEPAINT', 'ULTRACEMCO', 'GRASIM', 'AMBUJACEM',
+  'SHREECEM', 'PIDILITIND',
 ] as const;
 export type IndianAsset = typeof INDIAN_ASSETS[number];
 
@@ -69,6 +80,7 @@ export type Market = {
   volume24h: number;
   history: number[];
   candles: Candle[];
+  intradayCandles?: Candle[];
   source: DataSource;
   isSynthetic: boolean;
   lastUpdated: number;
@@ -598,7 +610,13 @@ export type PilotStrategyKind =
   | 'Hurst Trend Rider'
   | 'OU Mean Reversion'
   | 'Titan Alpha Sentinel'
-  | 'Value Accumulator';
+  | 'Value Accumulator'
+  | 'ORB Breakdown'
+  | 'VWAP Rejection Short'
+  | 'Momentum Scalper'
+  | 'Candle Price Action'
+  | 'VWAP Band Mean Reversion'
+  | 'Afternoon Momentum Surge';
 
 export type FleetAssetLifecycle =
   | 'MONITORING'

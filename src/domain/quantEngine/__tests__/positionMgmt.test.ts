@@ -10,16 +10,16 @@ import { Candle, Market } from '../../../types';
 
 describe('Phase 4: Defensive Position Management & Scenario Gates', () => {
   describe('Scenario 2: Multi-Stage Profit Ratchet & Level 0.5 Micro-Shield', () => {
-    it('activates Level 0.5 Fee-Breakeven Shield at +0.75 ATR', () => {
+    it('activates Level 0.5 Fee-Breakeven Shield at +0.85 ATR', () => {
       // Entry: ₹2,266.80, ATR: ₹18.00, Initial Stop: ₹2,221.80 (-2.5 ATR)
       // Roundtrip friction per share: ₹8.60 (Delivery)
-      // +0.75 ATR is +₹13.50 -> Price reaches ₹2,281.00 (+₹14.20 gain)
+      // +0.85 ATR is +₹15.30 -> Price reaches ₹2,283.00 (+₹16.20 gain)
       const entryPrice = 2266.80;
       const atr = 18.00;
       const initialStop = 2221.80;
       const frictionPerShare = 8.60;
 
-      const currentPrice = 2281.00; // Above entry + friction (2275.45) with breathing room
+      const currentPrice = 2283.00; // Above entry + friction (2275.55) with 0.40 ATR breathing room
       const res = calculateDynamicProfitRatchet(
         entryPrice,
         currentPrice,
@@ -35,16 +35,16 @@ describe('Phase 4: Defensive Position Management & Scenario Gates', () => {
       expect(res.ratchetedStopPrice).toBe(2275.55);
     });
 
-    it('TCS Regression Replay: Protects against afternoon reversal after +0.75 ATR gain', () => {
+    it('TCS Regression Replay: Protects against afternoon reversal after +0.85 ATR gain', () => {
       const entryPrice = 2266.80;
       const atr = 18.00;
       const initialStop = 2248.90;
       const frictionPerShare = 8.60;
 
-      // Peak price reached during mid-day: ₹2,281.00 (+0.79 ATR)
+      // Peak price reached during mid-day: ₹2,283.00 (+0.90 ATR)
       const peakRes = calculateDynamicProfitRatchet(
         entryPrice,
-        2281.00,
+        2283.00,
         atr,
         initialStop,
         0.05,
@@ -54,30 +54,30 @@ describe('Phase 4: Defensive Position Management & Scenario Gates', () => {
       expect(peakRes.ratchetedStopPrice).toBe(2275.55);
 
       // Price later drops to ₹2,260.00 in late afternoon
-      // The ratcheted stop (2275.45) triggers when price crosses 2275.45,
+      // The ratcheted stop (2275.55) triggers when price crosses 2275.55,
       // exiting with zero net loss rather than riding down to 2260 (-₹70 net loss)
       expect(peakRes.ratchetedStopPrice).toBeGreaterThan(2260.00);
       expect(peakRes.ratchetedStopPrice).toBeGreaterThan(entryPrice);
     });
 
-    it('locks +0.35 ATR at Level 1 (+1.00 ATR)', () => {
+    it('locks +0.50 ATR at Level 1 (+1.00 ATR)', () => {
       const entry = 1000;
       const atr = 20;
       const current = 1021; // +1.05 ATR
       const res = calculateDynamicProfitRatchet(entry, current, atr, 970, 0.05, 2.0);
 
       expect(res.stageName).toBe('STEPPED_BREAKEVEN');
-      expect(res.ratchetedStopPrice).toBe(1007); // 1000 + 20 * 0.35
+      expect(res.ratchetedStopPrice).toBe(1010); // 1000 + 20 * 0.50
     });
 
-    it('locks +0.75 ATR at Level 2 (+1.40 ATR)', () => {
+    it('locks +0.85 ATR at Level 2 (+1.40 ATR)', () => {
       const entry = 1000;
       const atr = 20;
       const current = 1030; // +1.50 ATR
-      const res = calculateDynamicProfitRatchet(entry, current, atr, 1007, 0.05, 2.0);
+      const res = calculateDynamicProfitRatchet(entry, current, atr, 1010, 0.05, 2.0);
 
       expect(res.stageName).toBe('LOCKED_PROFIT_T1');
-      expect(res.ratchetedStopPrice).toBe(1015); // 1000 + 20 * 0.75
+      expect(res.ratchetedStopPrice).toBe(1017); // 1000 + 20 * 0.85
     });
   });
 
@@ -125,7 +125,7 @@ describe('Phase 4: Defensive Position Management & Scenario Gates', () => {
   });
 
   describe('Scenario 7: Dead Trade Stagnancy Exit', () => {
-    it('triggers exit after 90 mins when price range < 0.25 ATR and volume fading', () => {
+    it('triggers exit after 60 mins when price range < 0.25 ATR and volume fading', () => {
       const entry = 2250;
       const current = 2251; // 1 pt move on ATR 10 = 0.10 ATR
       const atr = 10;

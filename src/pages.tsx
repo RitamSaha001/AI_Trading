@@ -8,6 +8,7 @@ import { AutonomousQuantPilot } from './components/AutonomousQuantPilot';
 import { UpstoxTradeAnalytics } from './components/UpstoxTradeAnalytics';
 import { UpstoxPortfolioAnalytics } from './components/UpstoxPortfolioAnalytics';
 import { evaluateMarketOpportunity, isMarketSessionOpen } from './domain/autonomousPilot';
+import { getAssetSector } from './domain/quantEngine';
 import {
   indicators,
   money,
@@ -798,7 +799,21 @@ export function Markets() {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [pageSize, setPageSize] = useState<number>(36);
 
-  const categories = ['All', 'Banking', 'IT', 'Energy', 'Auto', 'Pharma', 'FMCG', 'Watchlist'];
+  const categories = [
+    'All',
+    'Banking',
+    'IT',
+    'Energy',
+    'Auto',
+    'Pharma',
+    'FMCG',
+    'Metals',
+    'Infrastructure',
+    'Defence',
+    'Retail',
+    'Cement',
+    'Watchlist',
+  ];
 
   const filtered = INDIAN_ASSETS.filter((a) => {
     const m = markets[a];
@@ -811,7 +826,9 @@ export function Markets() {
       return state.watchlist.includes(a);
     }
     if (category !== 'All') {
-      return meta?.category === category;
+      const sec = getAssetSector(a);
+      if (category === 'Retail') return sec === 'Retail' || sec === 'Consumer Services & Retail';
+      return sec.toLowerCase() === category.toLowerCase();
     }
     return true;
   }).sort((a, b) => {
@@ -868,7 +885,11 @@ export function Markets() {
             ? INDIAN_ASSETS.length 
             : cat === 'Watchlist' 
             ? state.watchlist.filter((w) => isIndianAsset(w)).length 
-            : INDIAN_ASSETS.filter((a) => META[a]?.category === cat).length;
+            : INDIAN_ASSETS.filter((a) => {
+                const sec = getAssetSector(a);
+                if (cat === 'Retail') return sec === 'Retail' || sec === 'Consumer Services & Retail';
+                return sec.toLowerCase() === cat.toLowerCase();
+              }).length;
 
           return (
             <button

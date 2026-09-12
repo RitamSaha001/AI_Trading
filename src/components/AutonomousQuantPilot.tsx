@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Cpu,
   Zap,
@@ -20,6 +20,7 @@ import {
   Filter,
   Shield,
   Layers,
+  Search,
 } from 'lucide-react';
 import { useLumen } from '../store';
 import {
@@ -63,8 +64,40 @@ export function AutonomousQuantPilot() {
   const opportunities = autonomousPilot?.activeOpportunities || [];
   const activeFleet = autonomousPilot?.activeFleet || initializeFleetStatus();
   const rateLimitStatus = autonomousPilot?.rateLimitStatus || createDefaultRateLimitStatus();
+  const [fleetSectorFilter, setFleetSectorFilter] = useState<string>('ALL');
+  const [fleetSearchQuery, setFleetSearchQuery] = useState<string>('');
   const [logFilterCategory, setLogFilterCategory] = useState<'all' | 'trades' | 'ratchets' | 'risk' | 'system'>('all');
   const [logSelectedAsset, setLogSelectedAsset] = useState<string>('ALL');
+
+  const fleetSectors = useMemo(() => {
+    const sectors = new Set<string>();
+    for (const asset of UPSTOX_FLEET_ASSETS) {
+      const fleetItem = activeFleet[asset];
+      if (fleetItem?.sector) sectors.add(fleetItem.sector);
+    }
+    return ['ALL', ...Array.from(sectors).sort()];
+  }, [activeFleet]);
+
+  const filteredFleetAssets = useMemo(() => {
+    return UPSTOX_FLEET_ASSETS.filter((asset) => {
+      const meta = META[asset];
+      const fleetItem = activeFleet[asset];
+      const sector = fleetItem?.sector || 'Equities';
+
+      if (fleetSectorFilter !== 'ALL' && sector.toLowerCase() !== fleetSectorFilter.toLowerCase()) {
+        return false;
+      }
+
+      if (fleetSearchQuery.trim()) {
+        const query = fleetSearchQuery.toLowerCase().trim();
+        const matchesSymbol = asset.toLowerCase().includes(query);
+        const matchesName = meta?.name?.toLowerCase().includes(query);
+        if (!matchesSymbol && !matchesName) return false;
+      }
+
+      return true;
+    });
+  }, [fleetSectorFilter, fleetSearchQuery, activeFleet]);
 
   const actionLogs = autonomousPilot?.actionLogs || [];
 
@@ -192,7 +225,7 @@ export function AutonomousQuantPilot() {
                 Autonomous Quantitative Desk
               </h2>
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 border border-zinc-200">
-                10 Nifty Bluechips
+                {UPSTOX_FLEET_ASSETS.length} Nifty 100 Equities
               </span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
                 isEnabled
@@ -355,7 +388,7 @@ export function AutonomousQuantPilot() {
                 Armed in Standby &bull; Capital Safeguarded
               </span>
               <p className="text-xs text-blue-700 mt-0.5">
-                Indian markets (NSE) are closed. All 10 bluechip models and Half-Kelly sizing circuits are armed in standby. No live orders will be routed tonight. Execution begins at <strong>09:15 AM IST tomorrow</strong>.
+                Indian markets (NSE) are closed. All {UPSTOX_FLEET_ASSETS.length} equity models and Half-Kelly sizing circuits are armed in standby. No live orders will be routed tonight. Execution begins at <strong>09:15 AM IST tomorrow</strong>.
               </p>
             </div>
           </div>
@@ -650,13 +683,50 @@ export function AutonomousQuantPilot() {
       {/* 5. TAB 1: ACTIVE MODEL FLEET */}
       {activeTab === 'fleet' && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs text-zinc-500 px-1">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-xs text-zinc-500 px-1">
             <span>
-              Autonomous desk monitoring <strong>10 liquid Indian Bluechips</strong> via local statistical models
+              Autonomous desk monitoring <strong>{UPSTOX_FLEET_ASSETS.length} Liquid Equities (NIFTY 100)</strong> across {fleetSectors.length - 1} sectors
             </span>
             <span className="text-[11px] text-zinc-400">
               Authoritative Upstox Quotes &bull; Zero Heuristic Jitter
             </span>
+          </div>
+
+          {/* Fleet Sector Filters & Fast Search */}
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              {fleetSectors.map((sec) => {
+                const count = sec === 'ALL'
+                  ? UPSTOX_FLEET_ASSETS.length
+                  : UPSTOX_FLEET_ASSETS.filter((a) => (activeFleet[a]?.sector || 'Equities').toLowerCase() === sec.toLowerCase()).length;
+                const isSecActive = fleetSectorFilter.toLowerCase() === sec.toLowerCase();
+                return (
+                  <button
+                    key={sec}
+                    type="button"
+                    onClick={() => setFleetSectorFilter(sec)}
+                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all shrink-0 cursor-pointer ${
+                      isSecActive
+                        ? 'bg-zinc-900 text-white shadow-2xs'
+                        : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                    }`}
+                  >
+                    {sec === 'ALL' ? 'All Sectors' : sec} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="relative shrink-0 sm:w-64">
+              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder={`Search ${UPSTOX_FLEET_ASSETS.length} equities...`}
+                value={fleetSearchQuery}
+                onChange={(e) => setFleetSearchQuery(e.target.value)}
+                className="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-black/[0.08] rounded-xl outline-hidden focus:border-zinc-400 shadow-2xs"
+              />
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-black/[0.06] bg-white/80 shadow-2xs">
@@ -673,7 +743,14 @@ export function AutonomousQuantPilot() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/[0.04]">
-                {UPSTOX_FLEET_ASSETS.map((asset) => {
+                {filteredFleetAssets.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-zinc-500 text-xs">
+                      No equities found matching "{fleetSearchQuery}" in {fleetSectorFilter === 'ALL' ? 'any sector' : fleetSectorFilter}.
+                    </td>
+                  </tr>
+                )}
+                {filteredFleetAssets.map((asset) => {
                   const meta = META[asset];
                   const mkt = markets[asset];
                   const fleetItem = activeFleet[asset];
@@ -1078,7 +1155,7 @@ export function AutonomousQuantPilot() {
               <p className="text-xs text-zinc-500 max-w-sm mx-auto">
                 {actionLogs.length === 0
                   ? (isEnabled
-                    ? 'The engine is scanning the 10 bluechip fleet. When market setups qualify, entries, trailing ratchets, and profit harvests will be recorded here.'
+                    ? `The engine is scanning the ${UPSTOX_FLEET_ASSETS.length}-stock fleet across all sectors. When market setups qualify, entries, trailing ratchets, and profit harvests will be recorded here.`
                     : 'Autopilot is currently idle. Click "Engage Autopilot" to activate multi-factor quantitative scanning.')
                   : 'Try selecting "All" or choosing another asset to see your logged actions.'}
               </p>

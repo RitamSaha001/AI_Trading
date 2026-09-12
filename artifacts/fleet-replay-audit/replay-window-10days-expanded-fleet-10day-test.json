@@ -1,0 +1,1699 @@
+{
+  "windowDays": 10,
+  "startDate": "2026-08-28",
+  "endDate": "2026-09-10",
+  "profile": "balanced",
+  "startingCapital": 40000,
+  "endingNav": 39911.5341625,
+  "totalNetPnl": -88.4658374999999,
+  "totalNetReturnPct": -0.22116459374999978,
+  "maxWindowDrawdownPct": 0.31130015664008837,
+  "totalFeeBurn": 18.1158375,
+  "totalTrades": 3,
+  "totalWins": 1,
+  "totalLosses": 2,
+  "winRatePct": 33.33333333333333,
+  "profitFactor": 0.33054284383306914,
+  "dailyDistribution": {
+    "greenDays": 1,
+    "flatDays": 8,
+    "redDays": 1
+  },
+  "dailyBreakdown": [
+    {
+      "date": "2026-08-28",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 18,
+      "events": [
+        {
+          "minute": 0,
+          "timeStr": "2026-08-28T09:15:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "SKIPPED",
+          "price": 1070.5,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 4,
+          "timeStr": "2026-08-28T09:19:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1909.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 5,
+          "timeStr": "2026-08-28T09:20:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "SKIPPED",
+          "price": 1067.5,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 6,
+          "timeStr": "2026-08-28T09:21:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2000.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 8,
+          "timeStr": "2026-08-28T09:23:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2312.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 8,
+          "timeStr": "2026-08-28T09:23:00+05:30",
+          "asset": "KOTAKBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 421.45,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2026-08-28T09:25:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "SKIPPED",
+          "price": 1070.8,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2026-08-28T09:29:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1913.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-08-28T09:30:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "SKIPPED",
+          "price": 1068.7,
+          "qty": 0,
+          "detail": "[Value Accumulator] TCA Friction Hurdle: Realistic intraday gain ₹77.40 leaves less than dynamic floor ₹60.00 after ₹34.82 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-08-28T09:31:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2005.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-08-28T09:33:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2325,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-08-28T09:33:00+05:30",
+          "asset": "KOTAKBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 423.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-08-28T09:36:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1078.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-08-28T09:39:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1909.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-08-28T09:41:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2006.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-08-28T09:43:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2331.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-08-28T09:43:00+05:30",
+          "asset": "KOTAKBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 424.55,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 235,
+          "timeStr": "2026-08-28T13:10:00+05:30",
+          "asset": "INFY",
+          "type": "SKIPPED",
+          "price": 1143.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        }
+      ]
+    },
+    {
+      "date": "2026-08-31",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 21,
+      "events": [
+        {
+          "minute": 0,
+          "timeStr": "2026-08-31T09:15:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 2,
+          "timeStr": "2026-08-31T09:17:00+05:30",
+          "asset": "NTPC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 325.65,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 3,
+          "timeStr": "2026-08-31T09:18:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 182.77,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2026-08-31T09:25:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1120.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-08-31T09:27:00+05:30",
+          "asset": "NTPC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 325,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-08-31T09:28:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 182.27,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2026-08-31T09:35:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1112.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-08-31T09:37:00+05:30",
+          "asset": "NTPC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 328.15,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-08-31T09:38:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 181.98,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-08-31T09:41:00+05:30",
+          "asset": "TITAN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5093.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 202,
+          "timeStr": "2026-08-31T12:37:00+05:30",
+          "asset": "ICICIBANK",
+          "type": "SKIPPED",
+          "price": 1433.5,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 207,
+          "timeStr": "2026-08-31T12:42:00+05:30",
+          "asset": "ICICIBANK",
+          "type": "SKIPPED",
+          "price": 1434.6,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.00). Standing aside in cash."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "RELIANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1277,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2399.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "SBIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1060,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1811.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "ITC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 255.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 308.85,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "AXISBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1300,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1984.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-08-31T15:29:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1967.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-01",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40036.1668125,
+      "netPnl": 36.16681249999965,
+      "netReturnPct": 0.09041703124999913,
+      "feeBurn": 6.0831875,
+      "tradesCount": 1,
+      "winsCount": 1,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.13082736012982876,
+      "closedTrades": [
+        {
+          "day": "2026-09-01",
+          "asset": "TATASTEEL",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]",
+          "entryTime": "11:14:00 am",
+          "exitTime": "11:18:00 am",
+          "entryPrice": 186.85,
+          "exitPrice": 187.5,
+          "quantity": 65,
+          "pnl": 39.20312500000037,
+          "pnlPct": 0.34787262510035094,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 14,
+      "events": [
+        {
+          "minute": 7,
+          "timeStr": "2026-09-01T09:22:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1053.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-01T09:32:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1054.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-01T09:37:00+05:30",
+          "asset": "TITAN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5044,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-01T09:42:00+05:30",
+          "asset": "BAJFINANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1052.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 117,
+          "timeStr": "2026-09-01T11:12:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ENTRY_QUEUED",
+          "price": 186.85,
+          "qty": 65,
+          "detail": "Queued Limit BUY 65 @ ₹186.85 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]] SL: ₹184.70 TP: ₹189.00"
+        },
+        {
+          "minute": 119,
+          "timeStr": "2026-09-01T11:14:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ORDER_FILLED",
+          "price": 186.85,
+          "qty": 65,
+          "detail": "Limit Buy FILLED for 65 shs @ ₹186.85 (Limit was ₹186.85). Fee: ₹3.04"
+        },
+        {
+          "minute": 123,
+          "timeStr": "2026-09-01T11:18:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "PROFIT_HARVEST",
+          "price": 187.5,
+          "qty": 65,
+          "detail": "Trailing Ratchet Stop Triggered on 65 shs @ ₹187.50: P&L +₹39.20 (0.35%)"
+        },
+        {
+          "minute": 124,
+          "timeStr": "2026-09-01T11:19:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "SKIPPED",
+          "price": 187.07,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate TATASTEEL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 129,
+          "timeStr": "2026-09-01T11:24:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "SKIPPED",
+          "price": 186.25,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate TATASTEEL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 134,
+          "timeStr": "2026-09-01T11:29:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "SKIPPED",
+          "price": 186.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate TATASTEEL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 202,
+          "timeStr": "2026-09-01T12:37:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 4032,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.06). Standing aside in cash."
+        },
+        {
+          "minute": 207,
+          "timeStr": "2026-09-01T12:42:00+05:30",
+          "asset": "LT",
+          "type": "SKIPPED",
+          "price": 4032.6,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.06). Standing aside in cash."
+        },
+        {
+          "minute": 260,
+          "timeStr": "2026-09-01T13:35:00+05:30",
+          "asset": "INFY",
+          "type": "SKIPPED",
+          "price": 1153.5,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate INFY is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 265,
+          "timeStr": "2026-09-01T13:40:00+05:30",
+          "asset": "INFY",
+          "type": "SKIPPED",
+          "price": 1151.6,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate INFY is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-02",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40036.1668125,
+      "endingNav": 40036.1668125,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 19,
+      "events": [
+        {
+          "minute": 3,
+          "timeStr": "2026-09-02T09:18:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1935.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 4,
+          "timeStr": "2026-09-02T09:19:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1119.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 6,
+          "timeStr": "2026-09-02T09:21:00+05:30",
+          "asset": "HAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4717.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2026-09-02T09:22:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 702.45,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.06). Standing aside in cash."
+        },
+        {
+          "minute": 8,
+          "timeStr": "2026-09-02T09:23:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2306,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-02T09:27:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 703.8,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹64.06). Standing aside in cash."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-09-02T09:28:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1945.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2026-09-02T09:29:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1129.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-09-02T09:31:00+05:30",
+          "asset": "HAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4726.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-02T09:32:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 702.35,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹192.17). Standing aside in cash."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-09-02T09:33:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2333.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2026-09-02T09:35:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 237.7,
+          "qty": 0,
+          "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹84.92 leaves less than dynamic floor ₹60.00 after ₹33.55 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-09-02T09:38:00+05:30",
+          "asset": "SUNPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1936.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-02T09:39:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1136.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-02T09:40:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 238.4,
+          "qty": 0,
+          "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹84.92 leaves less than dynamic floor ₹60.00 after ₹33.64 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-09-02T09:41:00+05:30",
+          "asset": "ONGC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 238.97,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-09-02T09:41:00+05:30",
+          "asset": "HAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4728.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-09-02T09:41:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 704.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: No candidates cleared the dynamic net profit floor (₹192.17). Standing aside in cash."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-02T09:43:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2345.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-03",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 40036.1668125,
+      "endingNav": 40036.1668125,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 9,
+      "events": [
+        {
+          "minute": 2,
+          "timeStr": "2026-09-03T09:17:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1132.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2026-09-03T09:24:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2321.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-03T09:27:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1125.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2026-09-03T09:29:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 187.16,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2026-09-03T09:34:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2326.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-03T09:37:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1128,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-03T09:39:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 186.36,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-09-03T09:41:00+05:30",
+          "asset": "AXISBANK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1276.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-03T09:44:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2329.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-04",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 40036.1668125,
+      "endingNav": 40036.1668125,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 18,
+      "events": [
+        {
+          "minute": 2,
+          "timeStr": "2026-09-04T09:17:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2358.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 2,
+          "timeStr": "2026-09-04T09:17:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1145.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-04T09:27:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2340.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-04T09:27:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1141.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-04T09:37:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2329,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-04T09:37:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1138.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 38,
+          "timeStr": "2026-09-04T09:53:00+05:30",
+          "asset": "RELIANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1331.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 42,
+          "timeStr": "2026-09-04T09:57:00+05:30",
+          "asset": "HAL",
+          "type": "SKIPPED",
+          "price": 4908,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate HAL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 47,
+          "timeStr": "2026-09-04T10:02:00+05:30",
+          "asset": "HAL",
+          "type": "SKIPPED",
+          "price": 4903.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate HAL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 48,
+          "timeStr": "2026-09-04T10:03:00+05:30",
+          "asset": "RELIANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1326,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 53,
+          "timeStr": "2026-09-04T10:08:00+05:30",
+          "asset": "HAL",
+          "type": "SKIPPED",
+          "price": 4897.25,
+          "qty": 0,
+          "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹110.95 leaves less than dynamic floor ₹60.00 after ₹39.88 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 58,
+          "timeStr": "2026-09-04T10:13:00+05:30",
+          "asset": "RELIANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1326.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 58,
+          "timeStr": "2026-09-04T10:13:00+05:30",
+          "asset": "HAL",
+          "type": "SKIPPED",
+          "price": 4897.55,
+          "qty": 0,
+          "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹110.95 leaves less than dynamic floor ₹60.00 after ₹39.89 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 111,
+          "timeStr": "2026-09-04T11:06:00+05:30",
+          "asset": "HAL",
+          "type": "SKIPPED",
+          "price": 4909.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate HAL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 234,
+          "timeStr": "2026-09-04T13:09:00+05:30",
+          "asset": "HAL",
+          "type": "SKIPPED",
+          "price": 4932.7,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate HAL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 239,
+          "timeStr": "2026-09-04T13:14:00+05:30",
+          "asset": "HAL",
+          "type": "SKIPPED",
+          "price": 4921.9,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate HAL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 267,
+          "timeStr": "2026-09-04T13:42:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ENTRY_QUEUED",
+          "price": 186.5,
+          "qty": 65,
+          "detail": "Queued Limit BUY 65 @ ₹186.50 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:49]] SL: ₹184.55 TP: ₹188.45"
+        },
+        {
+          "minute": 269,
+          "timeStr": "2026-09-04T13:44:00+05:30",
+          "asset": "HAL",
+          "type": "SKIPPED",
+          "price": 4920,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate HAL is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-07",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40036.1668125,
+      "endingNav": 40036.1668125,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 6,
+      "events": [
+        {
+          "minute": 1,
+          "timeStr": "2026-09-07T09:16:00+05:30",
+          "asset": "ONGC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 234.37,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2026-09-07T09:22:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 187.25,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2026-09-07T09:26:00+05:30",
+          "asset": "ONGC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 233.81,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-07T09:32:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 186.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-07T09:36:00+05:30",
+          "asset": "ONGC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 233.75,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-07T09:42:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 186.86,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-08",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40036.1668125,
+      "endingNav": 40036.1668125,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 7,
+      "events": [
+        {
+          "minute": 1,
+          "timeStr": "2026-09-08T09:16:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1081.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2026-09-08T09:22:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 302.95,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2026-09-08T09:26:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1082.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-08T09:32:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 303.85,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-08T09:36:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1085,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-08T09:37:00+05:30",
+          "asset": "HAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5008.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-08T09:42:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 304.05,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-09",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40036.1668125,
+      "endingNav": 39911.5341625,
+      "netPnl": -124.63264999999956,
+      "netReturnPct": -0.31130015664008837,
+      "feeBurn": 12.03265,
+      "tradesCount": 2,
+      "winsCount": 0,
+      "lossesCount": 2,
+      "maxDrawdownPct": 0.6441972253642997,
+      "closedTrades": [
+        {
+          "day": "2026-09-09",
+          "asset": "TATASTEEL",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]",
+          "entryTime": "10:48:00 am",
+          "exitTime": "12:18:00 pm",
+          "entryPrice": 187.9,
+          "exitPrice": 187.8,
+          "quantity": 64,
+          "pnl": -9.404799999999636,
+          "pnlPct": -0.053219797764765465,
+          "exitReason": "Dead Trade Stagnancy Exit: Position active for 90 mins within +/-0.05 ATR with fading volume (0.06x avg). Liquidating to free capital."
+        },
+        {
+          "day": "2026-09-09",
+          "asset": "NTPC",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:64]",
+          "entryTime": "9:45:00 am",
+          "exitTime": "12:19:00 pm",
+          "entryPrice": 336,
+          "exitPrice": 333.05,
+          "quantity": 36,
+          "pnl": -109.19744999999959,
+          "pnlPct": -0.877976190476187,
+          "exitReason": "Stop Loss Triggered"
+        }
+      ],
+      "eventsCount": 27,
+      "events": [
+        {
+          "minute": 1,
+          "timeStr": "2026-09-09T09:16:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2207.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 1,
+          "timeStr": "2026-09-09T09:16:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1044.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 2,
+          "timeStr": "2026-09-09T09:17:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1816.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 5,
+          "timeStr": "2026-09-09T09:20:00+05:30",
+          "asset": "LT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3996.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2026-09-09T09:26:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2201.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2026-09-09T09:26:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1045.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-09T09:27:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1823.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-09-09T09:28:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 238.2,
+          "qty": 0,
+          "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹88.40 leaves less than dynamic floor ₹60.00 after ₹33.62 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-09-09T09:30:00+05:30",
+          "asset": "LT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4015,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-09-09T09:33:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 237.7,
+          "qty": 0,
+          "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹88.40 leaves less than dynamic floor ₹60.00 after ₹33.55 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-09T09:36:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2202.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-09T09:36:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1047.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-09T09:37:00+05:30",
+          "asset": "BHARTIARTL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1823.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-09-09T09:38:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 237.4,
+          "qty": 0,
+          "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹88.40 leaves less than dynamic floor ₹60.00 after ₹33.51 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-09T09:39:00+05:30",
+          "asset": "SBIN",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1005.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-09T09:40:00+05:30",
+          "asset": "LT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4005.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-09T09:43:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 237.35,
+          "qty": 0,
+          "detail": "[Hurst Trend Rider] TCA Friction Hurdle: Realistic intraday gain ₹88.40 leaves less than dynamic floor ₹60.00 after ₹33.50 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-09T09:44:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1955.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-09T09:44:00+05:30",
+          "asset": "NTPC",
+          "type": "ENTRY_QUEUED",
+          "price": 336,
+          "qty": 36,
+          "detail": "Queued Limit BUY 36 @ ₹336.00 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:64]] SL: ₹333.05 TP: ₹338.95"
+        },
+        {
+          "minute": 30,
+          "timeStr": "2026-09-09T09:45:00+05:30",
+          "asset": "NTPC",
+          "type": "ORDER_FILLED",
+          "price": 336,
+          "qty": 36,
+          "detail": "Limit Buy FILLED for 36 shs @ ₹336.00 (Limit was ₹336.00). Fee: ₹3.02"
+        },
+        {
+          "minute": 88,
+          "timeStr": "2026-09-09T10:43:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ENTRY_QUEUED",
+          "price": 187.9,
+          "qty": 64,
+          "detail": "Queued Limit BUY 64 @ ₹187.90 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]] SL: ₹185.50 TP: ₹190.30"
+        },
+        {
+          "minute": 93,
+          "timeStr": "2026-09-09T10:48:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ORDER_FILLED",
+          "price": 187.9,
+          "qty": 64,
+          "detail": "Limit Buy FILLED for 64 shs @ ₹187.90 (Limit was ₹187.90). Fee: ₹3.01"
+        },
+        {
+          "minute": 183,
+          "timeStr": "2026-09-09T12:18:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "STOP_LOSS_EXIT",
+          "price": 187.8,
+          "qty": 64,
+          "detail": "Dead Trade Stagnancy Exit: Position active for 90 mins within +/-0.05 ATR with fading volume (0.06x avg). Liquidating to free capital. on 64 shs @ ₹187.80: P&L ₹-9.40 (-0.05%)"
+        },
+        {
+          "minute": 184,
+          "timeStr": "2026-09-09T12:19:00+05:30",
+          "asset": "NTPC",
+          "type": "STOP_LOSS_EXIT",
+          "price": 333.05,
+          "qty": 36,
+          "detail": "Stop Loss Triggered on 36 shs @ ₹333.05: P&L ₹-109.20 (-0.88%)"
+        },
+        {
+          "minute": 190,
+          "timeStr": "2026-09-09T12:25:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 237.09,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate ONGC is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 195,
+          "timeStr": "2026-09-09T12:30:00+05:30",
+          "asset": "ONGC",
+          "type": "SKIPPED",
+          "price": 236.91,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate ONGC is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 263,
+          "timeStr": "2026-09-09T13:38:00+05:30",
+          "asset": "NTPC",
+          "type": "SKIPPED",
+          "price": 335.65,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate NTPC is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 39911.5341625,
+      "endingNav": 39911.5341625,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 18,
+      "events": [
+        {
+          "minute": 0,
+          "timeStr": "2026-09-10T09:15:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 403.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 4,
+          "timeStr": "2026-09-10T09:19:00+05:30",
+          "asset": "ONGC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 239.79,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2026-09-10T09:25:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 404.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2026-09-10T09:29:00+05:30",
+          "asset": "ONGC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 238.85,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-09-10T09:30:00+05:30",
+          "asset": "HAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4969.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-10T09:32:00+05:30",
+          "asset": "RELIANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1273.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-09-10T09:33:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1041.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2026-09-10T09:34:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1249.2,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate AXISBANK is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2026-09-10T09:35:00+05:30",
+          "asset": "TCS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2226,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2026-09-10T09:35:00+05:30",
+          "asset": "BEL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 404.25,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-10T09:39:00+05:30",
+          "asset": "MARUTI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 12530,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-10T09:39:00+05:30",
+          "asset": "ONGC",
+          "type": "VOLATILITY_SHOCK",
+          "price": 238.12,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-10T09:39:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1249.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate AXISBANK is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-10T09:40:00+05:30",
+          "asset": "HAL",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4953,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-10T09:42:00+05:30",
+          "asset": "RELIANCE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1272.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-10T09:43:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1042.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 2.5 ATR. New entries frozen for 10 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-10T09:44:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1248.4,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate AXISBANK is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        },
+        {
+          "minute": 178,
+          "timeStr": "2026-09-10T12:13:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1249,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 1: Top candidate AXISBANK is in Scenario C (Choppy/Sideways). Zero edge; standing aside in cash to avoid fee bleed."
+        }
+      ]
+    }
+  ],
+  "allClosedTrades": [
+    {
+      "day": "2026-09-01",
+      "asset": "TATASTEEL",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]",
+      "entryTime": "11:14:00 am",
+      "exitTime": "11:18:00 am",
+      "entryPrice": 186.85,
+      "exitPrice": 187.5,
+      "quantity": 65,
+      "pnl": 39.20312500000037,
+      "pnlPct": 0.34787262510035094,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2026-09-09",
+      "asset": "TATASTEEL",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]",
+      "entryTime": "10:48:00 am",
+      "exitTime": "12:18:00 pm",
+      "entryPrice": 187.9,
+      "exitPrice": 187.8,
+      "quantity": 64,
+      "pnl": -9.404799999999636,
+      "pnlPct": -0.053219797764765465,
+      "exitReason": "Dead Trade Stagnancy Exit: Position active for 90 mins within +/-0.05 ATR with fading volume (0.06x avg). Liquidating to free capital."
+    },
+    {
+      "day": "2026-09-09",
+      "asset": "NTPC",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:64]",
+      "entryTime": "9:45:00 am",
+      "exitTime": "12:19:00 pm",
+      "entryPrice": 336,
+      "exitPrice": 333.05,
+      "quantity": 36,
+      "pnl": -109.19744999999959,
+      "pnlPct": -0.877976190476187,
+      "exitReason": "Stop Loss Triggered"
+    }
+  ]
+}

@@ -84,17 +84,24 @@ export function evaluateLiveMarketDataQuality(
 export function calculateRoundtripFriction(
   price: number,
   quantity: number,
-  isDelivery = true
+  isDelivery = true,
+  options?: { isZeroBrokerage?: boolean; broker?: string }
 ): FrictionBreakdown {
   const safeQty = Math.max(1, quantity);
   const safePrice = Math.max(0.01, price);
   const turnover = safePrice * safeQty;
 
-  // Upstox brokerage per executed order
-  const buyBrokerage = isDelivery
+  const isZeroBrokerage = options?.isZeroBrokerage || options?.broker === 'flattrade' || options?.broker === 'kotak_neo';
+
+  // Upstox brokerage per executed order (or 0 for zero-brokerage venues)
+  const buyBrokerage = isZeroBrokerage
+    ? 0
+    : isDelivery
     ? thresholds.BROKERAGE_FLAT_INR
     : Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * thresholds.BROKERAGE_PCT);
-  const sellBrokerage = isDelivery
+  const sellBrokerage = isZeroBrokerage
+    ? 0
+    : isDelivery
     ? thresholds.BROKERAGE_FLAT_INR
     : Math.min(thresholds.BROKERAGE_FLAT_INR, turnover * thresholds.BROKERAGE_PCT);
   const brokerage = +(buyBrokerage + sellBrokerage).toFixed(2);
@@ -218,21 +225,106 @@ export interface SectorExposureSummary {
 
 // Official NSE Sector classification for Indian Bluechip Fleet
 export const ASSET_SECTOR_MAP: Record<string, string> = {
+  RELIANCE: 'Energy',
+  TCS: 'IT',
+  INFY: 'IT',
   HDFCBANK: 'Banking',
   ICICIBANK: 'Banking',
   SBIN: 'Banking',
-  TCS: 'IT',
-  INFY: 'IT',
-  RELIANCE: 'Energy',
-  TATAMOTORS: 'Auto',
-  LT: 'Infrastructure',
-  ITC: 'FMCG',
   BHARTIARTL: 'Telecom',
+  ITC: 'FMCG',
+  KOTAKBANK: 'Banking',
+  LT: 'Infrastructure',
+  TATAMOTORS: 'Auto',
+  AXISBANK: 'Banking',
+  MARUTI: 'Auto',
+  SUNPHARMA: 'Pharma',
+  TITAN: 'Retail',
+  BAJFINANCE: 'Banking',
+  HINDUNILVR: 'FMCG',
+  WIPRO: 'IT',
+  NTPC: 'Power',
+  ONGC: 'Energy',
   HAL: 'Defence',
   BEL: 'Defence',
-  NTPC: 'Power',
   TATASTEEL: 'Metals',
-  SUNPHARMA: 'Pharma',
+  INDUSINDBK: 'Banking',
+  BANKBARODA: 'Banking',
+  PNB: 'Banking',
+  CANBK: 'Banking',
+  UNIONBANK: 'Banking',
+  IDFCFIRSTB: 'Banking',
+  FEDERALBNK: 'Banking',
+  BAJAJFINSV: 'Banking',
+  CHOLAFIN: 'Banking',
+  SHRIRAMFIN: 'Banking',
+  JIOFIN: 'Banking',
+  MUTHOOTFIN: 'Banking',
+  HCLTECH: 'IT',
+  TECHM: 'IT',
+  LTM: 'IT',
+  PERSISTENT: 'IT',
+  COFORGE: 'IT',
+  LTTS: 'IT',
+  MPHASIS: 'IT',
+  TATAELXSI: 'IT',
+  KPITTECH: 'IT',
+  POWERGRID: 'Power',
+  COALINDIA: 'Metals',
+  BPCL: 'Energy',
+  IOC: 'Energy',
+  GAIL: 'Energy',
+  ADANIGREEN: 'Energy',
+  ADANIPOWER: 'Energy',
+  TATAPOWER: 'Power',
+  NHPC: 'Power',
+  'M&M': 'Auto',
+  'BAJAJ-AUTO': 'Auto',
+  EICHERMOT: 'Auto',
+  HEROMOTOCO: 'Auto',
+  TVSMOTOR: 'Auto',
+  BHARATFORG: 'Auto',
+  MOTHERSON: 'Auto',
+  BOSCHLTD: 'Auto',
+  MRF: 'Auto',
+  NESTLEIND: 'FMCG',
+  BRITANNIA: 'FMCG',
+  TATACONSUM: 'FMCG',
+  VBL: 'FMCG',
+  GODREJCP: 'FMCG',
+  DABUR: 'FMCG',
+  MARICO: 'FMCG',
+  COLPAL: 'FMCG',
+  CIPLA: 'Pharma',
+  DRREDDY: 'Pharma',
+  DIVISLAB: 'Pharma',
+  APOLLOHOSP: 'Pharma',
+  MANKIND: 'Pharma',
+  TORNTPHARM: 'Pharma',
+  LUPIN: 'Pharma',
+  ZYDUSLIFE: 'Pharma',
+  AUROPHARMA: 'Pharma',
+  JSWSTEEL: 'Metals',
+  HINDALCO: 'Metals',
+  VEDL: 'Metals',
+  JINDALSTEL: 'Metals',
+  NMDC: 'Metals',
+  SAIL: 'Metals',
+  SIEMENS: 'Infrastructure',
+  ABB: 'Infrastructure',
+  BHEL: 'Infrastructure',
+  HAVELLS: 'Infrastructure',
+  POLYCAB: 'Infrastructure',
+  TRENT: 'Retail',
+  DMART: 'Retail',
+  INDHOTEL: 'Retail',
+  ASIANPAINT: 'Retail',
+  BERGEPAINT: 'Retail',
+  ULTRACEMCO: 'Cement',
+  GRASIM: 'Cement',
+  AMBUJACEM: 'Cement',
+  SHREECEM: 'Cement',
+  PIDILITIND: 'Cement',
 };
 
 // Maximum permitted portfolio allocation per single sector
@@ -633,10 +725,12 @@ export function calculateVolumeMetrics(
     };
   }
 
+  const candlesForVwap = validCandles;
+
   let totalTypicalVolume = 0;
   let totalVolume = 0;
 
-  for (const c of validCandles) {
+  for (const c of candlesForVwap) {
     const high = c.high ?? c.close;
     const low = c.low ?? c.close;
     const close = c.close;
@@ -730,11 +824,11 @@ export function calculateDynamicProfitRatchet(
   else if (gainAtrMultiples >= thresholds.RATCHET_STAGE_0_5_ATR) {
     const feeArmorStop = entryPrice + roundtripFrictionPerShare + tickSize + (roundtripFrictionPerShare > 0 ? thresholds.FEE_ARMOR_NET_GAIN_PER_SHARE : 0);
     const candidateStop = currentPrice > feeArmorStop ? feeArmorStop : feeBreakeven;
-    // Maintain minimum breathing room (0.25 ATR) so early normal noise does not choke position
-    if (currentPrice > candidateStop && (currentPrice - candidateStop) >= safeAtr * 0.25) {
+    // Maintain minimum breathing room (0.40 ATR) so normal intraday noise does not choke position
+    if (currentPrice > candidateStop && (currentPrice - candidateStop) >= safeAtr * 0.40) {
       ratchetedStop = Math.max(ratchetedStop, candidateStop);
       stageName = 'FEE_BREAKEVEN_SHIELD';
-    } else if (currentPrice > feeBreakeven && (currentPrice - feeBreakeven) >= safeAtr * 0.20) {
+    } else if (currentPrice > feeBreakeven && (currentPrice - feeBreakeven) >= safeAtr * 0.35) {
       ratchetedStop = Math.max(ratchetedStop, feeBreakeven);
       stageName = 'FEE_BREAKEVEN_SHIELD';
     }
@@ -818,16 +912,25 @@ export function deadTradeStagnancyExit(
   }
 
   const safeAtr = Math.max(0.01, atr);
-  const priceRangeAtr = Math.abs(currentPrice - entryPrice) / safeAtr;
-  const isRangeStagnant = priceRangeAtr < thresholds.STAGNANT_TRADE_PRICE_RANGE_ATR;
-
+  const priceMoveAtr = (currentPrice - entryPrice) / safeAtr;
   const volumeRatio = avgVolume > 0 ? currentVolume / avgVolume : 0.5;
   const isVolumeFading = volumeRatio < thresholds.STAGNANT_TRADE_MAX_VOLUME_RATIO;
 
-  if (isRangeStagnant && isVolumeFading) {
+  // If trade is underwater or dead flat after max duration with fading volume,
+  // liquidate the failed momentum trade early before it drifts into a full 1.0 ATR stop loss.
+  const isFailedTrade = priceMoveAtr <= 0.10 && isVolumeFading;
+
+  // Range stagnant: price oscillation within +/- 0.25 ATR with fading volume
+  const isRangeStagnant = Math.abs(priceMoveAtr) < thresholds.STAGNANT_TRADE_PRICE_RANGE_ATR && isVolumeFading;
+
+  if (isFailedTrade || isRangeStagnant) {
+    // If the trade is solidly profitable (> 0.20 ATR), let dynamic trailing ratchets manage it
+    if (priceMoveAtr > 0.20) {
+      return { shouldExit: false, reason: 'Active momentum or price expansion present.' };
+    }
     return {
       shouldExit: true,
-      reason: `Dead Trade Stagnancy Exit: Position active for ${(elapsedMs / 60000).toFixed(0)} mins within +/-${priceRangeAtr.toFixed(2)} ATR with fading volume (${volumeRatio.toFixed(2)}x avg). Liquidating to free capital.`,
+      reason: `Dead Trade Stagnancy Exit: Position active for ${(elapsedMs / 60000).toFixed(0)} mins within +/-${Math.abs(priceMoveAtr).toFixed(2)} ATR with fading volume (${volumeRatio.toFixed(2)}x avg). Liquidating to free capital.`,
     };
   }
 
@@ -841,14 +944,20 @@ export function volatilityShockFreeze(
   candle: Candle | undefined,
   atr: number,
   lastShockTimestamp: number,
-  now: number = Date.now()
+  now: number = Date.now(),
+  options?: { isBullishSetup?: boolean }
 ): { isFrozen: boolean; newShockDetected: boolean; cooldownRemainingMs: number } {
   const safeAtr = Math.max(0.01, atr);
   let newShockDetected = false;
 
   if (candle) {
     const candleRange = candle.high - candle.low;
-    if (candleRange >= safeAtr * thresholds.VOLATILITY_SHOCK_ATR_MULTIPLE) {
+    const isDirectionalExpansion = options?.isBullishSetup && candle.close >= candle.open;
+    const effectiveMultiple = isDirectionalExpansion
+      ? thresholds.VOLATILITY_SHOCK_ATR_MULTIPLE * 1.35
+      : thresholds.VOLATILITY_SHOCK_ATR_MULTIPLE;
+
+    if (candleRange >= safeAtr * effectiveMultiple) {
       newShockDetected = true;
       lastShockTimestamp = now;
     }
@@ -1116,6 +1225,9 @@ export function calculateCrossSectionalAlphaRanking(
     volumeSurgeRatio: number;
     vwap: number;
     compositeScore?: number;
+    strategy?: string;
+    ouZScore?: number;
+    convictionBonus?: number;
   }>
 ): CandidateAlphaScore[] {
   if (!candidates || candidates.length === 0) return [];
@@ -1143,24 +1255,47 @@ export function calculateCrossSectionalAlphaRanking(
     const relStrength = (assetReturns[c.asset] || 0) - avgFleetReturn;
     const relativeStrengthPct = +(relStrength * 100).toFixed(2);
 
-    // 1. Hurst score (0 to 25 points): H=0.5 is 10pts, H>=0.7 is 25pts
-    const hurstPoints = Math.max(0, Math.min(25, (c.hurst - 0.45) * 80));
+    let rawAci = 0;
+    let breakdown = '';
 
-    // 2. Squeeze Release score (0 to 25 points): SQUEEZE_OFF gives 25pts, SQUEEZE_ON 15pts
-    let squeezePoints = 5;
-    if (c.squeezeStatus === 'SQUEEZE_OFF') squeezePoints = 25;
-    else if (c.squeezeStatus === 'SQUEEZE_ON') squeezePoints = 15;
+    if (c.strategy === 'VWAP Band Mean Reversion') {
+      // Mean Reversion Alpha:
+      // 1. Z-Score stretch below VWAP (15 to 30 pts): Z <= -1.60 gives 15-30 pts
+      const zStretchPoints = Math.min(30, Math.max(15, Math.abs(c.ouZScore || -1.6) * 14));
+      // 2. Anti-persistent Hurst (10 to 20 pts): H < 0.50 confirms mean-reversion characteristics
+      const mrHurstPoints = Math.max(8, Math.min(20, (0.55 - c.hurst) * 100));
+      // 3. Volume surge on absorption bounce (10 to 20 pts)
+      const volPoints = Math.max(8, Math.min(20, (c.volumeSurgeRatio - 0.5) * 20));
+      // 4. Pattern / bounce bonus (10 to 15 pts)
+      const bouncePoints = c.convictionBonus || 10;
+      // 5. Base quality factor (10 pts)
+      const baseQuality = 10;
+      rawAci = zStretchPoints + mrHurstPoints + volPoints + bouncePoints + baseQuality;
+      breakdown = `ACI ${Math.round(rawAci)}/100 (VWAP Mean-Rev: Z:${zStretchPoints.toFixed(0)}, H:${mrHurstPoints.toFixed(0)}, Vol:${volPoints.toFixed(0)}, Bounce:${bouncePoints})`;
+    } else if (c.strategy === 'Candle Price Action') {
+      // Microstructure & Candlestick Price Action Alpha:
+      // High-expectancy requires trend alignment (Hurst >= 0.52) + volume surge + key level rejection
+      const hurstPoints = Math.max(0, Math.min(25, (c.hurst - 0.45) * 80));
+      let squeezePoints = c.squeezeStatus === 'SQUEEZE_OFF' ? 25 : c.squeezeStatus === 'SQUEEZE_ON' ? 15 : 5;
+      const volPoints = Math.max(0, Math.min(20, (c.volumeSurgeRatio - 0.8) * 16.6));
+      const rsPoints = Math.max(0, Math.min(15, 7.5 + relativeStrengthPct * 3));
+      const vwapPoints = isAboveVwap ? 15 : 5;
+      const patternBonus = Math.min(6, (c.convictionBonus || 0) * 0.5);
+      rawAci = hurstPoints + squeezePoints + volPoints + rsPoints + vwapPoints + patternBonus;
+      breakdown = `ACI ${Math.round(rawAci)}/100 (Price Action: H:${hurstPoints.toFixed(0)}, Squeeze:${squeezePoints}, Vol:${volPoints.toFixed(0)}, Pattern:+${patternBonus.toFixed(0)})`;
+    } else {
+      // Default Trend Alpha (Hurst Trend Rider, ORB Breakout, Momentum Scalper, Value Accumulator)
+      const hurstPoints = Math.max(0, Math.min(25, (c.hurst - 0.45) * 80));
+      let squeezePoints = 5;
+      if (c.squeezeStatus === 'SQUEEZE_OFF') squeezePoints = 25;
+      else if (c.squeezeStatus === 'SQUEEZE_ON') squeezePoints = 15;
+      const volPoints = Math.max(0, Math.min(20, (c.volumeSurgeRatio - 0.8) * 16.6));
+      const rsPoints = Math.max(0, Math.min(15, 7.5 + relativeStrengthPct * 3));
+      const vwapPoints = isAboveVwap ? 15 : 5;
+      rawAci = hurstPoints + squeezePoints + volPoints + rsPoints + vwapPoints;
+      breakdown = `ACI ${Math.round(rawAci)}/100 (Hurst:${hurstPoints.toFixed(0)}, Squeeze:${squeezePoints}, Vol:${volPoints.toFixed(0)}, RS:${rsPoints.toFixed(0)}, VWAP:${vwapPoints})`;
+    }
 
-    // 3. Volume Surge score (0 to 20 points): 1.0x is 5pts, 2.0x is 20pts
-    const volPoints = Math.max(0, Math.min(20, (c.volumeSurgeRatio - 0.8) * 16.6));
-
-    // 4. Relative Strength vs Fleet (0 to 15 points): Leading the fleet adds edge
-    const rsPoints = Math.max(0, Math.min(15, 7.5 + relativeStrengthPct * 3));
-
-    // 5. VWAP & Base Quality Factor (0 to 15 points)
-    const vwapPoints = isAboveVwap ? 15 : 5;
-
-    const rawAci = hurstPoints + squeezePoints + volPoints + rsPoints + vwapPoints;
     const alphaConvictionIndex = Math.max(0, Math.min(100, Math.round(rawAci)));
 
     const sector = getAssetSector(c.asset);
@@ -1177,7 +1312,7 @@ export function calculateCrossSectionalAlphaRanking(
       hasInstitutionalVolume,
       sector,
       rank: 0,
-      breakdown: `ACI ${alphaConvictionIndex}/100 (Hurst:${hurstPoints.toFixed(0)}, Squeeze:${squeezePoints}, Vol:${volPoints.toFixed(0)}, RS:${rsPoints.toFixed(0)}, VWAP:${vwapPoints})`,
+      breakdown,
     };
   });
 
@@ -1328,19 +1463,22 @@ export function evaluateAllocationModeSwitch(
   // Sort candidates descending by conviction score
   const sorted = [...candidates].sort((a, b) => b.convictionScore - a.convictionScore);
 
-  // Step 1: Check regime scenario on top candidate
-  const topCandidate = sorted[0];
-  if (topCandidate.regimeScenario === 'C_CHOP' || topCandidate.regimeScenario === 'D_VOL_SHOCK') {
+  // Step 1: Check regime scenario on candidates, filtering out chop and volatility shock
+  const nonShockCandidates = sorted.filter(
+    (c) => c.regimeScenario !== 'C_CHOP' && c.regimeScenario !== 'D_VOL_SHOCK'
+  );
+  if (nonShockCandidates.length === 0) {
     return {
       mode: 'STAND_ASIDE',
       selectedCandidates: [],
       maxPositions: 0,
       assetAllocationPct: 0,
       cashBufferPct: 100,
-      rationale: `Step 1: Top candidate ${topCandidate.asset} is in ${topCandidate.regimeScenario === 'C_CHOP' ? 'Scenario C (Choppy/Sideways)' : 'Scenario D (Volatility Shock)'}. Zero edge; standing aside in cash to avoid fee bleed.`,
+      rationale: `Step 1: Top candidate ${sorted[0].asset} is in ${sorted[0].regimeScenario === 'C_CHOP' ? 'Scenario C (Choppy/Sideways)' : 'Scenario D (Volatility Shock)'}. Zero edge; standing aside in cash to avoid fee bleed.`,
       stepTriggered: 1,
     };
   }
+  const topCandidate = nonShockCandidates[0];
 
   // Step 2: Candidates clearing dynamic MIN_NET_PROFIT_FLOOR
   const qualifying = sorted.filter((c) => {
@@ -1368,7 +1506,7 @@ export function evaluateAllocationModeSwitch(
       maxPositions: 0,
       assetAllocationPct: 0,
       cashBufferPct: 100,
-      rationale: `Step 2: No candidates cleared the dynamic net profit floor (₹${topFloor.toFixed(2)}). Standing aside in cash.`,
+      rationale: `Step 2: Top candidate ${topCandidate.asset} net expected profit (₹${topCandidate.realisticNetProfit.toFixed(2)}) is below dynamic net floor (₹${topFloor.toFixed(2)}). Standing aside in cash.`,
       stepTriggered: 2,
     };
   }
@@ -1471,5 +1609,208 @@ export function evaluateAllocationModeSwitch(
     cashBufferPct: 30,
     rationale: 'Step 7: All four conditions passed (>=2 qualifying ideas, conviction ratio >= 85%, uncorrelated sectors, elevated net profit >= ₹180). Activating dual-opportunity Mode 35-2 (35% each, 30% cash buffer).',
     stepTriggered: 7,
+  };
+}
+
+export interface ORBBreakoutResult {
+  isBreakout: boolean;
+  orbHigh: number;
+  orbLow: number;
+  stopLossPrice: number;
+  takeProfitPrice: number;
+  takeProfit2Price: number;
+  rationale: string;
+}
+
+/**
+ * Evaluates 15-minute Opening Range Breakout (ORB) on Indian Equities.
+ * Initial Balance: 09:15-09:30 IST.
+ * Execution Window: 09:30-10:45 IST.
+ */
+export function evaluateORBBreakout(
+  candles: Candle[] | undefined,
+  currentPrice: number,
+  vwap: number,
+  atr: number,
+  volumeSurgeRatio: number,
+  nowTimestamp: number
+): ORBBreakoutResult {
+  if (!candles || candles.length < thresholds.ORB_INITIAL_BALANCE_MINUTES) {
+    return {
+      isBreakout: false,
+      orbHigh: 0,
+      orbLow: 0,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: 'Insufficient intraday candles for ORB initial balance.',
+    };
+  }
+
+  // Determine current market minute since 09:15 IST
+  const d = new Date(nowTimestamp + 3600000 * 5.5);
+  const istMinutes = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const sessionMinute = istMinutes - (9 * 60 + 15);
+
+  // Active from 09:30 to 10:45 IST (minutes 15 to 90)
+  if (sessionMinute < thresholds.ORB_INITIAL_BALANCE_MINUTES || sessionMinute > 90) {
+    return {
+      isBreakout: false,
+      orbHigh: 0,
+      orbLow: 0,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: 'Outside active ORB execution window (09:30-10:45 IST).',
+    };
+  }
+
+  // Calculate high and low of the first 15 1-minute bars
+  const initialBars = candles.slice(0, thresholds.ORB_INITIAL_BALANCE_MINUTES);
+  let orbHigh = -Infinity;
+  let orbLow = Infinity;
+  for (const bar of initialBars) {
+    if (bar.high > orbHigh) orbHigh = bar.high;
+    if (bar.low < orbLow) orbLow = bar.low;
+  }
+
+  if (orbHigh <= 0 || !Number.isFinite(orbHigh)) {
+    return {
+      isBreakout: false,
+      orbHigh: 0,
+      orbLow: 0,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: 'Invalid ORB initial balance levels.',
+    };
+  }
+
+  // Clean breakout: Current price clears ORB high, is supported by VWAP, and backed by volume surge
+  const isBreakout =
+    currentPrice > orbHigh &&
+    (vwap > 0 ? currentPrice >= vwap * 0.999 : true) &&
+    volumeSurgeRatio >= thresholds.ORB_MIN_VOLUME_SURGE;
+
+  if (!isBreakout) {
+    return {
+      isBreakout: false,
+      orbHigh,
+      orbLow,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: 'No ORB breakout confirmation.',
+    };
+  }
+
+  // Asymmetric Stop Loss: Placed tightly at the higher of VWAP or ORB Midpoint
+  const orbMid = (orbHigh + orbLow) / 2;
+  const tightStop = vwap > 0 ? Math.max(vwap * 0.998, orbMid) : orbMid;
+  const safeStop = Math.max(currentPrice - atr * 1.0, Math.min(currentPrice - atr * 0.25, tightStop));
+
+  const target1 = currentPrice + atr * 1.4;
+  const target2 = currentPrice + atr * 2.2;
+
+  return {
+    isBreakout: true,
+    orbHigh,
+    orbLow,
+    stopLossPrice: safeStop,
+    takeProfitPrice: target1,
+    takeProfit2Price: target2,
+    rationale: `ORB 15m Breakout (High: ₹${orbHigh.toFixed(2)}, Vol: ${volumeSurgeRatio.toFixed(2)}x): Asymmetric entry above initial balance with tight VWAP anchor stop.`,
+  };
+}
+
+export interface VWAPPullbackResult {
+  isPullbackBuy: boolean;
+  stopLossPrice: number;
+  takeProfitPrice: number;
+  takeProfit2Price: number;
+  rationale: string;
+}
+
+/**
+ * Evaluates Institutional VWAP Pullback entries on trending equities.
+ */
+export function evaluateVWAPPullback(
+  candles: Candle[] | undefined,
+  currentPrice: number,
+  vwap: number,
+  atr: number,
+  hurst: number,
+  nowTimestamp: number
+): VWAPPullbackResult {
+  if (!candles || candles.length < 20 || vwap <= 0 || atr <= 0) {
+    return {
+      isPullbackBuy: false,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: 'Insufficient data for VWAP pullback analysis.',
+    };
+  }
+
+  // Active during morning & early afternoon expansion (09:45 to 13:45 IST)
+  const d = new Date(nowTimestamp + 3600000 * 5.5);
+  const istMinutes = d.getUTCHours() * 60 + d.getUTCMinutes();
+  if (istMinutes < 9 * 60 + 45 || istMinutes > 13 * 60 + 45) {
+    return {
+      isPullbackBuy: false,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: 'Outside VWAP pullback timing window.',
+    };
+  }
+
+  // Trending prerequisite: Asset must possess persistent trend (Hurst >= 0.53)
+  if (hurst < 0.53) {
+    return {
+      isPullbackBuy: false,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: `Hurst exponent (${hurst.toFixed(2)}) indicates mean-reverting or noisy regime.`,
+    };
+  }
+
+  // Distance from VWAP: Price must be testing VWAP support within +/- 0.35 ATR
+  const vwapDistAtr = (currentPrice - vwap) / atr;
+  if (vwapDistAtr < -0.35 || vwapDistAtr > 0.40) {
+    return {
+      isPullbackBuy: false,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: `Price is not testing VWAP support (distance: ${vwapDistAtr.toFixed(2)} ATR).`,
+    };
+  }
+
+  // Bullish price action confirmation on latest candle (bounce or hammer)
+  const latest = candles[candles.length - 1];
+  const isBullishRejection = latest.close >= latest.open || (latest.close - latest.low) > (latest.high - latest.close);
+  if (!isBullishRejection) {
+    return {
+      isPullbackBuy: false,
+      stopLossPrice: 0,
+      takeProfitPrice: 0,
+      takeProfit2Price: 0,
+      rationale: 'Awaiting bullish rejection confirmation candle at VWAP.',
+    };
+  }
+
+  // Ultra-tight institutional stop: Just beneath VWAP support (-0.30 ATR)
+  const tightStop = vwap - atr * 0.30;
+  const target1 = currentPrice + atr * 1.30;
+  const target2 = currentPrice + atr * 2.00;
+
+  return {
+    isPullbackBuy: true,
+    stopLossPrice: tightStop,
+    takeProfitPrice: target1,
+    takeProfit2Price: target2,
+    rationale: `Institutional VWAP Pullback Test (Hurst: ${hurst.toFixed(2)}): Bullish bounce off VWAP support (₹${vwap.toFixed(2)}) with tight 0.30 ATR invalidation.`,
   };
 }

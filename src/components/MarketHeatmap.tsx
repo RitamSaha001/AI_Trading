@@ -176,8 +176,8 @@ export function MarketHeatmap({
       // Or by 24h change
       return (mb?.change24h || 0) - (ma?.change24h || 0);
     });
-    return showAll || isUpstox ? list : list.slice(0, 24);
-  }, [markets, filter, layout, showAll, targetAssets, isUpstox]);
+    return showAll ? list : list.slice(0, 24);
+  }, [markets, filter, layout, showAll, targetAssets]);
 
   const handleTileClick = (asset: Asset) => {
     onSelectAsset(asset);
@@ -503,14 +503,14 @@ export function MarketHeatmap({
       </div>
 
       {/* Expand/Collapse Markets Toggle */}
-      {!isUpstox && (
+      {targetAssets.length > 24 && (
         <div className="mt-4 flex justify-center">
           <button
             type="button"
             onClick={() => setShowAll((v) => !v)}
             className="px-4 py-1.5 text-xs font-semibold rounded-xl border border-black/[0.08] bg-white hover:bg-black/[0.03] text-zinc-700 shadow-xs transition-all flex items-center gap-1.5"
           >
-            <span>{showAll ? 'Show Top 24 Leading Markets' : `Expand Full Heatmap (All ${ASSETS.length} Markets)`}</span>
+            <span>{showAll ? 'Show Top 24 Leading Markets' : `Expand Full Heatmap (All ${targetAssets.length} Markets)`}</span>
           </button>
         </div>
       )}

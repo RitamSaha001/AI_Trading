@@ -7,6 +7,7 @@ import {
   PilotActionLog,
   PilotStrategyKind,
   FleetAssetLifecycle,
+  INDIAN_ASSETS,
 } from '../types';
 import { portfolioValue, isIndianAsset } from './portfolio';
 import { indicators } from './indicators';
@@ -38,27 +39,25 @@ import {
   deadTradeStagnancyExit,
   volatilityShockFreeze,
   correlationGate,
+  evaluateORBBreakout,
+  evaluateVWAPPullback,
+  evaluateFleetMacroBreadth,
+  calculateSectorMomentumRanking,
+  evaluateSectorAlignmentBonus,
+  evaluateMultiTimeframeConfluence,
+  evaluateMomentumScalp,
+  evaluateCandlePriceAction,
+  calculateVWAPBands,
+  evaluateVWAPMeanReversion,
+  classifyMarketDayType,
+  evaluateStrategyMasterBrain,
+  BrainDirective,
+  IntradayDailyPnlContext,
   thresholds,
 } from './quantEngine';
 
-// Institutional Indian Bluechip Assets monitored by the Autonomous Desk
-export const UPSTOX_FLEET_ASSETS: Asset[] = [
-  'RELIANCE',
-  'TCS',
-  'HDFCBANK',
-  'INFY',
-  'ICICIBANK',
-  'SBIN',
-  'BHARTIARTL',
-  'LT',
-  'ITC',
-  'TATAMOTORS',
-  'HAL',
-  'BEL',
-  'NTPC',
-  'TATASTEEL',
-  'SUNPHARMA',
-];
+// Institutional Indian Equities Fleet (NIFTY 100) monitored by the Autonomous Desk
+export const UPSTOX_FLEET_ASSETS: Asset[] = [...INDIAN_ASSETS];
 
 // Upstox API Rate Limit Constants (Conservative Pacing)
 export const PILOT_RATE_LIMITS = {
@@ -287,28 +286,36 @@ export function evaluateDynamicBuyingPower(
 
   const isExpansionWindow =
     timingQuality.phase === 'MORNING_EXPANSION' ||
-    timingQuality.phase === 'AFTERNOON_EXPANSION';
+    timingQuality.phase === 'AFTERNOON_EXPANSION' ||
+    timingQuality.phase === 'OPENING_VOLATILITY';
 
-  // High-Conviction Institutional Breakout in Prime Expansion Windows (09:30-11:30 & 13:15-14:00 IST):
-  // Persistent trending time series (Hurst >= 0.54)
+  // Strategy-specific margin scaling:
+  // High-conviction Candle Price Action & VWAP Band Mean Reversion setups:
+  if (strategy === 'Candle Price Action' || strategy === 'VWAP Band Mean Reversion') {
+    if (alphaConviction >= 65) return thresholds.INTRADAY_MAX_MIS_LEVERAGE; // 4.5x under SEBI 5x MIS framework
+    if (alphaConviction >= 55) return 3.5; // 3.5x
+    return 2.5; // 2.5x
+  }
+
+  // High-Conviction Institutional Breakout in Expansion Windows (09:35-11:30 & 13:15-14:00 IST):
+  // Persistent trending time series (Hurst >= 0.53)
   if (
     isExpansionWindow &&
-    hurst >= 0.54 &&
-    (strategy === 'Hurst Trend Rider' || strategy === 'Titan Alpha Sentinel' || strategy === 'Value Accumulator')
+    hurst >= 0.53
   ) {
-    if (alphaConviction >= 55 || hurst >= 0.58) {
-      return thresholds.INTRADAY_MAX_MIS_LEVERAGE; // 3.0x
+    if (alphaConviction >= 65 || hurst >= 0.58) {
+      return thresholds.INTRADAY_MAX_MIS_LEVERAGE; // 4.5x under SEBI 5x MIS framework
     }
-    return 2.0; // 2.0x
+    return 3.5; // 3.5x
   }
 
   // Normal Expansion Window:
-  if (isExpansionWindow && hurst >= 0.52) {
-    return 2.0; // 2.0x
+  if (isExpansionWindow && hurst >= 0.50) {
+    return 2.5; // 2.5x
   }
 
   // Midday / Low Persistence / Chop:
-  return 1.0; // 1.0x spot cash
+  return 1.5; // 1.5x
 }
 
 /**
@@ -449,8 +456,11 @@ export function tickAutonomousPilot(
 
   // 2. Market Hours & Timing Quality Check (for live Upstox/FlatTrade Indian venues)
   const isLiveUpstox = state.accountMode === 'upstox' || state.accountMode === 'flattrade' || (state as any).broker === 'flattrade' || (state as any).broker === 'kotak_neo';
+  const isZeroBrokerageVenue = state.accountMode === 'flattrade' || (state as any).broker === 'flattrade' || (state as any).broker === 'kotak_neo';
   const session = isMarketSessionOpen(now);
   const timingQuality = evaluateSessionTimingQuality(now);
+  const istDate = new Date(now + 330 * 60 * 1000);
+  const istMinutes = istDate.getUTCHours() * 60 + istDate.getUTCMinutes();
 
   if (isLiveUpstox && !session.isOpen) {
     return {
@@ -468,9 +478,9 @@ export function tickAutonomousPilot(
     ? state.upstoxAccount.funds.availableCash
     : state.cash;
 
-  // Adaptive Cash Buffer Floor: In active morning expansion (09:30 - 11:30 IST),
-  // lower cash buffer floor to 20% to allow dual-slot allocation (Mode 35-2) while preserving safety
-  const minCashFloorPct = timingQuality.phase === 'MORNING_EXPANSION'
+  // Adaptive Cash Buffer Floor: In active morning & afternoon expansion windows,
+  // lower cash buffer floor to 20% to allow multi-slot allocation while preserving safety
+  const minCashFloorPct = (timingQuality.phase === 'MORNING_EXPANSION' || timingQuality.phase === 'AFTERNOON_EXPANSION')
     ? Math.min(profile.targetCashBufferPct, thresholds.ACTIVE_MORNING_CASH_BUFFER_PCT)
     : Math.max(15, profile.targetCashBufferPct);
   const minRequiredCash = pv * (minCashFloorPct / 100);
@@ -581,10 +591,10 @@ export function tickAutonomousPilot(
     let lifecycleState: FleetAssetLifecycle = 'IN_POSITION';
     let trancheStage = fleetStatus.trancheStage || 0;
 
-    // Multi-Tranche Ladder Levels
-    const t1Price = alignToTickSize(avgBuyPrice + atr * 1.5, asset);
-    const t2Price = currentTarget;
-    const t3Chandelier = calculateChandelierExit(market.history, 22, 2.0);
+    // Multi-Tranche Ladder Levels (T1 at +1.25 ATR, T2 at +2.25 ATR, T3 Chandelier Runner)
+    const t1Price = alignToTickSize(avgBuyPrice + atr * 1.25, asset);
+    const t2Price = alignToTickSize(avgBuyPrice + atr * 2.25, asset);
+    const t3Chandelier = calculateChandelierExit(market.history, 22, 1.5);
 
     // Differentiate delivery (CNC) from intraday (MIS) for accurate fee-shielding:
     // If holding exists in Upstox CNC holdings or position.product === 'D'/'CNC', apply delivery clearing friction.
@@ -597,7 +607,6 @@ export function tickAutonomousPilot(
     const exitProduct: 'CNC' | 'MIS' = isDeliveryHolding ? 'CNC' : 'MIS';
     const roundtripFriction = calculateRoundtripFriction(avgBuyPrice, currentHolding, isDeliveryHolding);
     const highWaterMark = Math.max(fleetStatus.highWaterMark || avgBuyPrice, price);
-    const isZeroBrokerageVenue = state.accountMode === 'flattrade' || (state as any).broker === 'flattrade' || (state as any).broker === 'kotak_neo';
     const usesUnifiedExit = !isDeliveryHolding
       && !isZeroBrokerageVenue
       && avgBuyPrice * currentHolding < thresholds.UNIFIED_EXIT_NOTIONAL_CEILING;
@@ -709,8 +718,8 @@ export function tickAutonomousPilot(
       });
     }
 
-    // Stagnant Capital / Dead Trade Expiration: After 90 mins with range < 0.25 ATR and volume fading, liquidate orderly
-    const entryTimestamp = fleetStatus.entryTimestamp || fleetStatus.lastActionAt || now;
+    // Stagnant Capital / Failed Momentum Timeout / Dead Trade Expiration
+    const entryTimestamp = fleetStatus.entryTimestamp || now;
     const elapsedMs = now - entryTimestamp;
     const stagnancyCheck = deadTradeStagnancyExit(
       avgBuyPrice,
@@ -722,7 +731,8 @@ export function tickAutonomousPilot(
     );
 
     let exitOrderQueued = false;
-    if (stagnancyCheck.shouldExit && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    const isProfitableOrRiskFree = currentStop >= avgBuyPrice || price >= avgBuyPrice + roundtripFriction.frictionPerShare;
+    if (stagnancyCheck.shouldExit && !isProfitableOrRiskFree && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -747,6 +757,46 @@ export function tickAutonomousPilot(
         action: 'DEAD_TRADE_EXIT' as any,
         strategy,
         detail: stagnancyCheck.reason,
+        price,
+        status: 'EXECUTED',
+      });
+    }
+
+    // Micro-Loss Defense: VWAP Structure Invalidation Exit for Breakout / Trend Strategies
+    // If a trend breakout trade (Hurst Trend Rider, Candle Price Action, Momentum Scalper)
+    // drops and closes below VWAP (price < vwap * 0.9985) while still in initial risk (trancheStage === 0 && currentStop < avgBuyPrice),
+    // the institutional trend continuation thesis has been rejected by the market.
+    // Liquidate immediately with a micro-loss (~₹50-120) instead of riding it all the way down to a full -1.5 ATR stop loss (~₹350)!
+    const isBreakoutStrategy = (strategy as string) === 'Hurst Trend Rider' || (strategy as string) === 'Candle Price Action' || (strategy as string) === 'Momentum Scalper';
+    const isVwapBroken = vwap > 0 && price < vwap * 0.9985;
+    const isInitialRiskStage = trancheStage === 0 && currentStop < avgBuyPrice;
+
+    if (!exitOrderQueued && isBreakoutStrategy && isVwapBroken && isInitialRiskStage && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      const vwapInvalidationReason = `Breakout Failed: Price (₹${price.toFixed(2)}) broke below institutional VWAP support (₹${vwap.toFixed(2)}). Micro-loss capital defense exit.`;
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: currentHolding,
+        price: alignToTickSize(price, asset),
+        type: 'market',
+        product: exitProduct,
+        strategyName: `Auto-Pilot: ${strategy} VWAP Invalidation Exit`,
+        reason: vwapInvalidationReason,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      lifecycleState = 'COOLDOWN';
+      trancheStage = 0;
+      exitOrderQueued = true;
+
+      newActionLogs.push({
+        id: `log_vwap_invalidation_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'STOP_LOSS' as any,
+        strategy,
+        detail: vwapInvalidationReason,
         price,
         status: 'EXECUTED',
       });
@@ -789,25 +839,28 @@ export function tickAutonomousPilot(
         status: 'EXECUTED',
       });
     }
-    // Tranche 1 Profit Harvest: Take partial profit (50%) at +1.5 ATR
-    else if (!exitOrderQueued && !usesUnifiedExit && trancheStage === 0 && price >= t1Price && currentHolding >= 2 && evaluateRateLimitAllowance(rateLimits, now).allowed) {
-      const exitQty = Math.max(1, Math.floor(currentHolding * thresholds.TRANCHE_1_HARVEST_FRACTION));
-      ordersToDispatch.push({
-        asset,
-        side: 'sell',
-        amount: exitQty,
-        price: alignToTickSize(price, asset),
-        type: 'limit',
-        product: exitProduct,
-        strategyName: `Auto-Pilot: ${strategy} Tranche 1 Harvest`,
-        reason: `Tranche 1 (+1.5 ATR) reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Locking partial profit.`,
-        trancheStage: 1,
-      });
+    // Tranche 1 Profit Harvest: Take partial profit (50%) at +1.5 ATR and ratchet stop to breakeven + fees
+    else if (!exitOrderQueued && !usesUnifiedExit && trancheStage === 0 && price >= t1Price && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      if (currentHolding >= 2) {
+        const exitQty = Math.max(1, Math.floor(currentHolding * thresholds.TRANCHE_1_HARVEST_FRACTION));
+        ordersToDispatch.push({
+          asset,
+          side: 'sell',
+          amount: exitQty,
+          price: alignToTickSize(price, asset),
+          type: 'limit',
+          product: exitProduct,
+          strategyName: `Auto-Pilot: ${strategy} Tranche 1 Harvest`,
+          reason: `Tranche 1 (+1.5 ATR) reached at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Locking partial profit.`,
+          trancheStage: 1,
+        });
 
-      rateLimits.requestsThisMinute++;
-      rateLimits.lastDispatchedAt = now;
+        rateLimits.requestsThisMinute++;
+        rateLimits.lastDispatchedAt = now;
+      }
+
       trancheStage = 1;
-      currentStop = alignToTickSize(Math.max(currentStop, avgBuyPrice + roundtripFriction.frictionPerShare), asset);
+      currentStop = alignToTickSize(Math.max(currentStop, avgBuyPrice + atr * 0.35, avgBuyPrice + roundtripFriction.frictionPerShare * 2), asset);
       lifecycleState = 'TRAILING_PROFIT';
 
       newActionLogs.push({
@@ -816,14 +869,16 @@ export function tickAutonomousPilot(
         asset,
         action: 'PROFIT_HARVEST_T1',
         strategy,
-        detail: `Harvested Tranche 1 (${(thresholds.TRANCHE_1_HARVEST_FRACTION * 100).toFixed(0)}% = ${exitQty} shares) at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Stop moved to ₹${currentStop.toFixed(2)}.`,
+        detail: currentHolding >= 2
+          ? `Harvested Tranche 1 (${(thresholds.TRANCHE_1_HARVEST_FRACTION * 100).toFixed(0)}% = ${Math.max(1, Math.floor(currentHolding * thresholds.TRANCHE_1_HARVEST_FRACTION))} shares) at ₹${price.toFixed(2)} (+${unrealizedPnlPct}%). Stop moved to ₹${currentStop.toFixed(2)}.`
+          : `Target 1 (+1.5 ATR) reached at ₹${price.toFixed(2)}. Stop ratcheted to breakeven + fees (₹${currentStop.toFixed(2)}). Position net-risk-free.`,
         price,
         status: 'EXECUTED',
       });
     }
-    // Tranche 2 Profit Harvest: Take core target (50% of remaining) at T2
+    // Tranche 2 Profit Harvest: Take core target (50% of remaining, or 100% if 1 share) at T2
     else if (!exitOrderQueued && !usesUnifiedExit && trancheStage <= 1 && price >= t2Price && evaluateRateLimitAllowance(rateLimits, now).allowed) {
-      const exitQty = Math.max(1, Math.floor(currentHolding * 0.5));
+      const exitQty = currentHolding <= 1 ? 1 : Math.max(1, Math.floor(currentHolding * 0.5));
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -940,6 +995,25 @@ export function tickAutonomousPilot(
     };
   }
 
+  const activePositionCount = UPSTOX_FLEET_ASSETS.filter((asset) => (state.positions[asset] || 0) > 0).length;
+  const dailyStartingEquity = state.autonomousPilot?.dailyStartingValue || state.startingEquity || pv;
+  const dailyNavGain = pv - dailyStartingEquity;
+  const todayActions = getTodayPilotActionLogs(state, now);
+  const dailyLossCount = todayActions.filter((l) => l.action === 'STOP_LOSS').length;
+  const dailyWinsCount = todayActions.filter((l) => l.action === 'TAKE_PROFIT' || l.action === 'PROFIT_HARVEST_T1' || l.action === 'PROFIT_HARVEST_T2' || (l.action === 'TRAILING_RATCHET' && l.detail?.includes('Locked'))).length;
+  const dailyTradesCount = todayActions.filter((l) => l.action === 'BUY_ENTRY').length;
+
+  const intradayPnlContext: IntradayDailyPnlContext = {
+    dailyRealizedPnl: dailyNavGain,
+    dailyUnrealizedPnl: 0,
+    dailyNetPnl: dailyNavGain,
+    dailyWinsCount,
+    dailyLossCount,
+    dailyTradesCount,
+    activePositionCount,
+    targetProfitGoal: 100.0,
+  };
+
   // 3B. STEP 2: CANDIDATE SCANNING ACROSS FLEET (Unallocated Assets)
   interface CandidateSetup {
     asset: Asset;
@@ -956,9 +1030,29 @@ export function tickAutonomousPilot(
     hasInstitutionalVolume: boolean;
     entryRationale: string;
     price: number;
+    convictionBonus?: number;
+    brainDirective: BrainDirective;
   }
 
   const candidatePool: CandidateSetup[] = [];
+
+  // Evaluate Fleet Macro Breadth & Market Regime across all monitored Indian equities
+  const macroBreadth = evaluateFleetMacroBreadth(markets, UPSTOX_FLEET_ASSETS);
+
+  // Classify Institutional Market Day Type (Bull Trend, Bear Liquidation, Range-Bound, Afternoon Window, Chop)
+  const dayClassification = classifyMarketDayType(macroBreadth, now);
+
+  // Evaluate Sector Momentum Ranking across the 100-stock fleet
+  const sectorMomentum = calculateSectorMomentumRanking(markets, UPSTOX_FLEET_ASSETS);
+
+  // Systemic Fleet-Wide Volatility Shock Defense:
+  // True systemic flash dump requires >= 15% of fleet in volatility shock simultaneously.
+  const minShockThreshold = 15;
+  const recentFleetShocks = getTodayPilotActionLogs(state, now).filter(
+    (log) => log.action === 'VOLATILITY_SHOCK' && log.detail?.includes('Latest candle exceeded') && now - log.timestamp < 4 * 60 * 1000
+  );
+  const distinctShockAssets = new Set(recentFleetShocks.map((l) => l.asset));
+  const isSystemicShock = distinctShockAssets.size >= minShockThreshold;
 
   for (const asset of UPSTOX_FLEET_ASSETS) {
     const market = markets[asset];
@@ -968,18 +1062,20 @@ export function tickAutonomousPilot(
     if (currentHolding > 0) continue; // Handled in position management above
 
     const price = market.price;
+    const strategyResult = determineAssetStrategyAndRegime(market);
+    let strategy = strategyResult.strategy;
     const {
-      strategy,
       regimeLabel,
       hurst,
-      ouZScore,
+      ouZScore: rawOuZScore,
       atr,
       sector,
       squeezeStatus,
       vwap,
       volumeSurgeRatio,
       hasInstitutionalVolume,
-    } = determineAssetStrategyAndRegime(market);
+    } = strategyResult;
+    let ouZScore = rawOuZScore;
 
     const liveDataQuality = isLiveUpstox ? evaluateLiveMarketDataQuality(market, now) : { allowed: true, reason: '' };
 
@@ -1117,19 +1213,32 @@ export function tickAutonomousPilot(
       continue;
     }
 
+    // Intraday Price & Volatility Expansion Floors:
+    // 1. Avoid sub-penny stocks (< ₹80) where tick friction is elevated relative to price.
+    // 2. Avoid dead/frozen stocks with 30m ATR/Price < 0.25% (25 bps).
+    if (isIndianAsset(asset) && (price < 80 || atr / price < 0.0025)) {
+      continue;
+    }
+
     // Evaluate Entry Signal based on strategy & microstructure
     let hasEntrySignal = false;
     let entryRationale = '';
+    let currentConvictionBonus = 0;
 
     if (strategy === 'Hurst Trend Rider') {
       const ind = indicators(market.history, market.candles);
       const isBreakout = price > (ind.s10 ?? price) && (ind.s10 ?? 0) >= (ind.s30 ?? 0);
-      const isHealthyRsi = (ind.rsi ?? 50) >= 45 && (ind.rsi ?? 50) <= 68;
+      const isHealthyRsi = (ind.rsi ?? 50) >= 50 && (ind.rsi ?? 50) <= 68;
       const isSqueezeRelease = squeezeStatus === 'SQUEEZE_OFF';
       const isAboveVwap = vwap > 0 ? price >= vwap * 0.999 : true;
       const isPersistentHurst = timingQuality.phase === 'OPENING_VOLATILITY' ? hurst >= 0.58 : hurst >= 0.54;
+      const isNearDayHigh = market.high24h ? price >= market.high24h * 0.995 : true;
 
-      if (isBreakout && (isHealthyRsi || isSqueezeRelease) && isAboveVwap && isPersistentHurst) {
+      const isAboveMultiDayTrend = market.history && market.history.length >= 30
+        ? price >= (market.history.slice(-30).reduce((a, b) => a + b, 0) / 30) * 0.998
+        : true;
+
+      if (isBreakout && (isHealthyRsi || isSqueezeRelease) && isAboveVwap && isPersistentHurst && isNearDayHigh && isAboveMultiDayTrend) {
         hasEntrySignal = true;
         entryRationale = `Hurst Trend Breakout (H=${hurst.toFixed(2)}${isSqueezeRelease ? ' + Squeeze Release' : ''}): Momentum alignment with RSI ${(ind.rsi ?? 50).toFixed(0)} & VWAP.`;
       }
@@ -1157,28 +1266,144 @@ export function tickAutonomousPilot(
       }
     }
 
-    // Session-Aware Timing Noise Filtration
-    if (hasEntrySignal && isLiveUpstox) {
-      if (timingQuality.phase === 'OPENING_VOLATILITY') {
-        if (!hasInstitutionalVolume && volumeSurgeRatio < thresholds.OPENING_MIN_VOLUME_SURGE) {
-          hasEntrySignal = false; // Filter erratic opening 15-minute whipsaws unless backed by institutional volume
+    // Use intraday 1-minute candles if available for high-fidelity intraday microstructure evaluation
+    const intradayBars = market.intradayCandles && market.intradayCandles.length > 0
+      ? market.intradayCandles
+      : market.candles;
+
+    // 2. High-Expectancy Opening Range Breakout (ORB) Engine (09:30-10:45 IST)
+    if (!hasEntrySignal) {
+      const orbRes = evaluateORBBreakout(intradayBars, price, vwap, atr, volumeSurgeRatio, now);
+      if (orbRes.isBreakout && hurst >= 0.52) {
+        const isAboveMultiDayTrend = market.history && market.history.length >= 30
+          ? price >= (market.history.slice(-30).reduce((a, b) => a + b, 0) / 30) * 0.998
+          : true;
+        if (isAboveMultiDayTrend) {
+          hasEntrySignal = true;
+          strategy = 'Hurst Trend Rider';
+          entryRationale = orbRes.rationale;
         }
-      } else if (timingQuality.phase === 'MIDDAY_CONSOLIDATION') {
-        if (volumeSurgeRatio < timingQuality.minVolumeSurgeRequired && squeezeStatus !== 'SQUEEZE_OFF' && hurst < 0.60) {
-          hasEntrySignal = false; // Filter low-volume midday whipsaws
+      }
+    }
+
+    // 3. Institutional VWAP Pullback Engine (09:45-13:45 IST)
+    if (!hasEntrySignal) {
+      const vwapRes = evaluateVWAPPullback(intradayBars, price, vwap, atr, hurst, now);
+      if (vwapRes.isPullbackBuy) {
+        const isAboveMultiDayTrend = market.history && market.history.length >= 30
+          ? price >= (market.history.slice(-30).reduce((a, b) => a + b, 0) / 30) * 0.998
+          : true;
+        if (isAboveMultiDayTrend) {
+          hasEntrySignal = true;
+          strategy = 'Hurst Trend Rider';
+          entryRationale = vwapRes.rationale;
         }
+      }
+    }
+
+    // 4. Adaptive Intraday Momentum Scalper (09:30-11:00 & 13:30-14:15 IST)
+    if (!hasEntrySignal) {
+      const scalpRes = evaluateMomentumScalp(intradayBars, price, vwap, atr, hurst, now);
+      if (scalpRes.isScalpSignal && scalpRes.direction === 'LONG') {
+        hasEntrySignal = true;
+        strategy = 'Momentum Scalper';
+        entryRationale = scalpRes.rationale;
+      }
+    }
+
+    // 5. Candlestick Price Action & Microstructure Engine (Pinbars, Engulfing, Inside Bar Breakouts)
+    if (!hasEntrySignal) {
+      const cpaRes = evaluateCandlePriceAction(intradayBars, price, vwap, atr, volumeSurgeRatio, now);
+      if (cpaRes.isActionSignal && cpaRes.direction === 'LONG') {
+        const isAboveMultiDayTrend = market.history && market.history.length >= 30
+          ? price >= (market.history.slice(-30).reduce((a, b) => a + b, 0) / 30) * 0.998
+          : true;
+        if (isAboveMultiDayTrend) {
+          hasEntrySignal = true;
+          strategy = 'Candle Price Action';
+          currentConvictionBonus = cpaRes.convictionBonus;
+          entryRationale = cpaRes.rationale;
+        }
+      }
+    }
+
+    // 6. VWAP Standard Deviation Band Mean-Reversion Engine (-1.5σ to -2.0σ Oversold Bounces)
+    if (!hasEntrySignal && dayClassification.dayType !== 'BEAR_TREND_DAY') {
+      const mrRes = evaluateVWAPMeanReversion(intradayBars, price, atr, now);
+      if (mrRes.isSignal && mrRes.direction === 'LONG') {
+        hasEntrySignal = true;
+        strategy = 'VWAP Band Mean Reversion';
+        currentConvictionBonus = mrRes.convictionBonus;
+        ouZScore = mrRes.zScore;
+        entryRationale = mrRes.rationale;
+      }
+    }
+
+    const dayOpenPrice = (market.intradayCandles && market.intradayCandles.length > 0)
+      ? market.intradayCandles[0].open
+      : ((market as any).open ?? (market.candles && market.candles.length > 0 ? market.candles[market.candles.length - 1].open : price));
+    const mtfConfluence = evaluateMultiTimeframeConfluence(market, price, vwap, atr, hurst);
+    const vwapBands = calculateVWAPBands(intradayBars, price);
+    const sectorStats = sectorMomentum.sectorStatsMap.get(sector);
+
+    const brainDirective = evaluateStrategyMasterBrain({
+      istMinutes,
+      marketPrice: price,
+      dayOpenPrice,
+      vwap,
+      atr,
+      hurst,
+      squeezeStatus,
+      ouZScore,
+      macroBreadth,
+      sectorRank: sectorStats?.rank ?? 3,
+      sectorAvgChange: sectorStats?.averageChangePct ?? 0,
+      sectorAdvanceRatio: sectorStats?.advanceRatio ?? 0.5,
+      mtfConfluence,
+      vwapBands,
+      isSystemicShock,
+      intradayPnlContext,
+    });
+
+    if (hasEntrySignal) {
+      if (brainDirective.actionPermission !== 'PERMITTED') {
+        hasEntrySignal = false;
+        entryRationale = `[Master Brain ${brainDirective.scenarioId}: ${brainDirective.scenarioName}] ${brainDirective.rationale}`;
+      } else if (!brainDirective.allowedStrategies.includes(strategy)) {
+        hasEntrySignal = false;
+        entryRationale = `[Master Brain ${brainDirective.scenarioId}] Strategy ${strategy} prohibited. Allowed: ${brainDirective.allowedStrategies.join(', ')}`;
+      } else if (brainDirective.requireGreenOnDay && price < dayOpenPrice) {
+        hasEntrySignal = false;
+        entryRationale = `[Master Brain ${brainDirective.scenarioId}] Long setup rejected: Asset is red on day (Price ₹${price.toFixed(2)} < Open ₹${dayOpenPrice.toFixed(2)}).`;
       }
     }
 
     if (hasEntrySignal) {
       const extensionAboveVwapAtr = vwap > 0 && atr > 0 ? (price - vwap) / atr : 0;
-      const isFreshBreakout = squeezeStatus === 'SQUEEZE_OFF' && hasInstitutionalVolume;
-      if (volumeSurgeRatio < thresholds.MIN_ENTRY_VOLUME_SURGE_RATIO) {
+      const minVol = strategy === 'VWAP Band Mean Reversion' ? 0.60 : thresholds.MIN_ENTRY_VOLUME_SURGE_RATIO;
+      if (volumeSurgeRatio < minVol) {
         hasEntrySignal = false;
         entryRationale = `Entry rejected: last-candle volume is only ${volumeSurgeRatio.toFixed(2)}x average.`;
-      } else if (!isFreshBreakout && extensionAboveVwapAtr > thresholds.MAX_ENTRY_VWAP_EXTENSION_ATR) {
+      } else if (strategy !== 'VWAP Band Mean Reversion' && strategy !== 'Value Accumulator') {
+        if (extensionAboveVwapAtr > brainDirective.maxVwapExtensionAtr) {
+          hasEntrySignal = false;
+          entryRationale = `Entry rejected: price is extended ${extensionAboveVwapAtr.toFixed(2)} ATR above VWAP (max ${brainDirective.maxVwapExtensionAtr} ATR).`;
+        }
+      }
+    }
+
+    if (hasEntrySignal) {
+      // Multi-Timeframe Confluence Gate (30m macro trend + 1m micro momentum)
+      if (strategy === 'Hurst Trend Rider' && (mtfConfluence.macroTrendDirection === 'BEARISH' || mtfConfluence.alignmentScore < 45)) {
         hasEntrySignal = false;
-        entryRationale = `Entry rejected: price is extended ${extensionAboveVwapAtr.toFixed(2)} ATR above VWAP.`;
+        entryRationale = `Entry rejected: Severe MTF divergence (${mtfConfluence.alignmentScore}/100 - Macro ${mtfConfluence.macroTrendDirection}).`;
+      }
+
+      // Sector Momentum Laggard Defense: Reject long setups in deeply collapsing sectors
+      const secBonus = evaluateSectorAlignmentBonus(sector, sectorMomentum, true);
+      if (secBonus.scoreDelta <= -8 && strategy !== 'Value Accumulator' && strategy !== 'VWAP Band Mean Reversion') {
+        hasEntrySignal = false;
+        entryRationale = `Entry rejected: ${secBonus.rationale}`;
       }
     }
 
@@ -1198,6 +1423,8 @@ export function tickAutonomousPilot(
         hasInstitutionalVolume,
         entryRationale,
         price,
+        convictionBonus: currentConvictionBonus,
+        brainDirective,
       });
     }
 
@@ -1226,6 +1453,9 @@ export function tickAutonomousPilot(
       squeezeStatus: c.squeezeStatus,
       volumeSurgeRatio: c.volumeSurgeRatio,
       vwap: c.vwap,
+      strategy: c.strategy,
+      ouZScore: c.ouZScore,
+      convictionBonus: c.convictionBonus,
     }))
   );
 
@@ -1238,10 +1468,8 @@ export function tickAutonomousPilot(
     return rankA - rankB;
   });
 
-  const todayActions = getTodayPilotActionLogs(state, now);
-  const dayHasLoss = todayActions.some((log) => log.action === 'STOP_LOSS');
-  const dailyMisEntries = todayActions.filter((log) => log.action === 'BUY_ENTRY').length;
-  const activePositionCount = UPSTOX_FLEET_ASSETS.filter((asset) => (state.positions[asset] || 0) > 0).length;
+  const dayHasLoss = dailyLossCount > 0;
+  const dailyMisEntries = dailyTradesCount;
 
   const allocationCandidates: CandidateForAllocation[] = candidatePool.map((cand) => {
     const ranked = alphaByAsset.get(cand.asset);
@@ -1252,14 +1480,24 @@ export function tickAutonomousPilot(
       isIndianAsset(cand.asset) ? 0.05 : 0.01,
       ranked?.alphaConvictionIndex
     );
+    const candMarginMult = evaluateDynamicBuyingPower(
+      timingQuality,
+      cand.strategy,
+      cand.hurst,
+      ranked?.alphaConvictionIndex || 50,
+      false
+    );
     const projectedNotional = Math.min(
-      pv * (thresholds.MODE_40_1_ASSET_ALLOCATION_PCT / 100),
-      Math.max(0, allocatableCash)
+      pv * (thresholds.MODE_40_1_ASSET_ALLOCATION_PCT / 100) * candMarginMult,
+      Math.max(0, allocatableCash * candMarginMult)
     );
     const projectedQuantity = Math.max(1, Math.floor(projectedNotional / limitPrice));
     const friction = calculateRoundtripFriction(limitPrice, projectedQuantity, false);
     const realisticGrossProfit = Math.min(cand.atr * 1.25, limitPrice * 0.08) * projectedQuantity;
-    const dynamicFloor = calculateDynamicNetProfitFloor(friction.totalRoundtripFriction, projectedNotional);
+    const dynamicFloor = calculateDynamicNetProfitFloor(
+      friction.totalRoundtripFriction,
+      projectedNotional
+    );
     const rsi = indicators(cand.market.history, cand.market.candles).rsi ?? 50;
 
     return {
@@ -1282,11 +1520,30 @@ export function tickAutonomousPilot(
   });
   const allocationDecision = evaluateAllocationModeSwitch(allocationCandidates, dayHasLoss);
   const selectedAllocationAssets = new Set(allocationDecision.selectedCandidates.map((candidate) => candidate.asset));
+
+  // Micro-Adjustment Concurrency Gate:
+  // 1. In DEFENSIVE_RECOVERY (day has suffered a loss), cap concurrent positions strictly to 1.
+  // 2. Sequential Risk-Free Concurrency: If an existing active position is NOT yet risk-free
+  //    (trancheStage === 0 and stopLossPrice < entryPrice), prevent opening a 2nd position.
+  // 3. Prevent multi-order bursts: Dispatch at most 1 new order per evaluation tick so the top-ranked asset enters first.
+  const activeAssetsList = UPSTOX_FLEET_ASSETS.filter((a) => (state.positions[a] || 0) > 0);
+  const hasUnprotectedActivePosition = activeAssetsList.some((a) => {
+    const st = state.autonomousPilot?.activeFleet?.[a];
+    const buyPrice = state.avgBuyPrice?.[a] || st?.entryPrice || 0;
+    const stop = st?.stopLossPrice || 0;
+    const stage = st?.trancheStage || 0;
+    return stage === 0 && stop < buyPrice;
+  });
+
+  const effectiveMaxConcurrent = (dayHasLoss || dailyLossCount >= 1)
+    ? 1
+    : thresholds.MAX_CONCURRENT_MIS_POSITIONS;
+
   const availableConcurrentSlots = Math.max(
     0,
-    thresholds.MAX_CONCURRENT_MIS_POSITIONS - activePositionCount - pendingBuyAssets.size
+    effectiveMaxConcurrent - activePositionCount - pendingBuyAssets.size
   );
-  const maxNewEntries = Math.min(allocationDecision.maxPositions, availableConcurrentSlots);
+  const maxNewEntries = Math.min(allocationDecision.maxPositions, availableConcurrentSlots, 1);
   let dispatchedMisEntries = 0;
 
   if (candidatePool.length > 0 && allocationDecision.mode === 'STAND_ASIDE') {
@@ -1322,13 +1579,16 @@ export function tickAutonomousPilot(
       updatedFleet[asset].alphaConvictionIndex = ranked?.alphaConvictionIndex;
     }
 
+    if (isSystemicShock) continue;
     if (!selectedAllocationAssets.has(asset)) continue;
 
-    // Filter low-conviction entries during opening volatility and midday consolidation
-    if (timingQuality.phase === 'OPENING_VOLATILITY' && (ranked?.alphaConvictionIndex || 0) < 60) {
+    // Master Brain Dynamic Scenario Directive Gate
+    if (cand.brainDirective.actionPermission !== 'PERMITTED') {
       continue;
     }
-    if (timingQuality.phase === 'MIDDAY_CONSOLIDATION' && (ranked?.alphaConvictionIndex || 0) < 55) {
+
+    const minAciRequired = cand.brainDirective.minAciThreshold;
+    if ((ranked?.alphaConvictionIndex || 0) < minAciRequired) {
       continue;
     }
 
@@ -1409,8 +1669,8 @@ export function tickAutonomousPilot(
       ranked?.alphaConvictionIndex
     );
 
-    // Conditions-Based Dynamic Intraday Margin Leverage (1.0x to 3.0x)
-    const marginMultiplier = evaluateDynamicBuyingPower(
+    // Conditions-Based Dynamic Intraday Margin Leverage (1.0x to 4.5x from Master Brain Directive)
+    const marginMultiplier = cand.brainDirective?.marginMultiplier ?? evaluateDynamicBuyingPower(
       timingQuality,
       strategy,
       cand.hurst,
@@ -1419,21 +1679,51 @@ export function tickAutonomousPilot(
     );
 
     // Stop and Target Brackets
-    // For high-conviction margin breakouts (2.0x-3.0x), use a focused 1.0 - 1.25 ATR stop
+    // For high-conviction margin breakouts (2.5x-4.5x), use a focused 1.00 ATR stop
     // so notional can safely expand while total rupee risk is strictly anchored to <= ₹400
-    const effectiveStopAtrMult = marginMultiplier >= 2.0
+    const baseStopAtrMult = strategy === 'Momentum Scalper'
+      ? 0.60
+      : strategy === 'Candle Price Action'
+      ? 0.70
+      : strategy === 'VWAP Band Mean Reversion'
+      ? 0.75
+      : marginMultiplier >= 3.5 && (ranked?.alphaConvictionIndex || 0) >= 55
+      ? Math.min(profile.stopLossAtrMultiplier, 0.85)
+      : marginMultiplier >= 2.5
+      ? Math.min(profile.stopLossAtrMultiplier, 1.00)
+      : marginMultiplier >= 2.0
       ? Math.min(profile.stopLossAtrMultiplier, 1.25)
       : profile.stopLossAtrMultiplier;
-    const stopLossDist = Math.max(limitPrice * 0.008, atr * effectiveStopAtrMult);
+
+    const effectiveStopAtrMult = cand.brainDirective?.dailyPnlRegime === 'DEFENSIVE_RECOVERY'
+      ? Math.min(baseStopAtrMult, 0.80)
+      : baseStopAtrMult;
+    const stopLossDist = Math.max(limitPrice * 0.0035, atr * effectiveStopAtrMult);
     const stopLossPrice = alignToTickSize(limitPrice - stopLossDist, asset);
-    const takeProfitPrice = alignToTickSize(limitPrice + stopLossDist * profile.minRiskReward, asset);
+    const takeProfitPrice = cand.brainDirective?.trancheTargets
+      ? alignToTickSize(limitPrice + atr * cand.brainDirective.trancheTargets.tranche1Atr, asset)
+      : strategy === 'Momentum Scalper'
+      ? alignToTickSize(limitPrice + atr * 1.00, asset)
+      : strategy === 'Candle Price Action'
+      ? alignToTickSize(limitPrice + atr * 1.30, asset)
+      : strategy === 'VWAP Band Mean Reversion'
+      ? alignToTickSize(Math.max(limitPrice + atr * 1.10, cand.vwap * 0.999), asset)
+      : alignToTickSize(limitPrice + stopLossDist * profile.minRiskReward, asset);
     // Adaptive Trend Expansion: In confirmed high-Hurst super-trends (H >= 0.62) with Squeeze Release,
     // dynamically expand Tranche 2 take-profit multiplier by 20% to capture larger multi-ATR trend runners!
     const isSuperTrend = cand.hurst >= 0.62 && cand.squeezeStatus === 'SQUEEZE_OFF';
     const dynamicTpMultiplier = isSuperTrend
       ? profile.takeProfitAtrMultiplier * 1.20
       : profile.takeProfitAtrMultiplier;
-    const takeProfit2Price = alignToTickSize(limitPrice + atr * dynamicTpMultiplier, asset);
+    const takeProfit2Price = cand.brainDirective?.trancheTargets
+      ? alignToTickSize(limitPrice + atr * cand.brainDirective.trancheTargets.tranche2Atr, asset)
+      : strategy === 'Momentum Scalper'
+      ? alignToTickSize(limitPrice + atr * 1.80, asset)
+      : strategy === 'Candle Price Action'
+      ? alignToTickSize(limitPrice + atr * 2.10, asset)
+      : strategy === 'VWAP Band Mean Reversion'
+      ? alignToTickSize(Math.max(limitPrice + atr * 1.80, cand.vwap + atr * 0.5), asset)
+      : alignToTickSize(limitPrice + atr * dynamicTpMultiplier, asset);
     const takeProfit3Price = calculateChandelierExit(cand.market.history, 22, 2.0);
 
     const riskPerShare = limitPrice - stopLossPrice;
@@ -1446,6 +1736,11 @@ export function tickAutonomousPilot(
     if (cand.hurst > 0.60) estimatedWinRate += 0.03;
     if ((ranked?.relativeStrengthPct || 0) > 0) estimatedWinRate += 0.03;
     if ((ranked?.alphaConvictionIndex || 0) >= 75) estimatedWinRate += 0.03;
+    // Conviction-Aware Kelly Dampener: Reduce sizing for marginal entries (ACI 50-60)
+    // and slightly boost sizing for solid entries (ACI 60-75) to concentrate capital on best setups
+    const aci = ranked?.alphaConvictionIndex || 0;
+    if (aci >= 50 && aci < 60) estimatedWinRate -= 0.04;
+    else if (aci >= 60 && aci < 75) estimatedWinRate += 0.02;
 
     // Adaptive Volatility Shock Dampener: In high-volatility chop (ATR/P > 4.5%), dampen Kelly sizing
     if (atr / price > 0.045) {
@@ -1466,12 +1761,14 @@ export function tickAutonomousPilot(
       estWinRate,
       rrRatio,
       thresholds.MAX_KELLY_SIZE_MULTIPLIER,
-      thresholds.MIN_KELLY_SIZE_MULTIPLIER
+      0.65
     );
 
     // Sizing via Fractional Risk Budget multiplied by Half-Kelly multiplier
     const baseRiskCapital = pv * (profile.maxRiskPerTradePct / 100);
-    const maxRiskCapital = baseRiskCapital * kellyRes.recommendedSizeMultiplier;
+    const convictionBoost = cand.brainDirective?.riskBudgetMultiplier ?? ((ranked?.alphaConvictionIndex || 0) >= 60 ? 1.15 : 1.0);
+    if (convictionBoost <= 0) continue;
+    const maxRiskCapital = Math.min(500, baseRiskCapital * kellyRes.recommendedSizeMultiplier * convictionBoost);
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
 
     // Allocation mode asset-cap ceiling scaled by dynamic margin multiplier
@@ -1479,7 +1776,11 @@ export function tickAutonomousPilot(
     const maxAssetExposure = pv * (baseExposurePct / 100) * marginMultiplier;
     let proposedNotional = unitsToBuy * limitPrice;
     if (proposedNotional > maxAssetExposure) {
-      unitsToBuy = Math.max(1, Math.floor(maxAssetExposure / limitPrice));
+      unitsToBuy = Math.floor(maxAssetExposure / limitPrice);
+      if (unitsToBuy < 1) {
+        // Even a single share exceeds the maximum permissible single-asset exposure.
+        continue;
+      }
       proposedNotional = unitsToBuy * limitPrice;
     }
 
@@ -1559,58 +1860,87 @@ export function tickAutonomousPilot(
       continue; // Server already rejected a BUY for this asset recently — wait out the cooldown
     }
 
-    const requiredOrderCash = (unitsToBuy * limitPrice) / marginMultiplier;
+    let requiredOrderCash = (unitsToBuy * limitPrice) / marginMultiplier;
     if (requiredOrderCash > allocatableCash || allocatableCash <= 0) {
-      const recentCashSkip = state.autonomousPilot?.actionLogs?.find(
-        (l) => l.asset === asset && (l.action === 'SKIPPED' || l.action === 'THROTTLED') && now - l.timestamp < CASH_COOLDOWN_MS
-      );
-      if (!recentCashSkip) {
-        newActionLogs.push({
-          id: `log_cash_floor_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'SKIPPED',
-          strategy,
-          detail: `Preserving mandatory ${minCashFloorPct}% liquid cash buffer. Required margin: ₹${requiredOrderCash.toFixed(2)}, Allocatable: ₹${allocatableCash.toFixed(2)}.`,
-          price: limitPrice,
-          status: 'BLOCKED',
-        });
+      if ((cand.brainDirective?.downsizingAllowed ?? true) && allocatableCash > 0) {
+        // Graceful Downsizing: Scale unitsToBuy to fit available allocatable cash
+        const maxAffordableUnits = Math.floor((allocatableCash * marginMultiplier) / limitPrice);
+        if (maxAffordableUnits >= 1 && (maxAffordableUnits * limitPrice) >= effectiveMinNotional) {
+          unitsToBuy = maxAffordableUnits;
+          proposedNotional = unitsToBuy * limitPrice;
+          requiredOrderCash = proposedNotional / marginMultiplier;
+        }
       }
-      continue;
+
+      if (requiredOrderCash > allocatableCash || allocatableCash <= 0) {
+        const recentCashSkip = state.autonomousPilot?.actionLogs?.find(
+          (l) => l.asset === asset && (l.action === 'SKIPPED' || l.action === 'THROTTLED') && now - l.timestamp < CASH_COOLDOWN_MS
+        );
+        if (!recentCashSkip) {
+          newActionLogs.push({
+            id: `log_cash_floor_${asset}_${now}`,
+            timestamp: now,
+            asset,
+            action: 'SKIPPED',
+            strategy,
+            detail: `Preserving mandatory ${minCashFloorPct}% liquid cash buffer. Required margin: ₹${requiredOrderCash.toFixed(2)}, Allocatable: ₹${allocatableCash.toFixed(2)}.`,
+            price: limitPrice,
+            status: 'BLOCKED',
+          });
+        }
+        continue;
+      }
     }
 
-    // Sector Concentration Defense (Max MAX_SECTOR_ALLOCATION_PCT of total portfolio in any single sector)
+    // Sector Concentration Defense (Max MAX_SECTOR_ALLOCATION_PCT of total buying power in any single sector)
+    const effectiveTotalCapacity = pv * marginMultiplier;
     const sectorCheck = validateSectorExposureLimit(
       asset,
       proposedNotional,
       state.positions,
       markets,
-      pv,
+      effectiveTotalCapacity,
       thresholds.MAX_SECTOR_ALLOCATION_PCT
     );
 
     if (!sectorCheck.allowed) {
-      const recentSectorCap = state.autonomousPilot?.actionLogs?.find(
-        (l) => l.asset === asset && l.action === 'SECTOR_CAP_DEFENSE' && now - l.timestamp < 300_000
-      );
-      if (!recentSectorCap) {
-        newActionLogs.push({
-          id: `log_sector_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'SECTOR_CAP_DEFENSE',
-          strategy,
-          detail: sectorCheck.reason || `Sector concentration cap (${thresholds.MAX_SECTOR_ALLOCATION_PCT}%) reached for ${sector}.`,
-          price: limitPrice,
-          status: 'BLOCKED',
-        });
+      // Graceful Downsizing: Trim unitsToBuy to fit allowable sector capacity instead of outright dropping the setup
+      const currentSectorNotional = Object.entries(state.positions).reduce((sum, [sym, qty]) => {
+        if (!qty || qty <= 0) return sum;
+        if (getAssetSector(sym) === sector) {
+          return sum + qty * ((markets as any)[sym]?.price || 0);
+        }
+        return sum;
+      }, 0);
+      const maxSectorNotional = effectiveTotalCapacity * (thresholds.MAX_SECTOR_ALLOCATION_PCT / 100);
+      const availableSectorCapacity = Math.max(0, maxSectorNotional - currentSectorNotional);
+      const cappedUnits = Math.floor(availableSectorCapacity / limitPrice);
+
+      if (cappedUnits >= 1 && cappedUnits * limitPrice >= effectiveMinNotional) {
+        unitsToBuy = cappedUnits;
+        proposedNotional = unitsToBuy * limitPrice;
+      } else {
+        const recentSectorCap = state.autonomousPilot?.actionLogs?.find(
+          (l) => l.asset === asset && l.action === 'SECTOR_CAP_DEFENSE' && now - l.timestamp < 300_000
+        );
+        if (!recentSectorCap) {
+          newActionLogs.push({
+            id: `log_sector_${asset}_${now}`,
+            timestamp: now,
+            asset,
+            action: 'SECTOR_CAP_DEFENSE',
+            strategy,
+            detail: sectorCheck.reason || `Sector concentration cap (${thresholds.MAX_SECTOR_ALLOCATION_PCT}%) reached for ${sector}.`,
+            price: limitPrice,
+            status: 'BLOCKED',
+          });
+        }
+        continue;
       }
-      continue;
     }
 
     // Pre-Trade TCA Friction Hurdle:
     // 1. Overall target profit must be >= MIN_FRICTION_PROFIT_MULTIPLE (3.0x) roundtrip friction
-    // 2. Realistic near-term gain (at 1.25 ATR) must clear the absolute net-profit floor.
     const isDeliveryOrder = false;
     const expectedGrossProfit = (takeProfitPrice - limitPrice) * unitsToBuy;
     const orderFriction = calculateRoundtripFriction(limitPrice, unitsToBuy, isDeliveryOrder);
@@ -1702,6 +2032,7 @@ export function tickAutonomousPilot(
       takeProfit2Price,
       takeProfit3Price,
       unitsHeld: 0,
+      entryTimestamp: now,
       lastActionAt: now,
       lastActionDetail: cand.entryRationale,
       sector,

@@ -72,22 +72,45 @@ async function fetchWithRetry(url: string, retries = 5): Promise<any> {
 
 async function main() {
   await mkdir(CACHE_DIR, { recursive: true });
-  const tradingDays = getLastNTradingDays(250);
-  const startDate = tradingDays[0];
-  const endDate = tradingDays[tradingDays.length - 1];
+
+  const args = process.argv.slice(2);
+  let startDate = '2022-01-03';
+  let endDate = '2026-09-10';
+
+  for (const arg of args) {
+    if (arg.startsWith('--start=')) startDate = arg.split('=')[1].trim();
+    if (arg.startsWith('--end=')) endDate = arg.split('=')[1].trim();
+    if (arg.startsWith('--days=')) {
+      const d = Number(arg.split('=')[1].trim());
+      const days = getLastNTradingDays(d);
+      startDate = days[0];
+      endDate = days[days.length - 1];
+    }
+  }
+
+  // Generate all weekdays between startDate and endDate
+  const startDt = new Date(`${startDate}T12:00:00+05:30`);
+  const endDt = new Date(`${endDate}T12:00:00+05:30`);
+  const tradingDays: string[] = [];
+  let dIter = new Date(startDt);
+  while (dIter <= endDt) {
+    const isWk = IndianMarketCalendar.isWeekend(dIter);
+    const ist = IndianMarketCalendar.toIST(dIter);
+    if (!isWk) {
+      tradingDays.push(ist.dateStr);
+    }
+    dIter.setDate(dIter.getDate() + 1);
+  }
 
   console.log('='.repeat(80));
-  console.log('  BATCHED FLEET HISTORICAL CANDLE CACHE BUILDER');
+  console.log('  5-YEAR BATCHED FLEET HISTORICAL CANDLE INGESTION PIPELINE');
   console.log('='.repeat(80));
-  console.log(`Window:       250 Trading Days (${startDate} → ${endDate})`);
+  console.log(`Window:       ${tradingDays.length} Weekdays (${startDate} → ${endDate})`);
   console.log(`Assets:       ${UPSTOX_FLEET_ASSETS.length} Institutional Bluechips`);
   console.log(`Target Cache: ${CACHE_DIR}`);
   console.log('='.repeat(80));
 
   // Build 25-day windows covering startDate to endDate
-  const startDt = new Date(`${startDate}T00:00:00+05:30`);
-  const endDt = new Date(`${endDate}T23:59:59+05:30`);
-  
   const intervals: { from: string; to: string }[] = [];
   let curr = new Date(startDt);
   while (curr <= endDt) {
@@ -202,8 +225,29 @@ async function main() {
     }
   }
 
-  console.log('\n\n================================================================================');
-  console.log('  CACHE SYNCHRONIZATION COMPLETE');
+  console.log('\n\nPopulating empty files for market holiday closures...');
+  let holidayFilesCount = 0;
+  for (const asset of UPSTOX_FLEET_ASSETS) {
+    const inst = UpstoxInstrumentRegistry.get(asset);
+    if (!inst) continue;
+    const safeKey = inst.instrumentKey.replace(/[^a-zA-Z0-9]/g, '_');
+    for (const day of tradingDays) {
+      const f1 = join(CACHE_DIR, `${safeKey}_${day}_1m.json`);
+      const f30 = join(CACHE_DIR, `${safeKey}_${day}_30m.json`);
+      if (!existsSync(f1)) {
+        await writeFile(f1, '[]', 'utf-8');
+        holidayFilesCount++;
+      }
+      if (!existsSync(f30)) {
+        await writeFile(f30, '[]', 'utf-8');
+        holidayFilesCount++;
+      }
+    }
+  }
+  console.log(`Populated ${holidayFilesCount} closed/holiday session placeholders.`);
+
+  console.log('\n================================================================================');
+  console.log('  5-YEAR HISTORICAL CANDLE CACHE SYNCHRONIZATION COMPLETE');
   console.log('================================================================================');
 }
 

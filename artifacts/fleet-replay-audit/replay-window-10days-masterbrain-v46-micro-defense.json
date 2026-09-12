@@ -1,0 +1,4009 @@
+{
+  "windowDays": 10,
+  "startDate": "2026-08-31",
+  "endDate": "2026-09-11",
+  "profile": "balanced",
+  "startingCapital": 40000,
+  "endingNav": 40536.84423749999,
+  "totalNetPnl": 536.8442374999868,
+  "totalNetReturnPct": 1.3421105937499669,
+  "maxWindowDrawdownPct": 0.9543940543159329,
+  "totalFeeBurn": 324.90576250000004,
+  "totalTrades": 18,
+  "totalWins": 13,
+  "totalLosses": 5,
+  "winRatePct": 72.22222222222221,
+  "profitFactor": 1.860304031095172,
+  "dailyDistribution": {
+    "greenDays": 4,
+    "flatDays": 3,
+    "redDays": 3
+  },
+  "dailyBreakdown": [
+    {
+      "date": "2026-08-31",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40000,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 26,
+      "events": [
+        {
+          "minute": 3,
+          "timeStr": "2026-08-31T09:18:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3591.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 6,
+          "timeStr": "2026-08-31T09:21:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3615.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2026-08-31T09:24:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3609.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2026-08-31T09:26:00+05:30",
+          "asset": "KPITTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 592.65,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-08-31T09:27:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3605.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2026-08-31T09:29:00+05:30",
+          "asset": "KPITTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 590.95,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-08-31T09:30:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1116.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-08-31T09:30:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3593.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-08-31T09:32:00+05:30",
+          "asset": "KPITTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 591,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-08-31T09:33:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1115.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-08-31T09:33:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3601.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2026-08-31T09:35:00+05:30",
+          "asset": "KPITTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 589.45,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-08-31T09:36:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1112.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-08-31T09:36:00+05:30",
+          "asset": "PERSISTENT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5638.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-08-31T09:36:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3586,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-08-31T09:38:00+05:30",
+          "asset": "KPITTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 591.35,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-08-31T09:39:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1113,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-08-31T09:39:00+05:30",
+          "asset": "LTM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4559.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-08-31T09:39:00+05:30",
+          "asset": "PERSISTENT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5645,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-08-31T09:39:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3591,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-08-31T09:41:00+05:30",
+          "asset": "KPITTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 592.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-08-31T09:42:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1114,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-08-31T09:42:00+05:30",
+          "asset": "LTM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 4557.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-08-31T09:42:00+05:30",
+          "asset": "PERSISTENT",
+          "type": "VOLATILITY_SHOCK",
+          "price": 5628,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-08-31T09:42:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3585.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-08-31T09:44:00+05:30",
+          "asset": "KPITTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 590.95,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-01",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 40000,
+      "endingNav": 40134.248775,
+      "netPnl": 134.24877500000002,
+      "netReturnPct": 0.3356219375,
+      "feeBurn": 27.251225000000005,
+      "tradesCount": 1,
+      "winsCount": 1,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.21824250344507798,
+      "closedTrades": [
+        {
+          "day": "2026-09-01",
+          "asset": "TRENT",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:60]",
+          "entryTime": "11:58:00 am",
+          "exitTime": "12:05:00 pm",
+          "entryPrice": 2864.3,
+          "exitPrice": 2872.8,
+          "quantity": 19,
+          "pnl": 147.8542,
+          "pnlPct": 0.2967566246552386,
+          "exitReason": "Breakout Failed: Price (₹2872.80) broke below institutional VWAP support (₹3009.09). Micro-loss capital defense exit."
+        }
+      ],
+      "eventsCount": 55,
+      "events": [
+        {
+          "minute": 1,
+          "timeStr": "2026-09-01T09:16:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1456.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 4,
+          "timeStr": "2026-09-01T09:19:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1448.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2026-09-01T09:22:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1453.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2026-09-01T09:25:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1453.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-09-01T09:28:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1456.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-09-01T09:31:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1460.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2026-09-01T09:34:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1458.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-01T09:37:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1459.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-01T09:40:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1457.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-01T09:43:00+05:30",
+          "asset": "NESTLEIND",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1453.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 146,
+          "timeStr": "2026-09-01T11:41:00+05:30",
+          "asset": "TRENT",
+          "type": "ENTRY_QUEUED",
+          "price": 2864.3,
+          "qty": 19,
+          "detail": "Queued Limit BUY 19 @ ₹2864.30 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:60]] SL: ₹2851.40 TP: ₹2883.20"
+        },
+        {
+          "minute": 163,
+          "timeStr": "2026-09-01T11:58:00+05:30",
+          "asset": "TRENT",
+          "type": "ORDER_FILLED",
+          "price": 2864.3,
+          "qty": 19,
+          "detail": "Limit Buy FILLED for 19 shs @ ₹2864.30 (Limit was ₹2864.30). Fee: ₹13.61"
+        },
+        {
+          "minute": 170,
+          "timeStr": "2026-09-01T12:05:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "SKIPPED",
+          "price": 5188.5,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BRITANNIA net expected profit (₹16.40) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 170,
+          "timeStr": "2026-09-01T12:05:00+05:30",
+          "asset": "TRENT",
+          "type": "PROFIT_HARVEST",
+          "price": 2872.8,
+          "qty": 19,
+          "detail": "Breakout Failed: Price (₹2872.80) broke below institutional VWAP support (₹3009.09). Micro-loss capital defense exit. on 19 shs @ ₹2872.80: P&L +₹147.85 (0.30%)"
+        },
+        {
+          "minute": 171,
+          "timeStr": "2026-09-01T12:06:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 176,
+          "timeStr": "2026-09-01T12:11:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 181,
+          "timeStr": "2026-09-01T12:16:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 186,
+          "timeStr": "2026-09-01T12:21:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 191,
+          "timeStr": "2026-09-01T12:26:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 196,
+          "timeStr": "2026-09-01T12:31:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 201,
+          "timeStr": "2026-09-01T12:36:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 206,
+          "timeStr": "2026-09-01T12:41:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 211,
+          "timeStr": "2026-09-01T12:46:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 216,
+          "timeStr": "2026-09-01T12:51:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 221,
+          "timeStr": "2026-09-01T12:56:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 226,
+          "timeStr": "2026-09-01T13:01:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 231,
+          "timeStr": "2026-09-01T13:06:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 236,
+          "timeStr": "2026-09-01T13:11:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 241,
+          "timeStr": "2026-09-01T13:16:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 246,
+          "timeStr": "2026-09-01T13:21:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 251,
+          "timeStr": "2026-09-01T13:26:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 256,
+          "timeStr": "2026-09-01T13:31:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 261,
+          "timeStr": "2026-09-01T13:36:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 266,
+          "timeStr": "2026-09-01T13:41:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 271,
+          "timeStr": "2026-09-01T13:46:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 276,
+          "timeStr": "2026-09-01T13:51:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 281,
+          "timeStr": "2026-09-01T13:56:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 286,
+          "timeStr": "2026-09-01T14:01:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 291,
+          "timeStr": "2026-09-01T14:06:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 296,
+          "timeStr": "2026-09-01T14:11:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 301,
+          "timeStr": "2026-09-01T14:16:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 306,
+          "timeStr": "2026-09-01T14:21:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 311,
+          "timeStr": "2026-09-01T14:26:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 316,
+          "timeStr": "2026-09-01T14:31:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 321,
+          "timeStr": "2026-09-01T14:36:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 326,
+          "timeStr": "2026-09-01T14:41:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 331,
+          "timeStr": "2026-09-01T14:46:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 336,
+          "timeStr": "2026-09-01T14:51:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 341,
+          "timeStr": "2026-09-01T14:56:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 346,
+          "timeStr": "2026-09-01T15:01:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 351,
+          "timeStr": "2026-09-01T15:06:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 356,
+          "timeStr": "2026-09-01T15:11:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 361,
+          "timeStr": "2026-09-01T15:16:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 366,
+          "timeStr": "2026-09-01T15:21:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 371,
+          "timeStr": "2026-09-01T15:26:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹134.25 >= ₹100.00) achieved. Capital locked in cash for the session."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-02",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40134.248775,
+      "endingNav": 40279.789124999996,
+      "netPnl": 145.54034999999567,
+      "netReturnPct": 0.3626337964263931,
+      "feeBurn": 47.15965000000001,
+      "tradesCount": 4,
+      "winsCount": 3,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.5439523095813561,
+      "closedTrades": [
+        {
+          "day": "2026-09-02",
+          "asset": "ONGC",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:64]",
+          "entryTime": "9:45:00 am",
+          "exitTime": "9:51:00 am",
+          "entryPrice": 238.05000000000004,
+          "exitPrice": 237.65,
+          "quantity": 283,
+          "pnl": -130.01373750000965,
+          "pnlPct": -0.16803192606596684,
+          "exitReason": "Breakout Failed: Price (₹237.65) broke below institutional VWAP support (₹238.07). Micro-loss capital defense exit."
+        },
+        {
+          "day": "2026-09-02",
+          "asset": "BERGEPAINT",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]",
+          "entryTime": "10:03:00 am",
+          "exitTime": "10:27:00 am",
+          "entryPrice": 479.55,
+          "exitPrice": 483.1,
+          "quantity": 28,
+          "pnl": 96.01830000000032,
+          "pnlPct": 0.7402773433427194,
+          "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹483.10 (+0.74%). Locking partial profit."
+        },
+        {
+          "day": "2026-09-02",
+          "asset": "BERGEPAINT",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]",
+          "entryTime": "10:03:00 am",
+          "exitTime": "10:41:00 am",
+          "entryPrice": 479.55,
+          "exitPrice": 486.85,
+          "quantity": 14,
+          "pnl": 100.49602500000016,
+          "pnlPct": 1.5222604525075616,
+          "exitReason": "Core Target T2 reached at ₹486.85 (+1.52%). Harvesting core gain."
+        },
+        {
+          "day": "2026-09-02",
+          "asset": "BERGEPAINT",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]",
+          "entryTime": "10:03:00 am",
+          "exitTime": "10:44:00 am",
+          "entryPrice": 479.55,
+          "exitPrice": 487,
+          "quantity": 14,
+          "pnl": 102.59549999999984,
+          "pnlPct": 1.5535397768741503,
+          "exitReason": "Chandelier Trailing Exit triggered at ₹487.00. Final runner closed."
+        }
+      ],
+      "eventsCount": 95,
+      "events": [
+        {
+          "minute": 6,
+          "timeStr": "2026-09-02T09:21:00+05:30",
+          "asset": "MPHASIS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2433,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 7,
+          "timeStr": "2026-09-02T09:22:00+05:30",
+          "asset": "LTTS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3501.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2026-09-02T09:24:00+05:30",
+          "asset": "MPHASIS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2449.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 9,
+          "timeStr": "2026-09-02T09:24:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3545.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2026-09-02T09:25:00+05:30",
+          "asset": "LTTS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3510.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-02T09:27:00+05:30",
+          "asset": "MPHASIS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2460,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-02T09:27:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3558,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-09-02T09:28:00+05:30",
+          "asset": "LTTS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3509.1,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-09-02T09:30:00+05:30",
+          "asset": "MPHASIS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2463.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-09-02T09:30:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3558,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-09-02T09:31:00+05:30",
+          "asset": "LTTS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3508.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-09-02T09:33:00+05:30",
+          "asset": "MPHASIS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2471.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-09-02T09:33:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3572,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2026-09-02T09:34:00+05:30",
+          "asset": "LTTS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3519.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-02T09:36:00+05:30",
+          "asset": "MPHASIS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2476,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-02T09:36:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3588.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-02T09:37:00+05:30",
+          "asset": "LTTS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3518.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-02T09:39:00+05:30",
+          "asset": "MPHASIS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2468.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-02T09:39:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3577.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-02T09:40:00+05:30",
+          "asset": "LTTS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3519.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-02T09:42:00+05:30",
+          "asset": "MPHASIS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 2474.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-02T09:42:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3582.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-02T09:43:00+05:30",
+          "asset": "LTTS",
+          "type": "VOLATILITY_SHOCK",
+          "price": 3521,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-02T09:44:00+05:30",
+          "asset": "ONGC",
+          "type": "ENTRY_QUEUED",
+          "price": 238.05,
+          "qty": 283,
+          "detail": "Queued Limit BUY 283 @ ₹238.05 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:64]] SL: ₹236.90 TP: ₹239.90"
+        },
+        {
+          "minute": 30,
+          "timeStr": "2026-09-02T09:45:00+05:30",
+          "asset": "ONGC",
+          "type": "ORDER_FILLED",
+          "price": 238.05,
+          "qty": 283,
+          "detail": "Limit Buy FILLED for 283 shs @ ₹238.05 (Limit was ₹238.05). Fee: ₹16.84"
+        },
+        {
+          "minute": 36,
+          "timeStr": "2026-09-02T09:51:00+05:30",
+          "asset": "ONGC",
+          "type": "STOP_LOSS_EXIT",
+          "price": 237.65,
+          "qty": 283,
+          "detail": "Breakout Failed: Price (₹237.65) broke below institutional VWAP support (₹238.07). Micro-loss capital defense exit. on 283 shs @ ₹237.65: P&L ₹-130.01 (-0.17%)"
+        },
+        {
+          "minute": 47,
+          "timeStr": "2026-09-02T10:02:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "ENTRY_QUEUED",
+          "price": 479.55,
+          "qty": 56,
+          "detail": "Queued Limit BUY 56 @ ₹479.55 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]] SL: ₹477.25 TP: ₹482.90"
+        },
+        {
+          "minute": 48,
+          "timeStr": "2026-09-02T10:03:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "ORDER_FILLED",
+          "price": 479.55,
+          "qty": 56,
+          "detail": "Limit Buy FILLED for 56 shs @ ₹479.55 (Limit was ₹479.55). Fee: ₹6.71"
+        },
+        {
+          "minute": 57,
+          "timeStr": "2026-09-02T10:12:00+05:30",
+          "asset": "BHARATFORG",
+          "type": "SKIPPED",
+          "price": 2014.6,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 59,
+          "timeStr": "2026-09-02T10:14:00+05:30",
+          "asset": "APOLLOHOSP",
+          "type": "SKIPPED",
+          "price": 8688,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate APOLLOHOSP net expected profit (₹252.44) is below dynamic net floor (₹291.22). Standing aside in cash."
+        },
+        {
+          "minute": 64,
+          "timeStr": "2026-09-02T10:19:00+05:30",
+          "asset": "CIPLA",
+          "type": "SKIPPED",
+          "price": 1402.2,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 72,
+          "timeStr": "2026-09-02T10:27:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "PROFIT_HARVEST",
+          "price": 483.1,
+          "qty": 28,
+          "detail": "Tranche 1 (+1.5 ATR) reached at ₹483.10 (+0.74%). Locking partial profit. on 28 shs @ ₹483.10: P&L +₹96.02 (0.74%)"
+        },
+        {
+          "minute": 78,
+          "timeStr": "2026-09-02T10:33:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "SKIPPED",
+          "price": 1969.9,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate HINDUNILVR net expected profit (₹193.46) is below dynamic net floor (₹270.17). Standing aside in cash."
+        },
+        {
+          "minute": 83,
+          "timeStr": "2026-09-02T10:38:00+05:30",
+          "asset": "HINDUNILVR",
+          "type": "SKIPPED",
+          "price": 1968.7,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate HINDUNILVR net expected profit (₹193.77) is below dynamic net floor (₹270.57). Standing aside in cash."
+        },
+        {
+          "minute": 85,
+          "timeStr": "2026-09-02T10:40:00+05:30",
+          "asset": "M&M",
+          "type": "SKIPPED",
+          "price": 3178.7,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 86,
+          "timeStr": "2026-09-02T10:41:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "PROFIT_HARVEST",
+          "price": 486.85,
+          "qty": 14,
+          "detail": "Core Target T2 reached at ₹486.85 (+1.52%). Harvesting core gain. on 14 shs @ ₹486.85: P&L +₹100.50 (1.52%)"
+        },
+        {
+          "minute": 89,
+          "timeStr": "2026-09-02T10:44:00+05:30",
+          "asset": "DRREDDY",
+          "type": "SKIPPED",
+          "price": 1163.3,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate DRREDDY net expected profit (₹229.55) is below dynamic net floor (₹248.13). Standing aside in cash."
+        },
+        {
+          "minute": 89,
+          "timeStr": "2026-09-02T10:44:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "PROFIT_HARVEST",
+          "price": 487,
+          "qty": 14,
+          "detail": "Chandelier Trailing Exit triggered at ₹487.00. Final runner closed. on 14 shs @ ₹487.00: P&L +₹102.60 (1.55%)"
+        },
+        {
+          "minute": 90,
+          "timeStr": "2026-09-02T10:45:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 95,
+          "timeStr": "2026-09-02T10:50:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 100,
+          "timeStr": "2026-09-02T10:55:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 105,
+          "timeStr": "2026-09-02T11:00:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 110,
+          "timeStr": "2026-09-02T11:05:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 115,
+          "timeStr": "2026-09-02T11:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 120,
+          "timeStr": "2026-09-02T11:15:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 125,
+          "timeStr": "2026-09-02T11:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 130,
+          "timeStr": "2026-09-02T11:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 135,
+          "timeStr": "2026-09-02T11:30:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 140,
+          "timeStr": "2026-09-02T11:35:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 145,
+          "timeStr": "2026-09-02T11:40:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 150,
+          "timeStr": "2026-09-02T11:45:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 155,
+          "timeStr": "2026-09-02T11:50:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 160,
+          "timeStr": "2026-09-02T11:55:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 165,
+          "timeStr": "2026-09-02T12:00:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 170,
+          "timeStr": "2026-09-02T12:05:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 175,
+          "timeStr": "2026-09-02T12:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 180,
+          "timeStr": "2026-09-02T12:15:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 185,
+          "timeStr": "2026-09-02T12:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 190,
+          "timeStr": "2026-09-02T12:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 195,
+          "timeStr": "2026-09-02T12:30:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 200,
+          "timeStr": "2026-09-02T12:35:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 205,
+          "timeStr": "2026-09-02T12:40:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 210,
+          "timeStr": "2026-09-02T12:45:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 215,
+          "timeStr": "2026-09-02T12:50:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 220,
+          "timeStr": "2026-09-02T12:55:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 225,
+          "timeStr": "2026-09-02T13:00:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 230,
+          "timeStr": "2026-09-02T13:05:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 235,
+          "timeStr": "2026-09-02T13:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 240,
+          "timeStr": "2026-09-02T13:15:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 245,
+          "timeStr": "2026-09-02T13:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 250,
+          "timeStr": "2026-09-02T13:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 255,
+          "timeStr": "2026-09-02T13:30:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 260,
+          "timeStr": "2026-09-02T13:35:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 265,
+          "timeStr": "2026-09-02T13:40:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 270,
+          "timeStr": "2026-09-02T13:45:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 275,
+          "timeStr": "2026-09-02T13:50:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 280,
+          "timeStr": "2026-09-02T13:55:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 285,
+          "timeStr": "2026-09-02T14:00:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 290,
+          "timeStr": "2026-09-02T14:05:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 295,
+          "timeStr": "2026-09-02T14:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 300,
+          "timeStr": "2026-09-02T14:15:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 305,
+          "timeStr": "2026-09-02T14:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 310,
+          "timeStr": "2026-09-02T14:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 315,
+          "timeStr": "2026-09-02T14:30:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 320,
+          "timeStr": "2026-09-02T14:35:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 325,
+          "timeStr": "2026-09-02T14:40:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 330,
+          "timeStr": "2026-09-02T14:45:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 335,
+          "timeStr": "2026-09-02T14:50:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 340,
+          "timeStr": "2026-09-02T14:55:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 345,
+          "timeStr": "2026-09-02T15:00:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 350,
+          "timeStr": "2026-09-02T15:05:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 355,
+          "timeStr": "2026-09-02T15:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 360,
+          "timeStr": "2026-09-02T15:15:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 365,
+          "timeStr": "2026-09-02T15:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 370,
+          "timeStr": "2026-09-02T15:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹145.54 >= ₹100.00) achieved. Capital locked in cash for the session."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-03",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 40279.789124999996,
+      "endingNav": 39993.7293125,
+      "netPnl": -286.05981249999604,
+      "netReturnPct": -0.7101820012321032,
+      "feeBurn": 35.8098125,
+      "tradesCount": 1,
+      "winsCount": 0,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.7101820012321032,
+      "closedTrades": [
+        {
+          "day": "2026-09-03",
+          "asset": "TATASTEEL",
+          "strategy": "Auto-Pilot: Candle Price Action [Rank #1 ACI:65]",
+          "entryTime": "9:41:00 am",
+          "exitTime": "9:45:00 am",
+          "entryPrice": 186.35,
+          "exitPrice": 185.7,
+          "quantity": 385,
+          "pnl": -268.12362500000216,
+          "pnlPct": -0.34880601019587104,
+          "exitReason": "Breakout Failed: Price (₹185.70) broke below institutional VWAP support (₹186.34). Micro-loss capital defense exit."
+        }
+      ],
+      "eventsCount": 24,
+      "events": [
+        {
+          "minute": 9,
+          "timeStr": "2026-09-03T09:24:00+05:30",
+          "asset": "HCLTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1312.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 10,
+          "timeStr": "2026-09-03T09:25:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1124.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 11,
+          "timeStr": "2026-09-03T09:26:00+05:30",
+          "asset": "COFORGE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1923.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 12,
+          "timeStr": "2026-09-03T09:27:00+05:30",
+          "asset": "HCLTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1312.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-09-03T09:28:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 14,
+          "timeStr": "2026-09-03T09:29:00+05:30",
+          "asset": "COFORGE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1932.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 15,
+          "timeStr": "2026-09-03T09:30:00+05:30",
+          "asset": "HCLTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1316,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-09-03T09:31:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-03T09:32:00+05:30",
+          "asset": "COFORGE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1936.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-09-03T09:33:00+05:30",
+          "asset": "HCLTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1315.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2026-09-03T09:34:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127.3,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2026-09-03T09:35:00+05:30",
+          "asset": "COFORGE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1937.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-03T09:36:00+05:30",
+          "asset": "HCLTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1316.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-03T09:37:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1128,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-09-03T09:38:00+05:30",
+          "asset": "COFORGE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1935.8,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-03T09:39:00+05:30",
+          "asset": "HCLTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1316.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-03T09:40:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1128,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-03T09:40:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ENTRY_QUEUED",
+          "price": 186.35,
+          "qty": 385,
+          "detail": "Queued Limit BUY 385 @ ₹186.35 [Auto-Pilot: Candle Price Action [Rank #1 ACI:65]] SL: ₹185.50 TP: ₹188.10"
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-09-03T09:41:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "ORDER_FILLED",
+          "price": 186.35,
+          "qty": 385,
+          "detail": "Limit Buy FILLED for 385 shs @ ₹186.35 (Limit was ₹186.35). Fee: ₹17.94"
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-09-03T09:41:00+05:30",
+          "asset": "COFORGE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1938.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-03T09:42:00+05:30",
+          "asset": "HCLTECH",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1315.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-03T09:43:00+05:30",
+          "asset": "INFY",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1127.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-03T09:44:00+05:30",
+          "asset": "COFORGE",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1936.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 30,
+          "timeStr": "2026-09-03T09:45:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "STOP_LOSS_EXIT",
+          "price": 185.7,
+          "qty": 385,
+          "detail": "Breakout Failed: Price (₹185.70) broke below institutional VWAP support (₹186.34). Micro-loss capital defense exit. on 385 shs @ ₹185.70: P&L ₹-268.12 (-0.35%)"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-04",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 375,
+      "startingNav": 39993.7293125,
+      "endingNav": 39895.3612125,
+      "netPnl": -98.36809999999969,
+      "netReturnPct": -0.24595880827061267,
+      "feeBurn": 39.1681,
+      "tradesCount": 2,
+      "winsCount": 1,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.2752199034990651,
+      "closedTrades": [
+        {
+          "day": "2026-09-04",
+          "asset": "LTM",
+          "strategy": "Auto-Pilot: Candle Price Action [Rank #1 ACI:58]",
+          "entryTime": "9:46:00 am",
+          "exitTime": "9:46:00 am",
+          "entryPrice": 4607,
+          "exitPrice": 4608.6,
+          "quantity": 11,
+          "pnl": 4.926350000004,
+          "pnlPct": 0.034729759062304404,
+          "exitReason": "Breakout Failed: Price (₹4608.60) broke below institutional VWAP support (₹4617.55). Micro-loss capital defense exit."
+        },
+        {
+          "day": "2026-09-04",
+          "asset": "HAVELLS",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:66]",
+          "entryTime": "12:14:00 pm",
+          "exitTime": "1:45:00 pm",
+          "entryPrice": 1153.7,
+          "exitPrice": 1150.5,
+          "quantity": 24,
+          "pnl": -83.7030000000011,
+          "pnlPct": -0.2773684666724491,
+          "exitReason": "Dead Trade Stagnancy Exit: Position active for 91 mins within +/-0.47 ATR with fading volume (0.07x avg). Liquidating to free capital."
+        }
+      ],
+      "eventsCount": 12,
+      "events": [
+        {
+          "minute": 25,
+          "timeStr": "2026-09-04T09:40:00+05:30",
+          "asset": "LTM",
+          "type": "ENTRY_QUEUED",
+          "price": 4607,
+          "qty": 11,
+          "detail": "Queued Limit BUY 11 @ ₹4607.00 [Auto-Pilot: Candle Price Action [Rank #1 ACI:58]] SL: ₹4583.65 TP: ₹4653.75"
+        },
+        {
+          "minute": 31,
+          "timeStr": "2026-09-04T09:46:00+05:30",
+          "asset": "LTM",
+          "type": "ORDER_FILLED",
+          "price": 4607,
+          "qty": 11,
+          "detail": "Limit Buy FILLED for 11 shs @ ₹4607.00 (Limit was ₹4607.00). Fee: ₹12.67"
+        },
+        {
+          "minute": 31,
+          "timeStr": "2026-09-04T09:46:00+05:30",
+          "asset": "LTM",
+          "type": "PROFIT_HARVEST",
+          "price": 4608.6,
+          "qty": 11,
+          "detail": "Breakout Failed: Price (₹4608.60) broke below institutional VWAP support (₹4617.55). Micro-loss capital defense exit. on 11 shs @ ₹4608.60: P&L +₹4.93 (0.03%)"
+        },
+        {
+          "minute": 79,
+          "timeStr": "2026-09-04T10:34:00+05:30",
+          "asset": "GAIL",
+          "type": "SKIPPED",
+          "price": 173.12,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate GAIL net expected profit (₹205.97) is below dynamic net floor (₹287.90). Standing aside in cash."
+        },
+        {
+          "minute": 84,
+          "timeStr": "2026-09-04T10:39:00+05:30",
+          "asset": "GAIL",
+          "type": "SKIPPED",
+          "price": 173.11,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate GAIL net expected profit (₹207.08) is below dynamic net floor (₹287.90). Standing aside in cash."
+        },
+        {
+          "minute": 89,
+          "timeStr": "2026-09-04T10:44:00+05:30",
+          "asset": "GAIL",
+          "type": "SKIPPED",
+          "price": 172.89,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate GAIL net expected profit (₹214.79) is below dynamic net floor (₹287.90). Standing aside in cash."
+        },
+        {
+          "minute": 110,
+          "timeStr": "2026-09-04T11:05:00+05:30",
+          "asset": "MOTHERSON",
+          "type": "SKIPPED",
+          "price": 160.75,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹183.60 leaves less than dynamic floor ₹138.89 after ₹59.52 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 132,
+          "timeStr": "2026-09-04T11:27:00+05:30",
+          "asset": "HAVELLS",
+          "type": "ENTRY_QUEUED",
+          "price": 1153.7,
+          "qty": 24,
+          "detail": "Queued Limit BUY 24 @ ₹1153.70 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:66]] SL: ₹1148.30 TP: ₹1161.65"
+        },
+        {
+          "minute": 146,
+          "timeStr": "2026-09-04T11:41:00+05:30",
+          "asset": "GAIL",
+          "type": "SKIPPED",
+          "price": 172.35,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate GAIL net expected profit (₹209.17) is below dynamic net floor (₹287.90). Standing aside in cash."
+        },
+        {
+          "minute": 159,
+          "timeStr": "2026-09-04T11:54:00+05:30",
+          "asset": "TORNTPHARM",
+          "type": "SKIPPED",
+          "price": 4873.5,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 179,
+          "timeStr": "2026-09-04T12:14:00+05:30",
+          "asset": "HAVELLS",
+          "type": "ORDER_FILLED",
+          "price": 1153.7,
+          "qty": 24,
+          "detail": "Limit Buy FILLED for 24 shs @ ₹1153.70 (Limit was ₹1153.70). Fee: ₹6.92"
+        },
+        {
+          "minute": 270,
+          "timeStr": "2026-09-04T13:45:00+05:30",
+          "asset": "HAVELLS",
+          "type": "STOP_LOSS_EXIT",
+          "price": 1150.5,
+          "qty": 24,
+          "detail": "Dead Trade Stagnancy Exit: Position active for 91 mins within +/-0.47 ATR with fading volume (0.07x avg). Liquidating to free capital. on 24 shs @ ₹1150.50: P&L ₹-83.70 (-0.28%)"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-07",
+      "dayOfWeek": "Mon",
+      "barsEvaluated": 375,
+      "startingNav": 39895.3612125,
+      "endingNav": 39895.3612125,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 5,
+      "events": [
+        {
+          "minute": 15,
+          "timeStr": "2026-09-07T09:30:00+05:30",
+          "asset": "MRF",
+          "type": "VOLATILITY_SHOCK",
+          "price": 128840,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 18,
+          "timeStr": "2026-09-07T09:33:00+05:30",
+          "asset": "MRF",
+          "type": "VOLATILITY_SHOCK",
+          "price": 128715,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 21,
+          "timeStr": "2026-09-07T09:36:00+05:30",
+          "asset": "MRF",
+          "type": "VOLATILITY_SHOCK",
+          "price": 128990,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 24,
+          "timeStr": "2026-09-07T09:39:00+05:30",
+          "asset": "MRF",
+          "type": "VOLATILITY_SHOCK",
+          "price": 128805,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-07T09:42:00+05:30",
+          "asset": "MRF",
+          "type": "VOLATILITY_SHOCK",
+          "price": 128950,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-08",
+      "dayOfWeek": "Tue",
+      "barsEvaluated": 375,
+      "startingNav": 39895.3612125,
+      "endingNav": 40176.8080625,
+      "netPnl": 281.44685000000027,
+      "netReturnPct": 0.7054625937609444,
+      "feeBurn": 62.75315,
+      "tradesCount": 5,
+      "winsCount": 4,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.7279770686658537,
+      "closedTrades": [
+        {
+          "day": "2026-09-08",
+          "asset": "KPITTECH",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+          "entryTime": "10:02:00 am",
+          "exitTime": "10:17:00 am",
+          "entryPrice": 556.75,
+          "exitPrice": 560.15,
+          "quantity": 50,
+          "pnl": 162.99812499999885,
+          "pnlPct": 0.6106870229007593,
+          "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹560.15 (+0.61%). Locking partial profit."
+        },
+        {
+          "day": "2026-09-08",
+          "asset": "KPITTECH",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+          "entryTime": "10:02:00 am",
+          "exitTime": "10:36:00 am",
+          "entryPrice": 556.75,
+          "exitPrice": 559,
+          "quantity": 50,
+          "pnl": 105.5125,
+          "pnlPct": 0.4041311180960934,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        },
+        {
+          "day": "2026-09-08",
+          "asset": "TVSMOTOR",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #2 ACI:57]",
+          "entryTime": "10:13:00 am",
+          "exitTime": "10:36:00 am",
+          "entryPrice": 4107.2,
+          "exitPrice": 4092.8,
+          "quantity": 10,
+          "pnl": -154.23199999999636,
+          "pnlPct": -0.35060381768600596,
+          "exitReason": "Stop Loss Triggered"
+        },
+        {
+          "day": "2026-09-08",
+          "asset": "BHEL",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:67]",
+          "entryTime": "1:53:00 pm",
+          "exitTime": "2:12:00 pm",
+          "entryPrice": 420.4,
+          "exitPrice": 423.65,
+          "quantity": 34,
+          "pnl": 106.89897500000001,
+          "pnlPct": 0.7730732635585157,
+          "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹423.65 (+0.77%). Locking partial profit."
+        },
+        {
+          "day": "2026-09-08",
+          "asset": "BHEL",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:67]",
+          "entryTime": "1:53:00 pm",
+          "exitTime": "2:24:00 pm",
+          "entryPrice": 420.4,
+          "exitPrice": 423.2,
+          "quantity": 34,
+          "pnl": 91.60280000000039,
+          "pnlPct": 0.6660323501427239,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 49,
+      "events": [
+        {
+          "minute": 44,
+          "timeStr": "2026-09-08T09:59:00+05:30",
+          "asset": "KPITTECH",
+          "type": "ENTRY_QUEUED",
+          "price": 556.75,
+          "qty": 100,
+          "detail": "Queued Limit BUY 100 @ ₹556.75 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]] SL: ₹554.70 TP: ₹560.15"
+        },
+        {
+          "minute": 47,
+          "timeStr": "2026-09-08T10:02:00+05:30",
+          "asset": "KPITTECH",
+          "type": "ORDER_FILLED",
+          "price": 556.75,
+          "qty": 100,
+          "detail": "Limit Buy FILLED for 100 shs @ ₹556.75 (Limit was ₹556.75). Fee: ₹13.92"
+        },
+        {
+          "minute": 47,
+          "timeStr": "2026-09-08T10:02:00+05:30",
+          "asset": "SHRIRAMFIN",
+          "type": "SKIPPED",
+          "price": 1019.3,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 52,
+          "timeStr": "2026-09-08T10:07:00+05:30",
+          "asset": "POWERGRID",
+          "type": "SKIPPED",
+          "price": 264.75,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 53,
+          "timeStr": "2026-09-08T10:08:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "SKIPPED",
+          "price": 4108.7,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 54,
+          "timeStr": "2026-09-08T10:09:00+05:30",
+          "asset": "POWERGRID",
+          "type": "SKIPPED",
+          "price": 264.8,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate POWERGRID net expected profit (₹165.80) is below dynamic net floor (₹167.93). Standing aside in cash."
+        },
+        {
+          "minute": 57,
+          "timeStr": "2026-09-08T10:12:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "ENTRY_QUEUED",
+          "price": 4107.2,
+          "qty": 10,
+          "detail": "Queued Limit BUY 10 @ ₹4107.20 [Auto-Pilot: VWAP Band Mean Reversion [Rank #2 ACI:57]] SL: ₹4092.80 TP: ₹4130.40"
+        },
+        {
+          "minute": 58,
+          "timeStr": "2026-09-08T10:13:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "ORDER_FILLED",
+          "price": 4107.2,
+          "qty": 10,
+          "detail": "Limit Buy FILLED for 10 shs @ ₹4107.20 (Limit was ₹4107.20). Fee: ₹10.27"
+        },
+        {
+          "minute": 62,
+          "timeStr": "2026-09-08T10:17:00+05:30",
+          "asset": "KPITTECH",
+          "type": "PROFIT_HARVEST",
+          "price": 560.15,
+          "qty": 50,
+          "detail": "Tranche 1 (+1.5 ATR) reached at ₹560.15 (+0.61%). Locking partial profit. on 50 shs @ ₹560.15: P&L +₹163.00 (0.61%)"
+        },
+        {
+          "minute": 76,
+          "timeStr": "2026-09-08T10:31:00+05:30",
+          "asset": "POWERGRID",
+          "type": "SKIPPED",
+          "price": 263.85,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate POWERGRID net expected profit (₹74.79) is below dynamic net floor (₹97.30). Standing aside in cash."
+        },
+        {
+          "minute": 81,
+          "timeStr": "2026-09-08T10:36:00+05:30",
+          "asset": "KPITTECH",
+          "type": "PROFIT_HARVEST",
+          "price": 559,
+          "qty": 50,
+          "detail": "Trailing Ratchet Stop Triggered on 50 shs @ ₹559.00: P&L +₹105.51 (0.40%)"
+        },
+        {
+          "minute": 81,
+          "timeStr": "2026-09-08T10:36:00+05:30",
+          "asset": "TVSMOTOR",
+          "type": "STOP_LOSS_EXIT",
+          "price": 4092.8,
+          "qty": 10,
+          "detail": "Stop Loss Triggered on 10 shs @ ₹4092.80: P&L ₹-154.23 (-0.35%)"
+        },
+        {
+          "minute": 101,
+          "timeStr": "2026-09-08T10:56:00+05:30",
+          "asset": "IOC",
+          "type": "SKIPPED",
+          "price": 134.5,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate IOC net expected profit (₹189.99) is below dynamic net floor (₹223.92). Standing aside in cash."
+        },
+        {
+          "minute": 107,
+          "timeStr": "2026-09-08T11:02:00+05:30",
+          "asset": "GAIL",
+          "type": "SKIPPED",
+          "price": 174.2,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate GAIL net expected profit (₹194.07) is below dynamic net floor (₹223.92). Standing aside in cash."
+        },
+        {
+          "minute": 110,
+          "timeStr": "2026-09-08T11:05:00+05:30",
+          "asset": "ULTRACEMCO",
+          "type": "SKIPPED",
+          "price": 11045.05,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹131.10 leaves less than dynamic floor ₹88.36 after ₹55.03 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 115,
+          "timeStr": "2026-09-08T11:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 1294.2,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate RELIANCE net expected profit (₹188.36) is below dynamic net floor (₹223.92). Standing aside in cash."
+        },
+        {
+          "minute": 138,
+          "timeStr": "2026-09-08T11:33:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1245.35,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹187.05 leaves less than dynamic floor ₹144.46 after ₹60.01 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 143,
+          "timeStr": "2026-09-08T11:38:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1244.4,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹188.50 leaves less than dynamic floor ₹144.35 after ₹60.00 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 149,
+          "timeStr": "2026-09-08T11:44:00+05:30",
+          "asset": "AXISBANK",
+          "type": "SKIPPED",
+          "price": 1243,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹184.80 leaves less than dynamic floor ₹139.22 after ₹59.55 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 162,
+          "timeStr": "2026-09-08T11:57:00+05:30",
+          "asset": "ULTRACEMCO",
+          "type": "SKIPPED",
+          "price": 11009.85,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹134.40 leaves less than dynamic floor ₹88.08 after ₹55.00 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 167,
+          "timeStr": "2026-09-08T12:02:00+05:30",
+          "asset": "ULTRACEMCO",
+          "type": "SKIPPED",
+          "price": 11014.85,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹134.50 leaves less than dynamic floor ₹88.12 after ₹55.01 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 172,
+          "timeStr": "2026-09-08T12:07:00+05:30",
+          "asset": "ULTRACEMCO",
+          "type": "SKIPPED",
+          "price": 11019.85,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹134.50 leaves less than dynamic floor ₹88.16 after ₹55.01 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 174,
+          "timeStr": "2026-09-08T12:09:00+05:30",
+          "asset": "JINDALSTEL",
+          "type": "SKIPPED",
+          "price": 1139,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹184.00 leaves less than dynamic floor ₹145.79 after ₹60.13 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 177,
+          "timeStr": "2026-09-08T12:12:00+05:30",
+          "asset": "ULTRACEMCO",
+          "type": "SKIPPED",
+          "price": 11019.85,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹134.50 leaves less than dynamic floor ₹88.16 after ₹55.01 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 178,
+          "timeStr": "2026-09-08T12:13:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 1291.2,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate RELIANCE net expected profit (₹171.16) is below dynamic net floor (₹223.92). Standing aside in cash."
+        },
+        {
+          "minute": 199,
+          "timeStr": "2026-09-08T12:34:00+05:30",
+          "asset": "JSWSTEEL",
+          "type": "SKIPPED",
+          "price": 1301.55,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹184.95 leaves less than dynamic floor ₹140.57 after ₹59.67 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 207,
+          "timeStr": "2026-09-08T12:42:00+05:30",
+          "asset": "TATASTEEL",
+          "type": "SKIPPED",
+          "price": 184.7,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹185.00 leaves less than dynamic floor ₹136.68 after ₹59.33 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 231,
+          "timeStr": "2026-09-08T13:06:00+05:30",
+          "asset": "JSWSTEEL",
+          "type": "SKIPPED",
+          "price": 1298,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] TCA Friction Hurdle: Realistic intraday gain ₹186.20 leaves less than dynamic floor ₹145.38 after ₹60.09 in roundtrip fees. Setup rejected."
+        },
+        {
+          "minute": 267,
+          "timeStr": "2026-09-08T13:42:00+05:30",
+          "asset": "BHEL",
+          "type": "ENTRY_QUEUED",
+          "price": 420.4,
+          "qty": 68,
+          "detail": "Queued Limit BUY 68 @ ₹420.40 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:67]] SL: ₹418.50 TP: ₹423.20"
+        },
+        {
+          "minute": 273,
+          "timeStr": "2026-09-08T13:48:00+05:30",
+          "asset": "IOC",
+          "type": "SKIPPED",
+          "price": 133.71,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate IOC net expected profit (₹263.06) is below dynamic net floor (₹287.90). Standing aside in cash."
+        },
+        {
+          "minute": 277,
+          "timeStr": "2026-09-08T13:52:00+05:30",
+          "asset": "IOC",
+          "type": "SKIPPED",
+          "price": 133.38,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 278,
+          "timeStr": "2026-09-08T13:53:00+05:30",
+          "asset": "BHEL",
+          "type": "ORDER_FILLED",
+          "price": 420.4,
+          "qty": 68,
+          "detail": "Limit Buy FILLED for 68 shs @ ₹420.40 (Limit was ₹420.40). Fee: ₹7.15"
+        },
+        {
+          "minute": 282,
+          "timeStr": "2026-09-08T13:57:00+05:30",
+          "asset": "IOC",
+          "type": "SKIPPED",
+          "price": 133.18,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 297,
+          "timeStr": "2026-09-08T14:12:00+05:30",
+          "asset": "BHEL",
+          "type": "PROFIT_HARVEST",
+          "price": 423.65,
+          "qty": 34,
+          "detail": "Tranche 1 (+1.5 ATR) reached at ₹423.65 (+0.77%). Locking partial profit. on 34 shs @ ₹423.65: P&L +₹106.90 (0.77%)"
+        },
+        {
+          "minute": 309,
+          "timeStr": "2026-09-08T14:24:00+05:30",
+          "asset": "BHEL",
+          "type": "PROFIT_HARVEST",
+          "price": 423.2,
+          "qty": 34,
+          "detail": "Trailing Ratchet Stop Triggered on 34 shs @ ₹423.20: P&L +₹91.60 (0.67%)"
+        },
+        {
+          "minute": 309,
+          "timeStr": "2026-09-08T14:24:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 314,
+          "timeStr": "2026-09-08T14:29:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 319,
+          "timeStr": "2026-09-08T14:34:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 324,
+          "timeStr": "2026-09-08T14:39:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 329,
+          "timeStr": "2026-09-08T14:44:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 334,
+          "timeStr": "2026-09-08T14:49:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 339,
+          "timeStr": "2026-09-08T14:54:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 344,
+          "timeStr": "2026-09-08T14:59:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 349,
+          "timeStr": "2026-09-08T15:04:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 354,
+          "timeStr": "2026-09-08T15:09:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 359,
+          "timeStr": "2026-09-08T15:14:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 364,
+          "timeStr": "2026-09-08T15:19:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 369,
+          "timeStr": "2026-09-08T15:24:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 374,
+          "timeStr": "2026-09-08T15:29:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹281.45 >= ₹100.00) achieved. Capital locked in cash for the session."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-09",
+      "dayOfWeek": "Wed",
+      "barsEvaluated": 375,
+      "startingNav": 40176.8080625,
+      "endingNav": 39989.444437499995,
+      "netPnl": -187.3636250000054,
+      "netReturnPct": -0.46634771161645816,
+      "feeBurn": 40.863625000000006,
+      "tradesCount": 2,
+      "winsCount": 1,
+      "lossesCount": 1,
+      "maxDrawdownPct": 0.7121282947335963,
+      "closedTrades": [
+        {
+          "day": "2026-09-09",
+          "asset": "NTPC",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]",
+          "entryTime": "9:44:00 am",
+          "exitTime": "10:00:00 am",
+          "entryPrice": 336,
+          "exitPrice": 335,
+          "quantity": 163,
+          "pnl": -176.65125,
+          "pnlPct": -0.2976190476190476,
+          "exitReason": "Breakout Failed: Price (₹335.00) broke below institutional VWAP support (₹335.98). Micro-loss capital defense exit."
+        },
+        {
+          "day": "2026-09-09",
+          "asset": "HCLTECH",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:66]",
+          "entryTime": "1:23:00 pm",
+          "exitTime": "2:15:00 pm",
+          "entryPrice": 1228.75,
+          "exitPrice": 1229.5,
+          "quantity": 22,
+          "pnl": 9.73775,
+          "pnlPct": 0.06103763987792472,
+          "exitReason": "Stop hit at ₹1229.50. Protecting capital."
+        }
+      ],
+      "eventsCount": 34,
+      "events": [
+        {
+          "minute": 10,
+          "timeStr": "2026-09-09T09:25:00+05:30",
+          "asset": "COALINDIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 432.05,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 13,
+          "timeStr": "2026-09-09T09:28:00+05:30",
+          "asset": "COALINDIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 431.9,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-09-09T09:31:00+05:30",
+          "asset": "COALINDIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 431.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2026-09-09T09:34:00+05:30",
+          "asset": "COALINDIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 432,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-09T09:37:00+05:30",
+          "asset": "COALINDIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 433.05,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-09T09:40:00+05:30",
+          "asset": "COALINDIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 432.95,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 27,
+          "timeStr": "2026-09-09T09:42:00+05:30",
+          "asset": "ADANIGREEN",
+          "type": "ENTRY_QUEUED",
+          "price": 1312.65,
+          "qty": 30,
+          "detail": "Queued Limit BUY 30 @ ₹1312.65 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:63]] SL: ₹1302.05 TP: ₹1330.10"
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-09T09:43:00+05:30",
+          "asset": "COALINDIA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 433.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-09T09:43:00+05:30",
+          "asset": "NTPC",
+          "type": "ENTRY_QUEUED",
+          "price": 336,
+          "qty": 163,
+          "detail": "Queued Limit BUY 163 @ ₹336.00 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]] SL: ₹334.00 TP: ₹339.30"
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-09T09:44:00+05:30",
+          "asset": "NTPC",
+          "type": "ORDER_FILLED",
+          "price": 336,
+          "qty": 163,
+          "detail": "Limit Buy FILLED for 163 shs @ ₹336.00 (Limit was ₹336.00). Fee: ₹13.69"
+        },
+        {
+          "minute": 44,
+          "timeStr": "2026-09-09T09:59:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "SKIPPED",
+          "price": 2815.6,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 45,
+          "timeStr": "2026-09-09T10:00:00+05:30",
+          "asset": "NTPC",
+          "type": "STOP_LOSS_EXIT",
+          "price": 335,
+          "qty": 163,
+          "detail": "Breakout Failed: Price (₹335.00) broke below institutional VWAP support (₹335.98). Micro-loss capital defense exit. on 163 shs @ ₹335.00: P&L ₹-176.65 (-0.30%)"
+        },
+        {
+          "minute": 46,
+          "timeStr": "2026-09-09T10:01:00+05:30",
+          "asset": "HDFCBANK",
+          "type": "SKIPPED",
+          "price": 691.45,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 52,
+          "timeStr": "2026-09-09T10:07:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "SKIPPED",
+          "price": 2799.9,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 53,
+          "timeStr": "2026-09-09T10:08:00+05:30",
+          "asset": "KPITTECH",
+          "type": "SKIPPED",
+          "price": 551.9,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 57,
+          "timeStr": "2026-09-09T10:12:00+05:30",
+          "asset": "TATACONSUM",
+          "type": "SKIPPED",
+          "price": 1004.1,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 59,
+          "timeStr": "2026-09-09T10:14:00+05:30",
+          "asset": "MUTHOOTFIN",
+          "type": "ENTRY_QUEUED",
+          "price": 2799.45,
+          "qty": 8,
+          "detail": "Queued Limit BUY 8 @ ₹2799.45 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]] SL: ₹2784.65 TP: ₹2821.15"
+        },
+        {
+          "minute": 82,
+          "timeStr": "2026-09-09T10:37:00+05:30",
+          "asset": "BHARATFORG",
+          "type": "SKIPPED",
+          "price": 1972.5,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 124,
+          "timeStr": "2026-09-09T11:19:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "SKIPPED",
+          "price": 3411,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 129,
+          "timeStr": "2026-09-09T11:24:00+05:30",
+          "asset": "TATAELXSI",
+          "type": "SKIPPED",
+          "price": 3403.6,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 137,
+          "timeStr": "2026-09-09T11:32:00+05:30",
+          "asset": "BAJAJ-AUTO",
+          "type": "SKIPPED",
+          "price": 11776,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BAJAJ-AUTO net expected profit (₹281.85) is below dynamic net floor (₹287.90). Standing aside in cash."
+        },
+        {
+          "minute": 142,
+          "timeStr": "2026-09-09T11:37:00+05:30",
+          "asset": "BAJAJ-AUTO",
+          "type": "SKIPPED",
+          "price": 11788,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate BAJAJ-AUTO net expected profit (₹172.16) is below dynamic net floor (₹223.92). Standing aside in cash."
+        },
+        {
+          "minute": 145,
+          "timeStr": "2026-09-09T11:40:00+05:30",
+          "asset": "SHREECEM",
+          "type": "SKIPPED",
+          "price": 22980,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 166,
+          "timeStr": "2026-09-09T12:01:00+05:30",
+          "asset": "HAVELLS",
+          "type": "SKIPPED",
+          "price": 1124.6,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 168,
+          "timeStr": "2026-09-09T12:03:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "SKIPPED",
+          "price": 474.3,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 173,
+          "timeStr": "2026-09-09T12:08:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "SKIPPED",
+          "price": 474,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 175,
+          "timeStr": "2026-09-09T12:10:00+05:30",
+          "asset": "HAVELLS",
+          "type": "SKIPPED",
+          "price": 1120.6,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 195,
+          "timeStr": "2026-09-09T12:30:00+05:30",
+          "asset": "HCLTECH",
+          "type": "SKIPPED",
+          "price": 1228.7,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 0 are already active."
+        },
+        {
+          "minute": 199,
+          "timeStr": "2026-09-09T12:34:00+05:30",
+          "asset": "HCLTECH",
+          "type": "ENTRY_QUEUED",
+          "price": 1228.75,
+          "qty": 22,
+          "detail": "Queued Limit BUY 22 @ ₹1228.75 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:66]] SL: ₹1222.95 TP: ₹1237.25"
+        },
+        {
+          "minute": 237,
+          "timeStr": "2026-09-09T13:12:00+05:30",
+          "asset": "TECHM",
+          "type": "SKIPPED",
+          "price": 1505.3,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] Daily MIS entry governor: 4 entries already dispatched today. No new intraday position."
+        },
+        {
+          "minute": 248,
+          "timeStr": "2026-09-09T13:23:00+05:30",
+          "asset": "HCLTECH",
+          "type": "ORDER_FILLED",
+          "price": 1228.75,
+          "qty": 22,
+          "detail": "Limit Buy FILLED for 22 shs @ ₹1228.75 (Limit was ₹1228.75). Fee: ₹6.76"
+        },
+        {
+          "minute": 258,
+          "timeStr": "2026-09-09T13:33:00+05:30",
+          "asset": "TECHM",
+          "type": "SKIPPED",
+          "price": 1504.3,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] Daily MIS entry governor: 4 entries already dispatched today. No new intraday position."
+        },
+        {
+          "minute": 269,
+          "timeStr": "2026-09-09T13:44:00+05:30",
+          "asset": "TECHM",
+          "type": "SKIPPED",
+          "price": 1502.8,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] Daily MIS entry governor: 4 entries already dispatched today. No new intraday position."
+        },
+        {
+          "minute": 300,
+          "timeStr": "2026-09-09T14:15:00+05:30",
+          "asset": "HCLTECH",
+          "type": "PROFIT_HARVEST",
+          "price": 1229.5,
+          "qty": 22,
+          "detail": "Stop hit at ₹1229.50. Protecting capital. on 22 shs @ ₹1229.50: P&L +₹9.74 (0.06%)"
+        }
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "dayOfWeek": "Thu",
+      "barsEvaluated": 375,
+      "startingNav": 39989.444437499995,
+      "endingNav": 40536.84423749999,
+      "netPnl": 547.399799999992,
+      "netReturnPct": 1.3688607273740199,
+      "feeBurn": 71.90020000000001,
+      "tradesCount": 3,
+      "winsCount": 3,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0.5803877160843955,
+      "closedTrades": [
+        {
+          "day": "2026-09-10",
+          "asset": "PNB",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]",
+          "entryTime": "9:46:00 am",
+          "exitTime": "10:20:00 am",
+          "entryPrice": 116.95,
+          "exitPrice": 117.8,
+          "quantity": 270,
+          "pnl": 221.54849999999846,
+          "pnlPct": 0.7268063274903755,
+          "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹117.82 (+0.74%). Locking partial profit."
+        },
+        {
+          "day": "2026-09-10",
+          "asset": "BRITANNIA",
+          "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+          "entryTime": "11:08:00 am",
+          "exitTime": "11:13:00 am",
+          "entryPrice": 5013.8,
+          "exitPrice": 5028,
+          "quantity": 16,
+          "pnl": 207.0879999999971,
+          "pnlPct": 0.28321831744385134,
+          "exitReason": "Breakout Failed: Price (₹5028.00) broke below institutional VWAP support (₹5375.73). Micro-loss capital defense exit."
+        },
+        {
+          "day": "2026-09-10",
+          "asset": "PNB",
+          "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]",
+          "entryTime": "9:46:00 am",
+          "exitTime": "12:20:00 pm",
+          "entryPrice": 116.95,
+          "exitPrice": 117.55,
+          "quantity": 271,
+          "pnl": 154.63598749999846,
+          "pnlPct": 0.5130397605814402,
+          "exitReason": "Trailing Ratchet Stop Triggered"
+        }
+      ],
+      "eventsCount": 70,
+      "events": [
+        {
+          "minute": 14,
+          "timeStr": "2026-09-10T09:29:00+05:30",
+          "asset": "CANBK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 127.23,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 16,
+          "timeStr": "2026-09-10T09:31:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1658.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 17,
+          "timeStr": "2026-09-10T09:32:00+05:30",
+          "asset": "CANBK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 127,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 19,
+          "timeStr": "2026-09-10T09:34:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1665.5,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2026-09-10T09:35:00+05:30",
+          "asset": "CANBK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 126.85,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 20,
+          "timeStr": "2026-09-10T09:35:00+05:30",
+          "asset": "TECHM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1542.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 22,
+          "timeStr": "2026-09-10T09:37:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1665.7,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-09-10T09:38:00+05:30",
+          "asset": "CANBK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 126.99,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 23,
+          "timeStr": "2026-09-10T09:38:00+05:30",
+          "asset": "TECHM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1539,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 25,
+          "timeStr": "2026-09-10T09:40:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1663.6,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-09-10T09:41:00+05:30",
+          "asset": "CANBK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 127.08,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 26,
+          "timeStr": "2026-09-10T09:41:00+05:30",
+          "asset": "TECHM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1540.4,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-10T09:43:00+05:30",
+          "asset": "AUROPHARMA",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1665.2,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 28,
+          "timeStr": "2026-09-10T09:43:00+05:30",
+          "asset": "PNB",
+          "type": "ENTRY_QUEUED",
+          "price": 116.95,
+          "qty": 541,
+          "detail": "Queued Limit BUY 541 @ ₹116.95 [Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]] SL: ₹116.35 TP: ₹118.00"
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-10T09:44:00+05:30",
+          "asset": "CANBK",
+          "type": "VOLATILITY_SHOCK",
+          "price": 126.68,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 29,
+          "timeStr": "2026-09-10T09:44:00+05:30",
+          "asset": "TECHM",
+          "type": "VOLATILITY_SHOCK",
+          "price": 1536,
+          "qty": 0,
+          "detail": "[Volatility Shock Freeze] Latest candle exceeded 3.5 ATR. New entries frozen for 3 minutes."
+        },
+        {
+          "minute": 31,
+          "timeStr": "2026-09-10T09:46:00+05:30",
+          "asset": "PNB",
+          "type": "ORDER_FILLED",
+          "price": 116.95,
+          "qty": 541,
+          "detail": "Limit Buy FILLED for 541 shs @ ₹116.95 (Limit was ₹116.95). Fee: ₹15.82"
+        },
+        {
+          "minute": 44,
+          "timeStr": "2026-09-10T09:59:00+05:30",
+          "asset": "TATAMOTORS",
+          "type": "SKIPPED",
+          "price": 300.85,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 51,
+          "timeStr": "2026-09-10T10:06:00+05:30",
+          "asset": "BERGEPAINT",
+          "type": "SKIPPED",
+          "price": 470.65,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 52,
+          "timeStr": "2026-09-10T10:07:00+05:30",
+          "asset": "KPITTECH",
+          "type": "SKIPPED",
+          "price": 551.7,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 57,
+          "timeStr": "2026-09-10T10:12:00+05:30",
+          "asset": "KPITTECH",
+          "type": "SKIPPED",
+          "price": 551.4,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 65,
+          "timeStr": "2026-09-10T10:20:00+05:30",
+          "asset": "PNB",
+          "type": "PROFIT_HARVEST",
+          "price": 117.8,
+          "qty": 270,
+          "detail": "Tranche 1 (+1.5 ATR) reached at ₹117.82 (+0.74%). Locking partial profit. on 270 shs @ ₹117.80: P&L +₹221.55 (0.73%)"
+        },
+        {
+          "minute": 74,
+          "timeStr": "2026-09-10T10:29:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "ENTRY_QUEUED",
+          "price": 5013.8,
+          "qty": 16,
+          "detail": "Queued Limit BUY 16 @ ₹5013.80 [Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]] SL: ₹4992.80 TP: ₹5048.80"
+        },
+        {
+          "minute": 75,
+          "timeStr": "2026-09-10T10:30:00+05:30",
+          "asset": "COFORGE",
+          "type": "SKIPPED",
+          "price": 1825,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 113,
+          "timeStr": "2026-09-10T11:08:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "ORDER_FILLED",
+          "price": 5013.8,
+          "qty": 16,
+          "detail": "Limit Buy FILLED for 16 shs @ ₹5013.80 (Limit was ₹5013.80). Fee: ₹20.06"
+        },
+        {
+          "minute": 118,
+          "timeStr": "2026-09-10T11:13:00+05:30",
+          "asset": "BRITANNIA",
+          "type": "PROFIT_HARVEST",
+          "price": 5028,
+          "qty": 16,
+          "detail": "Breakout Failed: Price (₹5028.00) broke below institutional VWAP support (₹5375.73). Micro-loss capital defense exit. on 16 shs @ ₹5028.00: P&L +₹207.09 (0.28%)"
+        },
+        {
+          "minute": 128,
+          "timeStr": "2026-09-10T11:23:00+05:30",
+          "asset": "ITC",
+          "type": "SKIPPED",
+          "price": 260.3,
+          "qty": 0,
+          "detail": "[VWAP Band Mean Reversion] MIS concurrency limiter: allocation mode permits 1 new positions and 1 are already active."
+        },
+        {
+          "minute": 129,
+          "timeStr": "2026-09-10T11:24:00+05:30",
+          "asset": "MRF",
+          "type": "SKIPPED",
+          "price": 128110,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate MRF net expected profit (₹374.33) is below dynamic net floor (₹423.90). Standing aside in cash."
+        },
+        {
+          "minute": 159,
+          "timeStr": "2026-09-10T11:54:00+05:30",
+          "asset": "HAVELLS",
+          "type": "SKIPPED",
+          "price": 1110,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate HAVELLS net expected profit (₹47.24) is below dynamic net floor (₹71.26). Standing aside in cash."
+        },
+        {
+          "minute": 164,
+          "timeStr": "2026-09-10T11:59:00+05:30",
+          "asset": "CIPLA",
+          "type": "SKIPPED",
+          "price": 1368,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate CIPLA net expected profit (₹38.77) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 171,
+          "timeStr": "2026-09-10T12:06:00+05:30",
+          "asset": "ABB",
+          "type": "SKIPPED",
+          "price": 7334,
+          "qty": 0,
+          "detail": "[Conditions-Based Allocation Gate] Step 2: Top candidate ABB net expected profit (₹21.05) is below dynamic net floor (₹60.00). Standing aside in cash."
+        },
+        {
+          "minute": 185,
+          "timeStr": "2026-09-10T12:20:00+05:30",
+          "asset": "PNB",
+          "type": "PROFIT_HARVEST",
+          "price": 117.55,
+          "qty": 271,
+          "detail": "Trailing Ratchet Stop Triggered on 271 shs @ ₹117.55: P&L +₹154.64 (0.51%)"
+        },
+        {
+          "minute": 185,
+          "timeStr": "2026-09-10T12:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 190,
+          "timeStr": "2026-09-10T12:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 195,
+          "timeStr": "2026-09-10T12:30:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 200,
+          "timeStr": "2026-09-10T12:35:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 205,
+          "timeStr": "2026-09-10T12:40:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 210,
+          "timeStr": "2026-09-10T12:45:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 215,
+          "timeStr": "2026-09-10T12:50:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 220,
+          "timeStr": "2026-09-10T12:55:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 225,
+          "timeStr": "2026-09-10T13:00:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 230,
+          "timeStr": "2026-09-10T13:05:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 235,
+          "timeStr": "2026-09-10T13:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 240,
+          "timeStr": "2026-09-10T13:15:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 245,
+          "timeStr": "2026-09-10T13:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 250,
+          "timeStr": "2026-09-10T13:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 255,
+          "timeStr": "2026-09-10T13:30:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 260,
+          "timeStr": "2026-09-10T13:35:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 265,
+          "timeStr": "2026-09-10T13:40:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 270,
+          "timeStr": "2026-09-10T13:45:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 275,
+          "timeStr": "2026-09-10T13:50:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 280,
+          "timeStr": "2026-09-10T13:55:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 285,
+          "timeStr": "2026-09-10T14:00:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 290,
+          "timeStr": "2026-09-10T14:05:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 295,
+          "timeStr": "2026-09-10T14:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 300,
+          "timeStr": "2026-09-10T14:15:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 305,
+          "timeStr": "2026-09-10T14:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 310,
+          "timeStr": "2026-09-10T14:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 315,
+          "timeStr": "2026-09-10T14:30:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 320,
+          "timeStr": "2026-09-10T14:35:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 325,
+          "timeStr": "2026-09-10T14:40:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 330,
+          "timeStr": "2026-09-10T14:45:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 335,
+          "timeStr": "2026-09-10T14:50:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 340,
+          "timeStr": "2026-09-10T14:55:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 345,
+          "timeStr": "2026-09-10T15:00:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 350,
+          "timeStr": "2026-09-10T15:05:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 355,
+          "timeStr": "2026-09-10T15:10:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 360,
+          "timeStr": "2026-09-10T15:15:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 365,
+          "timeStr": "2026-09-10T15:20:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        },
+        {
+          "minute": 370,
+          "timeStr": "2026-09-10T15:25:00+05:30",
+          "asset": "RELIANCE",
+          "type": "SKIPPED",
+          "price": 0,
+          "qty": 0,
+          "detail": "[Daily Profit Goal Protection] Daily profit goal (+₹547.40 >= ₹100.00) achieved. Capital locked in cash for the session."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-11",
+      "dayOfWeek": "Fri",
+      "barsEvaluated": 0,
+      "startingNav": 40536.84423749999,
+      "endingNav": 40536.84423749999,
+      "netPnl": 0,
+      "netReturnPct": 0,
+      "feeBurn": 0,
+      "tradesCount": 0,
+      "winsCount": 0,
+      "lossesCount": 0,
+      "maxDrawdownPct": 0,
+      "closedTrades": [],
+      "eventsCount": 0
+    }
+  ],
+  "allClosedTrades": [
+    {
+      "day": "2026-09-01",
+      "asset": "TRENT",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:60]",
+      "entryTime": "11:58:00 am",
+      "exitTime": "12:05:00 pm",
+      "entryPrice": 2864.3,
+      "exitPrice": 2872.8,
+      "quantity": 19,
+      "pnl": 147.8542,
+      "pnlPct": 0.2967566246552386,
+      "exitReason": "Breakout Failed: Price (₹2872.80) broke below institutional VWAP support (₹3009.09). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2026-09-02",
+      "asset": "ONGC",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:64]",
+      "entryTime": "9:45:00 am",
+      "exitTime": "9:51:00 am",
+      "entryPrice": 238.05000000000004,
+      "exitPrice": 237.65,
+      "quantity": 283,
+      "pnl": -130.01373750000965,
+      "pnlPct": -0.16803192606596684,
+      "exitReason": "Breakout Failed: Price (₹237.65) broke below institutional VWAP support (₹238.07). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2026-09-02",
+      "asset": "BERGEPAINT",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]",
+      "entryTime": "10:03:00 am",
+      "exitTime": "10:27:00 am",
+      "entryPrice": 479.55,
+      "exitPrice": 483.1,
+      "quantity": 28,
+      "pnl": 96.01830000000032,
+      "pnlPct": 0.7402773433427194,
+      "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹483.10 (+0.74%). Locking partial profit."
+    },
+    {
+      "day": "2026-09-02",
+      "asset": "BERGEPAINT",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]",
+      "entryTime": "10:03:00 am",
+      "exitTime": "10:41:00 am",
+      "entryPrice": 479.55,
+      "exitPrice": 486.85,
+      "quantity": 14,
+      "pnl": 100.49602500000016,
+      "pnlPct": 1.5222604525075616,
+      "exitReason": "Core Target T2 reached at ₹486.85 (+1.52%). Harvesting core gain."
+    },
+    {
+      "day": "2026-09-02",
+      "asset": "BERGEPAINT",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:69]",
+      "entryTime": "10:03:00 am",
+      "exitTime": "10:44:00 am",
+      "entryPrice": 479.55,
+      "exitPrice": 487,
+      "quantity": 14,
+      "pnl": 102.59549999999984,
+      "pnlPct": 1.5535397768741503,
+      "exitReason": "Chandelier Trailing Exit triggered at ₹487.00. Final runner closed."
+    },
+    {
+      "day": "2026-09-03",
+      "asset": "TATASTEEL",
+      "strategy": "Auto-Pilot: Candle Price Action [Rank #1 ACI:65]",
+      "entryTime": "9:41:00 am",
+      "exitTime": "9:45:00 am",
+      "entryPrice": 186.35,
+      "exitPrice": 185.7,
+      "quantity": 385,
+      "pnl": -268.12362500000216,
+      "pnlPct": -0.34880601019587104,
+      "exitReason": "Breakout Failed: Price (₹185.70) broke below institutional VWAP support (₹186.34). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2026-09-04",
+      "asset": "LTM",
+      "strategy": "Auto-Pilot: Candle Price Action [Rank #1 ACI:58]",
+      "entryTime": "9:46:00 am",
+      "exitTime": "9:46:00 am",
+      "entryPrice": 4607,
+      "exitPrice": 4608.6,
+      "quantity": 11,
+      "pnl": 4.926350000004,
+      "pnlPct": 0.034729759062304404,
+      "exitReason": "Breakout Failed: Price (₹4608.60) broke below institutional VWAP support (₹4617.55). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2026-09-04",
+      "asset": "HAVELLS",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:66]",
+      "entryTime": "12:14:00 pm",
+      "exitTime": "1:45:00 pm",
+      "entryPrice": 1153.7,
+      "exitPrice": 1150.5,
+      "quantity": 24,
+      "pnl": -83.7030000000011,
+      "pnlPct": -0.2773684666724491,
+      "exitReason": "Dead Trade Stagnancy Exit: Position active for 91 mins within +/-0.47 ATR with fading volume (0.07x avg). Liquidating to free capital."
+    },
+    {
+      "day": "2026-09-08",
+      "asset": "KPITTECH",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+      "entryTime": "10:02:00 am",
+      "exitTime": "10:17:00 am",
+      "entryPrice": 556.75,
+      "exitPrice": 560.15,
+      "quantity": 50,
+      "pnl": 162.99812499999885,
+      "pnlPct": 0.6106870229007593,
+      "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹560.15 (+0.61%). Locking partial profit."
+    },
+    {
+      "day": "2026-09-08",
+      "asset": "KPITTECH",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:59]",
+      "entryTime": "10:02:00 am",
+      "exitTime": "10:36:00 am",
+      "entryPrice": 556.75,
+      "exitPrice": 559,
+      "quantity": 50,
+      "pnl": 105.5125,
+      "pnlPct": 0.4041311180960934,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2026-09-08",
+      "asset": "TVSMOTOR",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #2 ACI:57]",
+      "entryTime": "10:13:00 am",
+      "exitTime": "10:36:00 am",
+      "entryPrice": 4107.2,
+      "exitPrice": 4092.8,
+      "quantity": 10,
+      "pnl": -154.23199999999636,
+      "pnlPct": -0.35060381768600596,
+      "exitReason": "Stop Loss Triggered"
+    },
+    {
+      "day": "2026-09-08",
+      "asset": "BHEL",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:67]",
+      "entryTime": "1:53:00 pm",
+      "exitTime": "2:12:00 pm",
+      "entryPrice": 420.4,
+      "exitPrice": 423.65,
+      "quantity": 34,
+      "pnl": 106.89897500000001,
+      "pnlPct": 0.7730732635585157,
+      "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹423.65 (+0.77%). Locking partial profit."
+    },
+    {
+      "day": "2026-09-08",
+      "asset": "BHEL",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:67]",
+      "entryTime": "1:53:00 pm",
+      "exitTime": "2:24:00 pm",
+      "entryPrice": 420.4,
+      "exitPrice": 423.2,
+      "quantity": 34,
+      "pnl": 91.60280000000039,
+      "pnlPct": 0.6660323501427239,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    },
+    {
+      "day": "2026-09-09",
+      "asset": "NTPC",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:57]",
+      "entryTime": "9:44:00 am",
+      "exitTime": "10:00:00 am",
+      "entryPrice": 336,
+      "exitPrice": 335,
+      "quantity": 163,
+      "pnl": -176.65125,
+      "pnlPct": -0.2976190476190476,
+      "exitReason": "Breakout Failed: Price (₹335.00) broke below institutional VWAP support (₹335.98). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2026-09-09",
+      "asset": "HCLTECH",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:66]",
+      "entryTime": "1:23:00 pm",
+      "exitTime": "2:15:00 pm",
+      "entryPrice": 1228.75,
+      "exitPrice": 1229.5,
+      "quantity": 22,
+      "pnl": 9.73775,
+      "pnlPct": 0.06103763987792472,
+      "exitReason": "Stop hit at ₹1229.50. Protecting capital."
+    },
+    {
+      "day": "2026-09-10",
+      "asset": "PNB",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]",
+      "entryTime": "9:46:00 am",
+      "exitTime": "10:20:00 am",
+      "entryPrice": 116.95,
+      "exitPrice": 117.8,
+      "quantity": 270,
+      "pnl": 221.54849999999846,
+      "pnlPct": 0.7268063274903755,
+      "exitReason": "Tranche 1 (+1.5 ATR) reached at ₹117.82 (+0.74%). Locking partial profit."
+    },
+    {
+      "day": "2026-09-10",
+      "asset": "BRITANNIA",
+      "strategy": "Auto-Pilot: VWAP Band Mean Reversion [Rank #1 ACI:68]",
+      "entryTime": "11:08:00 am",
+      "exitTime": "11:13:00 am",
+      "entryPrice": 5013.8,
+      "exitPrice": 5028,
+      "quantity": 16,
+      "pnl": 207.0879999999971,
+      "pnlPct": 0.28321831744385134,
+      "exitReason": "Breakout Failed: Price (₹5028.00) broke below institutional VWAP support (₹5375.73). Micro-loss capital defense exit."
+    },
+    {
+      "day": "2026-09-10",
+      "asset": "PNB",
+      "strategy": "Auto-Pilot: Hurst Trend Rider [Rank #1 ACI:56]",
+      "entryTime": "9:46:00 am",
+      "exitTime": "12:20:00 pm",
+      "entryPrice": 116.95,
+      "exitPrice": 117.55,
+      "quantity": 271,
+      "pnl": 154.63598749999846,
+      "pnlPct": 0.5130397605814402,
+      "exitReason": "Trailing Ratchet Stop Triggered"
+    }
+  ]
+}
