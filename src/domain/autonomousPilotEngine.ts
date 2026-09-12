@@ -1242,14 +1242,15 @@ export function tickAutonomousPilot(
       const isHealthyRsi = (ind.rsi ?? 50) >= 50 && (ind.rsi ?? 50) <= 68;
       const isSqueezeRelease = squeezeStatus === 'SQUEEZE_OFF';
       const isAboveVwap = vwap > 0 ? price >= vwap * 0.999 : true;
-      const isPersistentHurst = timingQuality.phase === 'OPENING_VOLATILITY' ? hurst >= 0.58 : hurst >= 0.54;
+      const isPersistentHurst = istMinutes < 600 ? hurst >= 0.62 : timingQuality.phase === 'OPENING_VOLATILITY' ? hurst >= 0.58 : hurst >= 0.54;
+      const isConfirmedVol = istMinutes < 600 ? volumeSurgeRatio >= 1.40 : true;
       const isNearDayHigh = market.high24h ? price >= market.high24h * 0.995 : true;
 
       const isAboveMultiDayTrend = market.history && market.history.length >= 30
         ? price >= (market.history.slice(-30).reduce((a, b) => a + b, 0) / 30) * 0.998
         : true;
 
-      if (isBreakout && (isHealthyRsi || isSqueezeRelease) && isAboveVwap && isPersistentHurst && isNearDayHigh && isAboveMultiDayTrend) {
+      if (isBreakout && (isHealthyRsi || isSqueezeRelease) && isAboveVwap && isPersistentHurst && isConfirmedVol && isNearDayHigh && isAboveMultiDayTrend) {
         hasEntrySignal = true;
         entryRationale = `Hurst Trend Breakout (H=${hurst.toFixed(2)}${isSqueezeRelease ? ' + Squeeze Release' : ''}): Momentum alignment with RSI ${(ind.rsi ?? 50).toFixed(0)} & VWAP.`;
       }
