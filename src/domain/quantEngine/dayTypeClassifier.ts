@@ -47,16 +47,27 @@ export function classifyMarketDayType(
   }
 
   // 2. Bear Breakdown / Sell-off Day
-  if (breadthAboveVwapPct <= 38 && advanceDeclineRatio <= 0.65 && fleetMeanChangePct <= -0.20) {
+  if (
+    macroBreadth.totalAssetsEvaluated >= 15 &&
+    ((breadthAboveVwapPct <= 38 && advanceDeclineRatio <= 0.65 && fleetMeanChangePct <= -0.20) ||
+      macroBreadth.directionalPermission === 'SHORT_ONLY' ||
+      (breadthAboveVwapPct <= 32 && advanceDeclineRatio <= 0.55))
+  ) {
     return {
       dayType: 'BEAR_TREND_DAY',
       confidence: 0.85,
       favoredStrategies: ['ORB Breakdown', 'VWAP Rejection Short', 'Value Accumulator'],
-      restrictedStrategies: ['Hurst Trend Rider', 'ORB Breakout'],
-      maxDailyTradesRecommended: 2,
-      minAciFloor: 65,
+      restrictedStrategies: [
+        'Hurst Trend Rider',
+        'ORB Breakout',
+        'VWAP Band Mean Reversion',
+        'Momentum Scalper',
+        'Candle Price Action',
+      ],
+      maxDailyTradesRecommended: 0,
+      minAciFloor: 75,
       targetProfitAtrMultiplier: 1.5,
-      narrative: `Bear Trend / Liquidation Day: Only ${breadthAboveVwapPct.toFixed(0)}% fleet above VWAP, A/D ${advanceDeclineRatio.toFixed(1)}x. Long trend breakouts strictly restricted to preserve capital.`,
+      narrative: `Bear Trend / Liquidation Day: Only ${breadthAboveVwapPct.toFixed(0)}% fleet above VWAP, A/D ${advanceDeclineRatio.toFixed(1)}x. Long entries strictly restricted to preserve capital.`,
     };
   }
 

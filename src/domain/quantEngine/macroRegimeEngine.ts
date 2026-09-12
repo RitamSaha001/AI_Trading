@@ -53,12 +53,13 @@ export function evaluateFleetMacroBreadth(
     if (change > 0.05) advancingCount++;
     else if (change < -0.05) decliningCount++;
 
-    // Check VWAP from candles or fallback
+    // Check VWAP from candles or fallback (prefer intraday candles to avoid multi-week historical VWAP pollution)
     let vwap = 0;
-    if (m.candles && m.candles.length > 0) {
+    const candlesToUse = (m.intradayCandles && m.intradayCandles.length > 0) ? m.intradayCandles : m.candles;
+    if (candlesToUse && candlesToUse.length > 0) {
       let cumVol = 0;
       let cumTypical = 0;
-      for (const c of m.candles) {
+      for (const c of candlesToUse) {
         if (!c || typeof c.close !== 'number' || typeof c.volume !== 'number') continue;
         const typical = ((c.high ?? c.close) + (c.low ?? c.close) + c.close) / 3;
         const v = Math.max(1, c.volume);

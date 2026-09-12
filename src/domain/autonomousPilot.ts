@@ -76,6 +76,20 @@ export const PILOT_PROFILES: Record<AutonomousPilotProfile, PilotProfileConfig> 
     targetCashBufferPct: 25,
     allowedRegimes: ['BULLISH_EXPANSION', 'RANGE_BOUND_ACCUMULATION', 'HIGH_VOLATILITY_CHOP'],
   },
+  elite_runner: {
+    profile: 'elite_runner',
+    name: 'Elite Alpha Runner',
+    tagline: 'High-Conviction Selectivity & Extended Profit Runners',
+    description: 'Elevates minimum ACI hurdle (>= 72), requires institutional volume confirmation (>= 1.35x), and extends profit targets (T1 at +2.0 ATR, T2 at +3.25 ATR) to maximize the profit-to-fee ratio and eliminate statutory fee drag.',
+    minRiskReward: 2.5,
+    minCompositeScore: 72,
+    maxRiskPerTradePct: 1.0,
+    stopLossAtrMultiplier: 2.0,
+    takeProfitAtrMultiplier: 5.5,
+    maxDrawdownCircuitBreakerPct: 2.0,
+    targetCashBufferPct: 35,
+    allowedRegimes: ['BULLISH_EXPANSION', 'RANGE_BOUND_ACCUMULATION'],
+  },
 };
 
 import { initializeFleetStatus, createDefaultRateLimitStatus } from './autonomousPilotEngine';

@@ -564,7 +564,7 @@ export type AppState = {
 // AUTONOMOUS LOCAL QUANT PILOT & CAPITAL PROTECTION TYPES
 // ---------------------------------------------------------------------------
 
-export type AutonomousPilotProfile = 'conservative' | 'balanced' | 'momentum';
+export type AutonomousPilotProfile = 'conservative' | 'balanced' | 'momentum' | 'elite_runner';
 
 export type MarketRegime =
   | 'BULLISH_EXPANSION'
@@ -653,6 +653,10 @@ export interface AssetFleetStatus {
   alphaConvictionIndex?: number;
   highWaterMark?: number;
   entryTimestamp?: number;
+  reputationScore?: number;
+  consecutiveLosses?: number;
+  cooldownUntilTimestamp?: number;
+  successfulReversions?: number;
 }
 
 export interface PilotRateLimitStatus {

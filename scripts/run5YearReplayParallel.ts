@@ -28,7 +28,7 @@ const YEARS: YearConfig[] = [
   { year: 2023, startDate: '2023-01-02', endDate: '2023-12-29', totalDays: 261, tag: '5yr-2023' },
   { year: 2024, startDate: '2024-01-01', endDate: '2024-12-31', totalDays: 265, tag: '5yr-2024' },
   { year: 2025, startDate: '2025-01-01', endDate: '2025-12-31', totalDays: 262, tag: '5yr-2025' },
-  { year: 2026, startDate: '2026-01-01', endDate: '2026-09-10', totalDays: 182, tag: '5yr-2026' },
+  { year: 2026, startDate: '2026-01-01', endDate: '2026-09-11', totalDays: 183, tag: '5yr-2026' },
 ];
 
 interface MonthlyStats {
@@ -48,9 +48,131 @@ interface MonthlyStats {
   cleared2000: boolean;
 }
 
-function runYearProcess(cfg: YearConfig, capital: number, profile: string, broker: string): Promise<string> {
+interface LiveYearStatus {
+  year: number;
+  currentDay: number;
+  totalDays: number;
+  currentDate: string;
+  currentNav: number;
+  netPnl: number;
+  returnPct: number;
+  tradesCount: number;
+  winsCount: number;
+  lossesCount: number;
+  winRatePct: number;
+  lastEvent: string;
+  isDone: boolean;
+}
+
+const liveStatuses: Record<number, LiveYearStatus> = {};
+let lastDashboardPrintTime = 0;
+
+async function updateLiveDashboard(auditDir: string, capital: number) {
+  try {
+    await mkdir(auditDir, { recursive: true });
+    const statuses = Object.values(liveStatuses).sort((a, b) => a.year - b.year);
+    const totalSessionsDone = statuses.reduce((s, st) => s + st.currentDay, 0);
+    const totalSessionsAll = statuses.reduce((s, st) => s + st.totalDays, 0);
+    const totalPnl = statuses.reduce((s, st) => s + st.netPnl, 0);
+    const totalTrades = statuses.reduce((s, st) => s + st.tradesCount, 0);
+    const totalWins = statuses.reduce((s, st) => s + st.winsCount, 0);
+    const totalLosses = statuses.reduce((s, st) => s + st.lossesCount, 0);
+    const overallWr = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '0.0';
+    const overallPct = totalSessionsAll > 0 ? ((totalSessionsDone / totalSessionsAll) * 100).toFixed(1) : '0.0';
+
+    // Save JSON
+    await writeFile(
+      join(auditDir, 'live-progress.json'),
+      JSON.stringify(
+        {
+          timestamp: new Date().toISOString(),
+          totalSessionsDone,
+          totalSessionsAll,
+          overallProgressPct: Number(overallPct),
+          totalPnl,
+          totalTrades,
+          totalWins,
+          totalLosses,
+          overallWinRatePct: Number(overallWr),
+          statuses,
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+
+    // Save Markdown
+    const pnlSign = totalPnl >= 0 ? '+' : '';
+    const mdLines = [
+      '# 5-Year Autonomous Quant Master Brain — Live Test Progress',
+      '',
+      `**Status**: ${totalSessionsDone >= totalSessionsAll && totalSessionsAll > 0 ? 'COMPLETED ✅' : 'IN PROGRESS ⏳'}  `,
+      `**Last Updated**: ${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST  `,
+      `**Total Completed Sessions**: **${totalSessionsDone} / ${totalSessionsAll} (${overallPct}%)**  `,
+      `**Total 5-Year Net P&L**: **${pnlSign}₹${totalPnl.toFixed(2)}** | **Trades**: ${totalTrades} (Win Rate: ${overallWr}%)  `,
+      '',
+      '| Year | Progress | Current Date | Running NAV | Annual P&L | Trades | Win Rate | Last Event | Status |',
+      '| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- | :---: |',
+    ];
+
+    for (const st of statuses) {
+      const sSign = st.netPnl >= 0 ? '+' : '';
+      const pct = st.totalDays > 0 ? ((st.currentDay / st.totalDays) * 100).toFixed(0) : '0';
+      const wr = st.tradesCount > 0 ? ((st.winsCount / st.tradesCount) * 100).toFixed(1) + '%' : '—';
+      const statusIcon = st.isDone ? '✅ Done' : '⏳ Running';
+      mdLines.push(
+        `| **${st.year}** | ${st.currentDay}/${st.totalDays} (${pct}%) | ${st.currentDate} | ₹${st.currentNav.toFixed(2)} | **${sSign}₹${st.netPnl.toFixed(2)}** | ${st.tradesCount} | ${wr} | ${st.lastEvent || '—'} | ${statusIcon} |`
+      );
+    }
+    mdLines.push('');
+    await writeFile(join(auditDir, 'live-progress.md'), mdLines.join('\n'), 'utf-8');
+
+    // Periodic Console Dashboard (every 25 seconds)
+    const now = Date.now();
+    if (now - lastDashboardPrintTime > 25000) {
+      lastDashboardPrintTime = now;
+      console.log('\n' + '='.repeat(102));
+      console.log(`  5-YEAR FLEET REPLAY LIVE DASHBOARD [${totalSessionsDone}/${totalSessionsAll} Sessions — ${overallPct}% Complete]`);
+      console.log('='.repeat(102));
+      console.log(' Year   Progress        Current Date   Running NAV     Annual P&L     Return %   Trades  Win Rate   Status');
+      console.log('-'.repeat(102));
+      for (const st of statuses) {
+        const sSign = st.netPnl >= 0 ? '+' : '';
+        const pct = st.totalDays > 0 ? ((st.currentDay / st.totalDays) * 100).toFixed(0) : '0';
+        const progStr = `[${String(st.currentDay).padStart(3)}/${st.totalDays} ${pct.padStart(2)}%]`;
+        const wr = st.tradesCount > 0 ? ((st.winsCount / st.tradesCount) * 100).toFixed(1) + '%' : '—';
+        const statusBadge = st.isDone ? '✅ DONE' : '⏳ RUN ';
+        console.log(
+          ` ${st.year}   ${progStr}  ${st.currentDate.padEnd(10)}   ₹${st.currentNav.toFixed(2).padStart(10)}  ${(sSign + '₹' + st.netPnl.toFixed(2)).padStart(12)}  ${(sSign + st.returnPct.toFixed(2) + '%').padStart(8)}   ${String(st.tradesCount).padStart(5)}  ${wr.padStart(8)}   ${statusBadge}`
+        );
+      }
+      console.log('-'.repeat(102));
+      console.log(` CUMULATIVE: Net P&L: ${pnlSign}₹${totalPnl.toFixed(2)} | Closed Trades: ${totalTrades} | Overall Win Rate: ${overallWr}%`);
+      console.log('='.repeat(102) + '\n');
+    }
+  } catch {}
+}
+
+function runYearProcess(cfg: YearConfig, capital: number, profile: string, broker: string, resetDaily = false, auditDir = 'artifacts/fleet-replay-audit'): Promise<string> {
   return new Promise((resolve, reject) => {
-    console.log(`[Launch] Starting replay for ${cfg.year} (${cfg.startDate} → ${cfg.endDate}, ~${cfg.totalDays} days)...`);
+    liveStatuses[cfg.year] = {
+      year: cfg.year,
+      currentDay: 0,
+      totalDays: cfg.totalDays,
+      currentDate: cfg.startDate,
+      currentNav: capital,
+      netPnl: 0,
+      returnPct: 0,
+      tradesCount: 0,
+      winsCount: 0,
+      lossesCount: 0,
+      winRatePct: 0,
+      lastEvent: 'Starting...',
+      isDone: false,
+    };
+
+    console.log(`[Launch] Starting replay for ${cfg.year} (${cfg.startDate} → ${cfg.endDate}, ${cfg.totalDays} sessions)...`);
     const args = [
       'scripts/replayFleetWindow.ts',
       `--start=${cfg.startDate}`,
@@ -59,8 +181,10 @@ function runYearProcess(cfg: YearConfig, capital: number, profile: string, broke
       `--profile=${profile}`,
       `--broker=${broker}`,
       `--tag=${cfg.tag}`,
-      '--reset-daily',
     ];
+    if (resetDaily) {
+      args.push('--reset-daily');
+    }
 
     const child = spawn('npx', ['tsx', ...args], {
       cwd: process.cwd(),
@@ -70,19 +194,66 @@ function runYearProcess(cfg: YearConfig, capital: number, profile: string, broke
 
     let stdoutData = '';
     let stderrData = '';
-    let lastProgressTime = Date.now();
+    let buffer = '';
 
     child.stdout.on('data', (chunk) => {
       const text = chunk.toString();
       stdoutData += text;
-      const lines = text.split('\n');
+      buffer += text;
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete trailing line
+
       for (const line of lines) {
-        if (line.includes('[Day ') && line.includes('Done')) {
-          const now = Date.now();
-          if (now - lastProgressTime > 8000) {
-            console.log(`  [${cfg.year}] ${line.trim()}`);
-            lastProgressTime = now;
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        // Day completed line
+        if (trimmed.includes('[Day ') && trimmed.includes('Done')) {
+          const m = trimmed.match(/\[Day\s+(\d+)\/(\d+)\]\s+([\d-]+)\s+\.\.\.\s+Done.*?NAV:\s*₹([\d.]+).*?Net P&L:\s*([+\-]?₹?[\d.]+)\s*\(([+\-]?[\d.]+%)\)\s*\|\s*Trades:\s*(\d+)/i);
+          if (m) {
+            const dayIdx = Number(m[1]);
+            const totalDays = Number(m[2]);
+            const dateStr = m[3];
+            const nav = Number(m[4]);
+            const dailyPnlStr = m[5];
+            const retPctStr = m[6];
+            const dayTrades = Number(m[7]);
+
+            const st = liveStatuses[cfg.year];
+            if (st) {
+              st.currentDay = dayIdx;
+              st.totalDays = totalDays;
+              st.currentDate = dateStr;
+              st.currentNav = nav;
+              st.netPnl = nav - capital;
+              st.returnPct = capital > 0 ? (st.netPnl / capital) * 100 : 0;
+              st.tradesCount += dayTrades;
+              st.lastEvent = `${dateStr}: ${dailyPnlStr} (${dayTrades}T)`;
+            }
+
+            console.log(`[${cfg.year}] Day ${String(dayIdx).padStart(3)}/${totalDays} (${dateStr}) | NAV: ₹${nav.toFixed(2)} | Day P&L: ${dailyPnlStr} (${retPctStr}) | Trades: ${dayTrades}`);
+            updateLiveDashboard(auditDir, capital);
+          } else {
+            console.log(`[${cfg.year}] ${trimmed}`);
           }
+        }
+        // Executed trade line
+        else if (trimmed.includes('↳ [')) {
+          console.log(`[${cfg.year}]   ${trimmed}`);
+          const st = liveStatuses[cfg.year];
+          if (st) {
+            st.lastEvent = trimmed.substring(0, 70);
+            if (trimmed.includes('P&L: +')) st.winsCount++;
+            else if (trimmed.includes('P&L: -')) st.lossesCount++;
+          }
+        }
+        // Month milestone line
+        else if (trimmed.includes('🌟 [Month')) {
+          console.log(`\n[${cfg.year}] ${trimmed}\n`);
+          const st = liveStatuses[cfg.year];
+          if (st) st.lastEvent = trimmed;
+          updateLiveDashboard(auditDir, capital);
         }
       }
     });
@@ -92,11 +263,18 @@ function runYearProcess(cfg: YearConfig, capital: number, profile: string, broke
     });
 
     child.on('close', (code) => {
+      const st = liveStatuses[cfg.year];
+      if (st) {
+        st.isDone = true;
+        st.lastEvent = 'Completed';
+      }
+      updateLiveDashboard(auditDir, capital);
+
       if (code === 0) {
-        console.log(`[Success] Year ${cfg.year} finished successfully!`);
+        console.log(`\n[SUCCESS] Year ${cfg.year} finished simulation cleanly!`);
         resolve(stdoutData);
       } else {
-        console.error(`[Error] Year ${cfg.year} exited with code ${code}`);
+        console.error(`\n[ERROR] Year ${cfg.year} exited with code ${code}`);
         console.error(stderrData);
         reject(new Error(`Year ${cfg.year} process failed with code ${code}`));
       }
@@ -109,25 +287,60 @@ function runYearProcess(cfg: YearConfig, capital: number, profile: string, broke
 }
 
 async function main() {
-  console.log('='.repeat(85));
-  console.log('  AUTONOMOUS QUANT MASTER BRAIN — 5-YEAR COMPREHENSIVE HISTORICAL AUDIT');
-  console.log('='.repeat(85));
-  console.log('Historical Scope:   2022-01-03 → 2026-09-10 (~1,230 Sessions across 5 Years)');
-  console.log('Fleet Universe:     100 NIFTY Liquid Equities (1-Minute Historical Candles)');
-  console.log('Capital Baseline:   ₹40,000 per session with 5x MIS Intraday Leverage');
-  console.log('Execution Model:    FlatTrade Zero-Brokerage Engine (Statutory Taxes ~ 2.5 bps)');
-  console.log('Parallel Workers:   5 Concurrent Processing Streams');
-  console.log('='.repeat(85));
+  const rawArgs = process.argv.slice(2);
+  let capital = 40000;
+  let profile = 'balanced';
+  let broker = 'flattrade';
+  let resetDaily = false;
+  let concurrency = 5;
 
-  const capital = 40000;
-  const profile = 'balanced';
-  const broker = 'flattrade';
+  for (let i = 0; i < rawArgs.length; i++) {
+    const a = rawArgs[i];
+    if (a.startsWith('--capital=')) capital = Number(a.split('=')[1]) || 40000;
+    else if (a === '--capital' && i + 1 < rawArgs.length) capital = Number(rawArgs[++i]) || 40000;
+    else if (a.startsWith('--profile=')) profile = a.split('=')[1];
+    else if (a === '--profile' && i + 1 < rawArgs.length) profile = rawArgs[++i];
+    else if (a.startsWith('--broker=')) broker = a.split('=')[1];
+    else if (a === '--broker' && i + 1 < rawArgs.length) broker = rawArgs[++i];
+    else if (a === '--reset-daily') resetDaily = true;
+    else if (a.startsWith('--concurrency=')) concurrency = Number(a.split('=')[1]) || 5;
+  }
+
+  console.log('='.repeat(95));
+  console.log('  AUTONOMOUS QUANT MASTER BRAIN — 5-YEAR COMPREHENSIVE HISTORICAL AUDIT');
+  console.log('='.repeat(95));
+  console.log(`Historical Scope:   2022-01-03 → 2026-09-11 (1,231 Sessions across 5 Years)`);
+  console.log(`Fleet Universe:     100 NIFTY Liquid Equities (1-Minute Historical Candles)`);
+  console.log(`Capital Baseline:   ₹${capital.toLocaleString('en-IN')} with 5x MIS Intraday Leverage`);
+  console.log(`Capital Mode:       ${resetDaily ? 'Static Daily Reset' : 'CONTINUOUS COMPOUNDING NAV'}`);
+  console.log(`Execution Model:    FlatTrade Zero-Brokerage Engine (Statutory Taxes ~ 2.5 bps)`);
+  console.log(`Risk Profile:       ${profile.toUpperCase()}`);
+  console.log(`Parallel Workers:   ${concurrency} Concurrent Processing Streams`);
+  console.log('='.repeat(95));
+
+  const auditDir = join(process.cwd(), 'artifacts', 'fleet-replay-audit');
+  await mkdir(auditDir, { recursive: true });
 
   const startTime = Date.now();
+  console.log(`\nSpawning ${Math.min(concurrency, YEARS.length)} parallel simulation streams with LIVE trade & P&L telemetry...\n`);
 
-  console.log('\nSpawning 5 parallel simulation streams...\n');
+  // Concurrency pool runner
+  async function runPool() {
+    const pool = new Set<Promise<any>>();
+    for (const cfg of YEARS) {
+      const p: Promise<any> = runYearProcess(cfg, capital, profile, broker, resetDaily, auditDir).then(() => {
+        pool.delete(p);
+      });
+      pool.add(p);
+      if (pool.size >= concurrency) {
+        await Promise.race(pool);
+      }
+    }
+    await Promise.all(pool);
+  }
+
   try {
-    await Promise.all(YEARS.map((cfg) => runYearProcess(cfg, capital, profile, broker)));
+    await runPool();
   } catch (err: any) {
     console.error('Parallel execution encountered an error:', err.message);
     process.exit(1);
@@ -136,7 +349,6 @@ async function main() {
   const elapsedMins = ((Date.now() - startTime) / 60000).toFixed(2);
   console.log(`\nAll 5 simulation streams completed in ${elapsedMins} minutes! Compiling unified audit...\n`);
 
-  const auditDir = join(process.cwd(), 'artifacts', 'fleet-replay-audit');
   const allMonthlyStats: MonthlyStats[] = [];
   const yearSummaries: Record<number, any> = {};
 
@@ -161,7 +373,8 @@ async function main() {
       continue;
     }
 
-    yearSummaries[cfg.year] = loadedData;
+    const { dailyBreakdown, allClosedTrades, finalFleet, ...cleanSummary } = loadedData;
+    yearSummaries[cfg.year] = cleanSummary;
     total5YearNetPnl += loadedData.totalNetPnl;
     total5YearTrades += loadedData.totalTrades;
     total5YearWins += loadedData.totalWins;
@@ -186,14 +399,16 @@ async function main() {
       const mLosses = days.reduce((sum, d) => sum + d.lossesCount, 0);
       const mFees = days.reduce((sum, d) => sum + d.feeBurn, 0);
       const mWinRate = mTrades > 0 ? (mWins / mTrades) * 100 : 0;
-      const returnPct = (mNetPnl / capital) * 100;
+      const mStartNav = days[0].startingNav;
+      const mEndNav = days[days.length - 1].endingNav;
+      const returnPct = mStartNav > 0 ? (mNetPnl / mStartNav) * 100 : 0;
 
       allMonthlyStats.push({
         month: mKey,
         year: cfg.year,
         daysCount,
-        startNav: capital,
-        endNav: capital + mNetPnl,
+        startNav: mStartNav,
+        endNav: mEndNav,
         netPnl: mNetPnl,
         returnPct,
         tradesCount: mTrades,

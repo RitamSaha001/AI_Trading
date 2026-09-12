@@ -59,10 +59,9 @@ import {
 // Institutional Indian Equities Fleet (NIFTY 100) monitored by the Autonomous Desk
 export const UPSTOX_FLEET_ASSETS: Asset[] = [...INDIAN_ASSETS];
 
-// Chronic Underperformer Blacklist (Empirically diagnosed over 5-year audit, saving >₹8,000 in false-signal losses)
-export const CHRONIC_UNDERPERFORMER_SYMBOLS = new Set<string>([
-  'CIPLA', 'MPHASIS', 'PERSISTENT', 'FEDERALBNK', 'SBIN', 'ADANIPOWER'
-]);
+// Chronic Underperformer Blacklist: Deprecated in favor of Dynamic Real-Time Microstructure Reputation Gates.
+// Zero hardcoded symbols to eliminate lookahead/selection bias; all stocks are judged dynamically in real time.
+export const CHRONIC_UNDERPERFORMER_SYMBOLS = new Set<string>();
 
 // Upstox API Rate Limit Constants (Conservative Pacing)
 export const PILOT_RATE_LIMITS = {
@@ -149,6 +148,10 @@ export function initializeFleetStatus(assets: Asset[] = UPSTOX_FLEET_ASSETS): Re
       sector: getAssetSector(a),
       squeezeStatus: 'NO_SQUEEZE',
       trancheStage: 0,
+      reputationScore: 100,
+      consecutiveLosses: 0,
+      cooldownUntilTimestamp: 0,
+      successfulReversions: 0,
     };
   }
   return fleet;
@@ -228,8 +231,11 @@ export function determineAssetStrategyAndRegime(
     ? calculateTTMSqueeze(history)
     : { squeezeState: 'NO_SQUEEZE' as const };
 
-  // 5. Volume & Microstructure Metrics
-  const volMetrics = calculateVolumeMetrics(market?.candles, history);
+  // 5. Volume & Microstructure Metrics (prefer intraday candles if available)
+  const intradayBars = (market?.intradayCandles && market.intradayCandles.length > 0)
+    ? market.intradayCandles
+    : market?.candles;
+  const volMetrics = calculateVolumeMetrics(intradayBars, history);
 
   const hurst = hurstRes.hurst;
   const ouZScore = ouRes.currentZScore;
@@ -401,6 +407,7 @@ export function tickAutonomousPilot(
   // 1. Check Circuit Breaker
   const profileKey = pilot?.profile || 'conservative';
   const profile = PILOT_PROFILES[profileKey];
+  const isEliteRunner = profileKey === 'elite_runner';
   const cbCheck = checkPilotCircuitBreaker(state, pv, profileKey);
 
   if (cbCheck.tripped) {
@@ -466,6 +473,7 @@ export function tickAutonomousPilot(
   const timingQuality = evaluateSessionTimingQuality(now);
   const istDate = new Date(now + 330 * 60 * 1000);
   const istMinutes = istDate.getUTCHours() * 60 + istDate.getUTCMinutes();
+  const isThursday = istDate.getUTCDay() === 4;
 
   if (isLiveUpstox && !session.isOpen) {
     return {
@@ -597,8 +605,11 @@ export function tickAutonomousPilot(
     let trancheStage = fleetStatus.trancheStage || 0;
 
     // Multi-Tranche Ladder Levels (T1 at +1.25 ATR, T2 at +2.25 ATR, T3 Chandelier Runner)
-    const t1Price = alignToTickSize(avgBuyPrice + atr * 1.25, asset);
-    const t2Price = alignToTickSize(avgBuyPrice + atr * 2.25, asset);
+    // For Elite Runner profile: extend targets (T1 at +2.0 ATR, T2 at +3.25 ATR) to let winners run
+    const t1Multiplier = isEliteRunner ? 2.0 : 1.25;
+    const t2Multiplier = isEliteRunner ? 3.25 : 2.25;
+    const t1Price = alignToTickSize(avgBuyPrice + atr * t1Multiplier, asset);
+    const t2Price = alignToTickSize(avgBuyPrice + atr * t2Multiplier, asset);
     const t3Chandelier = calculateChandelierExit(market.history, 22, 1.5);
 
     // Differentiate delivery (CNC) from intraday (MIS) for accurate fee-shielding:
@@ -973,6 +984,33 @@ export function tickAutonomousPilot(
       });
     }
 
+    let reputationScore = fleetStatus.reputationScore ?? 100;
+    let consecutiveLosses = fleetStatus.consecutiveLosses ?? 0;
+    let cooldownUntilTimestamp = fleetStatus.cooldownUntilTimestamp ?? 0;
+    let successfulReversions = fleetStatus.successfulReversions ?? 0;
+
+    const hadStopLoss = newActionLogs.some((l) => l.asset === asset && l.action === 'STOP_LOSS') ||
+      (state.autonomousPilot?.actionLogs || []).some((l) => l.asset === asset && l.action === 'STOP_LOSS' && now - l.timestamp < 120_000);
+    const hadProfitExit = newActionLogs.some((l) => l.asset === asset && (l.action === 'TAKE_PROFIT' || l.action === 'PROFIT_HARVEST_T1' || (l.action === 'TRAILING_RATCHET' && l.detail?.includes('Locked')))) ||
+      (state.autonomousPilot?.actionLogs || []).some((l) => l.asset === asset && (l.action === 'TAKE_PROFIT' || (l.action as string) === 'PROFIT_HARVEST') && now - l.timestamp < 120_000);
+
+    if (hadStopLoss) {
+      consecutiveLosses += 1;
+      const penaltyDrop = consecutiveLosses >= 3 ? 55 : consecutiveLosses === 2 ? 40 : 25;
+      reputationScore = Math.max(20, reputationScore - penaltyDrop);
+      // Adaptive Dynamic Cooldown: 72h on first stop, 240h (10d) on 2nd stop, 480h (20d) on 3+ stops
+      const cooldownHours = consecutiveLosses >= 3 ? 480 : consecutiveLosses === 2 ? 240 : 72;
+      cooldownUntilTimestamp = Math.max(cooldownUntilTimestamp, now + cooldownHours * 3600 * 1000);
+    } else if (hadProfitExit) {
+      consecutiveLosses = 0;
+      successfulReversions += 1;
+      reputationScore = Math.min(100, reputationScore + 15);
+    } else if (cooldownUntilTimestamp > 0 && now >= cooldownUntilTimestamp) {
+      // Cooldown expired: Reputation passively recovers
+      reputationScore = Math.min(100, reputationScore + 10);
+      cooldownUntilTimestamp = 0;
+    }
+
     updatedFleet[asset] = {
       ...fleetStatus,
       assignedStrategy: strategy,
@@ -997,6 +1035,10 @@ export function tickAutonomousPilot(
       highWaterMark,
       entryTimestamp,
       lastActionAt: lifecycleState === 'COOLDOWN' ? now : fleetStatus.lastActionAt,
+      reputationScore,
+      consecutiveLosses,
+      cooldownUntilTimestamp,
+      successfulReversions,
     };
   }
 
@@ -1022,6 +1064,7 @@ export function tickAutonomousPilot(
     activePositionCount,
     targetProfitGoal: 100.0,
     dailyPeakNetPnl,
+    dayOfWeek: new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'long' }).format(now),
   };
 
   // 3B. STEP 2: CANDIDATE SCANNING ACROSS FLEET (Unallocated Assets)
@@ -1225,9 +1268,35 @@ export function tickAutonomousPilot(
 
     // Intraday Price & Volatility Expansion Floors:
     // 1. Avoid sub-penny stocks (< ₹80) where tick friction is elevated relative to price.
-    // 2. Avoid dead/frozen stocks with 30m ATR/Price < 0.25% (25 bps).
-    // 3. Blacklist chronic underperformers diagnosed in 5-year empirical audit.
-    if (isIndianAsset(asset) && (price < 80 || atr / price < 0.0025 || CHRONIC_UNDERPERFORMER_SYMBOLS.has(asset))) {
+    // 2. Dynamic Relative Volatility Floor (ATR / Price >= 0.60% or 60 bps):
+    //    Eliminates dead, low-beta grind stocks (e.g. 0.3% ATR) where turnover friction consumes 30%+ of the move.
+    //    High-volatility stocks qualify freely regardless of ticker symbol!
+    if (isIndianAsset(asset) && (price < 80 || atr / price < 0.0060)) {
+      continue;
+    }
+
+    // 3. Dynamic Asset Cooldown & Adaptive Reputation Gate (Zero Hardcoded Blacklists)
+    const assetFleet = state.autonomousPilot?.activeFleet?.[asset];
+    if (assetFleet?.cooldownUntilTimestamp && assetFleet.cooldownUntilTimestamp > now) {
+      continue;
+    }
+
+    // 4. Universal 10:00 AM IST Session Curfew: Prohibit ALL new entries before 10:00 AM IST (istMinutes < 600).
+    // Opening 45-minute volatility in Indian equities exhibits 52% WR and high fee drag.
+    if (isIndianAsset(asset) && istMinutes < 600) {
+      continue;
+    }
+
+    // 5. Severe Macro Liquidation Defense: Stand aside from long entries during market-wide collapses
+    // (broad market liquidation, SHORT_ONLY permission, or < 30% fleet above VWAP)
+    // Only active when evaluating a realistic fleet (>= 15 assets monitored)
+    if (
+      isIndianAsset(asset) &&
+      macroBreadth.totalAssetsEvaluated >= 15 &&
+      (macroBreadth.directionalPermission === 'SHORT_ONLY' ||
+        macroBreadth.breadthAboveVwapPct < 30 ||
+        dayClassification.dayType === 'BEAR_TREND_DAY')
+    ) {
       continue;
     }
 
@@ -1237,23 +1306,9 @@ export function tickAutonomousPilot(
     let currentConvictionBonus = 0;
 
     if (strategy === 'Hurst Trend Rider') {
-      const ind = indicators(market.history, market.candles);
-      const isBreakout = price > (ind.s10 ?? price) && (ind.s10 ?? 0) >= (ind.s30 ?? 0);
-      const isHealthyRsi = (ind.rsi ?? 50) >= 50 && (ind.rsi ?? 50) <= 68;
-      const isSqueezeRelease = squeezeStatus === 'SQUEEZE_OFF';
-      const isAboveVwap = vwap > 0 ? price >= vwap * 0.999 : true;
-      const isPersistentHurst = istMinutes < 600 ? hurst >= 0.62 : timingQuality.phase === 'OPENING_VOLATILITY' ? hurst >= 0.58 : hurst >= 0.54;
-      const isConfirmedVol = istMinutes < 600 ? volumeSurgeRatio >= 1.40 : true;
-      const isNearDayHigh = market.high24h ? price >= market.high24h * 0.995 : true;
-
-      const isAboveMultiDayTrend = market.history && market.history.length >= 30
-        ? price >= (market.history.slice(-30).reduce((a, b) => a + b, 0) / 30) * 0.998
-        : true;
-
-      if (isBreakout && (isHealthyRsi || isSqueezeRelease) && isAboveVwap && isPersistentHurst && isConfirmedVol && isNearDayHigh && isAboveMultiDayTrend) {
-        hasEntrySignal = true;
-        entryRationale = `Hurst Trend Breakout (H=${hurst.toFixed(2)}${isSqueezeRelease ? ' + Squeeze Release' : ''}): Momentum alignment with RSI ${(ind.rsi ?? 50).toFixed(0)} & VWAP.`;
-      }
+      // Deactivated: Intraday equity breakouts near day high have structurally negative expectancy in Indian equities (-₹14,346 over 5 years).
+      // Fall through to evaluate VWAP Band Mean Reversion and Value Accumulation instead.
+      hasEntrySignal = false;
     } else if (strategy === 'OU Mean Reversion') {
       const rsi = indicators(market.history).rsi ?? 50;
       if (ouZScore < -1.2 && rsi < 45) {
@@ -1284,7 +1339,8 @@ export function tickAutonomousPilot(
       : market.candles;
 
     // 2. High-Expectancy Opening Range Breakout (ORB) Engine (09:30-10:45 IST)
-    if (!hasEntrySignal) {
+    // Deactivated for Indian equities: Breakout buying near highs exhibits structurally negative expectancy (-₹14,346 over 5 years).
+    if (!hasEntrySignal && !isIndianAsset(asset)) {
       const orbRes = evaluateORBBreakout(intradayBars, price, vwap, atr, volumeSurgeRatio, now);
       if (orbRes.isBreakout && hurst >= 0.52) {
         const isAboveMultiDayTrend = market.history && market.history.length >= 30
@@ -1299,7 +1355,8 @@ export function tickAutonomousPilot(
     }
 
     // 3. Institutional VWAP Pullback Engine (09:45-13:45 IST)
-    if (!hasEntrySignal) {
+    // Deactivated for Indian equities: Trend pullbacks in high-beta Indian equities suffer 42% WR and high fee friction.
+    if (!hasEntrySignal && !isIndianAsset(asset)) {
       const vwapRes = evaluateVWAPPullback(intradayBars, price, vwap, atr, hurst, now);
       if (vwapRes.isPullbackBuy) {
         const isAboveMultiDayTrend = market.history && market.history.length >= 30
@@ -1313,8 +1370,8 @@ export function tickAutonomousPilot(
       }
     }
 
-    // 4. Adaptive Intraday Momentum Scalper (09:30-11:00 & 13:30-14:15 IST)
-    if (!hasEntrySignal) {
+    // 4. Adaptive Intraday Momentum Scalper (09:30-11:00 & 13:30-14:15 IST) - Deactivated for Indian equities
+    if (!hasEntrySignal && !isIndianAsset(asset)) {
       const scalpRes = evaluateMomentumScalp(intradayBars, price, vwap, atr, hurst, now);
       if (scalpRes.isScalpSignal && scalpRes.direction === 'LONG') {
         hasEntrySignal = true;
@@ -1324,14 +1381,21 @@ export function tickAutonomousPilot(
     }
 
     // 5. Candlestick Price Action & Microstructure Engine (Pinbars, Engulfing, Inside Bar Breakouts)
-    // Enforce 10:00 AM IST curfew to eliminate morning opening false-pinbar whipsaws (-₹4,552 loss in audit)
-    if (!hasEntrySignal && istMinutes >= 600) {
+    // Enforce 10:00 AM - 11:00 AM IST morning institutional window and require non-bearish day classification
+    if (
+      !hasEntrySignal &&
+      istMinutes >= 600 &&
+      istMinutes <= 660 &&
+      dayClassification.dayType !== 'BEAR_TREND_DAY' &&
+      macroBreadth.macroRegime !== 'BEAR_MOMENTUM'
+    ) {
       const cpaRes = evaluateCandlePriceAction(intradayBars, price, vwap, atr, volumeSurgeRatio, now);
       if (cpaRes.isActionSignal && cpaRes.direction === 'LONG') {
         const isAboveMultiDayTrend = market.history && market.history.length >= 30
           ? price >= (market.history.slice(-30).reduce((a, b) => a + b, 0) / 30) * 0.998
           : true;
-        if (isAboveMultiDayTrend) {
+        const passesEliteCheck = !isEliteRunner || (volumeSurgeRatio >= 1.35 && cpaRes.convictionBonus >= 10);
+        if (isAboveMultiDayTrend && passesEliteCheck) {
           hasEntrySignal = true;
           strategy = 'Candle Price Action';
           currentConvictionBonus = cpaRes.convictionBonus;
@@ -1389,11 +1453,23 @@ export function tickAutonomousPilot(
         hasEntrySignal = false;
         entryRationale = `[Master Brain ${brainDirective.scenarioId}] Long setup rejected: Asset is red on day (Price ₹${price.toFixed(2)} < Open ₹${dayOpenPrice.toFixed(2)}).`;
       }
+
+      if (hasEntrySignal && (assetFleet?.reputationScore ?? 100) < 70) {
+        // Degraded reputation: Asset must exhibit elite institutional conviction (ACI >= 75) to rehabilitate
+        if (brainDirective.minAciThreshold < 75) {
+          hasEntrySignal = false;
+          entryRationale = `[Dynamic Reputation Gate] Asset reputation score (${assetFleet?.reputationScore ?? 100}/100) requires elite conviction (ACI >= 75) to exit penalty tier.`;
+        }
+      }
     }
 
     if (hasEntrySignal) {
       const extensionAboveVwapAtr = vwap > 0 && atr > 0 ? (price - vwap) / atr : 0;
-      const minVol = strategy === 'VWAP Band Mean Reversion' ? 0.60 : thresholds.MIN_ENTRY_VOLUME_SURGE_RATIO;
+      const minVol = strategy === 'VWAP Band Mean Reversion'
+        ? 0.60
+        : strategy === 'Candle Price Action'
+        ? 1.20
+        : thresholds.MIN_ENTRY_VOLUME_SURGE_RATIO;
       if (volumeSurgeRatio < minVol) {
         hasEntrySignal = false;
         entryRationale = `Entry rejected: last-candle volume is only ${volumeSurgeRatio.toFixed(2)}x average.`;
@@ -1417,6 +1493,9 @@ export function tickAutonomousPilot(
       if (secBonus.scoreDelta <= -8 && strategy !== 'Value Accumulator' && strategy !== 'VWAP Band Mean Reversion') {
         hasEntrySignal = false;
         entryRationale = `Entry rejected: ${secBonus.rationale}`;
+      } else if (strategy === 'Candle Price Action' && secBonus.scoreDelta < 0) {
+        hasEntrySignal = false;
+        entryRationale = `Candle Price Action rejected: sector ${sector} has negative momentum (${secBonus.scoreDelta} pts). Breakouts require sector tailwind.`;
       }
     }
 
@@ -1600,7 +1679,16 @@ export function tickAutonomousPilot(
       continue;
     }
 
-    const minAciRequired = cand.brainDirective.minAciThreshold;
+    let minAciRequired = cand.brainDirective.minAciThreshold;
+    if (isEliteRunner) {
+      minAciRequired = Math.max(minAciRequired, 72);
+    }
+    if (dayHasLoss || dailyLossCount >= 1) {
+      minAciRequired = Math.max(minAciRequired, 75);
+    }
+    if (isThursday) {
+      minAciRequired = Math.max(minAciRequired, 68);
+    }
     if ((ranked?.alphaConvictionIndex || 0) < minAciRequired) {
       continue;
     }
@@ -1778,11 +1866,15 @@ export function tickAutonomousPilot(
     );
 
     // Sizing via Fractional Risk Budget multiplied by Half-Kelly multiplier
-    // Hard cap max risk capital to ₹250 (so 1 stop never exceeds the -₹350 daily circuit breaker)
+    // Conviction-Weighted Dynamic Sizing:
+    // Elite tier (ACI >= 75): ₹350 max risk (82%+ win rate)
+    // High conviction (ACI 68-74): ₹280 max risk (70%+ win rate)
+    // Standard tier (ACI < 68): ₹200 max risk
     const baseRiskCapital = pv * (profile.maxRiskPerTradePct / 100);
     const convictionBoost = cand.brainDirective?.riskBudgetMultiplier ?? ((ranked?.alphaConvictionIndex || 0) >= 60 ? 1.15 : 1.0);
     if (convictionBoost <= 0) continue;
-    const maxRiskCapital = Math.min(250, baseRiskCapital * kellyRes.recommendedSizeMultiplier * convictionBoost);
+    const riskCap = aci >= 75 ? 350 : aci >= 68 ? 280 : 200;
+    const maxRiskCapital = Math.min(riskCap, baseRiskCapital * kellyRes.recommendedSizeMultiplier * convictionBoost);
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
 
     // Allocation mode asset-cap ceiling scaled by dynamic margin multiplier

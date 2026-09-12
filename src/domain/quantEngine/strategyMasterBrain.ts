@@ -59,6 +59,7 @@ export interface IntradayDailyPnlContext {
   activePositionCount: number;    // Open positions currently active
   targetProfitGoal?: number;      // Target goal (defaults to ₹100.00/day)
   dailyPeakNetPnl?: number;       // Peak intraday net P&L reached today (INR)
+  dayOfWeek?: string;             // Day of week ('Monday', 'Thursday', etc.)
 }
 
 export interface TrancheTargetConfig {
@@ -220,7 +221,7 @@ export function evaluateStrategyMasterBrain(inputs: MasterBrainInputs): BrainDir
     macro = 'R4_VOLATILITY_SHOCK';
   } else if (macroBreadth.directionalPermission === 'LONG_ONLY' || advanceRatio >= 0.65) {
     macro = 'R1_BULL_EXPANSION';
-  } else if (macroBreadth.directionalPermission === 'SHORT_ONLY' || advanceRatio <= 0.35) {
+  } else if (macroBreadth.totalAssetsEvaluated >= 15 && (macroBreadth.directionalPermission === 'SHORT_ONLY' || advanceRatio <= 0.35 || (macroBreadth.breadthAboveVwapPct <= 32 && advanceRatio <= 0.50))) {
     macro = 'R2_BEAR_DISTRIBUTION';
   } else {
     macro = 'R3_RANGE_EQUILIBRIUM';
@@ -376,16 +377,16 @@ export function applyIntradayPnlSupervisor(
     trancheTargets: { ...baseDirective.trancheTargets },
   };
 
-  // RULE C: Defensive Recovery Mode (1 Stop Loss)
-  // One trade has stopped out today. Micro-adjust to reduce subsequent risk:
-  if (dailyLossCount === 1) {
+  // RULE C: Defensive Recovery Mode (1 Stop Loss or Net P&L <= -₹180)
+  // One trade has stopped out today or capital dipped. Micro-adjust to reduce subsequent risk:
+  if (dailyLossCount >= 1 || dailyNetPnl <= -180) {
     modifiedDirective.dailyPnlRegime = 'DEFENSIVE_RECOVERY';
     modifiedDirective.riskBudgetMultiplier = Math.min(baseDirective.riskBudgetMultiplier, 0.50); // Halve risk budget
     modifiedDirective.marginMultiplier = Math.min(baseDirective.marginMultiplier, 3.5); // Allow sufficient buying power for TCA hurdle
-    modifiedDirective.minAciThreshold = Math.max(baseDirective.minAciThreshold, 65); // Require high conviction
+    modifiedDirective.minAciThreshold = Math.max(baseDirective.minAciThreshold, 68); // Elevate to 68+ to prevent multi-loss cascade
     modifiedDirective.trancheTargets.tranche1Atr = 1.10; // Take quick profit
     modifiedDirective.trancheTargets.runnerMode = 'TIGHT_RATCHET';
-    modifiedDirective.rationale += ` [Defensive Recovery: 1 loss today, risk halved, ACI hurdle 65+].`;
+    modifiedDirective.rationale += ` [Defensive Recovery: 1 loss today, risk halved, ACI hurdle 68+].`;
     return modifiedDirective;
   }
 
@@ -409,6 +410,14 @@ export function applyIntradayPnlSupervisor(
       modifiedDirective.trancheTargets.tranche1Atr = Math.min(baseDirective.trancheTargets.tranche1Atr, 1.15);
       modifiedDirective.trancheTargets.guaranteedLockAtr = 0.40;
     }
+  }
+
+  // RULE F: Thursday Derivative Expiry Day Curfew
+  // On Thursdays (NSE weekly options expiry), institutional gamma pinning and theta decay cause
+  // false breakouts and whipsaws. Elevate minimum conviction to ACI >= 68.
+  if (pnlCtx.dayOfWeek === 'Thursday' || pnlCtx.dayOfWeek === 'Thu') {
+    modifiedDirective.minAciThreshold = Math.max(modifiedDirective.minAciThreshold, 68);
+    modifiedDirective.rationale += ` [Thursday Expiry Filter: ACI hurdle elevated to 68+].`;
   }
 
   return modifiedDirective;
@@ -521,6 +530,39 @@ function buildBrainDirective(
       },
       maxStagnancyMinutes: 30,
       rationale: 'Volatility shock / flash gap detected. Trading frozen to shield capital against severe market dislocations.',
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // RULE CLASS 4B: SEVERE MACRO LIQUIDATION & DISTRIBUTION DEFENSE (R2_BEAR_DISTRIBUTION)
+  // Prevents buying long during market-wide collapses (<32% above VWAP or SHORT_ONLY)
+  // --------------------------------------------------------------------------
+  if (macro === 'R2_BEAR_DISTRIBUTION') {
+    return {
+      scenarioId,
+      scenarioName: 'MACRO_BEAR_LIQUIDATION_DEFENSE',
+      sessionPhase: phase,
+      macroRegime: macro,
+      assetDynamics: assetDyn,
+      priceLocation: priceLoc,
+      sectorAlignment,
+      actionPermission: 'BLOCKED_STAND_ASIDE',
+      allowedStrategies: [],
+      preferredStrategy: null,
+      marginMultiplier: 1.0,
+      riskBudgetMultiplier: 0.0,
+      minAciThreshold: 999,
+      maxVwapExtensionAtr: 0.50,
+      requireGreenOnDay: true,
+      downsizingAllowed: false,
+      trancheTargets: {
+        tranche1Atr: 1.00,
+        tranche2Atr: 1.50,
+        guaranteedLockAtr: 0.20,
+        runnerMode: 'TIGHT_RATCHET',
+      },
+      maxStagnancyMinutes: 30,
+      rationale: 'Severe macro bear distribution / market-wide liquidation in progress. All new long entries blocked to preserve capital.',
     };
   }
 

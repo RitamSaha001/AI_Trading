@@ -20,7 +20,7 @@ import { UPSTOX_FLEET_ASSETS, createDefaultAutonomousPilotState, PILOT_PROFILES 
 import { UpstoxInstrumentRegistry } from '../server/services/brokers/upstox/upstoxInstrumentRegistry';
 import { IndianMarketCalendar } from '../server/services/brokers/upstox/indianMarketCalendar';
 import { tickAutonomousPilot, initializeFleetStatus, createDefaultRateLimitStatus } from '../src/domain/autonomousPilotEngine';
-import { AppState, Asset, Market, Order, AutonomousPilotProfile } from '../src/types';
+import { AppState, Asset, Market, Order, AutonomousPilotProfile, AssetFleetStatus } from '../src/types';
 
 interface RawCandle {
   timeStr: string;
@@ -71,6 +71,7 @@ interface DayReplaySummary {
   maxDrawdownPct: number;
   closedTrades: ReplayTrade[];
   eventsCount: number;
+  finalFleet?: Record<string, AssetFleetStatus>;
 }
 
 const CACHE_DIR = join(process.cwd(), '.cache', 'upstox-candles');
@@ -228,7 +229,8 @@ async function replaySingleDay(
   targetDate: string,
   startingCapital: number,
   profile: AutonomousPilotProfile,
-  broker: 'upstox' | 'flattrade' = 'upstox'
+  broker: 'upstox' | 'flattrade' = 'upstox',
+  persistentFleet?: Record<string, AssetFleetStatus>
 ): Promise<DayReplaySummary> {
   const assetHistoricalMap: Map<Asset, RawCandle[]> = new Map();
   const assetIntradayMap: Map<Asset, RawCandle[]> = new Map();
@@ -310,6 +312,37 @@ async function replaySingleDay(
   const closedTrades: ReplayTrade[] = [];
   const replayEvents: ReplayEvent[] = [];
 
+  const initialFleet: Record<string, AssetFleetStatus> = persistentFleet
+    ? { ...persistentFleet }
+    : initializeFleetStatus(availableFleet);
+
+  if (persistentFleet) {
+    for (const asset of availableFleet) {
+      if (!initialFleet[asset]) {
+        initialFleet[asset] = {
+          asset,
+          assignedStrategy: 'Titan Alpha Sentinel',
+          regimeLabel: 'Calibrating',
+          hurst: 0.5,
+          currentPrice: 0,
+          state: 'MONITORING',
+          reputationScore: 100,
+          consecutiveLosses: 0,
+          cooldownUntilTimestamp: 0,
+          successfulReversions: 0,
+        };
+      } else {
+        initialFleet[asset] = {
+          ...initialFleet[asset],
+          state: 'MONITORING',
+          unitsHeld: 0,
+          unrealizedPnl: 0,
+          unrealizedPnlPct: 0,
+        };
+      }
+    }
+  }
+
   const appState: AppState = {
     schemaVersion: 1,
     cash: currentCash,
@@ -349,7 +382,7 @@ async function replaySingleDay(
       profile,
       dailyStartingValue: startingCapital,
       peakPortfolioValue: startingCapital,
-      activeFleet: initializeFleetStatus(availableFleet),
+      activeFleet: initialFleet,
       rateLimitStatus: createDefaultRateLimitStatus(),
     },
     settings: {
@@ -558,6 +591,22 @@ async function replaySingleDay(
         delete avgBuyPrices[asset];
         delete appState.positions[asset];
         if (appState.avgBuyPrice) delete appState.avgBuyPrice[asset];
+
+        if (appState.autonomousPilot?.activeFleet?.[asset]) {
+          const st = appState.autonomousPilot.activeFleet[asset];
+          if (tradePnl < 0) {
+            const consecutiveLosses = (st.consecutiveLosses ?? 0) + 1;
+            const penaltyDrop = consecutiveLosses >= 3 ? 55 : consecutiveLosses === 2 ? 40 : 25;
+            st.consecutiveLosses = consecutiveLosses;
+            st.reputationScore = Math.max(20, (st.reputationScore ?? 100) - penaltyDrop);
+            const cooldownHours = consecutiveLosses >= 3 ? 480 : consecutiveLosses === 2 ? 240 : 72;
+            st.cooldownUntilTimestamp = Math.max(st.cooldownUntilTimestamp ?? 0, timestamp + cooldownHours * 3600 * 1000);
+          } else {
+            st.consecutiveLosses = 0;
+            st.successfulReversions = (st.successfulReversions ?? 0) + 1;
+            st.reputationScore = Math.min(100, (st.reputationScore ?? 100) + 15);
+          }
+        }
 
         appState.autonomousPilot!.actionLogs = [
           {
@@ -773,6 +822,7 @@ async function replaySingleDay(
     closedTrades,
     eventsCount: replayEvents.length,
     events: replayEvents,
+    finalFleet: appState.autonomousPilot?.activeFleet,
   };
 }
 
@@ -800,12 +850,12 @@ async function runMultiDayWindowReplay() {
       capital = Number(args[++i]) || 40000;
     } else if (arg.startsWith('--profile=')) {
       const p = arg.split('=')[1].toLowerCase();
-      if (p === 'conservative' || p === 'balanced' || p === 'momentum') {
+      if (p === 'conservative' || p === 'balanced' || p === 'momentum' || p === 'elite_runner') {
         profile = p as AutonomousPilotProfile;
       }
     } else if (arg === '--profile' && i + 1 < args.length) {
       const p = args[++i].toLowerCase();
-      if (p === 'conservative' || p === 'balanced' || p === 'momentum') {
+      if (p === 'conservative' || p === 'balanced' || p === 'momentum' || p === 'elite_runner') {
         profile = p as AutonomousPilotProfile;
       }
     } else if (arg.startsWith('--broker=')) {
@@ -867,6 +917,7 @@ async function runMultiDayWindowReplay() {
   let maxWindowDrawdownPct = 0;
   const dayResults: DayReplaySummary[] = [];
   const allClosedTrades: ReplayTrade[] = [];
+  let persistentFleet: Record<string, AssetFleetStatus> | undefined = undefined;
 
   for (let idx = 0; idx < tradingDays.length; idx++) {
     const day = tradingDays[idx];
@@ -874,7 +925,10 @@ async function runMultiDayWindowReplay() {
     process.stdout.write(`  [Day ${String(idx + 1).padStart(2)}/${daysCount}] ${day} ... `);
 
     const startTime = Date.now();
-    const result = await replaySingleDay(day, sessionCapital, profile, broker);
+    const result = await replaySingleDay(day, sessionCapital, profile, broker, persistentFleet);
+    if (result.finalFleet) {
+      persistentFleet = result.finalFleet;
+    }
     const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
 
     dayResults.push(result);
@@ -889,6 +943,25 @@ async function runMultiDayWindowReplay() {
     console.log(
       `Done (${elapsedSec}s) | NAV: ₹${result.endingNav.toFixed(2)} | Net P&L: ${pnlSign}₹${result.netPnl.toFixed(2)} (${pnlSign}${result.netReturnPct.toFixed(2)}%) | Trades: ${result.tradesCount}`
     );
+
+    if (result.closedTrades.length > 0) {
+      for (const t of result.closedTrades) {
+        const tSign = t.pnl >= 0 ? '+' : '';
+        console.log(`    ↳ [${t.entryTime} → ${t.exitTime}] ${t.asset.padEnd(10)} Entry: ₹${t.entryPrice.toFixed(2)} | Exit: ₹${t.exitPrice.toFixed(2)} | P&L: ${tSign}₹${t.pnl.toFixed(2)} (${tSign}${t.pnlPct.toFixed(2)}%) | ${t.exitReason}`);
+      }
+    }
+
+    const isLastDayOfMonth = idx === tradingDays.length - 1 || tradingDays[idx + 1].substring(0, 7) !== day.substring(0, 7);
+    if (isLastDayOfMonth) {
+      const monthStr = day.substring(0, 7);
+      const mDays = dayResults.filter((d) => d.date.startsWith(monthStr));
+      const mPnl = mDays.reduce((s, d) => s + d.netPnl, 0);
+      const mTrades = mDays.reduce((s, d) => s + d.tradesCount, 0);
+      const mWins = mDays.reduce((s, d) => s + d.winsCount, 0);
+      const mWinRate = mTrades > 0 ? ((mWins / mTrades) * 100).toFixed(1) + '%' : 'N/A';
+      const mSign = mPnl >= 0 ? '+' : '';
+      console.log(`  🌟 [Month ${monthStr}] P&L: ${mSign}₹${mPnl.toFixed(2)} | NAV: ₹${currentNav.toFixed(2)} | Trades: ${mTrades} (WR: ${mWinRate})`);
+    }
   }
 
   // Summary Metrics

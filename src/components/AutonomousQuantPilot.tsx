@@ -553,8 +553,8 @@ export function AutonomousQuantPilot() {
       )}
 
       {/* 3. Strategy Profiles */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {(['conservative', 'balanced', 'momentum'] as AutonomousPilotProfile[]).map((pKey) => {
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {(['conservative', 'balanced', 'momentum', 'elite_runner'] as AutonomousPilotProfile[]).map((pKey) => {
           const cfg = PILOT_PROFILES[pKey];
           const isSelected = activeProfileKey === pKey;
           return (
@@ -573,6 +573,7 @@ export function AutonomousQuantPilot() {
                   {pKey === 'conservative' && <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />}
                   {pKey === 'balanced' && <Scale className="w-3.5 h-3.5 text-emerald-600" />}
                   {pKey === 'momentum' && <TrendingUp className="w-3.5 h-3.5 text-blue-600" />}
+                  {pKey === 'elite_runner' && <Zap className="w-3.5 h-3.5 text-amber-500" />}
                   <span>{cfg.name}</span>
                 </span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-black/[0.04] text-zinc-600 font-semibold">
