@@ -78,15 +78,19 @@ function GlassCard({
   children,
   className = '',
   id,
+  interactive = false,
 }: {
   children: React.ReactNode;
   className?: string;
   id?: string;
+  interactive?: boolean;
 }) {
   return (
     <div
       id={id}
-      className={`liquid-glass-subtle rounded-[24px] p-5 sm:p-6 border border-black/[0.05] shadow-[0_4px_24px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.04)] transition-all duration-200 ${className}`}
+      className={`${
+        interactive ? 'pro-card-interactive' : 'liquid-glass-subtle'
+      } rounded-2xl sm:rounded-[24px] p-4 sm:p-5 md:p-6 border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] transition-all duration-200 ${className}`}
     >
       {children}
     </div>
@@ -236,12 +240,12 @@ export function Dashboard() {
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-sm font-semibold tracking-tight text-zinc-900">Watchlist &amp; Market Stream</h2>
-          <button type="button" onClick={() => go('/markets')} className="text-xs text-indigo-600 hover:underline font-medium">
+          <button type="button" onClick={() => go('/markets')} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
             All Markets ({state.accountMode === 'upstox' ? INDIAN_ASSETS.length : ASSETS.length}) →
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {(state.accountMode === 'upstox'
             ? (state.watchlist.filter(isIndianAsset).length > 0
                 ? (state.watchlist.filter(isIndianAsset) as Asset[])
@@ -258,19 +262,19 @@ export function Dashboard() {
                 key={a}
                 type="button"
                 onClick={() => setSelectedAsset(a)}
-                className={`p-4 rounded-2xl text-left border transition-all ${
+                className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl text-left border transition-all duration-200 cursor-pointer spring-press ${
                   isSelected
-                    ? 'bg-white border-zinc-900 shadow-md ring-1 ring-zinc-900'
-                    : 'bg-white/60 hover:bg-white border-black/[0.06] shadow-xs'
+                    ? 'bg-white border-zinc-950 shadow-md ring-1 ring-zinc-950 scale-[1.01]'
+                    : 'pro-card-interactive border-black/[0.06] hover:bg-white'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-xs text-zinc-900">{a}</span>
-                    <span className="text-[10px] text-zinc-400 truncate max-w-[60px]">{META[a]?.name}</span>
+                <div className="flex items-center justify-between mb-1 gap-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold text-xs text-zinc-900 shrink-0">{a}</span>
+                    <span className="text-[10px] text-zinc-400 truncate hidden sm:inline">{META[a]?.name}</span>
                   </div>
                   <span
-                    className={`text-[11px] font-semibold ${
+                    className={`text-[11px] font-semibold shrink-0 font-tabular ${
                       isPositive ? 'text-emerald-600' : 'text-rose-600'
                     }`}
                   >
@@ -278,7 +282,7 @@ export function Dashboard() {
                     {item ? item.change24h.toFixed(2) : '0.00'}%
                   </span>
                 </div>
-                <div className="text-base font-bold font-mono text-zinc-950">
+                <div className="text-sm sm:text-base font-bold font-mono font-tabular text-zinc-950">
                   {item ? (isIndianAsset(a) ? moneyINR(item.price) : money(item.price)) : 'Loading...'}
                 </div>
                 <div className="mt-2 h-6">
@@ -553,21 +557,23 @@ export function Dashboard() {
         </GlassCard>
       </div>
 
-      {/* Quick Launchpad Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      {/* Quick Launchpad Grid (Responsive 2x2 on Mobile, 4 Cols on Desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <button
           type="button"
           onClick={() => go('/orders')}
-          className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
+          className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl pro-card-interactive text-left transition-all group cursor-pointer spring-press flex flex-col justify-between"
         >
-          <div className="w-8 h-8 rounded-xl bg-zinc-900 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            {state.accountMode === 'upstox' ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <DollarSign className="w-4 h-4" />}
+          <div>
+            <div className="w-8 h-8 rounded-xl bg-zinc-950 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform shadow-xs">
+              {state.accountMode === 'upstox' ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <DollarSign className="w-4 h-4" />}
+            </div>
+            <strong className="text-xs font-bold text-zinc-900 block leading-snug">
+              {state.accountMode === 'upstox' ? 'NSE / BSE Execution Desk' : 'Paper Trading Terminal'}
+            </strong>
           </div>
-          <strong className="text-xs font-bold text-zinc-900 block">
-            {state.accountMode === 'upstox' ? 'NSE / BSE Execution Desk' : 'Paper Trading Terminal'}
-          </strong>
-          <span className="text-[11px] text-zinc-500">
-            {state.accountMode === 'upstox' ? 'Direct Upstox market & limit orders' : 'Market & limit execution with stop-loss'}
+          <span className="text-[10px] sm:text-[11px] text-zinc-500 mt-1 leading-tight block">
+            {state.accountMode === 'upstox' ? 'Direct market & limit orders' : 'Instant execution with stop-loss'}
           </span>
         </button>
 
@@ -575,55 +581,71 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openUpstoxDrawer()}
-            className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
+            className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl pro-card-interactive text-left transition-all group cursor-pointer spring-press flex flex-col justify-between"
           >
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-              <Sliders className="w-4 h-4" />
+            <div>
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform shadow-xs">
+                <Sliders className="w-4 h-4" />
+              </div>
+              <strong className="text-xs font-bold text-zinc-900 block leading-snug">Upstox Terminal</strong>
             </div>
-            <strong className="text-xs font-bold text-zinc-900 block">Upstox Terminal</strong>
-            <span className="text-[11px] text-zinc-500">Live order status, margins &amp; API telemetry</span>
+            <span className="text-[10px] sm:text-[11px] text-zinc-500 mt-1 leading-tight block">
+              Live order status, margins &amp; telemetry
+            </span>
           </button>
         ) : (
           <button
             type="button"
             onClick={() => go('/strategies')}
-            className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
+            className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl pro-card-interactive text-left transition-all group cursor-pointer spring-press flex flex-col justify-between"
           >
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-              <Sliders className="w-4 h-4" />
+            <div>
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform shadow-xs">
+                <Sliders className="w-4 h-4" />
+              </div>
+              <strong className="text-xs font-bold text-zinc-900 block leading-snug">Algorithmic Suite</strong>
             </div>
-            <strong className="text-xs font-bold text-zinc-900 block">Algorithmic Suite</strong>
-            <span className="text-[11px] text-zinc-500">Configure trend following &amp; DCA rules</span>
+            <span className="text-[10px] sm:text-[11px] text-zinc-500 mt-1 leading-tight block">
+              Configure trend following &amp; DCA
+            </span>
           </button>
         )}
 
         <button
           type="button"
           onClick={() => go('/alerts')}
-          className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
+          className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl pro-card-interactive text-left transition-all group cursor-pointer spring-press flex flex-col justify-between"
         >
-          <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <Bell className="w-4 h-4" />
+          <div>
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform shadow-xs">
+              <Bell className="w-4 h-4" />
+            </div>
+            <strong className="text-xs font-bold text-zinc-900 block leading-snug">Threshold Alerts</strong>
           </div>
-          <strong className="text-xs font-bold text-zinc-900 block">Threshold Alerts</strong>
-          <span className="text-[11px] text-zinc-500">Proximity gauges &amp; acoustic triggers</span>
+          <span className="text-[10px] sm:text-[11px] text-zinc-500 mt-1 leading-tight block">
+            Proximity gauges &amp; acoustic alerts
+          </span>
         </button>
 
         <button
           type="button"
           onClick={() => go('/portfolio')}
-          className="p-4 rounded-2xl bg-white/70 hover:bg-white border border-black/[0.06] text-left transition-all hover:shadow-md group"
+          className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl pro-card-interactive text-left transition-all group cursor-pointer spring-press flex flex-col justify-between"
         >
-          <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-            <PieChart className="w-4 h-4" />
+          <div>
+            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-2 group-hover:scale-105 transition-transform shadow-xs">
+              <PieChart className="w-4 h-4" />
+            </div>
+            <strong className="text-xs font-bold text-zinc-900 block leading-snug">Exposure Analytics</strong>
           </div>
-          <strong className="text-xs font-bold text-zinc-900 block">Exposure Analytics</strong>
-          <span className="text-[11px] text-zinc-500">Position weighting &amp; P&amp;L breakdown</span>
+          <span className="text-[10px] sm:text-[11px] text-zinc-500 mt-1 leading-tight block">
+            Position weighting &amp; P&amp;L breakdown
+          </span>
         </button>
       </div>
 
       {/* Quantitative AI Workflows & Stress Testing Desk */}
-      <div className="bg-white/95 rounded-2xl p-5 sm:p-6 border border-zinc-200/90 shadow-xs space-y-4">
+      <div className="pro-card rounded-2xl sm:rounded-[24px] p-4 sm:p-5 md:p-6 border border-zinc-200/90 shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-200/70">
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
@@ -644,7 +666,7 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat()}
-            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-xs transition-all self-start md:self-auto flex items-center gap-2 cursor-pointer active:scale-95"
+            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-xs transition-all self-start md:self-auto flex items-center gap-2 cursor-pointer spring-press"
           >
             <span>Open Copilot Terminal</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -655,10 +677,10 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat('Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.')}
-            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/80 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs active:scale-[0.99] flex flex-col justify-between cursor-pointer"
+            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs spring-press flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center shrink-0">
                 <ShieldAlert className="w-3.5 h-3.5 text-rose-600 group-hover:scale-110 transition-transform" />
               </div>
               <strong className="text-xs font-bold text-zinc-950">Capital Defense Audit</strong>
@@ -669,10 +691,10 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat('Run an Indian portfolio stress test simulating a 10% Nifty 50 selloff and sector rotation, and tell me my projected loss and survivability rating.')}
-            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/80 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs active:scale-[0.99] flex flex-col justify-between cursor-pointer"
+            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs spring-press flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center shrink-0">
                 <Activity className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
               </div>
               <strong className="text-xs font-bold text-zinc-950">Crash Stress Test</strong>
@@ -683,10 +705,10 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat(`Synthesize an institutional VWAP momentum strategy bot for ${selectedAsset} with dynamic ATR profit brackets and deploy it.`)}
-            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/80 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs active:scale-[0.99] flex flex-col justify-between cursor-pointer"
+            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs spring-press flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center shrink-0">
                 <Zap className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
               </div>
               <strong className="text-xs font-bold text-zinc-950">Synthesize Bot</strong>
@@ -697,10 +719,10 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat(`Create a Smart Value-Weighted DCA accumulation plan for ${selectedAsset} with dip buying multipliers.`)}
-            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/80 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs active:scale-[0.99] flex flex-col justify-between cursor-pointer"
+            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs spring-press flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center shrink-0">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
               </div>
               <strong className="text-xs font-bold text-zinc-950">Smart DCA Plan</strong>
@@ -813,7 +835,7 @@ export function Markets() {
       <MarketHeatmap />
 
       {/* Category Pills Strip */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
         {categories.map((cat) => {
           const isActive = category === cat;
           const count = cat === 'All' 
@@ -831,7 +853,7 @@ export function Markets() {
               key={cat}
               type="button"
               onClick={() => setCategory(cat)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
                 isActive
                   ? 'bg-zinc-950 text-white shadow-xs font-semibold'
                   : 'bg-white/80 text-zinc-600 hover:text-zinc-950 hover:bg-white border border-black/[0.05]'
@@ -1102,7 +1124,7 @@ export function Markets() {
             const meta = META[a];
 
             return (
-              <GlassCard key={a} className="flex flex-col justify-between hover:shadow-lg transition-all duration-200">
+              <GlassCard key={a} interactive className="flex flex-col justify-between hover:shadow-lg transition-all duration-200">
                 <div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
@@ -1137,11 +1159,11 @@ export function Markets() {
                   </div>
 
                   <div className="mt-3.5">
-                    <div className="text-xl font-bold font-mono tracking-tight text-zinc-950">
+                    <div className="text-xl font-bold font-mono font-tabular tracking-tight text-zinc-950">
                       {m ? (isIndianAsset(a) ? moneyINR(m.price) : money(m.price)) : 'Loading...'}
                     </div>
                     <div
-                      className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${
+                      className={`inline-flex items-center gap-1 text-xs font-semibold font-tabular mt-1 ${
                         isUp ? 'text-emerald-600' : 'text-rose-600'
                       }`}
                     >
@@ -1621,51 +1643,51 @@ export function Portfolio() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
-        <GlassCard>
-          <span className="text-xs font-medium text-zinc-500">Net Portfolio Value</span>
-          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{moneyINR(pv)}</div>
+      {/* KPI Cards (Responsive 2x2 on Mobile, 4 Cols on Desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+        <GlassCard interactive>
+          <span className="text-[11px] sm:text-xs font-medium text-zinc-500">Net Portfolio Value</span>
+          <div className="text-xl sm:text-2xl font-bold font-mono font-tabular text-zinc-950 mt-1">{moneyINR(pv)}</div>
           <span
-            className={`text-xs font-semibold mt-1 inline-block ${
+            className={`text-[11px] sm:text-xs font-semibold font-tabular mt-1 inline-block ${
               pnl.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'
             }`}
           >
             {pnl.amount >= 0 ? '+' : ''}
-            {pnl.pct.toFixed(2)}% total return
+            {pnl.pct.toFixed(2)}% return
           </span>
         </GlassCard>
 
-        <GlassCard>
-          <span className="text-xs font-medium text-zinc-500">Realized P&amp;L</span>
+        <GlassCard interactive>
+          <span className="text-[11px] sm:text-xs font-medium text-zinc-500">Realized P&amp;L</span>
           <div
-            className={`text-2xl font-bold font-mono mt-1 ${
+            className={`text-xl sm:text-2xl font-bold font-mono font-tabular mt-1 ${
               effectiveRealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'
             }`}
           >
             {effectiveRealizedPnl >= 0 ? '+' : ''}
             {moneyINR(effectiveRealizedPnl)}
           </div>
-          <span className="text-xs text-zinc-500 mt-1 inline-block">
-            {accountMode === 'upstox' ? 'Broker Mark-to-Market Realized' : `Fees Paid: ${moneyINR(state.totalFees || 0)}`}
+          <span className="text-[10px] sm:text-xs text-zinc-500 mt-1 inline-block truncate max-w-full">
+            {accountMode === 'upstox' ? 'Broker MTM Realized' : `Fees: ${moneyINR(state.totalFees || 0)}`}
           </span>
         </GlassCard>
 
-        <GlassCard>
-          <span className="text-xs font-medium text-zinc-500">Liquid Cash</span>
-          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">{moneyINR(effectiveCash)}</div>
-          <span className="text-xs text-zinc-500 mt-1 inline-block">
-            {((effectiveCash / Math.max(pv, 1)) * 100).toFixed(1)}% of total capital
+        <GlassCard interactive>
+          <span className="text-[11px] sm:text-xs font-medium text-zinc-500">Liquid Cash</span>
+          <div className="text-xl sm:text-2xl font-bold font-mono font-tabular text-zinc-950 mt-1">{moneyINR(effectiveCash)}</div>
+          <span className="text-[10px] sm:text-xs text-zinc-500 mt-1 inline-block font-tabular">
+            {((effectiveCash / Math.max(pv, 1)) * 100).toFixed(1)}% of capital
           </span>
         </GlassCard>
 
-        <GlassCard>
-          <span className="text-xs font-medium text-zinc-500">Risk Profile</span>
-          <div className="text-2xl font-bold font-mono text-zinc-950 mt-1">
-            {riskProfile.portfolioRiskScore} <span className="text-sm font-normal text-zinc-400">/ 100</span>
+        <GlassCard interactive>
+          <span className="text-[11px] sm:text-xs font-medium text-zinc-500">Risk Profile</span>
+          <div className="text-xl sm:text-2xl font-bold font-mono font-tabular text-zinc-950 mt-1">
+            {riskProfile.portfolioRiskScore} <span className="text-xs sm:text-sm font-normal text-zinc-400">/ 100</span>
           </div>
           <span
-            className={`text-xs font-semibold mt-1 inline-block ${
+            className={`text-[10px] sm:text-xs font-semibold mt-1 inline-block truncate max-w-full ${
               riskProfile.portfolioRiskScore >= 70
                 ? 'text-rose-600'
                 : riskProfile.portfolioRiskScore >= 40
@@ -1673,7 +1695,7 @@ export function Portfolio() {
                 : 'text-emerald-600'
             }`}
           >
-            {riskProfile.riskLabel} ({riskProfile.topAsset || 'None'} {riskProfile.topAssetConcentrationPct.toFixed(0)}%)
+            {riskProfile.riskLabel}
           </span>
         </GlassCard>
       </div>
@@ -2137,9 +2159,9 @@ export function Orders() {
               <button
                 type="button"
                 onClick={() => setSide('buy')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all ${
+                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer spring-press ${
                   side === 'buy'
-                    ? 'bg-emerald-600 text-white shadow-sm'
+                    ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
@@ -2148,9 +2170,9 @@ export function Orders() {
               <button
                 type="button"
                 onClick={() => setSide('sell')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all ${
+                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer spring-press ${
                   side === 'sell'
-                    ? 'bg-rose-600 text-white shadow-sm'
+                    ? 'bg-rose-600 text-white shadow-xs'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
@@ -2433,7 +2455,7 @@ export function Orders() {
               <tbody className="divide-y divide-black/[0.04]">
                 {filteredOrders.map((o) => (
                   <tr key={o.id} className="hover:bg-black/[0.015] transition-colors">
-                    <td className="px-5 py-3.5 text-zinc-400 font-mono text-[11px]">
+                    <td className="px-5 py-3.5 text-zinc-400 font-mono font-tabular text-[11px]">
                       {new Date(o.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </td>
                     <td className="px-5 py-3.5">
@@ -2469,14 +2491,14 @@ export function Orders() {
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 font-mono">{formatQty(o.amount, o.asset)}</td>
-                    <td className="px-5 py-3.5 font-mono text-zinc-800">
+                    <td className="px-5 py-3.5 font-mono font-tabular">{formatQty(o.amount, o.asset)}</td>
+                    <td className="px-5 py-3.5 font-mono font-tabular text-zinc-800">
                       {isIndianAsset(o.asset) ? moneyINR(o.price) : money(o.price)}
                     </td>
-                    <td className="px-5 py-3.5 font-mono font-semibold text-zinc-900">
+                    <td className="px-5 py-3.5 font-mono font-tabular font-semibold text-zinc-900">
                       {isIndianAsset(o.asset) ? moneyINR(o.notional) : money(o.notional)}
                     </td>
-                    <td className="px-5 py-3.5 font-mono text-zinc-400">
+                    <td className="px-5 py-3.5 font-mono font-tabular text-zinc-400">
                       {isIndianAsset(o.asset) ? moneyINR(o.fee) : money(o.fee)}
                     </td>
                     <td className="px-5 py-3.5 text-right">

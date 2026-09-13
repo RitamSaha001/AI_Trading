@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLumen } from './store';
 import { ASSETS, Asset } from './types';
 import { SettingsModal } from './Settings';
@@ -130,9 +130,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [indianBrokerDrawerOpen, setIndianBrokerDrawerOpen] = useState(false);
+
+  // Global Keyboard Shortcut: ⌘K or Ctrl+K to jump to search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     // Intercept Upstox OAuth redirect: /?code=...&state=... or #/?code=...
@@ -390,8 +404,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
             {/* Quick Search */}
             <div className="relative w-full">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -407,8 +422,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     }
                   }
                 }}
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-black/[0.03] hover:bg-black/[0.05] focus:bg-white border border-transparent focus:border-black/[0.1] rounded-xl outline-none transition-all placeholder:text-zinc-400 text-zinc-900"
+                className="w-full pl-8 pr-12 py-1.5 text-xs bg-black/[0.03] hover:bg-black/[0.05] focus:bg-white border border-transparent focus:border-black/[0.12] rounded-xl outline-none transition-all placeholder:text-zinc-400 text-zinc-900 shadow-2xs"
               />
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[9px] font-mono font-medium text-zinc-400 bg-black/[0.04] border border-black/[0.06] rounded-md pointer-events-none">
+                <span className="text-[10px]">⌘</span>K
+              </kbd>
             </div>
           </div>
 
@@ -601,8 +619,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <LegalFooter />
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Visible only on mobile) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-xl border-t border-black/[0.08] px-2 py-1.5 flex items-center justify-around lg:hidden">
+      {/* Mobile Bottom Navigation Bar (Optimized for iOS/Android safe areas and 44px touch targets) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-xl border-t border-black/[0.06] px-3 pt-1.5 safe-bottom flex items-center justify-around lg:hidden shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
         {mobileBottomNav.map(({ path, label, icon: Icon }) => {
           const isActive = route === path;
           return (
@@ -610,52 +628,56 @@ export function Shell({ children }: { children: React.ReactNode }) {
               key={path}
               type="button"
               onClick={() => go(path)}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-colors ${
-                isActive ? 'text-zinc-950 font-semibold' : 'text-zinc-400 hover:text-zinc-700'
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[44px] py-1 transition-all rounded-xl cursor-pointer ${
+                isActive
+                  ? 'text-zinc-950 font-semibold'
+                  : 'text-zinc-400 hover:text-zinc-700 active:scale-95'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : ''}`} />
-              <span className="text-[10px] tracking-tight">{label}</span>
+              <div className={`p-1 rounded-lg transition-all ${isActive ? 'bg-zinc-950 text-white shadow-2xs scale-105' : ''}`}>
+                <Icon className="w-4 h-4" />
+              </div>
+              <span className={`text-[10px] tracking-tight ${isActive ? 'font-bold text-zinc-950' : 'font-medium'}`}>
+                {label}
+              </span>
             </button>
           );
         })}
       </nav>
 
-      {/* Floating Lumen Nexus Capsule Button - Apple Siri Intelligence Capsule */}
+      {/* Floating Lumen Nexus Capsule Button - Institutional Dark Titanium Capsule */}
       {(() => {
         const danger = senseMarketDanger(state, markets);
         return (
           <button
             type="button"
             onClick={() => (chatOpen ? closeChat() : openChat())}
-            className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-30 flex items-center gap-3 px-4 py-2.5 bg-zinc-950/90 text-white backdrop-blur-2xl border border-white/20 rounded-full shadow-[0_16px_40px_rgba(0,0,0,0.3)] hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 group"
+            className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-30 flex items-center gap-3 px-4 py-2.5 bg-zinc-950/95 hover:bg-zinc-900 text-white backdrop-blur-2xl border border-white/15 rounded-full shadow-[0_16px_36px_rgba(0,0,0,0.35)] hover:border-white/25 active:scale-[0.98] transition-all duration-200 group cursor-pointer"
+            title="Open Nexus Quant Copilot"
           >
-            <div className="relative flex items-center justify-center">
-              <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center relative z-10">
-                <Sparkles className="w-3.5 h-3.5 text-white group-hover:scale-110 transition-transform" />
-              </div>
-              <div className="absolute inset-0 rounded-full siri-aurora-glow scale-150 pointer-events-none" />
+            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center relative shrink-0">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-300 group-hover:rotate-12 transition-transform duration-300" />
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-2 ring-zinc-950 ${
+                  danger.dangerLevel === 'CRITICAL'
+                    ? 'bg-rose-500 animate-ping'
+                    : danger.dangerLevel === 'HIGH'
+                    ? 'bg-amber-400'
+                    : 'bg-emerald-400 animate-subtle-pulse'
+                }`}
+              />
             </div>
             <div className="flex flex-col text-left">
               <span className="text-xs font-semibold tracking-tight text-white flex items-center gap-1.5">
-                Nexus Intelligence
+                Nexus Copilot
               </span>
               <span className="text-[10px] text-zinc-400 font-mono flex items-center gap-1">
                 {danger.dangerLevel === 'CRITICAL' ? (
-                  <span className="text-rose-400 font-semibold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-                    Critical Hazard
-                  </span>
+                  <span className="text-rose-400 font-semibold">Critical Hazard</span>
                 ) : danger.dangerLevel === 'HIGH' ? (
-                  <span className="text-amber-400 font-semibold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    Elevated Risk
-                  </span>
+                  <span className="text-amber-400 font-semibold">Elevated Risk</span>
                 ) : (
-                  <span className="text-emerald-400 font-medium flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Autonomous Quant
-                  </span>
+                  <span className="text-emerald-400 font-medium">Autonomous Quant</span>
                 )}
               </span>
             </div>
