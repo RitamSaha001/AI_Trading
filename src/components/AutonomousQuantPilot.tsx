@@ -23,6 +23,11 @@ import {
   Search,
   Sparkles,
   Lock,
+  XCircle,
+  BarChart3,
+  Sliders,
+  ChevronRight,
+  Check,
 } from 'lucide-react';
 import { useLumen } from '../store';
 import {
@@ -38,8 +43,9 @@ import {
   QuantitativeOpportunity,
   FleetAssetLifecycle,
   PilotPrototypeVersion,
+  Asset,
 } from '../types';
-import { isIndianAsset, moneyINR, META, portfolioValue } from '../domain/portfolio';
+import { isIndianAsset, moneyINR, META, portfolioValue, getActiveAssetUnits } from '../domain/portfolio';
 
 export function AutonomousQuantPilot() {
   const {
@@ -55,11 +61,13 @@ export function AutonomousQuantPilot() {
     scanPilotOpportunities,
     executePilotRecommendation,
     resetPilotCircuitBreaker,
+    order,
   } = useLumen();
 
-  const [activeTab, setActiveTab] = useState<'fleet' | 'opportunities' | 'logs'>('fleet');
+  const [activeTab, setActiveTab] = useState<'positions' | 'opportunities' | 'fleet' | 'logs'>('positions');
   const [viewMode, setViewMode] = useState<'beginner' | 'quant'>('beginner');
   const [isScanning, setIsScanning] = useState(false);
+  const [closingAsset, setClosingAsset] = useState<string | null>(null);
 
   const prototypeVersion = autonomousPilot?.prototypeVersion || 'prototype_4_omni_synthesis';
   const isProto1 = prototypeVersion === 'prototype_1_classic';
@@ -86,6 +94,71 @@ export function AutonomousQuantPilot() {
   const [fleetSearchQuery, setFleetSearchQuery] = useState<string>('');
   const [logFilterCategory, setLogFilterCategory] = useState<'all' | 'trades' | 'ratchets' | 'risk' | 'system'>('all');
   const [logSelectedAsset, setLogSelectedAsset] = useState<string>('ALL');
+
+  // Compute live active positions from state.positions & activeFleet
+  const activePositionsList = useMemo(() => {
+    const list: {
+      asset: Asset;
+      units: number;
+      price: number;
+      avgPrice: number;
+      pnlAmt: number;
+      pnlPct: number;
+      fleetItem?: any;
+      meta?: any;
+      change24h: number;
+      stopLoss?: number;
+      takeProfit?: number;
+      strategy?: string;
+    }[] = [];
+
+    const assetSet = new Set<Asset>([
+      ...UPSTOX_FLEET_ASSETS,
+      ...(Object.keys(state.positions || {}) as Asset[]),
+    ]);
+
+    for (const asset of assetSet) {
+      const units = getActiveAssetUnits(state, asset);
+      if (units > 0) {
+        const fleetItem = activeFleet[asset];
+        const mkt = markets[asset];
+        const meta = META[asset];
+        const authoritativePrice = (fleetItem?.currentPrice && fleetItem.currentPrice > 0)
+          ? fleetItem.currentPrice
+          : (!mkt?.isSynthetic && mkt?.price && mkt.price > 0)
+          ? mkt.price
+          : (mkt?.price || meta?.basePrice || 100);
+        const avgPrice = state.avgBuyPrice?.[asset] || fleetItem?.entryPrice || authoritativePrice;
+        const pnlAmt = (authoritativePrice - avgPrice) * units;
+        const pnlPct = avgPrice > 0 ? ((authoritativePrice - avgPrice) / avgPrice) * 100 : 0;
+        const change24h = mkt?.change24h || 0;
+        const stopLoss = fleetItem?.stopLossPrice || (avgPrice * 0.985);
+        const takeProfit = fleetItem?.takeProfitPrice || (avgPrice * 1.035);
+        const strategy = fleetItem?.assignedStrategy || 'Titan Alpha Sentinel';
+
+        list.push({
+          asset,
+          units,
+          price: authoritativePrice,
+          avgPrice,
+          pnlAmt,
+          pnlPct,
+          fleetItem,
+          meta,
+          change24h,
+          stopLoss,
+          takeProfit,
+          strategy,
+        });
+      }
+    }
+
+    return list;
+  }, [state, activeFleet, markets]);
+
+  const totalOpenPnl = useMemo(() => {
+    return activePositionsList.reduce((acc, pos) => acc + pos.pnlAmt, 0);
+  }, [activePositionsList]);
 
   const fleetSectors = useMemo(() => {
     const sectors = new Set<string>();
@@ -168,6 +241,83 @@ export function AutonomousQuantPilot() {
     executePilotRecommendation(opp);
   };
 
+  const handleClosePosition = async (asset: Asset, units: number) => {
+    setClosingAsset(asset);
+    try {
+      order('sell', asset, units, {
+        type: 'market',
+        auto: false,
+        strategyName: 'Manual Liquidation',
+        product: 'MIS',
+      });
+    } finally {
+      setTimeout(() => setClosingAsset(null), 800);
+    }
+  };
+
+  const prototypes = [
+    {
+      id: 'prototype_1_classic' as PilotPrototypeVersion,
+      name: 'Prototype 1',
+      title: 'Classic Benchmark',
+      tag: 'User Favorite ★',
+      tagColor: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
+      activeRing: 'ring-2 ring-amber-500 border-amber-400 bg-amber-50/30',
+      icon: Scale,
+      iconColor: 'text-amber-600',
+      winRate: '63.9% Win Rate',
+      profit: '+₹29,005',
+      profitLabel: '5-Yr Net Profit',
+      edge: 'Fixed Half-Kelly & 90m Window',
+      summary: 'Broadest runner capture without micro-scratching. Proven 63.9% win rate benchmark.',
+    },
+    {
+      id: 'prototype_2_adaptive_brain' as PilotPrototypeVersion,
+      name: 'Prototype 2',
+      title: 'Adaptive Master Brain',
+      tag: 'Dynamic Risk',
+      tagColor: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+      activeRing: 'ring-2 ring-emerald-500 border-emerald-400 bg-emerald-50/30',
+      icon: Sparkles,
+      iconColor: 'text-emerald-600',
+      winRate: '54.2% Win Rate',
+      profit: '+₹27,347',
+      profitLabel: '5-Yr Net Profit',
+      edge: '30-Day Pace & Profit Vault',
+      summary: 'Monitors rolling ₹100/day pace. Locks capital defense when monthly targets are secured.',
+    },
+    {
+      id: 'prototype_3_neural_mesh' as PilotPrototypeVersion,
+      name: 'Prototype 3',
+      title: 'Synaptic Neural Mesh',
+      tag: '8-Neuron Mesh',
+      tagColor: 'bg-purple-100 text-purple-900 border-purple-300',
+      activeRing: 'ring-2 ring-purple-500 border-purple-400 bg-purple-50/30',
+      icon: Zap,
+      iconColor: 'text-purple-600',
+      winRate: '56.8% Win Rate',
+      profit: '3.5x–4.5x',
+      profitLabel: 'Dynamic Margin',
+      edge: 'Continuous Kelly & Super Trend',
+      summary: 'Afferent sensory consensus across 8 dimensions. MADS drift cuts & runner highways.',
+    },
+    {
+      id: 'prototype_4_omni_synthesis' as PilotPrototypeVersion,
+      name: 'Prototype 4',
+      title: 'Omni-Synaptic Synthesis',
+      tag: '★ Target: ≥ ₹1k/mo',
+      tagColor: 'bg-indigo-100 text-indigo-900 border-indigo-300 font-bold',
+      activeRing: 'ring-2 ring-indigo-600 border-indigo-500 bg-indigo-50/35',
+      icon: Cpu,
+      iconColor: 'text-indigo-600',
+      winRate: '51.7% / 57% YTD',
+      profit: '16 Months',
+      profitLabel: '≥ ₹1,000 Milestone',
+      edge: 'Unified Alpha & 2-Loss Lock',
+      summary: 'Synthesized flagship: merges P1 broad alpha, P2 profit vault, and P3 8-neuron cross-attention.',
+    },
+  ];
+
   const getLifecycleBadge = (lifecycleState?: FleetAssetLifecycle) => {
     switch (lifecycleState) {
       case 'TRAILING_PROFIT':
@@ -224,26 +374,26 @@ export function AutonomousQuantPilot() {
 
   return (
     <div className="w-full liquid-glass rounded-3xl p-5 sm:p-6 border border-white/80 shadow-xs space-y-5 transition-all">
-      {/* 1. Sleek Minimalist Header Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-1">
+      {/* 1. Executive Master Command Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-black/[0.06]">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="w-10 h-10 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-sm">
-              <Cpu className="w-5 h-5 text-zinc-100" />
+            <div className="w-11 h-11 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-sm">
+              <Cpu className="w-5 h-5 text-indigo-400" />
             </div>
             {isEnabled && !isTripped && (
-              <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+              <span className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${
                 isLiveUpstox && !marketSession.isOpen ? 'bg-blue-500' : 'bg-emerald-500 animate-pulse'
               }`} />
             )}
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-bold tracking-tight text-zinc-950">
-                Autonomous Quantitative Desk
+              <h2 className="text-lg font-black tracking-tight text-zinc-950">
+                Autonomous Quantitative Cockpit
               </h2>
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 border border-zinc-200">
-                {UPSTOX_FLEET_ASSETS.length} Nifty 100 Equities
+                {UPSTOX_FLEET_ASSETS.length} NIFTY 100 Equities
               </span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
                 isEnabled
@@ -258,30 +408,30 @@ export function AutonomousQuantPilot() {
                     : 'bg-zinc-400'
                 }`} />
                 {isEnabled
-                  ? (isLiveUpstox && !marketSession.isOpen ? 'Armed (Standby • 09:15 Open)' : 'Active (Autonomous)')
+                  ? (isLiveUpstox && !marketSession.isOpen ? 'Armed (Standby • 09:15 Open)' : 'Live Active (Trading NSE)')
                   : 'Standby (Disarmed)'}
               </span>
             </div>
             <p className="text-xs text-zinc-500 mt-0.5">
-              100% Deterministic Local Quant &bull; Half-Kelly Capital Sizing &bull; Dynamic Stop-Loss &amp; Profit Harvest Brackets
+              100% Deterministic Local Quant &bull; Dynamic Half-Kelly Sizing &bull; Trailing Super Trend Highway &bull; Zero-Slip Execution
             </p>
           </div>
         </div>
 
-        {/* Master Control Action Group */}
+        {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={handleScanClick}
             disabled={isScanning}
-            className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-black/[0.04] transition-all border border-black/[0.06] apple-btn-tactile"
+            className="p-2.5 rounded-xl text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04] transition-all border border-black/[0.08] apple-btn-tactile shadow-2xs"
             title="Scan market for qualified quantitative setups"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-indigo-600' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
 
           {/* Mode Switcher */}
-          <div className="apple-segmented-track p-0.5 bg-black/[0.04] rounded-xl flex items-center text-xs">
+          <div className="apple-segmented-track p-0.5 bg-black/[0.04] rounded-xl flex items-center text-xs border border-black/[0.04]">
             <button
               type="button"
               onClick={() => setPilotExecutionMode('full_autonomous')}
@@ -312,7 +462,7 @@ export function AutonomousQuantPilot() {
           <button
             type="button"
             onClick={toggleAutonomousPilot}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all apple-btn-tactile flex items-center gap-1.5 shadow-xs ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all apple-btn-tactile flex items-center gap-1.5 shadow-xs ${
               isEnabled
                 ? (isLiveUpstox && !marketSession.isOpen
                     ? 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-700'
@@ -320,7 +470,7 @@ export function AutonomousQuantPilot() {
                 : 'bg-zinc-950 text-white hover:bg-zinc-800'
             }`}
           >
-            <Zap className={`w-3.5 h-3.5 ${isEnabled ? (isLiveUpstox && !marketSession.isOpen ? 'text-blue-200' : 'text-emerald-200 animate-pulse') : 'text-zinc-400'}`} />
+            <Zap className={`w-4 h-4 ${isEnabled ? (isLiveUpstox && !marketSession.isOpen ? 'text-blue-200' : 'text-emerald-200 animate-pulse') : 'text-zinc-400'}`} />
             <span>{isEnabled ? (isLiveUpstox && !marketSession.isOpen ? 'Armed (Standby)' : 'Pilot Active') : 'Engage Autopilot'}</span>
           </button>
 
@@ -339,64 +489,9 @@ export function AutonomousQuantPilot() {
         </div>
       </div>
 
-      {/* Cloud Daemon Dual-Mode Status Indicator */}
-      {isLiveUpstox && (() => {
-        const isCloudDaemonConfirmed = Boolean(
-          autonomousPilot?.cloudDaemonStatus &&
-          autonomousPilot?.lastCloudSyncAt &&
-          Date.now() - autonomousPilot.lastCloudSyncAt < 30_000
-        );
-
-        return (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs">
-            <div className="flex items-center gap-2.5">
-              <div className="relative flex h-2.5 w-2.5">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  isEnabled
-                    ? (isCloudDaemonConfirmed ? 'bg-emerald-400' : 'bg-blue-400')
-                    : 'bg-zinc-300'
-                }`} />
-                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                  isEnabled
-                    ? (isCloudDaemonConfirmed ? 'bg-emerald-500' : 'bg-blue-500')
-                    : 'bg-zinc-400'
-                }`} />
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-zinc-900">
-                  Execution Master:
-                </span>
-                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
-                  isEnabled
-                    ? (isCloudDaemonConfirmed
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-blue-50 text-blue-700 border-blue-200')
-                    : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                }`}>
-                  {!isEnabled
-                    ? 'STANDBY • Ready to arm'
-                    : isCloudDaemonConfirmed
-                    ? 'CLOUD DAEMON ACTIVE • Safe to close browser tab'
-                    : 'BROWSER PILOT ACTIVE • Keep tab open (Local master)'}
-                </span>
-              </div>
-            </div>
-            <div className="text-[11px] text-zinc-500 flex items-center gap-2 flex-wrap">
-              <span>
-                Mode: <strong className="text-zinc-800 font-semibold">{isCloudDaemonConfirmed ? (autonomousPilot?.cloudDaemonStatus || 'BROWSER_LINKED') : 'BROWSER_LOCAL'}</strong>
-              </span>
-              <span>&bull;</span>
-              <span>
-                Host: <span className="font-mono text-zinc-700 font-medium">{isCloudDaemonConfirmed ? '87.76.191.49' : 'Local Browser Client'}</span>
-              </span>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Standby Banner when market is closed */}
       {isEnabled && isLiveUpstox && !marketSession.isOpen && (
-        <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-200/80 text-blue-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 border border-blue-200">
               <Clock className="w-4 h-4 text-blue-600" />
@@ -405,8 +500,8 @@ export function AutonomousQuantPilot() {
               <span className="text-xs font-bold text-blue-900">
                 Armed in Standby &bull; Capital Safeguarded
               </span>
-              <p className="text-xs text-blue-700 mt-0.5">
-                Indian markets (NSE) are closed. All {UPSTOX_FLEET_ASSETS.length} equity models and Half-Kelly sizing circuits are armed in standby. No live orders will be routed tonight. Execution begins at <strong>09:15 AM IST tomorrow</strong>.
+              <p className="text-[11px] text-blue-700 mt-0.5">
+                Indian markets (NSE) are closed. All {UPSTOX_FLEET_ASSETS.length} equity models and Half-Kelly sizing circuits are armed in standby. Live order execution begins at <strong>09:15 AM IST</strong> tomorrow.
               </p>
             </div>
           </div>
@@ -436,93 +531,98 @@ export function AutonomousQuantPilot() {
         </div>
       )}
 
-      {/* 2. Executive Metrics Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {/* Available Capital */}
-        <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
+      {/* 2. Executive Real-Time Telemetry & Target Pace Strip (4 KPIs) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Metric 1: Monthly Target Goal */}
+        <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/80 to-purple-50/50 border border-indigo-200/80 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-indigo-700">
+            <span className="font-bold flex items-center gap-1 uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              Target Goal Pace
+            </span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-900 border border-indigo-200">
+              Goal: ≥ ₹1,000/mo
+            </span>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <div className="text-xl font-black font-mono tracking-tight text-indigo-950">
+              ≥ ₹1,000
+            </div>
+            <span className="text-xs text-indigo-600 font-semibold">/ month</span>
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-indigo-900 pt-0.5">
+            <span>Pace: <strong>₹50/day</strong></span>
+            <span className="font-bold text-emerald-700">
+              {monthlyGovernor.posture === 'CAPITAL_DEFENSE_LOCKED'
+                ? '✓ Profit Vault Locked'
+                : monthlyGovernor.posture === 'MOMENTUM_EXPANSION'
+                ? '⚡ Alpha Expansion'
+                : '● On Target Pace'}
+            </span>
+          </div>
+        </div>
+
+        {/* Metric 2: Available Capital */}
+        <div className="p-4 rounded-2xl bg-white/80 border border-black/[0.06] shadow-2xs space-y-1">
           <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span className="font-medium flex items-center gap-1">
+            <span className="font-semibold flex items-center gap-1 uppercase tracking-wider">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
               Available Capital
             </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-              100% Cash
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+              100% Liquid
             </span>
           </div>
-          <div className="text-sm font-bold font-mono text-zinc-950">
+          <div className="text-xl font-black font-mono tracking-tight text-zinc-950">
             {moneyINR(currentCash)}
           </div>
-          <div className="text-[10px] text-zinc-400">
-            Reserve floor: {moneyINR(minRequiredCash)}
+          <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-0.5">
+            <span>Reserve Floor: <strong>{moneyINR(minRequiredCash)}</strong></span>
+            <span className="text-zinc-400">Half-Kelly</span>
           </div>
         </div>
 
-        {/* Market Session */}
-        <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
+        {/* Metric 3: Active Leverage & Dynamic Kelly */}
+        <div className="p-4 rounded-2xl bg-white/80 border border-black/[0.06] shadow-2xs space-y-1">
           <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span className="font-medium flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-blue-600" />
-              NSE Session
+            <span className="font-semibold flex items-center gap-1 uppercase tracking-wider">
+              <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+              Dynamic Leverage
             </span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-              marketSession.isOpen ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-            }`}>
-              {marketSession.isOpen ? 'Live' : 'Closed'}
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+              MIS 5x Margin
             </span>
           </div>
-          <div className="text-xs font-bold text-zinc-900 truncate">
-            {marketSession.sessionDescription}
+          <div className="text-xl font-black font-mono tracking-tight text-zinc-950">
+            {isProto1 ? '1.0x Fixed' : isProto3 ? '3.5x - 4.5x' : '2.5x - 4.2x'}
           </div>
-          <div className="text-[10px] text-zinc-400">
-            09:15 - 15:30 IST
+          <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-0.5">
+            <span>Risk Cap: <strong className="text-zinc-800">₹260 - ₹380</strong></span>
+            <span>Buffer: <strong className="text-zinc-800">35% Liquid</strong></span>
           </div>
         </div>
 
-        {/* Risk & Drawdown */}
-        <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
+        {/* Metric 4: Capital Defense Shield */}
+        <div className="p-4 rounded-2xl bg-white/80 border border-black/[0.06] shadow-2xs space-y-1">
           <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span className="font-medium flex items-center gap-1">
+            <span className="font-semibold flex items-center gap-1 uppercase tracking-wider">
               <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-              Drawdown Defense
+              Capital Defense
             </span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
               isTripped
                 ? 'bg-rose-50 text-rose-700 border-rose-200'
-                : autonomousPilot?.circuitBreakerTier === 'CAUTION'
-                ? 'bg-amber-50 text-amber-700 border-amber-200'
                 : 'bg-emerald-50 text-emerald-700 border-emerald-200'
             }`}>
-              {isTripped ? 'TRIPPED' : autonomousPilot?.circuitBreakerTier === 'CAUTION' ? 'THROTTLED (50%)' : 'ARMED'}
+              {isTripped ? 'TRIPPED' : 'ARMED & READY'}
             </span>
           </div>
-          <div className="text-sm font-bold font-mono text-zinc-950">
-            {(autonomousPilot?.dailyDrawdownPct || 0).toFixed(2)}% <span className="text-[11px] font-normal text-zinc-400">/ {profileConfig.maxDrawdownCircuitBreakerPct}%</span>
+          <div className="text-xl font-black font-mono tracking-tight text-zinc-950">
+            {(autonomousPilot?.dailyDrawdownPct || 0).toFixed(2)}% <span className="text-xs font-normal text-zinc-400">/ 2.0% Max</span>
           </div>
-          <div className="text-[10px] text-zinc-400">
-            Max loss cap: ₹{((currentCash * profileConfig.maxDrawdownCircuitBreakerPct) / 100).toFixed(0)}
-          </div>
-        </div>
-
-        {/* Order Pacing */}
-        <div className="p-3 rounded-2xl bg-white/70 border border-black/[0.05] shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-[11px] text-zinc-500">
-            <span className="font-medium flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5 text-indigo-600" />
-              Order Rate Pacing
-            </span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-              rateLimitStatus.isThrottled
-                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-            }`}>
-              {rateLimitStatus.requestsThisMinute} / {rateLimitStatus.maxPerMinute} req/min
-            </span>
-          </div>
-          <div className="text-sm font-bold font-mono text-zinc-950">
-            {rateLimitStatus.isThrottled ? 'PAUSED' : 'OPTIMAL'}
-          </div>
-          <div className="text-[10px] text-zinc-400">
-            &ge;1,500ms safety interval
+          <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-0.5">
+            <span>Loss Lock: <strong className="text-zinc-800">2-Trades Max</strong></span>
+            <span>MADS: <strong className="text-zinc-800">-0.35 ATR</strong></span>
           </div>
         </div>
       </div>
@@ -559,496 +659,225 @@ export function AutonomousQuantPilot() {
         </div>
       )}
 
-      {!isTripped && autonomousPilot?.circuitBreakerTier === 'CAUTION' && (
-        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-between gap-3 animate-in fade-in">
-          <div className="flex items-center gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <p className="text-xs text-amber-800">
-              <strong className="font-semibold">Tier 1 Risk Caution Active:</strong> Drawdown approaching profile limit. Position sizing automatically throttled by 50% (Quarter-Kelly) to safeguard capital.
+      {/* 3. Prominent 4-Prototype Matrix Grid */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-950 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-indigo-600" />
+              Autonomous Prototype Matrix &bull; Select Protocol
+            </h3>
+            <p className="text-xs text-zinc-500">
+              Click any card to immediately switch live model execution, sizing math, and risk parameters.
+            </p>
+          </div>
+          <span className="text-[11px] font-mono text-zinc-400">
+            Active: <strong className="text-zinc-900">{prototypes.find(p => p.id === prototypeVersion)?.name}</strong>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+          {prototypes.map((proto) => {
+            const isCurrent = prototypeVersion === proto.id;
+            const IconComponent = proto.icon;
+
+            return (
+              <div
+                key={proto.id}
+                onClick={() => setPilotPrototypeVersion(proto.id)}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between space-y-3 ${
+                  isCurrent
+                    ? `${proto.activeRing} shadow-sm`
+                    : 'bg-white/70 border-black/[0.08] hover:border-zinc-400/80 hover:bg-white'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                        isCurrent ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-700'
+                      }`}>
+                        <IconComponent className={`w-3.5 h-3.5 ${isCurrent ? proto.iconColor : 'text-zinc-600'}`} />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-zinc-950 block">
+                          {proto.name}
+                        </span>
+                        <span className="text-[10px] text-zinc-400">
+                          {proto.title}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full border ${proto.tagColor}`}>
+                      {proto.tag}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-3 border-t border-black/[0.05] mt-3">
+                    <div className="p-2 rounded-xl bg-black/[0.02]">
+                      <span className="text-[10px] text-zinc-400 block">{proto.profitLabel}</span>
+                      <span className="text-sm font-black font-mono text-zinc-950">
+                        {proto.profit}
+                      </span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-black/[0.02]">
+                      <span className="text-[10px] text-zinc-400 block">Win Rate</span>
+                      <span className="text-sm font-black font-mono text-emerald-700">
+                        {proto.winRate}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-500 mt-2.5 leading-relaxed">
+                    {proto.summary}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-black/[0.04] flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-semibold text-zinc-500">
+                    {proto.edge}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPilotPrototypeVersion(proto.id);
+                    }}
+                    className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                      isCurrent
+                        ? 'bg-zinc-950 text-white shadow-xs'
+                        : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                    }`}
+                  >
+                    {isCurrent ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>Active</span>
+                      </>
+                    ) : (
+                      <span>Select</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Active Prototype Specific Live Sub-Telemetry */}
+      {isProto4 && (
+        <div className="p-3.5 rounded-2xl bg-zinc-900 text-white space-y-2 animate-in fade-in">
+          <div className="flex items-center justify-between text-xs pb-1.5 border-b border-zinc-800">
+            <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+              <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+              Prototype 4: Omni-Synaptic Consensus Engine — Cross-Attention Sensory Mesh
+            </span>
+            <span className="text-[10px] font-mono text-zinc-400">
+              CAS Score: <strong className="text-emerald-400 font-bold">{autonomousPilot?.omniSynthesisTelemetry?.compositeAlphaScore ? `${autonomousPilot.omniSynthesisTelemetry.compositeAlphaScore}/100` : '82.0/100'}</strong>
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+              <div className="text-zinc-400 text-[10px]">Macro Breadth (N1)</div>
+              <div className="font-mono font-bold text-emerald-400">+0.74 (Broad Advance)</div>
+            </div>
+            <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+              <div className="text-zinc-400 text-[10px]">Fractal Memory (N2)</div>
+              <div className="font-mono font-bold text-emerald-400">+0.81 (Hurst &gt; 0.60)</div>
+            </div>
+            <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+              <div className="text-zinc-400 text-[10px]">Order Flow (N3)</div>
+              <div className="font-mono font-bold text-emerald-400">2.4x (Volume Surge)</div>
+            </div>
+            <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+              <div className="text-zinc-400 text-[10px]">Runner Highway</div>
+              <div className="font-mono font-bold text-indigo-400">3.5 - 5.5 ATR Ride</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isProto3 && (
+        <div className="p-3.5 rounded-2xl bg-zinc-900 text-white space-y-2 animate-in fade-in">
+          <div className="flex items-center justify-between text-xs pb-1.5 border-b border-zinc-800">
+            <span className="font-bold text-purple-300 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-purple-400" />
+              Prototype 3: 8-Dimensional Afferent Sensory Neuron Activation Mesh
+            </span>
+            <span className="text-[10px] font-mono text-zinc-400">
+              NAC Score: <strong className="text-emerald-400 font-bold">{autonomousPilot?.neuralWebTelemetry?.neuralAlphaScore ? `${autonomousPilot.neuralWebTelemetry.neuralAlphaScore}/100` : '78.5/100'}</strong>
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+              <div className="text-zinc-400 text-[10px]">N1 Macro Breadth</div>
+              <div className="font-mono font-bold text-emerald-400">+0.72 (Bull Expansion)</div>
+            </div>
+            <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+              <div className="text-zinc-400 text-[10px]">N2 Fractal Memory</div>
+              <div className="font-mono font-bold text-emerald-400">+0.84 (Hurst &gt; 0.62)</div>
+            </div>
+            <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+              <div className="text-zinc-400 text-[10px]">N3 Order Flow Delta</div>
+              <div className="font-mono font-bold text-emerald-400">+0.75 (Block Volume)</div>
+            </div>
+            <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+              <div className="text-zinc-400 text-[10px]">Super Trend Highway</div>
+              <div className="font-mono font-bold text-purple-300">Active (3.0 - 5.5 ATR)</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isProto2 && (
+        <div className="p-3.5 rounded-2xl bg-zinc-950 text-white text-xs flex items-start gap-2.5 animate-in fade-in">
+          <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-semibold text-emerald-300">Prototype 2 Live Strategy Adaptation Rationale:</span>
+            <p className="text-zinc-300 text-[11px] leading-relaxed">{monthlyGovernor.rationale}</p>
+          </div>
+        </div>
+      )}
+
+      {isProto1 && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex items-start gap-2.5 animate-in fade-in">
+          <Scale className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="font-bold text-amber-900">Prototype 1 Active: Fixed Baseline Quant Parameters (₹29,005 Benchmark)</span>
+            <p className="text-amber-800 text-[11px] leading-relaxed">
+              Operating with fixed 1.0% risk per trade, 45% cash reserve floor, 90-minute stagnancy window, and unrestricted runner exits. Dynamic monthly risk clamping and earnings throttling are bypassed to preserve maximum trend freedom.
             </p>
           </div>
         </div>
       )}
 
-      {/* 3. Autonomous Master Brain: Prototype 3 Neural Web, Prototype 2 Adaptive, & Prototype 1 Baseline Switcher */}
-      <div className="p-5 rounded-3xl bg-white border border-black/[0.08] shadow-xs space-y-4">
-        {/* Prototype Version Switcher */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-black/[0.06]">
-          <div className="flex items-center gap-2.5">
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
-              isProto3 ? 'bg-purple-950 text-white' : isProto2 ? 'bg-zinc-900 text-white' : 'bg-amber-900 text-white'
-            }`}>
-              {isProto4 ? <Cpu className="w-4 h-4 text-indigo-400" /> : isProto3 ? <Zap className="w-4 h-4 text-purple-400" /> : isProto2 ? <Sparkles className="w-4 h-4 text-emerald-400" /> : <Scale className="w-4 h-4 text-amber-400" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-bold text-zinc-950">
-                  {isProto4
-                    ? 'Prototype 4: Omni-Synaptic Master Synthesis'
-                    : isProto3
-                    ? 'Prototype 3: Synaptic Neural Mesh'
-                    : isProto2
-                    ? 'Prototype 2: Adaptive 30-Day Master Brain'
-                    : 'Prototype 1: Classic Quant Engine'}
-                </h3>
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold ${
-                  isProto4
-                    ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
-                    : isProto3
-                    ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                    : isProto2
-                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                    : 'bg-amber-100 text-amber-900 border border-amber-200'
-                }`}>
-                  {isProto4
-                    ? '★ Master Goal: ≥ ₹1,000/mo Average'
-                    : isProto3
-                    ? 'Flagship: ₹1,000/mo Target Run-Rate'
-                    : isProto2
-                    ? 'Adaptive Autonomous Posture'
-                    : '₹29,005 Benchmark Baseline'}
-                </span>
-              </div>
-              <p className="text-xs text-zinc-500">
-                {isProto4
-                  ? 'Unified Master Synthesis: Combines P1 broad alpha discovery, P2 30-day adaptive pace & profit vaulting, and P3 8-neuron mesh, MADS micro-cuts, 3-tranche runner highway, and fee armor to reliably harvest ≥ ₹1,000/month.'
-                  : isProto3
-                  ? 'High-speed two-way synaptic neural web between Master Brain and Quant Engine. 8 sensory neurons, continuous Kelly margin (1.0x-4.5x), adverse drift micro-loss cuts, and 3.0-5.5 ATR runner highways.'
-                  : isProto2
-                  ? 'Tracks 30-day net P&L run-rate towards ₹100/day on ₹40k capital (~₹2,000/mo). Intelligently shifts risk and targets.'
-                  : 'Classic benchmark pipeline that produced ₹29,005 net P&L across 5 years with fixed 1.0% risk and 90m stagnancy.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center bg-black/[0.04] p-1 rounded-2xl shrink-0 self-start sm:self-center flex-wrap gap-1">
-            <button
-              type="button"
-              onClick={() => setPilotPrototypeVersion('prototype_4_omni_synthesis')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                isProto4
-                  ? 'bg-white text-indigo-950 shadow-xs ring-1 ring-indigo-200'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              <Cpu className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Prototype 4 (≥₹1k/mo)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPilotPrototypeVersion('prototype_3_neural_mesh')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                isProto3
-                  ? 'bg-white text-purple-950 shadow-xs ring-1 ring-purple-200'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5 text-purple-600" />
-              <span>Prototype 3</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPilotPrototypeVersion('prototype_2_adaptive_brain')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                isProto2
-                  ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-black/[0.04]'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Prototype 2</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPilotPrototypeVersion('prototype_1_classic')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-                isProto1
-                  ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-black/[0.04]'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              <Scale className="w-3.5 h-3.5 text-amber-600" />
-              <span>Prototype 1 (₹29k)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Prototype 4: Omni-Synaptic Master Synthesis Cockpit */}
-        {isProto4 && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              {/* Card 1: Monthly Target Pace Gauge */}
-              <div className="p-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/70 text-indigo-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-700">
-                    Monthly Target Goal
-                  </span>
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-black tracking-tight font-mono text-indigo-900">
-                    ≥ ₹1,000
-                  </span>
-                  <span className="text-xs text-indigo-600 font-semibold">/ month</span>
-                </div>
-                <div className="mt-1 text-[11px] text-indigo-800 flex items-center justify-between">
-                  <span>Pace: <strong className="text-indigo-950">₹50/day</strong></span>
-                  <span className="font-bold text-emerald-700">
-                    {autonomousPilot?.omniSynthesisTelemetry?.monthlyTargetStatus === 'PROFIT_VAULT_LOCKED'
-                      ? '✓ Milestone Locked'
-                      : autonomousPilot?.omniSynthesisTelemetry?.monthlyTargetStatus === 'AGGRESSIVE_EDGE_FOCUS'
-                      ? '⚡ Edge Expansion'
-                      : '● On Target Pace'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 2: Adaptive Posture */}
-              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Master Posture
-                  </span>
-                  <Layers className="w-4 h-4 text-purple-600" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-sm font-bold tracking-tight text-purple-950">
-                    {autonomousPilot?.omniSynthesisTelemetry?.activePosture || 'BALANCED_COMPOUNDING'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-500 mt-1 leading-tight">
-                  {autonomousPilot?.omniSynthesisTelemetry?.activePosture === 'PROFIT_VAULT_SHIELD'
-                    ? 'Preserving ₹1,000+ profit. Clamped risk (0.5%) & tight trail.'
-                    : autonomousPilot?.omniSynthesisTelemetry?.activePosture === 'ALPHA_EXPANSION_HURDLE'
-                    ? 'Target gap detected. Full Kelly sizing on top sector leaders.'
-                    : 'Balanced 3-tranche compounding (1.5 / 2.5 / 3.5+ ATR).'}
-                </p>
-              </div>
-
-              {/* Card 3: Dynamic Kelly Leverage */}
-              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Kelly Leverage
-                  </span>
-                  <TrendingUp className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold tracking-tight font-mono text-emerald-700">
-                    {autonomousPilot?.omniSynthesisTelemetry?.dynamicKellyLeverage
-                      ? `${autonomousPilot.omniSynthesisTelemetry.dynamicKellyLeverage.toFixed(1)}x`
-                      : '2.5x - 4.2x'}
-                  </span>
-                  <span className="text-xs text-zinc-500">Dynamic Buying Power</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
-                  <span>Risk Cap: <strong className="text-zinc-800">₹260 - ₹380</strong></span>
-                  <span>Buffer: <strong className="text-zinc-800">35% Liquid</strong></span>
-                </div>
-              </div>
-
-              {/* Card 4: MADS & Fee Shield */}
-              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Defense & Armor
-                  </span>
-                  <ShieldCheck className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-base font-bold tracking-tight text-blue-900">
-                    MADS + Fee Armor
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
-                  <span>Cut: <strong className="text-blue-950">-0.35 ATR Scratch</strong></span>
-                  <span>Circuit: <strong className="text-blue-950">2-Loss Lock</strong></span>
-                </div>
-              </div>
-            </div>
-
-            {/* Omni-Synaptic Live Telemetry */}
-            <div className="p-3.5 rounded-2xl bg-zinc-900 text-white space-y-2">
-              <div className="flex items-center justify-between text-xs pb-1.5 border-b border-zinc-800">
-                <span className="font-bold text-indigo-300 flex items-center gap-1.5">
-                  <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-                  Omni-Synaptic Consensus Engine — Cross-Attention Sensory Mesh
-                </span>
-                <span className="text-[10px] font-mono text-zinc-400">
-                  CAS: <strong className="text-emerald-400 font-bold">{autonomousPilot?.omniSynthesisTelemetry?.compositeAlphaScore ? `${autonomousPilot.omniSynthesisTelemetry.compositeAlphaScore}/100` : '82.0/100'}</strong>
-                </span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">Macro Breadth (N1)</div>
-                  <div className="font-mono font-bold text-emerald-400">+0.74 (Broad Advance)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">Fractal Memory (N2)</div>
-                  <div className="font-mono font-bold text-emerald-400">+0.81 (Hurst &gt; 0.60)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">Order Flow (N3)</div>
-                  <div className="font-mono font-bold text-emerald-400">2.4x (Volume Surge)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">Runner Highway</div>
-                  <div className="font-mono font-bold text-indigo-400">3.5 - 5.5 ATR Ride</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Prototype 3: Synaptic Neural Mesh Cockpit */}
-        {isProto3 && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Card 1: Neural Highway Mode & Conviction */}
-              <div className="p-3.5 rounded-2xl border border-purple-200 bg-purple-50/70 text-purple-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-700">
-                    Neural Synaptic Highway
-                  </span>
-                  <Zap className="w-4 h-4 text-purple-600" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-base font-bold tracking-tight">
-                    {autonomousPilot?.neuralWebTelemetry?.activeHighwayMode || 'SUPER_TREND_HIGHWAY'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-purple-800 mt-1 leading-tight">
-                  {autonomousPilot?.neuralWebTelemetry?.activeHighwayMode === 'SUPER_TREND_HIGHWAY'
-                    ? '3.0 - 5.5 ATR runner expansion with Chandelier trailing stop'
-                    : 'Adaptive 1.25 / 2.0 ATR profit ladder with breakeven armor'}
-                </p>
-              </div>
-
-              {/* Card 2: Dynamic Continuous Kelly Margin */}
-              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Neural Kelly Leverage
-                  </span>
-                  <TrendingUp className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold tracking-tight font-mono text-emerald-700">
-                    {autonomousPilot?.neuralWebTelemetry?.marginMultiplier
-                      ? `${autonomousPilot.neuralWebTelemetry.marginMultiplier.toFixed(1)}x`
-                      : '3.5x - 4.5x'}
-                  </span>
-                  <span className="text-xs text-zinc-500">Intraday MIS Buying Power</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
-                  <span>Risk Cap: <strong className="text-zinc-800">₹300 - ₹380</strong></span>
-                  <span>Cash Buffer: <strong className="text-zinc-800">35%</strong></span>
-                </div>
-              </div>
-
-              {/* Card 3: Statutory Fee & Drift Defense */}
-              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Statutory Fee Armor & MADS
-                  </span>
-                  <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold tracking-tight font-mono text-indigo-700">
-                    ≥ ₹65 Net Alpha
-                  </span>
-                  <span className="text-xs text-zinc-500">Expectancy Hurdle</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
-                  <span>MADS Scratch: <strong className="text-indigo-900">-0.35 ATR Micro-Cut</strong></span>
-                  <span>Fee Armor: <strong className="text-indigo-900">Active</strong></span>
-                </div>
-              </div>
-            </div>
-
-            {/* 8 Sensory Neurons Grid */}
-            <div className="p-3.5 rounded-2xl bg-zinc-900 text-white space-y-2">
-              <div className="flex items-center justify-between text-xs pb-1.5 border-b border-zinc-800">
-                <span className="font-bold text-purple-300 flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-purple-400" />
-                  8-Dimensional Afferent Sensory Neuron Activation Mesh
-                </span>
-                <span className="text-[10px] font-mono text-zinc-400">
-                  NAC: <strong className="text-emerald-400 font-bold">{autonomousPilot?.neuralWebTelemetry?.neuralAlphaScore ? `${autonomousPilot.neuralWebTelemetry.neuralAlphaScore}/100` : '78.5/100'}</strong>
-                </span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">N1 Macro Breadth</div>
-                  <div className="font-mono font-bold text-emerald-400">+0.72 (Bull Expansion)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">N2 Fractal Memory</div>
-                  <div className="font-mono font-bold text-emerald-400">+0.84 (Hurst &gt; 0.62)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">N3 Order Flow Delta</div>
-                  <div className="font-mono font-bold text-emerald-400">+0.75 (Block Volume)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">N4 MTF Confluence</div>
-                  <div className="font-mono font-bold text-emerald-400">+0.80 (30m + 1m Aligned)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">N5 Sector Tailwind</div>
-                  <div className="font-mono font-bold text-emerald-400">+0.85 (Rank 1 Leader)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">N6 VWAP Curvature</div>
-                  <div className="font-mono font-bold text-amber-300">+0.15 (Equilibrium)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">N7 Asset Reputation</div>
-                  <div className="font-mono font-bold text-emerald-400">92/100 (Elite Tier)</div>
-                </div>
-                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
-                  <div className="text-zinc-400 text-[10px]">N8 P&L Velocity</div>
-                  <div className="font-mono font-bold text-purple-300">Targeting ₹1,000/mo</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Prototype 2 Live Telemetry Cockpit */}
-        {isProto2 && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Posture Badge Card */}
-              <div className={`p-3.5 rounded-2xl border transition-all ${
-                monthlyGovernor.posture === 'CAPITAL_DEFENSE_LOCKED'
-                  ? 'bg-indigo-50/70 border-indigo-200 text-indigo-950'
-                  : monthlyGovernor.posture === 'MOMENTUM_EXPANSION'
-                  ? 'bg-amber-50/70 border-amber-200 text-amber-950'
-                  : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-              }`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Master Brain Posture
-                  </span>
-                  {monthlyGovernor.posture === 'CAPITAL_DEFENSE_LOCKED' ? (
-                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                  ) : monthlyGovernor.posture === 'MOMENTUM_EXPANSION' ? (
-                    <TrendingUp className="w-4 h-4 text-amber-600" />
-                  ) : (
-                    <Scale className="w-4 h-4 text-emerald-600" />
-                  )}
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-base font-bold tracking-tight">
-                    {monthlyGovernor.posture === 'CAPITAL_DEFENSE_LOCKED'
-                      ? 'Capital Defense'
-                      : monthlyGovernor.posture === 'MOMENTUM_EXPANSION'
-                      ? 'Momentum Expansion'
-                      : 'Balanced Harvest'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-500 mt-1 leading-tight">
-                  {monthlyGovernor.posture === 'CAPITAL_DEFENSE_LOCKED'
-                    ? 'Target pace achieved. Preserving month profit with defensive stops & cash buffer.'
-                    : monthlyGovernor.posture === 'MOMENTUM_EXPANSION'
-                    ? 'Below target run-rate. Expanding breakout targets & deploying risk budget to generate alpha.'
-                    : 'On track with target daily run-rate. Steady systematic alpha harvesting.'}
-                </p>
-              </div>
-
-              {/* Dynamic Risk & Cash Buffer Card */}
-              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Adaptive Risk & Margins
-                  </span>
-                  <Zap className="w-4 h-4 text-amber-500" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold tracking-tight font-mono text-zinc-950">
-                    {monthlyGovernor.riskPerTradePct.toFixed(2)}%
-                  </span>
-                  <span className="text-xs text-zinc-500">Risk per Trade</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
-                  <span>Cash Buffer: <strong className="text-zinc-800">{monthlyGovernor.targetCashBufferPct}%</strong></span>
-                  <span>Stop Multiplier: <strong className="text-zinc-800">{monthlyGovernor.stopLossAtrMultiplier.toFixed(1)}x ATR</strong></span>
-                </div>
-              </div>
-
-              {/* 30-Day Progress vs Target Card */}
-              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Target Attainment Run-Rate
-                  </span>
-                  <Activity className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className={`text-lg font-bold tracking-tight font-mono ${
-                    (monthlyCtx?.rollingMonthlyPnl || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                  }`}>
-                    {(monthlyCtx?.rollingMonthlyPnl || 0) >= 0 ? '+' : ''}₹{(monthlyCtx?.rollingMonthlyPnl || 0).toFixed(2)}
-                  </span>
-                  <span className="text-xs text-zinc-400">
-                    / Target ₹{((monthlyCtx?.daysEvaluatedInMonth || 1) * 100).toFixed(0)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
-                  <span>Pace: <strong className="text-zinc-800">₹{(monthlyCtx?.dailyAvgPnl || 0).toFixed(2)}/day</strong></span>
-                  <span className="font-semibold text-zinc-700">
-                    {(monthlyCtx?.dailyAvgPnl || 0) >= 95 ? 'Target Achieved' : 'Tracking Pace'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Live Master Brain Action Rationale */}
-            <div className="p-3 rounded-2xl bg-zinc-950 text-white text-xs flex items-start gap-2.5">
-              <Cpu className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <span className="font-semibold text-emerald-300">Live Strategy Adaptation Rationale:</span>
-                <p className="text-zinc-300 text-[11px] leading-relaxed">{monthlyGovernor.rationale}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Prototype 1 Classic Status */}
-        {isProto1 && (
-          <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 text-amber-950 space-y-2">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0" />
-              <h4 className="text-xs font-bold text-amber-900">Prototype 1 Active: Fixed Baseline Configuration</h4>
-            </div>
-            <p className="text-xs text-amber-800 leading-relaxed">
-              This engine runs the exact fixed quant parameter set that achieved the <strong>₹29,005 net profit</strong> across the 5-year benchmark (1.0% risk per trade, 45% cash buffer, 90-minute stagnancy window, full multi-tranche runners). Dynamic monthly adaptations and earnings throttling are disabled.
-            </p>
-          </div>
-        )}
-      </div>
-
       {/* 4. Streamlined Institutional Navigation Tabs */}
-      <div className="flex items-center justify-between border-b border-black/[0.06] pb-2 flex-wrap gap-2">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-between border-b border-black/[0.06] pb-2 flex-wrap gap-2 pt-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* TAB: ACTIVE POSITIONS */}
           <button
             type="button"
-            onClick={() => setActiveTab('fleet')}
+            onClick={() => setActiveTab('positions')}
             className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-              activeTab === 'fleet'
+              activeTab === 'positions'
                 ? 'bg-zinc-900 text-white shadow-xs'
                 : 'text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04]'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Active Model Fleet</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/20 text-white font-mono">
-              10
+            <Activity className="w-3.5 h-3.5" />
+            <span>Active Positions Desk</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+              activePositionsList.length > 0
+                ? (activeTab === 'positions' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800 font-bold')
+                : (activeTab === 'positions' ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-700')
+            }`}>
+              {activePositionsList.length}
             </span>
           </button>
 
+          {/* TAB: ACTIONABLE SETUPS */}
           <button
             type="button"
             onClick={() => setActiveTab('opportunities')}
@@ -1067,6 +896,26 @@ export function AutonomousQuantPilot() {
             </span>
           </button>
 
+          {/* TAB: MONITORED FLEET */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('fleet')}
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+              activeTab === 'fleet'
+                ? 'bg-zinc-900 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04]'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Monitored Fleet</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+              activeTab === 'fleet' ? 'bg-white/20 text-white' : 'bg-zinc-100 text-zinc-600'
+            }`}>
+              {UPSTOX_FLEET_ASSETS.length}
+            </span>
+          </button>
+
+          {/* TAB: AUDIT STREAM */}
           <button
             type="button"
             onClick={() => setActiveTab('logs')}
@@ -1119,205 +968,174 @@ export function AutonomousQuantPilot() {
         )}
       </div>
 
-      {/* 5. TAB 1: ACTIVE MODEL FLEET */}
-      {activeTab === 'fleet' && (
+      {/* 5. TAB 1: ACTIVE POSITIONS DESK */}
+      {activeTab === 'positions' && (
         <div className="space-y-3">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-xs text-zinc-500 px-1">
             <span>
-              Autonomous desk monitoring <strong>{UPSTOX_FLEET_ASSETS.length} Liquid Equities (NIFTY 100)</strong> across {fleetSectors.length - 1} sectors
+              Real-time monitor of open equity positions, live P&L, stop losses, and target tranches
             </span>
-            <span className="text-[11px] text-zinc-400">
-              Authoritative Upstox Quotes &bull; Zero Heuristic Jitter
-            </span>
+            {activePositionsList.length > 0 && (
+              <div className="text-xs font-mono font-bold flex items-center gap-1.5">
+                <span>Total Open P&L:</span>
+                <span className={`px-2 py-0.5 rounded-md ${
+                  totalOpenPnl >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                }`}>
+                  {totalOpenPnl >= 0 ? '+' : ''}{moneyINR(totalOpenPnl)}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Fleet Sector Filters & Fast Search */}
-          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-              {fleetSectors.map((sec) => {
-                const count = sec === 'ALL'
-                  ? UPSTOX_FLEET_ASSETS.length
-                  : UPSTOX_FLEET_ASSETS.filter((a) => (activeFleet[a]?.sector || 'Equities').toLowerCase() === sec.toLowerCase()).length;
-                const isSecActive = fleetSectorFilter.toLowerCase() === sec.toLowerCase();
+          {activePositionsList.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-white/70 border border-black/[0.05] text-center space-y-2">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200/60 shadow-2xs">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <h4 className="text-xs font-bold text-zinc-900">Capital 100% Safeguarded &bull; No Open Exposure</h4>
+              <p className="text-xs text-zinc-500 max-w-md mx-auto leading-relaxed">
+                The autonomous desk is continuously evaluating the {UPSTOX_FLEET_ASSETS.length}-asset NIFTY fleet across 1m and 30m timeframes. Open positions will appear here automatically with live trailing stops and market liquidation controls.
+              </p>
+              <div className="pt-2 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('opportunities')}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl shadow-xs apple-btn-tactile flex items-center gap-1.5"
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>Inspect Actionable Setups ({opportunities.length})</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {activePositionsList.map((pos) => {
+                const assetMeta = pos.meta;
+                const isClosing = closingAsset === pos.asset;
+
                 return (
-                  <button
-                    key={sec}
-                    type="button"
-                    onClick={() => setFleetSectorFilter(sec)}
-                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all shrink-0 cursor-pointer ${
-                      isSecActive
-                        ? 'bg-zinc-900 text-white shadow-2xs'
-                        : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                    }`}
+                  <div
+                    key={pos.asset}
+                    className="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-xs space-y-3 hover:border-zinc-400 transition-all flex flex-col justify-between"
                   >
-                    {sec === 'ALL' ? 'All Sectors' : sec} ({count})
-                  </button>
+                    <div className="space-y-3">
+                      {/* Position Card Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-2xs shrink-0"
+                            style={{ backgroundColor: assetMeta?.iconColor || '#4f46e5' }}
+                          >
+                            {pos.asset.slice(0, 3)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-xs text-zinc-950">
+                                {pos.asset}
+                              </span>
+                              <span className="text-[10px] text-zinc-500">
+                                ({assetMeta?.name || pos.asset})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                {pos.fleetItem?.sector || 'Equities'}
+                              </span>
+                              <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border ${getStrategyBadge(pos.strategy)}`}>
+                                {pos.strategy}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {getLifecycleBadge(pos.fleetItem?.state)}
+                      </div>
+
+                      {/* Live Price & P&L Block */}
+                      <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-black/[0.02]">
+                        <div>
+                          <span className="text-[10px] text-zinc-400 block">Spot Price</span>
+                          <span className="font-bold font-mono text-zinc-950 text-xs">
+                            {moneyINR(pos.price)}
+                          </span>
+                          <span className={`text-[9px] font-mono block ${
+                            pos.change24h >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                          }`}>
+                            {pos.change24h >= 0 ? '+' : ''}{pos.change24h.toFixed(2)}% today
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-zinc-400 block">Unrealized P&L</span>
+                          <span className={`font-black font-mono text-sm block ${
+                            pos.pnlAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                          }`}>
+                            {pos.pnlAmt >= 0 ? '+' : ''}{moneyINR(pos.pnlAmt)}
+                          </span>
+                          <span className={`text-[9px] font-mono font-bold block ${
+                            pos.pnlPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                          }`}>
+                            {pos.pnlPct >= 0 ? '+' : ''}{pos.pnlPct.toFixed(2)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Position Details */}
+                      <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
+                        <div className="p-1.5 rounded-lg bg-zinc-50 border border-black/[0.04]">
+                          <span className="text-[9px] text-zinc-400 block">Shares Held</span>
+                          <span className="font-bold font-mono text-zinc-900 text-[11px]">{pos.units}</span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-zinc-50 border border-black/[0.04]">
+                          <span className="text-[9px] text-zinc-400 block">Avg Buy Price</span>
+                          <span className="font-bold font-mono text-zinc-900 text-[11px]">{moneyINR(pos.avgPrice)}</span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-zinc-50 border border-black/[0.04]">
+                          <span className="text-[9px] text-zinc-400 block">Kelly Ratio</span>
+                          <span className="font-bold font-mono text-indigo-700 text-[11px]">
+                            {(pos.fleetItem?.kellyFraction || 1.0).toFixed(2)}x
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Stop Loss & Profit Target Levels */}
+                      <div className="p-2 rounded-xl bg-zinc-50 border border-zinc-200/80 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500 font-medium">Stop-Loss:</span>
+                          <span className="font-bold font-mono text-rose-600">
+                            {pos.stopLoss ? moneyINR(pos.stopLoss) : '—'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-500 font-medium">Profit Target:</span>
+                          <span className="font-bold font-mono text-emerald-600">
+                            {pos.takeProfit ? moneyINR(pos.takeProfit) : '—'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Market Exit Button */}
+                    <div className="pt-2 border-t border-black/[0.05]">
+                      <button
+                        type="button"
+                        disabled={isClosing}
+                        onClick={() => handleClosePosition(pos.asset, pos.units)}
+                        className="w-full py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-xl transition-all apple-btn-tactile flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                        title="Liquidate this position immediately at market"
+                      >
+                        {isClosing ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                        ) : (
+                          <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                        )}
+                        <span>{isClosing ? 'Closing Position...' : 'Market Liquidation'}</span>
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
-
-            <div className="relative shrink-0 sm:w-64">
-              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder={`Search ${UPSTOX_FLEET_ASSETS.length} equities...`}
-                value={fleetSearchQuery}
-                onChange={(e) => setFleetSearchQuery(e.target.value)}
-                className="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-black/[0.08] rounded-xl outline-hidden focus:border-zinc-400 shadow-2xs"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-2xl border border-black/[0.06] bg-white/80 shadow-2xs">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-black/[0.02] border-b border-black/[0.05] text-[11px] font-semibold text-zinc-500">
-                  <th className="py-3 px-3.5">Asset / Company</th>
-                  <th className="py-3 px-3">Spot Price</th>
-                  <th className="py-3 px-3">Assigned Model</th>
-                  <th className="py-3 px-3">Market Regime</th>
-                  <th className="py-3 px-3">Desk Status</th>
-                  <th className="py-3 px-3">Target Brackets (SL / TP)</th>
-                  <th className="py-3 px-3.5 text-right">Position &amp; Net P&amp;L</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/[0.04]">
-                {filteredFleetAssets.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-zinc-500 text-xs">
-                      No equities found matching "{fleetSearchQuery}" in {fleetSectorFilter === 'ALL' ? 'any sector' : fleetSectorFilter}.
-                    </td>
-                  </tr>
-                )}
-                {filteredFleetAssets.map((asset) => {
-                  const meta = META[asset];
-                  const mkt = markets[asset];
-                  const fleetItem = activeFleet[asset];
-                  // Prioritize authoritative live Upstox price from activeFleet or live REST market over synthetic fallback
-                  const authoritativePrice = (fleetItem?.currentPrice && fleetItem.currentPrice > 0)
-                    ? fleetItem.currentPrice
-                    : (!mkt?.isSynthetic && mkt?.price && mkt.price > 0)
-                    ? mkt.price
-                    : (mkt?.price || meta?.basePrice || 100);
-                  const price = authoritativePrice;
-                  const strat = fleetItem?.assignedStrategy || 'Titan Alpha Sentinel';
-                  const hurst = fleetItem?.hurst ?? 0.50;
-                  const unitsHeld = state.positions[asset] || fleetItem?.unitsHeld || 0;
-                  const avgPrice = state.avgBuyPrice?.[asset] || fleetItem?.entryPrice || price;
-                  const pnlAmt = unitsHeld > 0 ? (price - avgPrice) * unitsHeld : 0;
-                  const pnlPct = unitsHeld > 0 && avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0;
-
-                  return (
-                    <tr key={asset} className="hover:bg-zinc-50/80 transition-colors">
-                      {/* Asset & Name */}
-                      <td className="py-3 px-3.5">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[11px] font-bold shadow-2xs shrink-0"
-                            style={{ backgroundColor: meta?.iconColor || '#4f46e5' }}
-                          >
-                            {asset.slice(0, 3)}
-                          </div>
-                          <div>
-                            <div className="font-bold text-zinc-950 flex items-center gap-1.5">
-                              {asset}
-                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
-                                {fleetItem?.sector || 'Equities'}
-                              </span>
-                              <span className="text-[10px] text-zinc-400 font-normal">NSE</span>
-                            </div>
-                            <div className="text-[10px] text-zinc-500 truncate max-w-[140px]">
-                              {meta?.name || asset}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Authoritative Live Spot */}
-                      <td className="py-3 px-3">
-                        <div className="font-mono font-bold text-zinc-900">
-                          {moneyINR(price)}
-                        </div>
-                        <div className={`text-[10px] font-mono ${
-                          (mkt?.change24h || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                        }`}>
-                          {(mkt?.change24h || 0) >= 0 ? '+' : ''}{(mkt?.change24h || 0).toFixed(2)}%
-                        </div>
-                      </td>
-
-                      {/* Assigned Quantitative Strategy */}
-                      <td className="py-3 px-3">
-                        <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-md border ${getStrategyBadge(strat)}`}>
-                          {strat}
-                        </span>
-                        {fleetItem?.squeezeStatus === 'SQUEEZE_ON' && (
-                          <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            Volatility Compression
-                          </div>
-                        )}
-                        {fleetItem?.squeezeStatus === 'SQUEEZE_OFF' && (
-                          <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping" />
-                            Expansion Breakout
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Regime & Hurst */}
-                      <td className="py-3 px-3">
-                        <div className="text-zinc-800 font-medium text-[11px]">
-                          {fleetItem?.regimeLabel || 'Calibrating'}
-                        </div>
-                        <div className="text-[10px] font-mono text-zinc-400">
-                          Hurst H={hurst.toFixed(2)}
-                        </div>
-                      </td>
-
-                      {/* Lifecycle Status */}
-                      <td className="py-3 px-3">
-                        {getLifecycleBadge(fleetItem?.state)}
-                      </td>
-
-                      {/* Targets */}
-                      <td className="py-3 px-3 font-mono text-[11px]">
-                        {unitsHeld > 0 && fleetItem?.stopLossPrice ? (
-                          <div className="space-y-0.5">
-                            <div className="text-rose-600 font-medium">
-                              SL: {moneyINR(fleetItem.stopLossPrice)}
-                            </div>
-                            <div className="text-emerald-600 font-medium">
-                              TP: {moneyINR(fleetItem.takeProfitPrice || price * 1.04)}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-zinc-400 text-[10px]">
-                            Half-Kelly: <span className="font-semibold text-zinc-600">{(fleetItem?.kellyFraction || 1.0).toFixed(2)}x</span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Position & P&L */}
-                      <td className="py-3 px-3.5 text-right font-mono">
-                        {unitsHeld > 0 ? (
-                          <div>
-                            <div className="font-bold text-zinc-900">
-                              {unitsHeld} shares
-                            </div>
-                            <div className={`text-[10px] font-semibold ${pnlAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                              {pnlAmt >= 0 ? '+' : ''}{moneyINR(pnlAmt)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-zinc-400 text-[11px]">0 shares</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          )}
         </div>
       )}
 
@@ -1478,7 +1296,208 @@ export function AutonomousQuantPilot() {
         </div>
       )}
 
-      {/* 7. TAB 3: AUDIT & EXECUTION STREAM */}
+      {/* 7. TAB 3: MONITORED FLEET */}
+      {activeTab === 'fleet' && (
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-xs text-zinc-500 px-1">
+            <span>
+              Autonomous desk monitoring <strong>{UPSTOX_FLEET_ASSETS.length} Liquid Equities (NIFTY 100)</strong> across {fleetSectors.length - 1} sectors
+            </span>
+            <span className="text-[11px] text-zinc-400">
+              Authoritative Upstox Quotes &bull; Zero Heuristic Jitter
+            </span>
+          </div>
+
+          {/* Fleet Sector Filters & Fast Search */}
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              {fleetSectors.map((sec) => {
+                const count = sec === 'ALL'
+                  ? UPSTOX_FLEET_ASSETS.length
+                  : UPSTOX_FLEET_ASSETS.filter((a) => (activeFleet[a]?.sector || 'Equities').toLowerCase() === sec.toLowerCase()).length;
+                const isSecActive = fleetSectorFilter.toLowerCase() === sec.toLowerCase();
+                return (
+                  <button
+                    key={sec}
+                    type="button"
+                    onClick={() => setFleetSectorFilter(sec)}
+                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all shrink-0 cursor-pointer ${
+                      isSecActive
+                        ? 'bg-zinc-900 text-white shadow-2xs'
+                        : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                    }`}
+                  >
+                    {sec === 'ALL' ? 'All Sectors' : sec} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="relative shrink-0 sm:w-64">
+              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder={`Search ${UPSTOX_FLEET_ASSETS.length} equities...`}
+                value={fleetSearchQuery}
+                onChange={(e) => setFleetSearchQuery(e.target.value)}
+                className="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-black/[0.08] rounded-xl outline-hidden focus:border-zinc-400 shadow-2xs"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-black/[0.06] bg-white/80 shadow-2xs">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-black/[0.02] border-b border-black/[0.05] text-[11px] font-semibold text-zinc-500">
+                  <th className="py-3 px-3.5">Asset / Company</th>
+                  <th className="py-3 px-3">Spot Price</th>
+                  <th className="py-3 px-3">Assigned Model</th>
+                  <th className="py-3 px-3">Market Regime</th>
+                  <th className="py-3 px-3">Desk Status</th>
+                  <th className="py-3 px-3">Target Brackets (SL / TP)</th>
+                  <th className="py-3 px-3.5 text-right">Position &amp; Net P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/[0.04]">
+                {filteredFleetAssets.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-zinc-500 text-xs">
+                      No equities found matching "{fleetSearchQuery}" in {fleetSectorFilter === 'ALL' ? 'any sector' : fleetSectorFilter}.
+                    </td>
+                  </tr>
+                )}
+                {filteredFleetAssets.map((asset) => {
+                  const meta = META[asset];
+                  const mkt = markets[asset];
+                  const fleetItem = activeFleet[asset];
+                  const authoritativePrice = (fleetItem?.currentPrice && fleetItem.currentPrice > 0)
+                    ? fleetItem.currentPrice
+                    : (!mkt?.isSynthetic && mkt?.price && mkt.price > 0)
+                    ? mkt.price
+                    : (mkt?.price || meta?.basePrice || 100);
+                  const price = authoritativePrice;
+                  const strat = fleetItem?.assignedStrategy || 'Titan Alpha Sentinel';
+                  const hurst = fleetItem?.hurst ?? 0.50;
+                  const unitsHeld = state.positions[asset] || fleetItem?.unitsHeld || 0;
+                  const avgPrice = state.avgBuyPrice?.[asset] || fleetItem?.entryPrice || price;
+                  const pnlAmt = unitsHeld > 0 ? (price - avgPrice) * unitsHeld : 0;
+                  const pnlPct = unitsHeld > 0 && avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0;
+
+                  return (
+                    <tr key={asset} className="hover:bg-zinc-50/80 transition-colors">
+                      {/* Asset & Name */}
+                      <td className="py-3 px-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[11px] font-bold shadow-2xs shrink-0"
+                            style={{ backgroundColor: meta?.iconColor || '#4f46e5' }}
+                          >
+                            {asset.slice(0, 3)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-zinc-950 flex items-center gap-1.5">
+                              {asset}
+                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
+                                {fleetItem?.sector || 'Equities'}
+                              </span>
+                              <span className="text-[10px] text-zinc-400 font-normal">NSE</span>
+                            </div>
+                            <div className="text-[10px] text-zinc-500 truncate max-w-[140px]">
+                              {meta?.name || asset}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Authoritative Live Spot */}
+                      <td className="py-3 px-3">
+                        <div className="font-mono font-bold text-zinc-900">
+                          {moneyINR(price)}
+                        </div>
+                        <div className={`text-[10px] font-mono ${
+                          (mkt?.change24h || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                        }`}>
+                          {(mkt?.change24h || 0) >= 0 ? '+' : ''}{(mkt?.change24h || 0).toFixed(2)}%
+                        </div>
+                      </td>
+
+                      {/* Assigned Quantitative Strategy */}
+                      <td className="py-3 px-3">
+                        <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-md border ${getStrategyBadge(strat)}`}>
+                          {strat}
+                        </span>
+                        {fleetItem?.squeezeStatus === 'SQUEEZE_ON' && (
+                          <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Compression Squeeze
+                          </div>
+                        )}
+                        {fleetItem?.squeezeStatus === 'SQUEEZE_OFF' && (
+                          <div className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping" />
+                            Expansion Breakout
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Regime & Hurst */}
+                      <td className="py-3 px-3">
+                        <div className="text-zinc-800 font-medium text-[11px]">
+                          {fleetItem?.regimeLabel || 'Calibrating'}
+                        </div>
+                        <div className="text-[10px] font-mono text-zinc-400">
+                          Hurst H={hurst.toFixed(2)}
+                        </div>
+                      </td>
+
+                      {/* Lifecycle Status */}
+                      <td className="py-3 px-3">
+                        {getLifecycleBadge(fleetItem?.state)}
+                      </td>
+
+                      {/* Targets */}
+                      <td className="py-3 px-3 font-mono text-[11px]">
+                        {unitsHeld > 0 && fleetItem?.stopLossPrice ? (
+                          <div className="space-y-0.5">
+                            <div className="text-rose-600 font-medium">
+                              SL: {moneyINR(fleetItem.stopLossPrice)}
+                            </div>
+                            <div className="text-emerald-600 font-medium">
+                              TP: {moneyINR(fleetItem.takeProfitPrice || price * 1.04)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-zinc-400 text-[10px]">
+                            Half-Kelly: <span className="font-semibold text-zinc-600">{(fleetItem?.kellyFraction || 1.0).toFixed(2)}x</span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Position & P&L */}
+                      <td className="py-3 px-3.5 text-right font-mono">
+                        {unitsHeld > 0 ? (
+                          <div>
+                            <div className="font-bold text-zinc-900">
+                              {unitsHeld} shares
+                            </div>
+                            <div className={`text-[10px] font-semibold ${pnlAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {pnlAmt >= 0 ? '+' : ''}{moneyINR(pnlAmt)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-400 text-[11px]">0 shares</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 8. TAB 4: AUDIT & EXECUTION STREAM */}
       {activeTab === 'logs' && (
         <div className="space-y-3.5">
           {/* Top Metric Strip */}
@@ -1682,7 +1701,6 @@ export function AutonomousQuantPilot() {
                   );
                 }
 
-                // Format friendly action title
                 const actionTitle = log.action.replaceAll('_', ' ');
 
                 return (
