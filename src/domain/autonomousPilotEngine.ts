@@ -59,6 +59,7 @@ import {
   IntradayDailyPnlContext,
   thresholds,
 } from './quantEngine';
+import { NewsCatalystRegistry } from './newsEngine';
 
 // Institutional Indian Equities Fleet (NIFTY 100) monitored by the Autonomous Desk
 export const UPSTOX_FLEET_ASSETS: Asset[] = [...INDIAN_ASSETS];
@@ -779,6 +780,41 @@ export function tickAutonomousPilot(
     );
 
     let exitOrderQueued = false;
+
+    // Emergency Breaking Adverse News Veto Defense: Immediate market liquidation on critical regulatory/corporate shocks
+    const newsVeto = NewsCatalystRegistry.checkEmergencyVeto(asset, now);
+    if (!exitOrderQueued && newsVeto.hasVeto && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      const exitProduct = isIndianAsset(asset) ? 'MIS' : 'CNC';
+      const exitReason = newsVeto.reason || `[Emergency News Veto] Critical adverse event on ${asset}. Immediate capital defense scratch.`;
+
+      ordersToDispatch.push({
+        asset,
+        side: 'sell',
+        amount: currentHolding,
+        price: alignToTickSize(price, asset),
+        type: 'market',
+        product: exitProduct,
+        strategyName: 'Auto-Pilot: Emergency News Veto Defense',
+        reason: exitReason,
+      });
+
+      rateLimits.requestsThisMinute++;
+      rateLimits.lastDispatchedAt = now;
+      lifecycleState = 'COOLDOWN';
+      trancheStage = 0;
+      exitOrderQueued = true;
+
+      newActionLogs.push({
+        id: `log_news_veto_${asset}_${now}`,
+        timestamp: now,
+        asset,
+        action: 'STOP_LOSS' as any,
+        strategy,
+        detail: exitReason,
+        price,
+        status: 'EXECUTED',
+      });
+    }
     const isProfitableOrRiskFree = currentStop >= avgBuyPrice || price >= avgBuyPrice + roundtripFriction.frictionPerShare;
     if (stagnancyCheck.shouldExit && !isProfitableOrRiskFree && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       ordersToDispatch.push({
@@ -1805,6 +1841,19 @@ export function tickAutonomousPilot(
     if (isSystemicShock) continue;
     if (!selectedAllocationAssets.has(asset)) continue;
 
+    // Emergency Breaking Adverse News Veto: Block any new entries if asset has breaking negative news
+    const candNewsVeto = NewsCatalystRegistry.checkEmergencyVeto(asset, now);
+    if (candNewsVeto.hasVeto) {
+      continue;
+    }
+
+    // News Alpha Catalyst Boost: If stock has verified positive corporate news, apply ACI conviction boost
+    const candNewsCatalyst = NewsCatalystRegistry.checkAlphaCatalyst(asset, now);
+    const newsAciBonus = candNewsCatalyst.hasCatalyst ? candNewsCatalyst.boostPoints : 0;
+    if (candNewsCatalyst.hasCatalyst && candNewsCatalyst.reason) {
+      cand.entryRationale = `${cand.entryRationale} | ${candNewsCatalyst.reason}`;
+    }
+
     // Master Brain Dynamic Scenario Directive Gate
     if (cand.brainDirective.actionPermission !== 'PERMITTED') {
       continue;
@@ -1831,7 +1880,8 @@ export function tickAutonomousPilot(
     if ((candAssetFleet?.reputationScore ?? 100) < 75) {
       minAciRequired = Math.max(minAciRequired, 75);
     }
-    if ((ranked?.alphaConvictionIndex || 0) < minAciRequired) {
+    const effectiveAci = (ranked?.alphaConvictionIndex || 0) + newsAciBonus;
+    if (effectiveAci < minAciRequired) {
       continue;
     }
 

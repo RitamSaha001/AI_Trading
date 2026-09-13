@@ -33,7 +33,9 @@ import {
   WifiOff,
   XCircle,
   Zap,
+  Newspaper,
 } from 'lucide-react';
+import { NewsSentimentRadar } from './NewsSentimentRadar';
 import { useLumen } from '../store';
 import {
   PILOT_PROFILES,
@@ -71,7 +73,7 @@ export function AutonomousQuantPilot() {
     openUpstoxDrawer,
   } = useLumen();
 
-  const [activeTab, setActiveTab] = useState<'positions' | 'opportunities' | 'fleet' | 'quant_lab' | 'logs'>('positions');
+  const [activeTab, setActiveTab] = useState<'positions' | 'opportunities' | 'fleet' | 'quant_lab' | 'news' | 'logs'>('positions');
   const [viewMode, setViewMode] = useState<'beginner' | 'quant'>('beginner');
   const [isScanning, setIsScanning] = useState(false);
   const [closingAsset, setClosingAsset] = useState<string | null>(null);
@@ -1275,6 +1277,23 @@ export function AutonomousQuantPilot() {
             </span>
           </button>
 
+          {/* TAB: NEWS & SENTIMENT RADAR */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('news')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
+              activeTab === 'news'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-rose-900'
+            }`}
+          >
+            <Newspaper className="w-3.5 h-3.5" />
+            <span>News &bull; Sentiment</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 font-mono font-bold">
+              FinBERT
+            </span>
+          </button>
+
           {/* TAB: AUDIT STREAM */}
           <button
             type="button"
@@ -2290,6 +2309,13 @@ export function AutonomousQuantPilot() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 9.5 TAB: REAL-TIME NEWS & SENTIMENT RADAR                                 */}
+      {/* ========================================================================= */}
+      {activeTab === 'news' && (
+        <NewsSentimentRadar />
       )}
 
       {/* ========================================================================= */}

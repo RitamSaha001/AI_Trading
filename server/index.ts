@@ -37,6 +37,8 @@ import { UpstoxTotpAuthService } from './services/brokers/upstox/upstoxTotpAuthS
 import { IntradaySquareOffService } from './services/intradaySquareOffService';
 import { AutonomousPilotWorker } from './services/autonomousPilotWorker';
 import { InFlightMtmService } from './services/inFlightMtmService';
+import { registerNewsRoutes } from './routes/newsRoutes';
+import { NewsIngestionService } from '../src/domain/newsEngine';
 
 let isShuttingDown = false;
 
@@ -63,6 +65,7 @@ export async function shutdownServer(server?: FastifyInstance): Promise<void> {
     IntradaySquareOffService.stop();
     AutonomousPilotWorker.stop();
     InFlightMtmService.stopDaemon();
+    NewsIngestionService.stop();
   } catch (err: any) {
     logger.warn('Error stopping background workers:', err.message);
   }
@@ -1753,6 +1756,8 @@ export function buildServer(): FastifyInstance {
     return { success: true, result };
   });
 
+  registerNewsRoutes(server);
+
   return server;
 }
 
@@ -1829,6 +1834,9 @@ if (isMain || process.env.START_SERVER === 'true') {
 
       console.log(`[AutonomousPilot] Starting Autonomous Quant Pilot 5s background execution daemon...`);
       AutonomousPilotWorker.startScheduler();
+
+      console.log(`[NewsEngine] Starting real-time free news ingestion & FinBERT sentiment poller...`);
+      NewsIngestionService.start(60_000);
 
       const server = buildServer();
 
