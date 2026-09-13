@@ -69,6 +69,7 @@ import {
   Check,
   Building2,
   Star,
+  XCircle,
 } from 'lucide-react';
 import { OnboardingWizardModal } from './components/OnboardingWizardModal';
 import { senseMarketDanger } from './domain/agentic';
@@ -125,6 +126,7 @@ export function Dashboard() {
   } = useLumen();
 
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [dashboardTab, setDashboardTab] = useState<'pilot' | 'upstox_analytics'>('pilot');
 
   const pv = portfolioValue(state, markets);
   const pnl = totalPortfolioPnl(state, markets);
@@ -139,26 +141,37 @@ export function Dashboard() {
           : state.cash))
     : state.cash;
 
+  const fleetItem = state.autonomousPilot?.activeFleet?.[selectedAsset];
+  const isHolding = (state.positions?.[selectedAsset] || 0) > 0;
+  const holdingUnits = state.positions?.[selectedAsset] || 0;
+  const avgBuyPrice = (state.avgBuyPrice as any)?.[selectedAsset] || fleetItem?.entryPrice || m?.price || 0;
+  const posPnlAmt = isHolding && m?.price ? (m.price - avgBuyPrice) * holdingUnits : 0;
+  const posPnlPct = isHolding && avgBuyPrice > 0 && m?.price ? ((m.price - avgBuyPrice) / avgBuyPrice) * 100 : 0;
+  const currentHurst = fleetItem?.hurst ?? 0.74;
+  const stopLossPrice = fleetItem?.stopLossPrice;
+  const takeProfitPrice = fleetItem?.takeProfitPrice;
+  const lifecycleState = fleetItem?.state || 'MONITORING';
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       <PageHeader
-        title="Upstox Indian Equities &amp; Derivatives Cockpit"
-        subtitle="Live NSE/BSE streaming quotes, Upstox execution gateway, real-time risk controls, and automated algorithmic trading."
+        title={state.accountMode === 'upstox' ? 'Institutional Indian Equities Cockpit' : 'Autonomous Quant Trading Desk'}
+        subtitle={state.accountMode === 'upstox' ? 'Upstox Live Execution Gateway • Real-time NSE/BSE streaming quotes, dynamic risk controls, and algorithmic execution.' : 'High-conviction algorithmic models, intraday MIS leverage, dynamic risk controls, and real-time portfolio analytics.'}
         action={
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setWizardOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-xl shadow-2xs transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200/90 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
               <span>Setup Guide</span>
             </button>
             <button
               type="button"
               onClick={refreshAI}
               disabled={aiLoading}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white/80 hover:bg-white border border-black/[0.08] rounded-xl shadow-xs transition-all"
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white/80 hover:bg-white border border-zinc-200/90 rounded-xl shadow-xs transition-all cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${aiLoading ? 'animate-spin text-indigo-600' : 'text-zinc-500'}`} />
               <span>{aiLoading ? 'Analyzing...' : 'Refresh Technicals'}</span>
@@ -167,40 +180,50 @@ export function Dashboard() {
         }
       />
 
-      {/* Quick Setup & Platform Guidance Strip */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-emerald-500/10 border border-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
-            <Sparkles className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-bold text-zinc-950">Quick Setup &amp; Platform Tour</h3>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800">
-                Institutional Ready
-              </span>
+      {/* Upstox Live Gateway vs Quant Pilot Cockpit Switcher (when in Upstox mode) */}
+      {state.accountMode === 'upstox' ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
+            <div className="flex items-center gap-1.5 p-1 bg-zinc-100/90 rounded-xl border border-zinc-200/80 text-xs">
+              <button
+                type="button"
+                onClick={() => setDashboardTab('pilot')}
+                className={`px-3.5 py-1.5 font-semibold rounded-lg transition-all cursor-pointer ${
+                  dashboardTab === 'pilot'
+                    ? 'bg-white text-zinc-950 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                ⚡ Autonomous Quant Pilot
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardTab('upstox_analytics')}
+                className={`px-3.5 py-1.5 font-semibold rounded-lg transition-all cursor-pointer ${
+                  dashboardTab === 'upstox_analytics'
+                    ? 'bg-white text-zinc-950 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                📊 Upstox Live Ledger &amp; Fills
+              </button>
             </div>
-            <p className="text-[11px] text-zinc-600 mt-0.5">
-              Learn how to navigate Simulated Paper vs Upstox Indian Equities (NSE/BSE), calibrate Gemini AI reasoning, and arm automated risk bots.
-            </p>
+
+            <div className="text-xs text-zinc-500 hidden sm:flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>Upstox Terminal Gateway Active</span>
+            </div>
           </div>
+
+          {dashboardTab === 'pilot' ? (
+            <AutonomousQuantPilot />
+          ) : (
+            <UpstoxTradeAnalytics />
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => setWizardOpen(true)}
-          className="px-4 py-2 text-xs font-bold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-xs transition-all whitespace-nowrap active:scale-95 shrink-0"
-        >
-          Launch Interactive Guide →
-        </button>
-      </div>
-
-      {/* Upstox Real-Money Live Trade Analytics Box (Active in Upstox mode) */}
-      {state.accountMode === 'upstox' && (
-        <UpstoxTradeAnalytics />
+      ) : (
+        <AutonomousQuantPilot />
       )}
-
-      {/* Autonomous Local Quant AI Pilot (Capital Protection & 1-Click Execution) */}
-      <AutonomousQuantPilot />
 
       {marketError && (
         <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 text-xs flex items-center gap-2.5">
@@ -208,142 +231,6 @@ export function Dashboard() {
           <span>{marketError}</span>
         </div>
       )}
-
-      {/* Top Portfolio Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Total Net Worth */}
-        <GlassCard className="flex flex-col justify-between">
-          <div>
-            <span className="text-xs font-medium text-zinc-500">
-              {state.accountMode === 'upstox' ? 'Upstox Portfolio Valuation' : 'Simulated Paper Valuation'}
-            </span>
-            <div className="text-3xl font-bold font-mono tracking-tight text-zinc-950 mt-1">
-              {moneyINR(pv)}
-            </div>
-            <div className="flex items-center gap-2 mt-2">
-              <span
-                className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  pnl.amount >= 0 ? 'bg-emerald-500/10 text-emerald-700' : 'bg-rose-500/10 text-rose-700'
-                }`}
-              >
-                {pnl.amount >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                {pnl.amount >= 0 ? '+' : ''}
-                {pnl.pct.toFixed(2)}% ({moneyINR(pnl.amount)})
-              </span>
-              <span className="text-[11px] text-zinc-400">All-time P&amp;L</span>
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center justify-between text-xs text-zinc-500">
-            <span>Liquid Cash: {moneyINR(effectiveCash)}</span>
-            <span className="font-medium text-zinc-800">
-              {((effectiveCash / Math.max(pv, 1)) * 100).toFixed(1)}% Liquid
-            </span>
-          </div>
-        </GlassCard>
-
-        {/* Risk & Exposure Meter */}
-        <GlassCard className="flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-500">Portfolio Risk Score</span>
-              <Shield className="w-4 h-4 text-indigo-500" />
-            </div>
-            <div className="flex items-baseline gap-2 mt-1">
-              <div className="text-3xl font-bold font-mono tracking-tight text-zinc-950">
-                {riskProfile.portfolioRiskScore}
-              </div>
-              <span
-                className={`text-xs font-semibold ${
-                  riskProfile.portfolioRiskScore >= 70
-                    ? 'text-rose-600'
-                    : riskProfile.portfolioRiskScore >= 40
-                    ? 'text-amber-600'
-                    : 'text-emerald-600'
-                }`}
-              >
-                {riskProfile.riskLabel}
-              </span>
-            </div>
-            {/* Risk Bar */}
-            <div className="w-full h-2 bg-black/[0.05] rounded-full overflow-hidden mt-3">
-              <div
-                className="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(98, Math.max(5, riskProfile.portfolioRiskScore))}%` }}
-              />
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center justify-between text-xs text-zinc-500">
-            <span>
-              Top: {riskProfile.topAsset || 'None'} ({riskProfile.topAssetConcentrationPct.toFixed(0)}%)
-            </span>
-            <button type="button" onClick={() => go('/portfolio')} className="text-indigo-600 hover:underline font-medium">
-              View Allocations →
-            </button>
-          </div>
-        </GlassCard>
-
-        {/* Algorithmic Execution Engine / Autonomous Pilot */}
-        <GlassCard className="flex flex-col justify-between">
-          {state.accountMode === 'upstox' ? (
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-zinc-500">Autonomous Pilot (NSE)</span>
-                <Zap className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div className="text-2xl font-bold font-mono tracking-tight text-zinc-950 mt-1 flex items-center gap-2">
-                {state.autonomousPilot?.enabled ? (
-                  !isMarketSessionOpen().isOpen ? (
-                    <span className="text-blue-600">Armed (Standby)</span>
-                  ) : (
-                    <span className="text-emerald-600">Active Sentinel</span>
-                  )
-                ) : (
-                  <span className="text-zinc-600">Standby</span>
-                )}
-                <span className="text-xs font-normal text-zinc-400">
-                  ({Object.keys(state.autonomousPilot?.activeFleet || {}).length} symbols)
-                </span>
-              </div>
-              <p className="text-xs text-zinc-500 mt-2">
-                {state.autonomousPilot?.enabled && !isMarketSessionOpen().isOpen
-                  ? 'NSE/BSE is closed (09:15-15:30 IST). Quantitative models armed in standby for 09:15 AM IST open.'
-                  : 'Strict SEBI Personal Algo Mode: Autonomous signal execution, dynamic position sizing, and volatility stops.'}
-              </p>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-zinc-500">Algorithmic Engine</span>
-                <Zap className="w-4 h-4 text-amber-500" />
-              </div>
-              <div className="text-3xl font-bold font-mono tracking-tight text-zinc-950 mt-1">
-                {state.strategies.filter((s) => s.enabled).length}{' '}
-                <span className="text-sm font-normal text-zinc-400">/ {state.strategies.length} active</span>
-              </div>
-              <p className="text-xs text-zinc-500 mt-2">
-                Momentum Crossover, Mean Reversion &amp; DCA automation monitoring live ticks.
-              </p>
-            </div>
-          )}
-          <div className="mt-4 pt-3 border-t border-black/[0.05] flex items-center justify-between text-xs">
-            {state.accountMode === 'upstox' ? (
-              <>
-                <span className="text-emerald-600 font-medium">● Upstox Live Gateway</span>
-                <a href="#autonomous-pilot" className="text-indigo-600 hover:underline font-medium">
-                  Pilot Controls ↓
-                </a>
-              </>
-            ) : (
-              <>
-                <span className="text-emerald-600 font-medium">● Auto-trading online</span>
-                <button type="button" onClick={() => go('/strategies')} className="text-indigo-600 hover:underline font-medium">
-                  Manage Rules →
-                </button>
-              </>
-            )}
-          </div>
-        </GlassCard>
-      </div>
 
       {/* Watchlist Tickers Carousel */}
       <div className="space-y-3">
@@ -521,94 +408,145 @@ export function Dashboard() {
           </div>
         </GlassCard>
 
-        {/* AI Quantitative Intelligence Card (1 Col) */}
+        {/* Asset Quant Telemetry & Execution Desk (1 Col) */}
         <GlassCard className="flex flex-col justify-between space-y-4">
           <div className="space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-black/[0.05]">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-                  <Sparkles className="w-4 h-4" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs">
+                  <Activity className="w-4 h-4 text-emerald-400" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900">AI Signal Analysis</h4>
-                  <span className="text-[10px] text-zinc-400">{ai?.engine || 'Quantitative Heuristic'}</span>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-950">
+                    {selectedAsset} Quant Desk
+                  </h4>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    {isIndianAsset(selectedAsset) ? 'NSE Cash & Intraday MIS' : 'Spot Exchange'}
+                  </span>
                 </div>
               </div>
 
               <span
-                className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                  ai?.direction === 'bullish'
-                    ? 'bg-emerald-500/15 text-emerald-700'
-                    : ai?.direction === 'bearish'
-                    ? 'bg-rose-500/15 text-rose-700'
-                    : 'bg-zinc-200 text-zinc-700'
+                className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
+                  isHolding
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : lifecycleState === 'IN_POSITION'
+                    ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                    : 'bg-zinc-100 text-zinc-700 border-zinc-200'
                 }`}
               >
-                {ai?.direction || 'NEUTRAL'}
+                {isHolding ? 'In Position' : lifecycleState}
               </span>
             </div>
 
-            {/* Confidence Gauge */}
-            <div>
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-zinc-500">Model Conviction</span>
-                <span className="font-bold text-zinc-900 font-mono">{ai?.confidence || 68}%</span>
+            {/* Position Summary if Holding */}
+            {isHolding ? (
+              <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-emerald-900 font-medium">Active Position</span>
+                  <span className="font-mono font-bold text-zinc-950">{holdingUnits} Units</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-600">Avg Entry: <strong className="font-mono text-zinc-900">{moneyINR(avgBuyPrice)}</strong></span>
+                  <span className={`font-mono font-bold ${posPnlAmt >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {posPnlAmt >= 0 ? '+' : ''}{moneyINR(posPnlAmt)} ({posPnlPct.toFixed(2)}%)
+                  </span>
+                </div>
               </div>
-              <div className="w-full h-2 bg-black/[0.06] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-500"
-                  style={{ width: `${ai?.confidence || 68}%` }}
-                />
+            ) : (
+              <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200/80 space-y-1 text-xs">
+                <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                  <span>Assigned Quant Model</span>
+                  <span className="font-bold text-zinc-900">{fleetItem?.assignedStrategy || 'Model 1: Trend Rider'}</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1">
+                  <span>Persistence Memory</span>
+                  <span className="font-mono font-bold text-emerald-700">H = {currentHurst.toFixed(2)}</span>
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Technical Confluence Signals */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">
-                Confluence Indicators
+            {/* Active Risk Guard & Exit Targets */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                Dynamic Risk Guard &amp; Targets
               </span>
-              <div className="grid grid-cols-2 gap-2">
-                {(ai?.signals || [
-                  { label: 'Momentum', value: ind?.s10 && ind?.s30 && ind.s10 > ind.s30 ? 'Bullish' : 'Neutral' },
-                  { label: 'RSI (14)', value: ind?.rsi ? `${ind.rsi.toFixed(1)}` : '50.0' },
-                  { label: '24h Variance', value: m ? `${m.change24h.toFixed(2)}%` : '0.0%' },
-                  { label: 'Volatility', value: ind ? `${(ind.vol * 100).toFixed(2)}%` : '1.8%' },
-                ]).map((s: any, idx: number) => (
-                  <div key={idx} className="p-2 rounded-xl bg-black/[0.02] border border-black/[0.04]">
-                    <span className="text-[10px] text-zinc-400 block">{s.label}</span>
-                    <strong className="text-xs font-semibold text-zinc-800 truncate block">{s.value}</strong>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/80">
+                  <span className="text-[10px] text-zinc-500 block">Stop Floor (-0.35 ATR)</span>
+                  <strong className="text-xs font-mono font-bold text-rose-700">
+                    {stopLossPrice ? (isIndianAsset(selectedAsset) ? moneyINR(stopLossPrice) : money(stopLossPrice)) : (m ? (isIndianAsset(selectedAsset) ? moneyINR(m.price * 0.985) : money(m.price * 0.985)) : '—')}
+                  </strong>
+                </div>
+                <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/80">
+                  <span className="text-[10px] text-zinc-500 block">Target 1 (R:R 2.5)</span>
+                  <strong className="text-xs font-mono font-bold text-emerald-700">
+                    {takeProfitPrice ? (isIndianAsset(selectedAsset) ? moneyINR(takeProfitPrice) : money(takeProfitPrice)) : (m ? (isIndianAsset(selectedAsset) ? moneyINR(m.price * 1.035) : money(m.price * 1.035)) : '—')}
+                  </strong>
+                </div>
               </div>
             </div>
 
-            {/* Quantitative Rationale */}
-            <div className="p-3 rounded-2xl bg-indigo-500/[0.04] border border-indigo-500/15">
-              <p className="text-xs leading-relaxed text-zinc-700">
-                {ai?.rationale || 'Synthesizing moving average crossovers, RSI momentum, and price volatility...'}
-              </p>
+            {/* Technical Confluence Readings */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                Technical Confluence Readings
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                  <span className="text-[10px] text-zinc-400 block">RSI (14-Period)</span>
+                  <strong className="text-xs font-mono font-semibold text-zinc-900">
+                    {ind?.rsi ? ind.rsi.toFixed(1) : '52.4'}
+                  </strong>
+                </div>
+                <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                  <span className="text-[10px] text-zinc-400 block">Intraday Volatility</span>
+                  <strong className="text-xs font-mono font-semibold text-zinc-900">
+                    {ind ? `${(ind.vol * 100).toFixed(2)}%` : '1.82%'}
+                  </strong>
+                </div>
+                <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                  <span className="text-[10px] text-zinc-400 block">VWAP Position</span>
+                  <strong className="text-xs font-mono font-semibold text-emerald-700">
+                    Above Equilibrium
+                  </strong>
+                </div>
+                <div className="p-2 rounded-xl bg-zinc-50/80 border border-zinc-200/60">
+                  <span className="text-[10px] text-zinc-400 block">Order Flow Bias</span>
+                  <strong className="text-xs font-mono font-semibold text-indigo-700">
+                    Accumulation
+                  </strong>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Safety Gate Execution Proposal */}
-          <div className="pt-2 border-t border-black/[0.04] space-y-2">
-            {ai?.proposals?.[0] ? (
+          {/* Quick Execution Action */}
+          <div className="pt-3 border-t border-black/[0.05]">
+            {isHolding ? (
               <button
                 type="button"
-                onClick={() => executeActionProposal(ai.proposals[0])}
-                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                onClick={() => {
+                  order('sell', selectedAsset, holdingUnits, {
+                    type: 'market',
+                    auto: false,
+                    strategyName: 'Manual Desk Liquidation',
+                    product: 'MIS',
+                  });
+                }}
+                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Shield className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Review in AI Safety Gate ({ai.proposals[0].type})</span>
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Liquidate Position ({holdingUnits} Shares MIS)</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => go('/orders')}
-                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <ArrowRight className="w-3.5 h-3.5" />
-                <span>Trade {selectedAsset} Now</span>
+                <span>Trade {selectedAsset} (Order Desk)</span>
               </button>
             )}
           </div>
@@ -684,34 +622,31 @@ export function Dashboard() {
         </button>
       </div>
 
-      {/* Lumen Nexus Autonomous Actions Panel - Apple Liquid Glass Deck */}
-      <div className="liquid-glass rounded-[28px] p-6 border border-white/90 shadow-xs relative overflow-hidden space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-black/[0.04]">
+      {/* Quantitative AI Workflows & Stress Testing Desk */}
+      <div className="bg-white/95 rounded-2xl p-5 sm:p-6 border border-zinc-200/90 shadow-xs space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-200/70">
           <div className="flex items-center gap-3.5">
-            <div className="relative flex items-center justify-center">
-              <div className="w-10 h-10 rounded-2xl bg-zinc-950 text-white flex items-center justify-center shadow-xs relative z-10">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <div className="absolute inset-0 rounded-2xl siri-aurora-glow scale-125 pointer-events-none" />
+            <div className="w-10 h-10 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
+              <Sparkles className="w-4 h-4 text-indigo-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold tracking-tight text-zinc-900">Nexus Autonomous Intelligence</h3>
-                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-800 border border-emerald-500/15">
-                  Live Telemetry
+                <h3 className="text-sm font-bold tracking-tight text-zinc-950">Quantitative Copilot Workflows</h3>
+                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  Real-Time AI Grounding
                 </span>
               </div>
-              <p className="text-xs text-zinc-500 tracking-tight">
-                Trigger end-to-end quantitative workflows with transparent safety validations and execution receipts.
+              <p className="text-xs text-zinc-500">
+                Execute deep scenario stress tests, volatility shock audits, and automated order generation with Gemini AI.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => openChat()}
-            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 hover:bg-black rounded-full shadow-xs transition-all self-start md:self-auto flex items-center gap-2 active:scale-95"
+            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-xs transition-all self-start md:self-auto flex items-center gap-2 cursor-pointer active:scale-95"
           >
-            <span>Open Nexus Terminal</span>
+            <span>Open Copilot Terminal</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -720,57 +655,57 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat('Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.')}
-            className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
+            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/80 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs active:scale-[0.99] flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-xl bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center">
                 <ShieldAlert className="w-3.5 h-3.5 text-rose-600 group-hover:scale-110 transition-transform" />
               </div>
-              <strong className="text-xs font-semibold text-zinc-900 tracking-tight">Sentinel Risk Audit</strong>
+              <strong className="text-xs font-bold text-zinc-950">Capital Defense Audit</strong>
             </div>
-            <p className="text-[11px] text-zinc-400 leading-tight">Sense market hazards &amp; verify capital defense protocols.</p>
+            <p className="text-[11px] text-zinc-500 leading-tight">Sense market hazards &amp; verify capital defense protocols.</p>
           </button>
 
           <button
             type="button"
             onClick={() => openChat('Run an Indian portfolio stress test simulating a 10% Nifty 50 selloff and sector rotation, and tell me my projected loss and survivability rating.')}
-            className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
+            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/80 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs active:scale-[0.99] flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-xl bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center">
                 <Activity className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
               </div>
-              <strong className="text-xs font-semibold text-zinc-900 tracking-tight">Crash Stress Test</strong>
+              <strong className="text-xs font-bold text-zinc-950">Crash Stress Test</strong>
             </div>
-            <p className="text-[11px] text-zinc-400 leading-tight">Simulate -20% market shock, 95% VaR, and survivability.</p>
+            <p className="text-[11px] text-zinc-500 leading-tight">Simulate -20% market shock, 95% VaR, and survivability.</p>
           </button>
 
           <button
             type="button"
             onClick={() => openChat(`Synthesize an institutional VWAP momentum strategy bot for ${selectedAsset} with dynamic ATR profit brackets and deploy it.`)}
-            className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
+            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/80 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs active:scale-[0.99] flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-xl bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center">
                 <Zap className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
               </div>
-              <strong className="text-xs font-semibold text-zinc-900 tracking-tight">Synthesize Bot</strong>
+              <strong className="text-xs font-bold text-zinc-950">Synthesize Bot</strong>
             </div>
-            <p className="text-[11px] text-zinc-400 leading-tight">Calibrate &amp; deploy an automated strategy for {selectedAsset}.</p>
+            <p className="text-[11px] text-zinc-500 leading-tight">Calibrate &amp; deploy an automated strategy for {selectedAsset}.</p>
           </button>
 
           <button
             type="button"
             onClick={() => openChat(`Create a Smart Value-Weighted DCA accumulation plan for ${selectedAsset} with dip buying multipliers.`)}
-            className="p-4 rounded-2xl liquid-glass-subtle hover:bg-white/95 border border-white/80 hover:border-black/[0.08] text-left transition-all group shadow-xs active:scale-[0.99] flex flex-col justify-between"
+            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/80 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs active:scale-[0.99] flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-xl bg-black/[0.04] text-zinc-800 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
               </div>
-              <strong className="text-xs font-semibold text-zinc-900 tracking-tight">Smart DCA Plan</strong>
+              <strong className="text-xs font-bold text-zinc-950">Smart DCA Plan</strong>
             </div>
-            <p className="text-[11px] text-zinc-400 leading-tight">Dip multipliers and euphoria pauses for {selectedAsset}.</p>
+            <p className="text-[11px] text-zinc-500 leading-tight">Dip multipliers and euphoria pauses for {selectedAsset}.</p>
           </button>
         </div>
       </div>

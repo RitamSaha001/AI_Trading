@@ -43,7 +43,7 @@ import {
   PilotPrototypeVersion,
   Asset,
 } from '../types';
-import { isIndianAsset, moneyINR, META, portfolioValue, getActiveAssetUnits } from '../domain/portfolio';
+import { isIndianAsset, moneyINR, META, portfolioValue, getActiveAssetUnits, totalPortfolioPnl } from '../domain/portfolio';
 
 export function AutonomousQuantPilot() {
   const {
@@ -244,6 +244,12 @@ export function AutonomousQuantPilot() {
   });
 
   const pv = portfolioValue(state, markets);
+  const pnl = totalPortfolioPnl(state, markets);
+  const avgOpportunityConfidence = useMemo(() => {
+    if (opportunities.length === 0) return 82.0;
+    const sum = opportunities.reduce((acc, opp) => acc + (opp.compositeScore || 75), 0);
+    return Math.round((sum / opportunities.length) * 10) / 10;
+  }, [opportunities]);
   const currentCash = state.accountMode === 'upstox'
     ? (state.upstoxAccount?.funds?.availableCash ??
         (state.upstoxAccount?.balances?.INR?.free !== undefined
@@ -680,7 +686,7 @@ export function AutonomousQuantPilot() {
           </div>
         </div>
 
-        {/* Metric 2: Available Capital */}
+        {/* Metric 2: Available Capital & Net Worth */}
         <div className="p-4 rounded-xl bg-zinc-50/80 border border-zinc-200/80 space-y-1">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
             <span>Available Capital</span>
@@ -692,8 +698,10 @@ export function AutonomousQuantPilot() {
             {moneyINR(currentCash)}
           </div>
           <div className="flex items-center justify-between text-[11px] text-zinc-600 pt-0.5">
-            <span>Cash Floor: <strong className="font-mono">{moneyINR(minRequiredCash)}</strong></span>
-            <span className="text-zinc-500">Half-Kelly</span>
+            <span>Portfolio NAV: <strong className="font-mono text-zinc-900">{moneyINR(pv)}</strong></span>
+            <span className={`font-semibold font-mono ${pnl.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {pnl.amount >= 0 ? '+' : ''}{pnl.pct.toFixed(2)}%
+            </span>
           </div>
         </div>
 
@@ -771,7 +779,7 @@ export function AutonomousQuantPilot() {
           </div>
           <div className="flex items-center gap-4 text-xs font-mono">
             <span className="text-zinc-400">
-              Model Conviction: <strong className="text-emerald-400">82.0%</strong>
+              Model Conviction: <strong className="text-emerald-400">{avgOpportunityConfidence.toFixed(1)}%</strong>
             </span>
             <span className="text-zinc-400">
               Active Strategy: <strong className="text-indigo-300">{strategyModels.find(m => m.id === prototypeVersion)?.code} ({strategyModels.find(m => m.id === prototypeVersion)?.name})</strong>
