@@ -866,14 +866,18 @@ async function runMultiDayWindowReplay() {
       capital = Number(args[++i]) || 40000;
     } else if (arg.startsWith('--prototype=')) {
       const pr = arg.split('=')[1].toLowerCase();
-      prototype = (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
+      prototype = (pr.includes('4') || pr.includes('omni') || pr === 'prototype_4_omni_synthesis')
+        ? 'prototype_4_omni_synthesis'
+        : (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
         ? 'prototype_3_neural_mesh'
         : (pr.includes('1') || pr === 'prototype_1_classic')
         ? 'prototype_1_classic'
         : 'prototype_2_adaptive_brain';
     } else if (arg === '--prototype' && i + 1 < args.length) {
       const pr = args[++i].toLowerCase();
-      prototype = (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
+      prototype = (pr.includes('4') || pr.includes('omni') || pr === 'prototype_4_omni_synthesis')
+        ? 'prototype_4_omni_synthesis'
+        : (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
         ? 'prototype_3_neural_mesh'
         : (pr.includes('1') || pr === 'prototype_1_classic')
         ? 'prototype_1_classic'
@@ -936,7 +940,9 @@ async function runMultiDayWindowReplay() {
   console.log(`Starting Capital:     ₹${capital.toLocaleString('en-IN')}`);
   console.log(`Risk Profile:         ${profile.toUpperCase()}`);
   console.log(`Engine Prototype:     ${
-    prototype === 'prototype_3_neural_mesh'
+    prototype === 'prototype_4_omni_synthesis'
+      ? 'PROTOTYPE 4 (Omni-Synaptic Master Synthesis - Target: >=₹1,000/mo Avg)'
+      : prototype === 'prototype_3_neural_mesh'
       ? 'PROTOTYPE 3 (Synaptic Neural Web Mesh - Target: ₹1,000/mo Avg)'
       : prototype === 'prototype_1_classic'
       ? 'PROTOTYPE 1 (Classic Benchmark Baseline - ₹29,005)'

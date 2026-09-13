@@ -701,7 +701,20 @@ export interface PilotActionLog {
   status: 'EXECUTED' | 'THROTTLED' | 'BLOCKED' | 'PENDING';
 }
 
-export type PilotPrototypeVersion = 'prototype_1_classic' | 'prototype_2_adaptive_brain' | 'prototype_3_neural_mesh';
+export type PilotPrototypeVersion = 'prototype_1_classic' | 'prototype_2_adaptive_brain' | 'prototype_3_neural_mesh' | 'prototype_4_omni_synthesis';
+
+export interface OmniSynthesisTelemetry {
+  monthlyPnlPace: number;          // Current pace towards ₹1000/mo (0 - 100%)
+  monthlyTargetStatus: 'ON_TRACK' | 'AGGRESSIVE_EDGE_FOCUS' | 'PROFIT_VAULT_LOCKED' | 'DEFENSIVE_RECOVERY';
+  activePosture: 'ALPHA_EXPANSION_HURDLE' | 'BALANCED_COMPOUNDING' | 'PROFIT_VAULT_SHIELD' | 'CAPITAL_DEFENSE_LOCKED';
+  dailyLossCount: number;          // Circuit breaker tracking: 1 loss = 50% risk, 2 losses = circuit break
+  madsPrunedCount: number;         // Count of micro-loss cuts
+  highwayRunnerCount: number;      // Count of 3.5-5.5 ATR runner positions
+  feeArmorVetoCount: number;       // Count of low-expectancy trades blocked
+  dynamicKellyLeverage: number;    // Continuous Kelly leverage multiplier (1.0x to 4.5x)
+  compositeAlphaScore: number;     // 0 - 100 synthesis conviction
+  lastEvaluatedAt: number;
+}
 
 export interface SynapticNeuronActivations {
   macroBreadth: number;       // N1: [-1.0, 1.0] Fleet advance/decline & VWAP breadth
@@ -760,6 +773,7 @@ export interface AutonomousPilotState {
   prototypeVersion?: PilotPrototypeVersion;
   rollingMonthlyContext?: RollingMonthlyPnlContext;
   neuralWebTelemetry?: NeuralWebTelemetry;
+  omniSynthesisTelemetry?: OmniSynthesisTelemetry;
   executionMode: 'full_autonomous' | 'semi_autonomous';
   maxDailyDrawdownPct: number;
   riskPerTradePct: number;

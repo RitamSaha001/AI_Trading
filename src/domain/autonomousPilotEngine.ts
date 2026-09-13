@@ -410,9 +410,10 @@ export function tickAutonomousPilot(
   const ordersToDispatch: AutonomousPilotOrderProposal[] = [];
 
   // 1. Check Circuit Breaker & Prototype Version
-  const prototypeVersion = pilot?.prototypeVersion || 'prototype_2_adaptive_brain';
+  const prototypeVersion = pilot?.prototypeVersion || 'prototype_4_omni_synthesis';
   const isPrototype1 = prototypeVersion === 'prototype_1_classic';
   const isPrototype3 = prototypeVersion === 'prototype_3_neural_mesh';
+  const isPrototype4 = prototypeVersion === 'prototype_4_omni_synthesis';
   const profileKey = isPrototype1 ? 'balanced' : (pilot?.profile || 'balanced');
   const profile = PILOT_PROFILES[profileKey];
   const isEliteRunner = profileKey === 'elite_runner';
@@ -422,27 +423,27 @@ export function tickAutonomousPilot(
   const monthlyGovernor = evaluateMonthlyPnlGovernor(pilot?.rollingMonthlyContext, pv);
   const effectiveCashBufferPct = isPrototype1
     ? profile.targetCashBufferPct
-    : isPrototype3
+    : (isPrototype3 || isPrototype4)
     ? 35
     : monthlyGovernor.targetCashBufferPct;
   const effectiveRiskPerTradePct = isPrototype1
     ? profile.maxRiskPerTradePct
-    : isPrototype3
+    : (isPrototype3 || isPrototype4)
     ? 1.25
     : monthlyGovernor.riskPerTradePct;
   const effectiveMinRiskReward = isPrototype1
     ? profile.minRiskReward
-    : isPrototype3
+    : (isPrototype3 || isPrototype4)
     ? 2.2
     : monthlyGovernor.minRiskReward;
   const effectiveStopLossAtrMult = isPrototype1
     ? profile.stopLossAtrMultiplier
-    : isPrototype3
-    ? 1.6
+    : (isPrototype3 || isPrototype4)
+    ? 1.5
     : monthlyGovernor.stopLossAtrMultiplier;
   const effectiveTakeProfitAtrMult = isPrototype1
     ? profile.takeProfitAtrMultiplier
-    : isPrototype3
+    : (isPrototype3 || isPrototype4)
     ? 3.5
     : monthlyGovernor.takeProfitAtrMultiplier;
 
@@ -821,9 +822,9 @@ export function tickAutonomousPilot(
       });
     }
 
-    // PROTOTYPE 3: MICROSTRUCTURE ADVERSE DRIFT SYNAPSE (MADS Early Scratch)
+    // PROTOTYPES 3 & 4: MICROSTRUCTURE ADVERSE DRIFT SYNAPSE (MADS Early Scratch)
     const isInitialRiskStage = trancheStage === 0 && currentStop < avgBuyPrice;
-    if (!exitOrderQueued && isPrototype3 && isInitialRiskStage && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    if (!exitOrderQueued && (isPrototype3 || isPrototype4) && isInitialRiskStage && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       const elapsedMinutes = Math.floor((now - (fleetStatus.entryTimestamp || now)) / 60000);
       const adverseDrift = evaluateMicrostructureAdverseDrift(
         avgBuyPrice,
@@ -908,7 +909,7 @@ export function tickAutonomousPilot(
     // Small MIS positions use one exit order. Partial exits would multiply the flat brokerage fee.
     // In Prototype 3: If in SUPER_TREND_HIGHWAY mode (or super trend persistence), expand Target 2 from 2.0 ATR to 3.5 ATR,
     // and widen trailing stop cushion from 0.50 ATR to 1.00 ATR to ride 3.5 - 5.5 ATR expansions!
-    const isSuperTrendRunner = isPrototype3 && (fleetStatus.highwayMode === 'SUPER_TREND_HIGHWAY' || (hurst >= 0.60 && squeezeStatus === 'SQUEEZE_OFF'));
+    const isSuperTrendRunner = (isPrototype3 || isPrototype4) && (fleetStatus.highwayMode === 'SUPER_TREND_HIGHWAY' || (hurst >= 0.60 && squeezeStatus === 'SQUEEZE_OFF'));
     const target2AtrThreshold = isSuperTrendRunner ? 3.50 : thresholds.RATCHET_STAGE_3_ATR;
     const trailBufferAtr = isSuperTrendRunner ? 1.00 : thresholds.UNIFIED_EXIT_PROFIT_TRAIL_ATR;
 
@@ -1183,7 +1184,7 @@ export function tickAutonomousPilot(
   const isCurfewActive = isIndianAsset(UPSTOX_FLEET_ASSETS[0]) && (istMinutes < 600 || istMinutes >= thresholds.SESSION_INTRADAY_ENTRY_CURFEW_MIN);
   const maxConcurrencyLimit = isPrototype1
     ? thresholds.MAX_CONCURRENT_MIS_POSITIONS
-    : isPrototype3
+    : (isPrototype3 || isPrototype4)
     ? 2
     : Math.min(thresholds.MAX_CONCURRENT_MIS_POSITIONS, monthlyGovernor.maxConcurrentPositions);
   const effectiveMaxConcurrent = dailyLossCount >= 1
@@ -1195,6 +1196,8 @@ export function tickAutonomousPilot(
   );
   const maxAllowedDailyEntries = isPrototype1
     ? thresholds.MAX_DAILY_MIS_ENTRIES
+    : isPrototype4
+    ? (dailyLossCount >= 1 ? 2 : 3)
     : isPrototype3
     ? 4
     : monthlyGovernor.maxDailyEntries;
@@ -1729,6 +1732,23 @@ export function tickAutonomousPilot(
     };
   }
 
+  if (candidatePool.length > 0 && isPrototype4 && candidatePool[0].brainDirective.omniDirective && state.autonomousPilot) {
+    const topOmni = candidatePool[0].brainDirective.omniDirective;
+    const currentMonthPnl = pilot?.rollingMonthlyContext?.rollingMonthlyPnl || 0;
+    state.autonomousPilot.omniSynthesisTelemetry = {
+      monthlyPnlPace: topOmni.monthlyTargetStatus === 'PROFIT_VAULT_LOCKED' ? 100 : Math.min(100, Math.max(0, Math.round((currentMonthPnl / 1000) * 100))),
+      monthlyTargetStatus: topOmni.monthlyTargetStatus,
+      activePosture: topOmni.activePosture,
+      dailyLossCount,
+      madsPrunedCount: state.autonomousPilot.omniSynthesisTelemetry?.madsPrunedCount || 0,
+      highwayRunnerCount: state.autonomousPilot.omniSynthesisTelemetry?.highwayRunnerCount || 0,
+      feeArmorVetoCount: state.autonomousPilot.omniSynthesisTelemetry?.feeArmorVetoCount || 0,
+      dynamicKellyLeverage: topOmni.marginMultiplier,
+      compositeAlphaScore: topOmni.compositeAlphaScore,
+      lastEvaluatedAt: now,
+    };
+  }
+
   const dayHasLoss = dailyLossCount > 0;
   const dailyMisEntries = dailyTradesCount;
 
@@ -1842,7 +1862,7 @@ export function tickAutonomousPilot(
 
     let minAciRequired = isPrototype1
       ? cand.brainDirective.minAciThreshold
-      : isPrototype3
+      : (isPrototype3 || isPrototype4)
       ? Math.max(cand.brainDirective.minAciThreshold, 60)
       : Math.max(cand.brainDirective.minAciThreshold, monthlyGovernor.minAciThreshold);
     if (isPrototype3 && cand.brainDirective.neuralWebDirective) {
@@ -1850,6 +1870,14 @@ export function tickAutonomousPilot(
         continue;
       }
       if (cand.brainDirective.neuralWebDirective.neuralAlphaScore < 60.0) {
+        continue;
+      }
+    }
+    if (isPrototype4 && cand.brainDirective.omniDirective) {
+      if (cand.brainDirective.omniDirective.actionPermission !== 'PERMITTED') {
+        continue;
+      }
+      if (cand.brainDirective.omniDirective.compositeAlphaScore < 60.0) {
         continue;
       }
     }
@@ -2062,7 +2090,9 @@ export function tickAutonomousPilot(
     const baseRiskCapital = pv * (effectiveRiskPerTradePct / 100);
     const convictionBoost = cand.brainDirective?.riskBudgetMultiplier ?? ((ranked?.alphaConvictionIndex || 0) >= 60 ? 1.15 : 1.0);
     if (convictionBoost <= 0) continue;
-    const riskCap = (isPrototype3 && cand.brainDirective?.neuralWebDirective)
+    const riskCap = (isPrototype4 && cand.brainDirective?.omniDirective)
+      ? cand.brainDirective.omniDirective.maxRiskRupees
+      : (isPrototype3 && cand.brainDirective?.neuralWebDirective)
       ? cand.brainDirective.neuralWebDirective.maxRiskRupees
       : aci >= 75 ? 350 : aci >= 68 ? 280 : 200;
     const maxRiskCapital = Math.min(riskCap, baseRiskCapital * kellyRes.recommendedSizeMultiplier * convictionBoost);
@@ -2340,6 +2370,16 @@ export function tickAutonomousPilot(
       volumeSurgeRatio: cand.volumeSurgeRatio,
       alphaRank: ranked?.rank,
       alphaConvictionIndex: ranked?.alphaConvictionIndex,
+      highwayMode: (isPrototype4 && cand.brainDirective?.omniDirective)
+        ? (cand.brainDirective.omniDirective.highwayMode as any)
+        : (isPrototype3 && cand.brainDirective?.neuralWebDirective)
+        ? cand.brainDirective.neuralWebDirective.highwayMode
+        : undefined,
+      neuralAlphaScore: (isPrototype4 && cand.brainDirective?.omniDirective)
+        ? cand.brainDirective.omniDirective.compositeAlphaScore
+        : (isPrototype3 && cand.brainDirective?.neuralWebDirective)
+        ? cand.brainDirective.neuralWebDirective.neuralAlphaScore
+        : undefined,
     };
 
     newActionLogs.push({

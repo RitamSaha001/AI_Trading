@@ -18,6 +18,7 @@ import { SectorRankingResult } from './sectorMomentumEngine';
 import { MultiTimeframeConfluenceResult } from './multiTimeframeConfluence';
 import { VWAPBands } from './vwapBandsEngine';
 import { NeuralWebDirective, evaluateSynapticNeuralWeb } from './synapticNeuralWeb';
+import { OmniSynthesisDirective, evaluateOmniMasterSynthesis } from './omniMasterSynthesis';
 import * as thresholds from './config/thresholds';
 
 // ============================================================================
@@ -91,6 +92,7 @@ export interface BrainDirective {
   trancheTargets: TrancheTargetConfig;
   maxStagnancyMinutes: number;        // Dead trade exit limit (minutes)
   neuralWebDirective?: NeuralWebDirective;
+  omniDirective?: OmniSynthesisDirective;
   rationale: string;
 }
 
@@ -336,6 +338,52 @@ export function evaluateStrategyMasterBrain(inputs: MasterBrainInputs): BrainDir
       directive.maxStagnancyMinutes = neuralDirective.maxStagnancyMinutes;
       directive.minAciThreshold = Math.max(directive.minAciThreshold, 60);
       directive.rationale = `${directive.rationale} [Neural Mesh: NAC ${neuralDirective.neuralAlphaScore}/100 | ${neuralDirective.highwayMode} | Margin ${neuralDirective.marginMultiplier}x]`;
+    }
+  }
+
+  // PROTOTYPE 4: OMNI-SYNAPTIC MASTER SYNTHESIS INTEGRATION
+  if (inputs.prototypeVersion === 'prototype_4_omni_synthesis') {
+    const omniDirective = evaluateOmniMasterSynthesis({
+      istMinutes,
+      marketPrice,
+      dayOpenPrice,
+      vwap,
+      atr,
+      hurst,
+      squeezeStatus,
+      volumeSurgeRatio: inputs.volumeSurgeRatio ?? 1.5,
+      hasInstitutionalVolume: inputs.hasInstitutionalVolume ?? false,
+      ouZScore,
+      macroBreadth,
+      sectorRank,
+      sectorAvgChange,
+      sectorAdvanceRatio,
+      mtfConfluence,
+      vwapBands,
+      reputationScore: inputs.reputationScore ?? 100,
+      intradayDailyPnlContext: intradayPnlContext,
+      rollingMonthlyContext: inputs.rollingMonthlyContext,
+      isSystemicShock,
+      projectedNotional: inputs.projectedNotional ?? 35000,
+      projectedQuantity: inputs.projectedQuantity ?? 10,
+      isDeliveryHolding: inputs.isDeliveryHolding ?? false,
+      dailyLossCount: intradayPnlContext ? (intradayPnlContext.dailyLossCount ?? 0) : 0,
+    });
+
+    directive.omniDirective = omniDirective;
+
+    if (omniDirective.actionPermission !== 'PERMITTED') {
+      directive.actionPermission = 'BLOCKED_STAND_ASIDE';
+      directive.minAciThreshold = 999;
+      directive.rationale = omniDirective.rationale;
+    } else {
+      directive.marginMultiplier = omniDirective.marginMultiplier;
+      directive.riskBudgetMultiplier = omniDirective.riskBudgetMultiplier;
+      directive.trancheTargets = omniDirective.trancheTargets;
+      directive.maxVwapExtensionAtr = omniDirective.maxVwapExtensionAtr;
+      directive.maxStagnancyMinutes = omniDirective.maxStagnancyMinutes;
+      directive.minAciThreshold = Math.max(directive.minAciThreshold, 60);
+      directive.rationale = `${directive.rationale} [Omni-Synthesis: CAS ${omniDirective.compositeAlphaScore}/100 | ${omniDirective.highwayMode} | ${omniDirective.activePosture} | Margin ${omniDirective.marginMultiplier}x]`;
     }
   }
 

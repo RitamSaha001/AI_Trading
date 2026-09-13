@@ -15,4 +15,5 @@ export * from './vwapBandsEngine';
 export * from './dayTypeClassifier';
 export * from './strategyMasterBrain';
 export * from './synapticNeuralWeb';
+export * from './omniMasterSynthesis';
 export * as thresholds from './config/thresholds';

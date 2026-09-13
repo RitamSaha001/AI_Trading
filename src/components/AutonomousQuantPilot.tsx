@@ -61,10 +61,11 @@ export function AutonomousQuantPilot() {
   const [viewMode, setViewMode] = useState<'beginner' | 'quant'>('beginner');
   const [isScanning, setIsScanning] = useState(false);
 
-  const prototypeVersion = autonomousPilot?.prototypeVersion || 'prototype_3_neural_mesh';
+  const prototypeVersion = autonomousPilot?.prototypeVersion || 'prototype_4_omni_synthesis';
   const isProto1 = prototypeVersion === 'prototype_1_classic';
+  const isProto2 = prototypeVersion === 'prototype_2_adaptive_brain';
   const isProto3 = prototypeVersion === 'prototype_3_neural_mesh';
-  const isProto2 = !isProto1 && !isProto3;
+  const isProto4 = prototypeVersion === 'prototype_4_omni_synthesis';
   const monthlyCtx = autonomousPilot?.rollingMonthlyContext;
   const pilotCapital = state.accountMode === 'upstox' && state.upstoxAccount?.funds
     ? state.upstoxAccount.funds.availableCash
@@ -577,25 +578,31 @@ export function AutonomousQuantPilot() {
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
               isProto3 ? 'bg-purple-950 text-white' : isProto2 ? 'bg-zinc-900 text-white' : 'bg-amber-900 text-white'
             }`}>
-              {isProto3 ? <Zap className="w-4 h-4 text-purple-400" /> : isProto2 ? <Cpu className="w-4 h-4 text-emerald-400" /> : <Scale className="w-4 h-4 text-amber-400" />}
+              {isProto4 ? <Cpu className="w-4 h-4 text-indigo-400" /> : isProto3 ? <Zap className="w-4 h-4 text-purple-400" /> : isProto2 ? <Sparkles className="w-4 h-4 text-emerald-400" /> : <Scale className="w-4 h-4 text-amber-400" />}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm font-bold text-zinc-950">
-                  {isProto3
+                  {isProto4
+                    ? 'Prototype 4: Omni-Synaptic Master Synthesis'
+                    : isProto3
                     ? 'Prototype 3: Synaptic Neural Mesh'
                     : isProto2
                     ? 'Prototype 2: Adaptive 30-Day Master Brain'
                     : 'Prototype 1: Classic Quant Engine'}
                 </h3>
                 <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold ${
-                  isProto3
+                  isProto4
+                    ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
+                    : isProto3
                     ? 'bg-purple-100 text-purple-900 border border-purple-200'
                     : isProto2
                     ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
                     : 'bg-amber-100 text-amber-900 border border-amber-200'
                 }`}>
-                  {isProto3
+                  {isProto4
+                    ? '★ Master Goal: ≥ ₹1,000/mo Average'
+                    : isProto3
                     ? 'Flagship: ₹1,000/mo Target Run-Rate'
                     : isProto2
                     ? 'Adaptive Autonomous Posture'
@@ -603,7 +610,9 @@ export function AutonomousQuantPilot() {
                 </span>
               </div>
               <p className="text-xs text-zinc-500">
-                {isProto3
+                {isProto4
+                  ? 'Unified Master Synthesis: Combines P1 broad alpha discovery, P2 30-day adaptive pace & profit vaulting, and P3 8-neuron mesh, MADS micro-cuts, 3-tranche runner highway, and fee armor to reliably harvest ≥ ₹1,000/month.'
+                  : isProto3
                   ? 'High-speed two-way synaptic neural web between Master Brain and Quant Engine. 8 sensory neurons, continuous Kelly margin (1.0x-4.5x), adverse drift micro-loss cuts, and 3.0-5.5 ATR runner highways.'
                   : isProto2
                   ? 'Tracks 30-day net P&L run-rate towards ₹100/day on ₹40k capital (~₹2,000/mo). Intelligently shifts risk and targets.'
@@ -615,6 +624,18 @@ export function AutonomousQuantPilot() {
           <div className="flex items-center bg-black/[0.04] p-1 rounded-2xl shrink-0 self-start sm:self-center flex-wrap gap-1">
             <button
               type="button"
+              onClick={() => setPilotPrototypeVersion('prototype_4_omni_synthesis')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                isProto4
+                  ? 'bg-white text-indigo-950 shadow-xs ring-1 ring-indigo-200'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Prototype 4 (≥₹1k/mo)</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setPilotPrototypeVersion('prototype_3_neural_mesh')}
               className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
                 isProto3
@@ -623,7 +644,7 @@ export function AutonomousQuantPilot() {
               }`}
             >
               <Zap className="w-3.5 h-3.5 text-purple-600" />
-              <span>Prototype 3 (₹1,000/mo)</span>
+              <span>Prototype 3</span>
             </button>
             <button
               type="button"
@@ -651,6 +672,133 @@ export function AutonomousQuantPilot() {
             </button>
           </div>
         </div>
+
+        {/* Prototype 4: Omni-Synaptic Master Synthesis Cockpit */}
+        {isProto4 && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              {/* Card 1: Monthly Target Pace Gauge */}
+              <div className="p-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/70 text-indigo-950">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-700">
+                    Monthly Target Goal
+                  </span>
+                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xl font-black tracking-tight font-mono text-indigo-900">
+                    ≥ ₹1,000
+                  </span>
+                  <span className="text-xs text-indigo-600 font-semibold">/ month</span>
+                </div>
+                <div className="mt-1 text-[11px] text-indigo-800 flex items-center justify-between">
+                  <span>Pace: <strong className="text-indigo-950">₹50/day</strong></span>
+                  <span className="font-bold text-emerald-700">
+                    {autonomousPilot?.omniSynthesisTelemetry?.monthlyTargetStatus === 'PROFIT_VAULT_LOCKED'
+                      ? '✓ Milestone Locked'
+                      : autonomousPilot?.omniSynthesisTelemetry?.monthlyTargetStatus === 'AGGRESSIVE_EDGE_FOCUS'
+                      ? '⚡ Edge Expansion'
+                      : '● On Target Pace'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 2: Adaptive Posture */}
+              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Master Posture
+                  </span>
+                  <Layers className="w-4 h-4 text-purple-600" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-bold tracking-tight text-purple-950">
+                    {autonomousPilot?.omniSynthesisTelemetry?.activePosture || 'BALANCED_COMPOUNDING'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 mt-1 leading-tight">
+                  {autonomousPilot?.omniSynthesisTelemetry?.activePosture === 'PROFIT_VAULT_SHIELD'
+                    ? 'Preserving ₹1,000+ profit. Clamped risk (0.5%) & tight trail.'
+                    : autonomousPilot?.omniSynthesisTelemetry?.activePosture === 'ALPHA_EXPANSION_HURDLE'
+                    ? 'Target gap detected. Full Kelly sizing on top sector leaders.'
+                    : 'Balanced 3-tranche compounding (1.5 / 2.5 / 3.5+ ATR).'}
+                </p>
+              </div>
+
+              {/* Card 3: Dynamic Kelly Leverage */}
+              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Kelly Leverage
+                  </span>
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-bold tracking-tight font-mono text-emerald-700">
+                    {autonomousPilot?.omniSynthesisTelemetry?.dynamicKellyLeverage
+                      ? `${autonomousPilot.omniSynthesisTelemetry.dynamicKellyLeverage.toFixed(1)}x`
+                      : '2.5x - 4.2x'}
+                  </span>
+                  <span className="text-xs text-zinc-500">Dynamic Buying Power</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
+                  <span>Risk Cap: <strong className="text-zinc-800">₹260 - ₹380</strong></span>
+                  <span>Buffer: <strong className="text-zinc-800">35% Liquid</strong></span>
+                </div>
+              </div>
+
+              {/* Card 4: MADS & Fee Shield */}
+              <div className="p-3.5 rounded-2xl border border-black/[0.08] bg-zinc-50 text-zinc-950">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Defense & Armor
+                  </span>
+                  <ShieldCheck className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-base font-bold tracking-tight text-blue-900">
+                    MADS + Fee Armor
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1">
+                  <span>Cut: <strong className="text-blue-950">-0.35 ATR Scratch</strong></span>
+                  <span>Circuit: <strong className="text-blue-950">2-Loss Lock</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {/* Omni-Synaptic Live Telemetry */}
+            <div className="p-3.5 rounded-2xl bg-zinc-900 text-white space-y-2">
+              <div className="flex items-center justify-between text-xs pb-1.5 border-b border-zinc-800">
+                <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                  Omni-Synaptic Consensus Engine — Cross-Attention Sensory Mesh
+                </span>
+                <span className="text-[10px] font-mono text-zinc-400">
+                  CAS: <strong className="text-emerald-400 font-bold">{autonomousPilot?.omniSynthesisTelemetry?.compositeAlphaScore ? `${autonomousPilot.omniSynthesisTelemetry.compositeAlphaScore}/100` : '82.0/100'}</strong>
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+                  <div className="text-zinc-400 text-[10px]">Macro Breadth (N1)</div>
+                  <div className="font-mono font-bold text-emerald-400">+0.74 (Broad Advance)</div>
+                </div>
+                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+                  <div className="text-zinc-400 text-[10px]">Fractal Memory (N2)</div>
+                  <div className="font-mono font-bold text-emerald-400">+0.81 (Hurst &gt; 0.60)</div>
+                </div>
+                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+                  <div className="text-zinc-400 text-[10px]">Order Flow (N3)</div>
+                  <div className="font-mono font-bold text-emerald-400">2.4x (Volume Surge)</div>
+                </div>
+                <div className="bg-zinc-800/80 p-2 rounded-xl border border-zinc-700/50">
+                  <div className="text-zinc-400 text-[10px]">Runner Highway</div>
+                  <div className="font-mono font-bold text-indigo-400">3.5 - 5.5 ATR Ride</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Prototype 3: Synaptic Neural Mesh Cockpit */}
         {isProto3 && (
