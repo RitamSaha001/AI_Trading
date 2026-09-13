@@ -12,11 +12,12 @@
  * with strict risk bounds (<= ₹400-500/trade, <= 2.0-2.5% max drawdown, 0 overnight risk).
  */
 
-import { PilotStrategyKind, Market, Asset, MasterBrainAdaptivePosture, RollingMonthlyPnlContext } from '../../types';
+import { PilotStrategyKind, Market, Asset, MasterBrainAdaptivePosture, RollingMonthlyPnlContext, PilotPrototypeVersion } from '../../types';
 import { FleetMacroBreadthResult } from './macroRegimeEngine';
 import { SectorRankingResult } from './sectorMomentumEngine';
 import { MultiTimeframeConfluenceResult } from './multiTimeframeConfluence';
 import { VWAPBands } from './vwapBandsEngine';
+import { NeuralWebDirective, evaluateSynapticNeuralWeb } from './synapticNeuralWeb';
 import * as thresholds from './config/thresholds';
 
 // ============================================================================
@@ -89,6 +90,7 @@ export interface BrainDirective {
   downsizingAllowed: boolean;         // Graceful downsizing if cash is tight
   trancheTargets: TrancheTargetConfig;
   maxStagnancyMinutes: number;        // Dead trade exit limit (minutes)
+  neuralWebDirective?: NeuralWebDirective;
   rationale: string;
 }
 
@@ -170,6 +172,14 @@ export interface MasterBrainInputs {
   vwapBands?: VWAPBands;
   isSystemicShock?: boolean;
   intradayPnlContext?: IntradayDailyPnlContext;
+  prototypeVersion?: PilotPrototypeVersion;
+  volumeSurgeRatio?: number;
+  hasInstitutionalVolume?: boolean;
+  reputationScore?: number;
+  rollingMonthlyContext?: RollingMonthlyPnlContext;
+  projectedNotional?: number;
+  projectedQuantity?: number;
+  isDeliveryHolding?: boolean;
 }
 
 /**
@@ -279,11 +289,57 @@ export function evaluateStrategyMasterBrain(inputs: MasterBrainInputs): BrainDir
     dayOpenPrice
   );
 
+  let directive = baseDirective;
   if (intradayPnlContext) {
-    return applyIntradayPnlSupervisor(baseDirective, intradayPnlContext);
+    directive = applyIntradayPnlSupervisor(baseDirective, intradayPnlContext);
   }
 
-  return baseDirective;
+  // PROTOTYPE 3: SYNAPTIC NEURAL WEB INTEGRATION
+  if (inputs.prototypeVersion === 'prototype_3_neural_mesh') {
+    const neuralDirective = evaluateSynapticNeuralWeb({
+      istMinutes,
+      marketPrice,
+      dayOpenPrice,
+      vwap,
+      atr,
+      hurst,
+      squeezeStatus,
+      volumeSurgeRatio: inputs.volumeSurgeRatio ?? 1.5,
+      hasInstitutionalVolume: inputs.hasInstitutionalVolume ?? false,
+      ouZScore,
+      macroBreadth,
+      sectorRank,
+      sectorAvgChange,
+      sectorAdvanceRatio,
+      mtfConfluence,
+      vwapBands,
+      reputationScore: inputs.reputationScore ?? 100,
+      intradayDailyPnlContext: intradayPnlContext,
+      rollingMonthlyContext: inputs.rollingMonthlyContext,
+      isSystemicShock,
+      projectedNotional: inputs.projectedNotional ?? 35000,
+      projectedQuantity: inputs.projectedQuantity ?? 10,
+      isDeliveryHolding: inputs.isDeliveryHolding ?? false,
+    });
+
+    directive.neuralWebDirective = neuralDirective;
+
+    if (neuralDirective.actionPermission !== 'PERMITTED') {
+      directive.actionPermission = 'BLOCKED_STAND_ASIDE';
+      directive.minAciThreshold = 999;
+      directive.rationale = `[Neural Mesh Synapse] ${neuralDirective.rationale}`;
+    } else {
+      directive.marginMultiplier = neuralDirective.marginMultiplier;
+      directive.riskBudgetMultiplier = neuralDirective.riskBudgetMultiplier;
+      directive.trancheTargets = neuralDirective.trancheTargets;
+      directive.maxVwapExtensionAtr = neuralDirective.maxVwapExtensionAtr;
+      directive.maxStagnancyMinutes = neuralDirective.maxStagnancyMinutes;
+      directive.minAciThreshold = Math.max(directive.minAciThreshold, 60);
+      directive.rationale = `${directive.rationale} [Neural Mesh: NAC ${neuralDirective.neuralAlphaScore}/100 | ${neuralDirective.highwayMode} | Margin ${neuralDirective.marginMultiplier}x]`;
+    }
+  }
+
+  return directive;
 }
 
 export interface MonthlyPnlGovernorResult {

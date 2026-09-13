@@ -866,10 +866,18 @@ async function runMultiDayWindowReplay() {
       capital = Number(args[++i]) || 40000;
     } else if (arg.startsWith('--prototype=')) {
       const pr = arg.split('=')[1].toLowerCase();
-      prototype = (pr.includes('1') || pr === 'prototype_1_classic') ? 'prototype_1_classic' : 'prototype_2_adaptive_brain';
+      prototype = (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
+        ? 'prototype_3_neural_mesh'
+        : (pr.includes('1') || pr === 'prototype_1_classic')
+        ? 'prototype_1_classic'
+        : 'prototype_2_adaptive_brain';
     } else if (arg === '--prototype' && i + 1 < args.length) {
       const pr = args[++i].toLowerCase();
-      prototype = (pr.includes('1') || pr === 'prototype_1_classic') ? 'prototype_1_classic' : 'prototype_2_adaptive_brain';
+      prototype = (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
+        ? 'prototype_3_neural_mesh'
+        : (pr.includes('1') || pr === 'prototype_1_classic')
+        ? 'prototype_1_classic'
+        : 'prototype_2_adaptive_brain';
     } else if (arg.startsWith('--profile=')) {
       const p = arg.split('=')[1].toLowerCase();
       if (p === 'conservative' || p === 'balanced' || p === 'momentum' || p === 'elite_runner') {
@@ -921,10 +929,19 @@ async function runMultiDayWindowReplay() {
     tradingDays = getLastNTradingDays(daysCount);
   }
 
-  console.log('='.repeat(80));
-  console.log(`  AUTONOMOUS QUANT PILOT — ${daysCount}-DAY ROLLING FLEET AUDIT`);
-  console.log('='.repeat(80));
-  console.log(`Engine Prototype:     ${prototype === 'prototype_1_classic' ? 'PROTOTYPE 1 (Classic Benchmark Baseline - ₹29,005)' : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'}`);
+  console.log(`\n===============================================================`);
+  console.log(`🚀 AUTONOMOUS FLEET CHRONOLOGICAL REPLAY HARNESS`);
+  console.log(`===============================================================`);
+  console.log(`Days to Replay:       ${daysCount} trading sessions`);
+  console.log(`Starting Capital:     ₹${capital.toLocaleString('en-IN')}`);
+  console.log(`Risk Profile:         ${profile.toUpperCase()}`);
+  console.log(`Engine Prototype:     ${
+    prototype === 'prototype_3_neural_mesh'
+      ? 'PROTOTYPE 3 (Synaptic Neural Web Mesh - Target: ₹1,000/mo Avg)'
+      : prototype === 'prototype_1_classic'
+      ? 'PROTOTYPE 1 (Classic Benchmark Baseline - ₹29,005)'
+      : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'
+  }`);
   console.log(`Execution Venue:      ${broker.toUpperCase()} (${broker === 'flattrade' ? 'Zero Brokerage Retail-Algo Engine' : 'Traditional Discount Broker'})`);
   console.log(`Window Scope:         ${daysCount} Completed Indian Market Trading Sessions`);
   console.log(`Dates Range:          ${tradingDays[0]} → ${tradingDays[tradingDays.length - 1]}`);

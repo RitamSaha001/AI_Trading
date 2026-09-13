@@ -313,10 +313,18 @@ async function main() {
     else if (a === '--capital' && i + 1 < rawArgs.length) capital = Number(rawArgs[++i]) || 40000;
     else if (a.startsWith('--prototype=')) {
       const pr = a.split('=')[1].toLowerCase();
-      prototype = (pr.includes('1') || pr === 'prototype_1_classic') ? 'prototype_1_classic' : 'prototype_2_adaptive_brain';
+      prototype = (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
+        ? 'prototype_3_neural_mesh'
+        : (pr.includes('1') || pr === 'prototype_1_classic')
+        ? 'prototype_1_classic'
+        : 'prototype_2_adaptive_brain';
     } else if (a === '--prototype' && i + 1 < rawArgs.length) {
       const pr = rawArgs[++i].toLowerCase();
-      prototype = (pr.includes('1') || pr === 'prototype_1_classic') ? 'prototype_1_classic' : 'prototype_2_adaptive_brain';
+      prototype = (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
+        ? 'prototype_3_neural_mesh'
+        : (pr.includes('1') || pr === 'prototype_1_classic')
+        ? 'prototype_1_classic'
+        : 'prototype_2_adaptive_brain';
     }
     else if (a.startsWith('--profile=')) profile = a.split('=')[1];
     else if (a === '--profile' && i + 1 < rawArgs.length) profile = rawArgs[++i];
@@ -330,7 +338,13 @@ async function main() {
   console.log('='.repeat(95));
   console.log('  AUTONOMOUS QUANT MASTER BRAIN — 5-YEAR COMPREHENSIVE HISTORICAL AUDIT');
   console.log('='.repeat(95));
-  console.log(`Engine Prototype:   ${prototype === 'prototype_1_classic' ? 'PROTOTYPE 1 (Classic Baseline - ₹29,005)' : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'}`);
+  console.log(`Engine Prototype:   ${
+    prototype === 'prototype_3_neural_mesh'
+      ? 'PROTOTYPE 3 (Synaptic Neural Web Mesh - Target: ₹1,000/mo Avg)'
+      : prototype === 'prototype_1_classic'
+      ? 'PROTOTYPE 1 (Classic Baseline - ₹29,005)'
+      : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'
+  }`);
   console.log(`Historical Scope:   2022-01-03 → 2026-09-11 (1,231 Sessions across 5 Years)`);
   console.log(`Fleet Universe:     100 NIFTY Liquid Equities (1-Minute Historical Candles)`);
   console.log(`Capital Baseline:   ₹${capital.toLocaleString('en-IN')} with 5x MIS Intraday Leverage`);

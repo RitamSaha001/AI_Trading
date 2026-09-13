@@ -14,4 +14,5 @@ export * from './candlestickPatternEngine';
 export * from './vwapBandsEngine';
 export * from './dayTypeClassifier';
 export * from './strategyMasterBrain';
+export * from './synapticNeuralWeb';
 export * as thresholds from './config/thresholds';

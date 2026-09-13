@@ -657,6 +657,8 @@ export interface AssetFleetStatus {
   consecutiveLosses?: number;
   cooldownUntilTimestamp?: number;
   successfulReversions?: number;
+  highwayMode?: 'SUPER_TREND_HIGHWAY' | 'BALANCED_TRAIL' | 'ADVERSE_DRIFT_SHIELD' | 'CAPITAL_LOCK';
+  neuralAlphaScore?: number;
 }
 
 export interface PilotRateLimitStatus {
@@ -699,7 +701,41 @@ export interface PilotActionLog {
   status: 'EXECUTED' | 'THROTTLED' | 'BLOCKED' | 'PENDING';
 }
 
-export type PilotPrototypeVersion = 'prototype_1_classic' | 'prototype_2_adaptive_brain';
+export type PilotPrototypeVersion = 'prototype_1_classic' | 'prototype_2_adaptive_brain' | 'prototype_3_neural_mesh';
+
+export interface SynapticNeuronActivations {
+  macroBreadth: number;       // N1: [-1.0, 1.0] Fleet advance/decline & VWAP breadth
+  fractalPersistence: number; // N2: [-1.0, 1.0] Hurst memory & persistence
+  orderFlowSurge: number;     // N3: [0.0, 1.0] Volume surge ratio & block buying
+  mtfConfluence: number;      // N4: [-1.0, 1.0] 30m trend vs 1m micro alignment
+  sectorTailwind: number;     // N5: [-1.0, 1.0] Sector ranking & relative strength
+  vwapCurvature: number;      // N6: [-1.0, 1.0] Z-score distance from VWAP
+  assetReputation: number;    // N7: [0.0, 1.0] Historical win rate / penalty decay
+  pnlVelocity: number;        // N8: [-1.0, 1.0] Run-rate relative to ₹100/day target
+}
+
+export interface NeuralAttentionWeights {
+  macroAttention: number;
+  fractalAttention: number;
+  orderFlowAttention: number;
+  mtfAttention: number;
+  sectorAttention: number;
+  vwapAttention: number;
+  reputationAttention: number;
+  pnlVelocityAttention: number;
+}
+
+export interface NeuralWebTelemetry {
+  neurons: SynapticNeuronActivations;
+  attention: NeuralAttentionWeights;
+  neuralAlphaScore: number;     // 0 - 100 continuous conviction
+  marginMultiplier: number;     // 1.0x to 4.5x continuous dynamic leverage
+  activeHighwayMode: 'SUPER_TREND_HIGHWAY' | 'BALANCED_TRAIL' | 'ADVERSE_DRIFT_SHIELD' | 'CAPITAL_LOCK';
+  feeArmorVetoCount: number;
+  adverseDriftCutCount: number;
+  runnerExpansionCount: number;
+  lastEvaluatedAt: number;
+}
 
 export type MasterBrainAdaptivePosture =
   | 'MOMENTUM_EXPANSION'      // Pushing for alpha when monthly P&L is low or behind target
@@ -723,6 +759,7 @@ export interface AutonomousPilotState {
   profile: AutonomousPilotProfile;
   prototypeVersion?: PilotPrototypeVersion;
   rollingMonthlyContext?: RollingMonthlyPnlContext;
+  neuralWebTelemetry?: NeuralWebTelemetry;
   executionMode: 'full_autonomous' | 'semi_autonomous';
   maxDailyDrawdownPct: number;
   riskPerTradePct: number;

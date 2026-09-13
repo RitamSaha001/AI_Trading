@@ -53,6 +53,7 @@ import {
   classifyMarketDayType,
   evaluateStrategyMasterBrain,
   evaluateMonthlyPnlGovernor,
+  evaluateMicrostructureAdverseDrift,
   MonthlyPnlGovernorResult,
   BrainDirective,
   IntradayDailyPnlContext,
@@ -411,6 +412,7 @@ export function tickAutonomousPilot(
   // 1. Check Circuit Breaker & Prototype Version
   const prototypeVersion = pilot?.prototypeVersion || 'prototype_2_adaptive_brain';
   const isPrototype1 = prototypeVersion === 'prototype_1_classic';
+  const isPrototype3 = prototypeVersion === 'prototype_3_neural_mesh';
   const profileKey = isPrototype1 ? 'balanced' : (pilot?.profile || 'balanced');
   const profile = PILOT_PROFILES[profileKey];
   const isEliteRunner = profileKey === 'elite_runner';
@@ -420,18 +422,28 @@ export function tickAutonomousPilot(
   const monthlyGovernor = evaluateMonthlyPnlGovernor(pilot?.rollingMonthlyContext, pv);
   const effectiveCashBufferPct = isPrototype1
     ? profile.targetCashBufferPct
+    : isPrototype3
+    ? 35
     : monthlyGovernor.targetCashBufferPct;
   const effectiveRiskPerTradePct = isPrototype1
     ? profile.maxRiskPerTradePct
+    : isPrototype3
+    ? 1.25
     : monthlyGovernor.riskPerTradePct;
   const effectiveMinRiskReward = isPrototype1
     ? profile.minRiskReward
+    : isPrototype3
+    ? 2.2
     : monthlyGovernor.minRiskReward;
   const effectiveStopLossAtrMult = isPrototype1
     ? profile.stopLossAtrMultiplier
+    : isPrototype3
+    ? 1.6
     : monthlyGovernor.stopLossAtrMultiplier;
   const effectiveTakeProfitAtrMult = isPrototype1
     ? profile.takeProfitAtrMultiplier
+    : isPrototype3
+    ? 3.5
     : monthlyGovernor.takeProfitAtrMultiplier;
 
   if (cbCheck.tripped) {
@@ -809,6 +821,51 @@ export function tickAutonomousPilot(
       });
     }
 
+    // PROTOTYPE 3: MICROSTRUCTURE ADVERSE DRIFT SYNAPSE (MADS Early Scratch)
+    const isInitialRiskStage = trancheStage === 0 && currentStop < avgBuyPrice;
+    if (!exitOrderQueued && isPrototype3 && isInitialRiskStage && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+      const elapsedMinutes = Math.floor((now - (fleetStatus.entryTimestamp || now)) / 60000);
+      const adverseDrift = evaluateMicrostructureAdverseDrift(
+        avgBuyPrice,
+        price,
+        atr,
+        elapsedMinutes,
+        vwap,
+        highWaterMark,
+        trancheStage
+      );
+
+      if (adverseDrift.shouldScratch) {
+        ordersToDispatch.push({
+          asset,
+          side: 'sell',
+          amount: currentHolding,
+          price: alignToTickSize(price, asset),
+          type: 'market',
+          product: exitProduct,
+          strategyName: `Auto-Pilot: MADS Micro-Loss Exit`,
+          reason: adverseDrift.reason,
+        });
+
+        rateLimits.requestsThisMinute++;
+        rateLimits.lastDispatchedAt = now;
+        lifecycleState = 'COOLDOWN';
+        trancheStage = 0;
+        exitOrderQueued = true;
+
+        newActionLogs.push({
+          id: `log_mads_scratch_${asset}_${now}`,
+          timestamp: now,
+          asset,
+          action: 'STOP_LOSS' as any,
+          strategy,
+          detail: adverseDrift.reason,
+          price,
+          status: 'EXECUTED',
+        });
+      }
+    }
+
     // Micro-Loss Defense: VWAP Structure Invalidation Exit for Breakout / Trend Strategies
     // If a trend breakout trade (Hurst Trend Rider, Candle Price Action, Momentum Scalper)
     // drops and closes below VWAP (price < vwap * 0.9985) while still in initial risk (trancheStage === 0 && currentStop < avgBuyPrice),
@@ -816,7 +873,6 @@ export function tickAutonomousPilot(
     // Liquidate immediately with a micro-loss (~₹50-120) instead of riding it all the way down to a full -1.5 ATR stop loss (~₹350)!
     const isBreakoutStrategy = (strategy as string) === 'Hurst Trend Rider' || (strategy as string) === 'Candle Price Action' || (strategy as string) === 'Momentum Scalper';
     const isVwapBroken = vwap > 0 && price < vwap * 0.9985;
-    const isInitialRiskStage = trancheStage === 0 && currentStop < avgBuyPrice;
 
     if (!exitOrderQueued && isBreakoutStrategy && isVwapBroken && isInitialRiskStage && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       const vwapInvalidationReason = `Breakout Failed: Price (₹${price.toFixed(2)}) broke below institutional VWAP support (₹${vwap.toFixed(2)}). Micro-loss capital defense exit.`;
@@ -850,9 +906,15 @@ export function tickAutonomousPilot(
     }
 
     // Small MIS positions use one exit order. Partial exits would multiply the flat brokerage fee.
+    // In Prototype 3: If in SUPER_TREND_HIGHWAY mode (or super trend persistence), expand Target 2 from 2.0 ATR to 3.5 ATR,
+    // and widen trailing stop cushion from 0.50 ATR to 1.00 ATR to ride 3.5 - 5.5 ATR expansions!
+    const isSuperTrendRunner = isPrototype3 && (fleetStatus.highwayMode === 'SUPER_TREND_HIGHWAY' || (hurst >= 0.60 && squeezeStatus === 'SQUEEZE_OFF'));
+    const target2AtrThreshold = isSuperTrendRunner ? 3.50 : thresholds.RATCHET_STAGE_3_ATR;
+    const trailBufferAtr = isSuperTrendRunner ? 1.00 : thresholds.UNIFIED_EXIT_PROFIT_TRAIL_ATR;
+
     const isTarget1Cleared = dynamicRatchet.gainAtrMultiples >= thresholds.RATCHET_STAGE_2_ATR;
-    const isTarget2Hit = dynamicRatchet.gainAtrMultiples >= thresholds.RATCHET_STAGE_3_ATR;
-    const isUnifiedTrailStopHit = isTarget1Cleared && price <= (highWaterMark - atr * thresholds.UNIFIED_EXIT_PROFIT_TRAIL_ATR);
+    const isTarget2Hit = dynamicRatchet.gainAtrMultiples >= target2AtrThreshold;
+    const isUnifiedTrailStopHit = isTarget1Cleared && price <= (highWaterMark - atr * trailBufferAtr);
 
     if (!exitOrderQueued && usesUnifiedExit && (isTarget2Hit || isUnifiedTrailStopHit) && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       const exitReason = isTarget2Hit
@@ -1121,6 +1183,8 @@ export function tickAutonomousPilot(
   const isCurfewActive = isIndianAsset(UPSTOX_FLEET_ASSETS[0]) && (istMinutes < 600 || istMinutes >= thresholds.SESSION_INTRADAY_ENTRY_CURFEW_MIN);
   const maxConcurrencyLimit = isPrototype1
     ? thresholds.MAX_CONCURRENT_MIS_POSITIONS
+    : isPrototype3
+    ? 2
     : Math.min(thresholds.MAX_CONCURRENT_MIS_POSITIONS, monthlyGovernor.maxConcurrentPositions);
   const effectiveMaxConcurrent = dailyLossCount >= 1
     ? 1
@@ -1129,7 +1193,11 @@ export function tickAutonomousPilot(
     0,
     effectiveMaxConcurrent - activePositionCount - pendingBuyAssets.size
   );
-  const maxAllowedDailyEntries = isPrototype1 ? thresholds.MAX_DAILY_MIS_ENTRIES : monthlyGovernor.maxDailyEntries;
+  const maxAllowedDailyEntries = isPrototype1
+    ? thresholds.MAX_DAILY_MIS_ENTRIES
+    : isPrototype3
+    ? 4
+    : monthlyGovernor.maxDailyEntries;
   const canScreenCandidates = !isCurfewActive &&
     availableConcurrentSlots > 0 &&
     dailyTradesCount < maxAllowedDailyEntries &&
@@ -1517,6 +1585,13 @@ export function tickAutonomousPilot(
       vwapBands,
       isSystemicShock,
       intradayPnlContext,
+      prototypeVersion,
+      volumeSurgeRatio,
+      hasInstitutionalVolume,
+      reputationScore: assetFleet?.reputationScore ?? 100,
+      rollingMonthlyContext: pilot?.rollingMonthlyContext,
+      projectedNotional: 35000,
+      projectedQuantity: Math.max(1, Math.floor(35000 / price)),
     });
 
     if (hasEntrySignal) {
@@ -1610,6 +1685,8 @@ export function tickAutonomousPilot(
       squeezeStatus,
       vwap,
       volumeSurgeRatio,
+      highwayMode: brainDirective.neuralWebDirective?.highwayMode,
+      neuralAlphaScore: brainDirective.neuralWebDirective?.neuralAlphaScore,
     };
   }
 
@@ -1636,6 +1713,21 @@ export function tickAutonomousPilot(
     const rankB = alphaByAsset.get(b.asset)?.rank ?? 999;
     return rankA - rankB;
   });
+
+  if (candidatePool.length > 0 && isPrototype3 && candidatePool[0].brainDirective.neuralWebDirective && state.autonomousPilot) {
+    const topNeural = candidatePool[0].brainDirective.neuralWebDirective;
+    state.autonomousPilot.neuralWebTelemetry = {
+      neurons: topNeural.neurons,
+      attention: topNeural.attention,
+      neuralAlphaScore: topNeural.neuralAlphaScore,
+      marginMultiplier: topNeural.marginMultiplier,
+      activeHighwayMode: topNeural.highwayMode,
+      feeArmorVetoCount: state.autonomousPilot.neuralWebTelemetry?.feeArmorVetoCount || 0,
+      adverseDriftCutCount: state.autonomousPilot.neuralWebTelemetry?.adverseDriftCutCount || 0,
+      runnerExpansionCount: state.autonomousPilot.neuralWebTelemetry?.runnerExpansionCount || 0,
+      lastEvaluatedAt: now,
+    };
+  }
 
   const dayHasLoss = dailyLossCount > 0;
   const dailyMisEntries = dailyTradesCount;
@@ -1750,7 +1842,17 @@ export function tickAutonomousPilot(
 
     let minAciRequired = isPrototype1
       ? cand.brainDirective.minAciThreshold
+      : isPrototype3
+      ? Math.max(cand.brainDirective.minAciThreshold, 60)
       : Math.max(cand.brainDirective.minAciThreshold, monthlyGovernor.minAciThreshold);
+    if (isPrototype3 && cand.brainDirective.neuralWebDirective) {
+      if (cand.brainDirective.neuralWebDirective.actionPermission !== 'PERMITTED') {
+        continue;
+      }
+      if (cand.brainDirective.neuralWebDirective.neuralAlphaScore < 60.0) {
+        continue;
+      }
+    }
     if (isEliteRunner) {
       minAciRequired = Math.max(minAciRequired, 72);
     }
@@ -1960,7 +2062,9 @@ export function tickAutonomousPilot(
     const baseRiskCapital = pv * (effectiveRiskPerTradePct / 100);
     const convictionBoost = cand.brainDirective?.riskBudgetMultiplier ?? ((ranked?.alphaConvictionIndex || 0) >= 60 ? 1.15 : 1.0);
     if (convictionBoost <= 0) continue;
-    const riskCap = aci >= 75 ? 350 : aci >= 68 ? 280 : 200;
+    const riskCap = (isPrototype3 && cand.brainDirective?.neuralWebDirective)
+      ? cand.brainDirective.neuralWebDirective.maxRiskRupees
+      : aci >= 75 ? 350 : aci >= 68 ? 280 : 200;
     const maxRiskCapital = Math.min(riskCap, baseRiskCapital * kellyRes.recommendedSizeMultiplier * convictionBoost);
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
 
