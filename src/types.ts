@@ -699,9 +699,30 @@ export interface PilotActionLog {
   status: 'EXECUTED' | 'THROTTLED' | 'BLOCKED' | 'PENDING';
 }
 
+export type PilotPrototypeVersion = 'prototype_1_classic' | 'prototype_2_adaptive_brain';
+
+export type MasterBrainAdaptivePosture =
+  | 'MOMENTUM_EXPANSION'      // Pushing for alpha when monthly P&L is low or behind target
+  | 'BALANCED_HARVEST'        // Steady on-track compounding
+  | 'CAPITAL_DEFENSE_LOCKED'; // Target reached (~₹100/day pace on ₹40k) -> conservative capital preservation & profit lock
+
+export interface RollingMonthlyPnlContext {
+  rollingMonthlyPnl: number;
+  daysEvaluatedInMonth: number;
+  dailyAvgPnl: number;
+  targetDailyPnl: number;      // Target ₹100.00/day
+  targetMonthlyPnl: number;    // daysEvaluatedInMonth * targetDailyPnl
+  targetPaceRatio: number;     // dailyAvgPnl / targetDailyPnl
+  activePosture: MasterBrainAdaptivePosture;
+  postureRationale: string;
+  lastUpdatedTimestamp?: number;
+}
+
 export interface AutonomousPilotState {
   enabled: boolean;
   profile: AutonomousPilotProfile;
+  prototypeVersion?: PilotPrototypeVersion;
+  rollingMonthlyContext?: RollingMonthlyPnlContext;
   executionMode: 'full_autonomous' | 'semi_autonomous';
   maxDailyDrawdownPct: number;
   riskPerTradePct: number;

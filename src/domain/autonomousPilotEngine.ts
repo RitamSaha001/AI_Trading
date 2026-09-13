@@ -25,6 +25,7 @@ import {
   calculateDynamicProfitRatchet,
   evaluateSessionTimingQuality,
   SessionTimingQuality,
+  isEarningsSeasonWindow,
   calculateCrossSectionalAlphaRanking,
   calculateSmartLimitPrice,
   calculateRoundtripFriction,
@@ -51,6 +52,8 @@ import {
   evaluateVWAPMeanReversion,
   classifyMarketDayType,
   evaluateStrategyMasterBrain,
+  evaluateMonthlyPnlGovernor,
+  MonthlyPnlGovernorResult,
   BrainDirective,
   IntradayDailyPnlContext,
   thresholds,
@@ -116,6 +119,7 @@ export interface AutonomousPilotTickResult {
   ordersToCancel: string[];
   circuitBreakerTripped: boolean;
   tripReason?: string;
+  monthlyGovernorResult?: MonthlyPnlGovernorResult;
 }
 
 /**
@@ -404,11 +408,31 @@ export function tickAutonomousPilot(
   const newActionLogs: PilotActionLog[] = [];
   const ordersToDispatch: AutonomousPilotOrderProposal[] = [];
 
-  // 1. Check Circuit Breaker
-  const profileKey = pilot?.profile || 'conservative';
+  // 1. Check Circuit Breaker & Prototype Version
+  const prototypeVersion = pilot?.prototypeVersion || 'prototype_2_adaptive_brain';
+  const isPrototype1 = prototypeVersion === 'prototype_1_classic';
+  const profileKey = isPrototype1 ? 'balanced' : (pilot?.profile || 'balanced');
   const profile = PILOT_PROFILES[profileKey];
   const isEliteRunner = profileKey === 'elite_runner';
   const cbCheck = checkPilotCircuitBreaker(state, pv, profileKey);
+
+  // Prototype 2: 30-Day Rolling Monthly P&L Governor
+  const monthlyGovernor = evaluateMonthlyPnlGovernor(pilot?.rollingMonthlyContext, pv);
+  const effectiveCashBufferPct = isPrototype1
+    ? profile.targetCashBufferPct
+    : monthlyGovernor.targetCashBufferPct;
+  const effectiveRiskPerTradePct = isPrototype1
+    ? profile.maxRiskPerTradePct
+    : monthlyGovernor.riskPerTradePct;
+  const effectiveMinRiskReward = isPrototype1
+    ? profile.minRiskReward
+    : monthlyGovernor.minRiskReward;
+  const effectiveStopLossAtrMult = isPrototype1
+    ? profile.stopLossAtrMultiplier
+    : monthlyGovernor.stopLossAtrMultiplier;
+  const effectiveTakeProfitAtrMult = isPrototype1
+    ? profile.takeProfitAtrMultiplier
+    : monthlyGovernor.takeProfitAtrMultiplier;
 
   if (cbCheck.tripped) {
     return {
@@ -430,6 +454,7 @@ export function tickAutonomousPilot(
       ordersToCancel: [],
       circuitBreakerTripped: true,
       tripReason: cbCheck.reason,
+      monthlyGovernorResult: monthlyGovernor,
     };
   }
 
@@ -463,6 +488,7 @@ export function tickAutonomousPilot(
       ordersToDispatch: [],
       ordersToCancel: [],
       circuitBreakerTripped: false,
+      monthlyGovernorResult: monthlyGovernor,
     };
   }
 
@@ -474,6 +500,7 @@ export function tickAutonomousPilot(
   const istDate = new Date(now + 330 * 60 * 1000);
   const istMinutes = istDate.getUTCHours() * 60 + istDate.getUTCMinutes();
   const isThursday = istDate.getUTCDay() === 4;
+  const isEarningsSeason = isEarningsSeasonWindow(now);
 
   if (isLiveUpstox && !session.isOpen) {
     return {
@@ -483,6 +510,7 @@ export function tickAutonomousPilot(
       ordersToDispatch: [],
       ordersToCancel: [],
       circuitBreakerTripped: false,
+      monthlyGovernorResult: monthlyGovernor,
     };
   }
 
@@ -494,8 +522,8 @@ export function tickAutonomousPilot(
   // Adaptive Cash Buffer Floor: In active morning & afternoon expansion windows,
   // lower cash buffer floor to 20% to allow multi-slot allocation while preserving safety
   const minCashFloorPct = (timingQuality.phase === 'MORNING_EXPANSION' || timingQuality.phase === 'AFTERNOON_EXPANSION')
-    ? Math.min(profile.targetCashBufferPct, thresholds.ACTIVE_MORNING_CASH_BUFFER_PCT)
-    : Math.max(15, profile.targetCashBufferPct);
+    ? Math.min(effectiveCashBufferPct, thresholds.ACTIVE_MORNING_CASH_BUFFER_PCT)
+    : Math.max(15, effectiveCashBufferPct);
   const minRequiredCash = pv * (minCashFloorPct / 100);
   let allocatableCash = Math.max(0, currentCash - minRequiredCash);
 
@@ -743,7 +771,10 @@ export function tickAutonomousPilot(
       atr,
       elapsedMs,
       volumeSurgeRatio,
-      1.0
+      1.0,
+      isPrototype1,
+      isPrototype1 ? undefined : monthlyGovernor.stagnancyMaxDurationMs,
+      isPrototype1 ? false : monthlyGovernor.allowAdverseDriftCut
     );
 
     let exitOrderQueued = false;
@@ -1087,6 +1118,38 @@ export function tickAutonomousPilot(
     brainDirective: BrainDirective;
   }
 
+  const isCurfewActive = isIndianAsset(UPSTOX_FLEET_ASSETS[0]) && (istMinutes < 600 || istMinutes >= thresholds.SESSION_INTRADAY_ENTRY_CURFEW_MIN);
+  const maxConcurrencyLimit = isPrototype1
+    ? thresholds.MAX_CONCURRENT_MIS_POSITIONS
+    : Math.min(thresholds.MAX_CONCURRENT_MIS_POSITIONS, monthlyGovernor.maxConcurrentPositions);
+  const effectiveMaxConcurrent = dailyLossCount >= 1
+    ? 1
+    : maxConcurrencyLimit;
+  const availableConcurrentSlots = Math.max(
+    0,
+    effectiveMaxConcurrent - activePositionCount - pendingBuyAssets.size
+  );
+  const maxAllowedDailyEntries = isPrototype1 ? thresholds.MAX_DAILY_MIS_ENTRIES : monthlyGovernor.maxDailyEntries;
+  const canScreenCandidates = !isCurfewActive &&
+    availableConcurrentSlots > 0 &&
+    dailyTradesCount < maxAllowedDailyEntries &&
+    allocatableCash >= 2000;
+
+  // Ultra-Fast Candidate Screening Bypass:
+  // If curfew is active, all concurrent slots are occupied, daily entry cap reached, or cash buffer floor is hit,
+  // skip the heavy 100-asset indicator math, fleet macro breadth, and sector ranking calculations completely.
+  if (!canScreenCandidates) {
+    return {
+      updatedFleet,
+      updatedRateLimits: rateLimits,
+      newActionLogs,
+      ordersToDispatch,
+      ordersToCancel,
+      circuitBreakerTripped: false,
+      monthlyGovernorResult: monthlyGovernor,
+    };
+  }
+
   const candidatePool: CandidateSetup[] = [];
 
   // Evaluate Fleet Macro Breadth & Market Regime across all monitored Indian equities
@@ -1115,6 +1178,13 @@ export function tickAutonomousPilot(
     if (currentHolding > 0) continue; // Handled in position management above
 
     const price = market.price;
+    if (isIndianAsset(asset) && price < 80) continue;
+    const existingAssetFleet = state.autonomousPilot?.activeFleet?.[asset];
+    if (existingAssetFleet?.cooldownUntilTimestamp && existingAssetFleet.cooldownUntilTimestamp > now) {
+      continue;
+    }
+    if (pendingBuyAssets.has(asset)) continue;
+
     const strategyResult = determineAssetStrategyAndRegime(market);
     let strategy = strategyResult.strategy;
     const {
@@ -1281,10 +1351,17 @@ export function tickAutonomousPilot(
       continue;
     }
 
-    // 4. Universal 10:00 AM IST Session Curfew: Prohibit ALL new entries before 10:00 AM IST (istMinutes < 600).
-    // Opening 45-minute volatility in Indian equities exhibits 52% WR and high fee drag.
-    if (isIndianAsset(asset) && istMinutes < 600) {
-      continue;
+    // 4. Universal Session Curfew Gates for Indian Equities:
+    // a) Opening Noise Guard: Prohibit all new entries before 10:00 AM IST (istMinutes < 600).
+    // b) Late-Session Entry Curfew: Prohibit entries post 14:00 IST (istMinutes >= 840) due to 15:05 square-off.
+    // Note: Midday (12:20 - 13:00) is defended asymmetrically by the 45-min Stagnancy Stop Contraction
+    // rather than a blanket ban, ensuring legitimate multi-ATR runners (e.g. TCS +₹689, ZYDUSLIFE +₹359)
+    // are 100% preserved while non-expanding midday drifts are liquidated early.
+    if (isIndianAsset(asset)) {
+      if (istMinutes < 600) continue;
+      if (istMinutes >= thresholds.SESSION_INTRADAY_ENTRY_CURFEW_MIN) {
+        continue;
+      }
     }
 
     // 5. Severe Macro Liquidation Defense: Stand aside from long entries during market-wide collapses
@@ -1627,14 +1704,6 @@ export function tickAutonomousPilot(
     return stage === 0 && stop < buyPrice;
   });
 
-  const effectiveMaxConcurrent = (dayHasLoss || dailyLossCount >= 1)
-    ? 1
-    : thresholds.MAX_CONCURRENT_MIS_POSITIONS;
-
-  const availableConcurrentSlots = Math.max(
-    0,
-    effectiveMaxConcurrent - activePositionCount - pendingBuyAssets.size
-  );
   const maxNewEntries = Math.min(allocationDecision.maxPositions, availableConcurrentSlots, 1);
   let dispatchedMisEntries = 0;
 
@@ -1679,7 +1748,9 @@ export function tickAutonomousPilot(
       continue;
     }
 
-    let minAciRequired = cand.brainDirective.minAciThreshold;
+    let minAciRequired = isPrototype1
+      ? cand.brainDirective.minAciThreshold
+      : Math.max(cand.brainDirective.minAciThreshold, monthlyGovernor.minAciThreshold);
     if (isEliteRunner) {
       minAciRequired = Math.max(minAciRequired, 72);
     }
@@ -1688,6 +1759,15 @@ export function tickAutonomousPilot(
     }
     if (isThursday) {
       minAciRequired = Math.max(minAciRequired, 68);
+    }
+    // Earnings Season Macro Throttle: Require ACI >= 70 during high-volatility corporate earnings windows (Prototype 2 only)
+    if (!isPrototype1 && isEarningsSeason) {
+      minAciRequired = Math.max(minAciRequired, thresholds.EARNINGS_SEASON_MIN_ACI);
+    }
+    // Impaired Dynamic Reputation: Require ACI >= 75 for degraded assets
+    const candAssetFleet = state.autonomousPilot?.activeFleet?.[asset];
+    if ((candAssetFleet?.reputationScore ?? 100) < 75) {
+      minAciRequired = Math.max(minAciRequired, 75);
     }
     if ((ranked?.alphaConvictionIndex || 0) < minAciRequired) {
       continue;
@@ -1702,7 +1782,7 @@ export function tickAutonomousPilot(
     if (alreadyTradedToday) {
       continue;
     }
-    if (dailyMisEntries + dispatchedMisEntries >= thresholds.MAX_DAILY_MIS_ENTRIES) {
+    if (dailyMisEntries + dispatchedMisEntries >= maxAllowedDailyEntries) {
       const recentDailyCap = state.autonomousPilot?.actionLogs?.find(
         (l) => l.asset === asset && l.action === 'SKIPPED' && l.detail?.includes('Daily MIS entry governor') && now - l.timestamp < 300_000
       );
@@ -1713,14 +1793,20 @@ export function tickAutonomousPilot(
           asset,
           action: 'SKIPPED',
           strategy,
-          detail: `Daily MIS entry governor: ${thresholds.MAX_DAILY_MIS_ENTRIES} entries already dispatched today. No new intraday position.`,
+          detail: `Daily MIS entry governor: ${maxAllowedDailyEntries} entries already dispatched today. No new intraday position.`,
           price,
           status: 'BLOCKED',
         });
       }
       continue;
     }
-    if (dispatchedMisEntries >= maxNewEntries) {
+    const maxEarningsPositions = (macroBreadth.macroRegime === 'BULL_MOMENTUM' || macroBreadth.advanceDeclineRatio >= 1.5)
+      ? thresholds.EARNINGS_SEASON_MAX_POSITIONS_BULLISH
+      : thresholds.EARNINGS_SEASON_MAX_POSITIONS;
+    const effectiveMaxNewEntries = (!isPrototype1 && isEarningsSeason)
+      ? Math.min(maxNewEntries, maxEarningsPositions)
+      : maxNewEntries;
+    if (dispatchedMisEntries >= effectiveMaxNewEntries) {
       const recentConcurrencyCap = state.autonomousPilot?.actionLogs?.find(
         (l) => l.asset === asset && l.action === 'SKIPPED' && l.detail?.includes('MIS concurrency limiter') && now - l.timestamp < 300_000
       );
@@ -1789,35 +1875,36 @@ export function tickAutonomousPilot(
       : strategy === 'VWAP Band Mean Reversion'
       ? 0.70
       : marginMultiplier >= 3.5 && (ranked?.alphaConvictionIndex || 0) >= 55
-      ? Math.min(profile.stopLossAtrMultiplier, 0.75)
+      ? Math.min(effectiveStopLossAtrMult, 0.75)
       : marginMultiplier >= 2.5
-      ? Math.min(profile.stopLossAtrMultiplier, 0.85)
+      ? Math.min(effectiveStopLossAtrMult, 0.85)
       : marginMultiplier >= 2.0
-      ? Math.min(profile.stopLossAtrMultiplier, 1.00)
-      : profile.stopLossAtrMultiplier;
+      ? Math.min(effectiveStopLossAtrMult, 1.00)
+      : effectiveStopLossAtrMult;
 
     const effectiveStopAtrMult = cand.brainDirective?.dailyPnlRegime === 'DEFENSIVE_RECOVERY'
       ? Math.min(baseStopAtrMult, 0.75)
       : baseStopAtrMult;
     const stopLossDist = Math.max(limitPrice * 0.0035, atr * effectiveStopAtrMult);
     const stopLossPrice = alignToTickSize(limitPrice - stopLossDist, asset);
-    const takeProfitPrice = cand.brainDirective?.trancheTargets
-      ? alignToTickSize(limitPrice + atr * cand.brainDirective.trancheTargets.tranche1Atr, asset)
+    const activeTrancheTargets = cand.brainDirective?.trancheTargets ?? (!isPrototype1 ? monthlyGovernor.trancheTargets : undefined);
+    const takeProfitPrice = activeTrancheTargets
+      ? alignToTickSize(limitPrice + atr * activeTrancheTargets.tranche1Atr, asset)
       : strategy === 'Momentum Scalper'
       ? alignToTickSize(limitPrice + atr * 1.00, asset)
       : strategy === 'Candle Price Action'
       ? alignToTickSize(limitPrice + atr * 1.30, asset)
       : strategy === 'VWAP Band Mean Reversion'
       ? alignToTickSize(Math.max(limitPrice + atr * 1.10, cand.vwap * 0.999), asset)
-      : alignToTickSize(limitPrice + stopLossDist * profile.minRiskReward, asset);
+      : alignToTickSize(limitPrice + stopLossDist * effectiveMinRiskReward, asset);
     // Adaptive Trend Expansion: In confirmed high-Hurst super-trends (H >= 0.62) with Squeeze Release,
     // dynamically expand Tranche 2 take-profit multiplier by 20% to capture larger multi-ATR trend runners!
     const isSuperTrend = cand.hurst >= 0.62 && cand.squeezeStatus === 'SQUEEZE_OFF';
     const dynamicTpMultiplier = isSuperTrend
-      ? profile.takeProfitAtrMultiplier * 1.20
-      : profile.takeProfitAtrMultiplier;
-    const takeProfit2Price = cand.brainDirective?.trancheTargets
-      ? alignToTickSize(limitPrice + atr * cand.brainDirective.trancheTargets.tranche2Atr, asset)
+      ? effectiveTakeProfitAtrMult * 1.20
+      : effectiveTakeProfitAtrMult;
+    const takeProfit2Price = activeTrancheTargets
+      ? alignToTickSize(limitPrice + atr * activeTrancheTargets.tranche2Atr, asset)
       : strategy === 'Momentum Scalper'
       ? alignToTickSize(limitPrice + atr * 1.80, asset)
       : strategy === 'Candle Price Action'
@@ -1870,7 +1957,7 @@ export function tickAutonomousPilot(
     // Elite tier (ACI >= 75): ₹350 max risk (82%+ win rate)
     // High conviction (ACI 68-74): ₹280 max risk (70%+ win rate)
     // Standard tier (ACI < 68): ₹200 max risk
-    const baseRiskCapital = pv * (profile.maxRiskPerTradePct / 100);
+    const baseRiskCapital = pv * (effectiveRiskPerTradePct / 100);
     const convictionBoost = cand.brainDirective?.riskBudgetMultiplier ?? ((ranked?.alphaConvictionIndex || 0) >= 60 ? 1.15 : 1.0);
     if (convictionBoost <= 0) continue;
     const riskCap = aci >= 75 ? 350 : aci >= 68 ? 280 : 200;
@@ -1924,7 +2011,7 @@ export function tickAutonomousPilot(
       const minUnitsForViability = Math.ceil(effectiveMinNotional / limitPrice);
       const elevatedNotional = minUnitsForViability * limitPrice;
       const elevatedRisk = minUnitsForViability * riskPerShare;
-      const maxAllowedRisk = pv * (profile.maxRiskPerTradePct * 1.5 / 100);
+      const maxAllowedRisk = pv * (effectiveRiskPerTradePct * 1.5 / 100);
 
       const requiredCashForElevation = elevatedNotional / marginMultiplier;
       if (
@@ -2170,5 +2257,6 @@ export function tickAutonomousPilot(
     ordersToDispatch,
     ordersToCancel,
     circuitBreakerTripped: false,
+    monthlyGovernorResult: monthlyGovernor,
   };
 }

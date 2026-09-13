@@ -21,6 +21,8 @@ import {
   Shield,
   Layers,
   Search,
+  Sparkles,
+  Lock,
 } from 'lucide-react';
 import { useLumen } from '../store';
 import {
@@ -30,10 +32,12 @@ import {
   initializeFleetStatus,
   createDefaultRateLimitStatus,
 } from '../domain/autonomousPilot';
+import { evaluateMonthlyPnlGovernor } from '../domain/quantEngine';
 import {
   AutonomousPilotProfile,
   QuantitativeOpportunity,
   FleetAssetLifecycle,
+  PilotPrototypeVersion,
 } from '../types';
 import { isIndianAsset, moneyINR, META, portfolioValue } from '../domain/portfolio';
 
@@ -44,6 +48,7 @@ export function AutonomousQuantPilot() {
     autonomousPilot,
     toggleAutonomousPilot,
     setPilotProfile,
+    setPilotPrototypeVersion,
     setPilotExecutionMode,
     emergencyDisarmPilot,
     clearPilotLogs,
@@ -56,7 +61,17 @@ export function AutonomousQuantPilot() {
   const [viewMode, setViewMode] = useState<'beginner' | 'quant'>('beginner');
   const [isScanning, setIsScanning] = useState(false);
 
-  const activeProfileKey = autonomousPilot?.profile || 'conservative';
+  const prototypeVersion = autonomousPilot?.prototypeVersion || 'prototype_2_adaptive_brain';
+  const isProto1 = prototypeVersion === 'prototype_1_classic';
+  const monthlyCtx = autonomousPilot?.rollingMonthlyContext;
+  const pilotCapital = state.accountMode === 'upstox' && state.upstoxAccount?.funds
+    ? state.upstoxAccount.funds.availableCash
+    : state.cash;
+  const monthlyGovernor = useMemo(() => {
+    return evaluateMonthlyPnlGovernor(monthlyCtx, pilotCapital);
+  }, [monthlyCtx, pilotCapital]);
+
+  const activeProfileKey = isProto1 ? 'balanced' : (autonomousPilot?.profile || 'balanced');
   const profileConfig = PILOT_PROFILES[activeProfileKey];
   const isEnabled = autonomousPilot?.enabled || false;
   const executionMode = autonomousPilot?.executionMode || 'full_autonomous';
@@ -552,44 +567,172 @@ export function AutonomousQuantPilot() {
         </div>
       )}
 
-      {/* 3. Strategy Profiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {(['conservative', 'balanced', 'momentum', 'elite_runner'] as AutonomousPilotProfile[]).map((pKey) => {
-          const cfg = PILOT_PROFILES[pKey];
-          const isSelected = activeProfileKey === pKey;
-          return (
+      {/* 3. Autonomous Master Brain: Prototype 2 Adaptive Cockpit & Prototype 1 Baseline Switcher */}
+      <div className="p-5 rounded-3xl bg-white border border-black/[0.08] shadow-xs space-y-4">
+        {/* Prototype Version Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-black/[0.06]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-zinc-900 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Cpu className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-zinc-950">
+                  {isProto1 ? 'Prototype 1: Classic Quant Engine' : 'Prototype 2: Adaptive 30-Day Master Brain'}
+                </h3>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold ${
+                  isProto1
+                    ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                    : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                }`}>
+                  {isProto1 ? '₹29,005 Benchmark Baseline' : 'Active Autonomous Synthesizer'}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500">
+                {isProto1
+                  ? 'Classic benchmark pipeline that produced ₹29,005 net P&L across 5 years with fixed 1.0% risk and 90m stagnancy.'
+                  : 'Tracks 30-day net P&L run-rate towards ₹100/day on ₹40k capital (~₹2,000/mo). Intelligently shifts risk and targets.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center bg-black/[0.04] p-1 rounded-2xl shrink-0 self-start sm:self-center">
             <button
-              key={pKey}
               type="button"
-              onClick={() => setPilotProfile(pKey)}
-              className={`p-3.5 rounded-2xl border text-left transition-all apple-btn-tactile ${
-                isSelected
-                  ? 'bg-white border-zinc-900 shadow-sm ring-1 ring-zinc-900'
-                  : 'bg-white/50 hover:bg-white border-black/[0.05] text-zinc-600'
+              onClick={() => setPilotPrototypeVersion('prototype_2_adaptive_brain')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                !isProto1
+                  ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-black/[0.04]'
+                  : 'text-zinc-500 hover:text-zinc-900'
               }`}
             >
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-xs font-bold flex items-center gap-1.5 ${isSelected ? 'text-zinc-950' : 'text-zinc-800'}`}>
-                  {pKey === 'conservative' && <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />}
-                  {pKey === 'balanced' && <Scale className="w-3.5 h-3.5 text-emerald-600" />}
-                  {pKey === 'momentum' && <TrendingUp className="w-3.5 h-3.5 text-blue-600" />}
-                  {pKey === 'elite_runner' && <Zap className="w-3.5 h-3.5 text-amber-500" />}
-                  <span>{cfg.name}</span>
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-black/[0.04] text-zinc-600 font-semibold">
-                  Min {cfg.minRiskReward}:1 R:R
-                </span>
-              </div>
-              <p className="text-[11px] text-zinc-500 line-clamp-2 leading-relaxed">
-                {cfg.tagline}
-              </p>
-              <div className="mt-2 pt-2 border-t border-black/[0.04] flex items-center justify-between text-[10px] text-zinc-400">
-                <span>Max Risk: {cfg.maxRiskPerTradePct}%/trade</span>
-                <span>Buffer: {cfg.targetCashBufferPct}% Cash</span>
-              </div>
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Prototype 2</span>
             </button>
-          );
-        })}
+            <button
+              type="button"
+              onClick={() => setPilotPrototypeVersion('prototype_1_classic')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+                isProto1
+                  ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-black/[0.04]'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5 text-amber-600" />
+              <span>Prototype 1 (₹29k)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Prototype 2 Live Telemetry Cockpit */}
+        {!isProto1 ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Posture Badge Card */}
+              <div className={`p-3.5 rounded-2xl border transition-all ${
+                monthlyGovernor.posture === 'CAPITAL_DEFENSE_LOCKED'
+                  ? 'bg-indigo-50/70 border-indigo-200 text-indigo-950'
+                  : monthlyGovernor.posture === 'MOMENTUM_EXPANSION'
+                  ? 'bg-amber-50/70 border-amber-200 text-amber-950'
+                  : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Master Brain Posture
+                  </span>
+                  {monthlyGovernor.posture === 'CAPITAL_DEFENSE_LOCKED' ? (
+                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                  ) : monthlyGovernor.posture === 'MOMENTUM_EXPANSION' ? (
+                    <TrendingUp className="w-4 h-4 text-amber-600" />
+                  ) : (
+                    <Scale className="w-4 h-4 text-emerald-600" />
+                  )}
+                </div>
+                <div className="text-sm font-bold flex items-center gap-1.5">
+                  {monthlyGovernor.posture === 'CAPITAL_DEFENSE_LOCKED' && '🛡️ Capital Defense Locked'}
+                  {monthlyGovernor.posture === 'MOMENTUM_EXPANSION' && '🚀 Momentum Expansion'}
+                  {monthlyGovernor.posture === 'BALANCED_HARVEST' && '⚖️ Balanced Alpha Harvest'}
+                </div>
+                <div className="mt-2 pt-2 border-t border-black/[0.05] flex items-center justify-between text-[11px]">
+                  <span>Risk: {monthlyGovernor.riskPerTradePct}%/trade</span>
+                  <span>Cash Buffer: {monthlyGovernor.targetCashBufferPct}%</span>
+                </div>
+              </div>
+
+              {/* Monthly P&L Progress Card */}
+              <div className="p-3.5 rounded-2xl bg-zinc-50/80 border border-black/[0.05]">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Month-to-Date Net P&L
+                  </span>
+                  <span className="text-[11px] font-mono text-zinc-400">Target: ₹2,000/mo</span>
+                </div>
+                <div className="text-lg font-black font-mono flex items-baseline gap-1">
+                  <span className={(monthlyCtx?.rollingMonthlyPnl || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                    {(monthlyCtx?.rollingMonthlyPnl || 0) >= 0 ? '+' : ''}₹{(monthlyCtx?.rollingMonthlyPnl || 0).toFixed(2)}
+                  </span>
+                  <span className="text-xs text-zinc-400 font-normal">
+                    ({Math.min(100, Math.max(0, ((monthlyCtx?.rollingMonthlyPnl || 0) / 2000) * 100)).toFixed(0)}% reached)
+                  </span>
+                </div>
+                <div className="w-full bg-zinc-200 h-1.5 rounded-full overflow-hidden mt-2">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      (monthlyCtx?.rollingMonthlyPnl || 0) >= 1800
+                        ? 'bg-indigo-600'
+                        : (monthlyCtx?.rollingMonthlyPnl || 0) >= 500
+                        ? 'bg-emerald-500'
+                        : 'bg-amber-500'
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(0, ((monthlyCtx?.rollingMonthlyPnl || 0) / 2000) * 100))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Daily Run Rate Card */}
+              <div className="p-3.5 rounded-2xl bg-zinc-50/80 border border-black/[0.05]">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Daily Average Run-Rate
+                  </span>
+                  <span className="text-[11px] font-mono text-zinc-400">Pace: ₹100.00/day</span>
+                </div>
+                <div className="text-lg font-black font-mono flex items-baseline gap-1">
+                  <span className={(monthlyCtx?.dailyAvgPnl || 0) >= 95 ? 'text-indigo-600' : (monthlyCtx?.dailyAvgPnl || 0) >= 50 ? 'text-emerald-600' : 'text-amber-600'}>
+                    {(monthlyCtx?.dailyAvgPnl || 0) >= 0 ? '+' : ''}₹{(monthlyCtx?.dailyAvgPnl || 0).toFixed(2)}
+                  </span>
+                  <span className="text-xs text-zinc-400 font-normal">/ day</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-black/[0.05] flex items-center justify-between text-[11px] text-zinc-500">
+                  <span>Sessions in Window: {Math.max(1, monthlyCtx?.daysEvaluatedInMonth || 1)}</span>
+                  <span className="font-semibold text-zinc-700">
+                    {(monthlyCtx?.dailyAvgPnl || 0) >= 95 ? 'Target Achieved' : 'Tracking Pace'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Master Brain Action Rationale */}
+            <div className="p-3 rounded-2xl bg-zinc-950 text-white text-xs flex items-start gap-2.5">
+              <Cpu className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-semibold text-emerald-300">Live Strategy Adaptation Rationale:</span>
+                <p className="text-zinc-300 text-[11px] leading-relaxed">{monthlyGovernor.rationale}</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Prototype 1 Classic Status */
+          <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 text-amber-950 space-y-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0" />
+              <h4 className="text-xs font-bold text-amber-900">Prototype 1 Active: Fixed Baseline Configuration</h4>
+            </div>
+            <p className="text-xs text-amber-800 leading-relaxed">
+              This engine runs the exact fixed quant parameter set that achieved the <strong>₹29,005 net profit</strong> across the 5-year benchmark (1.0% risk per trade, 45% cash buffer, 90-minute stagnancy window, full multi-tranche runners). Dynamic monthly adaptations and earnings throttling are disabled.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* 4. Streamlined Institutional Navigation Tabs */}

@@ -905,9 +905,13 @@ export function deadTradeStagnancyExit(
   atr: number,
   elapsedMs: number,
   currentVolume: number = 0,
-  avgVolume: number = 0
+  avgVolume: number = 0,
+  isPrototype1: boolean = false,
+  maxDurationOverride?: number,
+  allowAdverseDrift?: boolean
 ): { shouldExit: boolean; reason: string } {
-  if (elapsedMs < thresholds.STAGNANT_TRADE_MAX_DURATION_MS) {
+  const maxDuration = maxDurationOverride ?? (isPrototype1 ? (90 * 60 * 1000) : thresholds.STAGNANT_TRADE_MAX_DURATION_MS);
+  if (elapsedMs < maxDuration) {
     return { shouldExit: false, reason: 'Trade duration within active execution window.' };
   }
 
@@ -923,7 +927,12 @@ export function deadTradeStagnancyExit(
   // Range stagnant: price oscillation within +/- 0.25 ATR with fading volume
   const isRangeStagnant = Math.abs(priceMoveAtr) < thresholds.STAGNANT_TRADE_PRICE_RANGE_ATR && isVolumeFading;
 
-  if (isFailedTrade || isRangeStagnant) {
+  // Persistent adverse drift: position has stalled underwater (<= -0.35 ATR) for full duration
+  // or is negative (<= -0.28 ATR) with actively dying volume. Deactivated in Prototype 1 baseline.
+  const canAdverseDrift = allowAdverseDrift !== undefined ? allowAdverseDrift : !isPrototype1;
+  const isAdverseDrift = canAdverseDrift && (priceMoveAtr <= -0.35 || (priceMoveAtr <= -0.28 && isVolumeFading));
+
+  if (isFailedTrade || isRangeStagnant || isAdverseDrift) {
     // If the trade is solidly profitable (> 0.20 ATR), let dynamic trailing ratchets manage it
     if (priceMoveAtr > 0.20) {
       return { shouldExit: false, reason: 'Active momentum or price expansion present.' };
@@ -935,6 +944,24 @@ export function deadTradeStagnancyExit(
   }
 
   return { shouldExit: false, reason: 'Active momentum or price expansion present.' };
+}
+
+/**
+ * Checks if current timestamp falls within high-volatility Indian corporate earnings seasons:
+ * - Q4 Earnings Window: April 15 – May 25
+ * - Q1 Earnings Window: July 20 – August 25
+ */
+export function isEarningsSeasonWindow(now: number = Date.now()): boolean {
+  const d = new Date(now + 330 * 60 * 1000); // IST (UTC + 5:30)
+  const month = d.getUTCMonth() + 1; // 1-12
+  const day = d.getUTCDate(); // 1-31
+
+  if (month === 4 && day >= 15) return true;
+  if (month === 5 && day <= 25) return true;
+  if (month === 7 && day >= 20) return true;
+  if (month === 8 && day <= 25) return true;
+
+  return false;
 }
 
 /**

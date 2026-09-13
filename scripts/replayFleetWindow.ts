@@ -20,7 +20,7 @@ import { UPSTOX_FLEET_ASSETS, createDefaultAutonomousPilotState, PILOT_PROFILES 
 import { UpstoxInstrumentRegistry } from '../server/services/brokers/upstox/upstoxInstrumentRegistry';
 import { IndianMarketCalendar } from '../server/services/brokers/upstox/indianMarketCalendar';
 import { tickAutonomousPilot, initializeFleetStatus, createDefaultRateLimitStatus } from '../src/domain/autonomousPilotEngine';
-import { AppState, Asset, Market, Order, AutonomousPilotProfile, AssetFleetStatus } from '../src/types';
+import { AppState, Asset, Market, Order, AutonomousPilotProfile, AssetFleetStatus, PilotPrototypeVersion, RollingMonthlyPnlContext } from '../src/types';
 
 interface RawCandle {
   timeStr: string;
@@ -75,19 +75,26 @@ interface DayReplaySummary {
 }
 
 const CACHE_DIR = join(process.cwd(), '.cache', 'upstox-candles');
+const MEM_CACHE = new Map<string, any>();
 
 async function getCachedJson(filename: string): Promise<any | null> {
+  if (MEM_CACHE.has(filename)) {
+    return MEM_CACHE.get(filename);
+  }
   const filePath = join(CACHE_DIR, filename);
   if (!existsSync(filePath)) return null;
   try {
     const raw = await readFile(filePath, 'utf-8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    MEM_CACHE.set(filename, parsed);
+    return parsed;
   } catch {
     return null;
   }
 }
 
 async function setCachedJson(filename: string, data: any): Promise<void> {
+  MEM_CACHE.set(filename, data);
   try {
     await mkdir(CACHE_DIR, { recursive: true });
     const filePath = join(CACHE_DIR, filename);
@@ -230,7 +237,9 @@ async function replaySingleDay(
   startingCapital: number,
   profile: AutonomousPilotProfile,
   broker: 'upstox' | 'flattrade' = 'upstox',
-  persistentFleet?: Record<string, AssetFleetStatus>
+  persistentFleet?: Record<string, AssetFleetStatus>,
+  prototypeVersion: PilotPrototypeVersion = 'prototype_2_adaptive_brain',
+  rollingMonthlyContext?: RollingMonthlyPnlContext
 ): Promise<DayReplaySummary> {
   const assetHistoricalMap: Map<Asset, RawCandle[]> = new Map();
   const assetIntradayMap: Map<Asset, RawCandle[]> = new Map();
@@ -380,6 +389,8 @@ async function replaySingleDay(
       enabled: true,
       executionMode: 'full_autonomous',
       profile,
+      prototypeVersion,
+      rollingMonthlyContext,
       dailyStartingValue: startingCapital,
       peakPortfolioValue: startingCapital,
       activeFleet: initialFleet,
@@ -399,20 +410,37 @@ async function replaySingleDay(
   };
 
   const assetStats24h: Map<Asset, { high: number; low: number; volume: number; firstOpen: number }> = new Map();
-  const asset30mBars: Map<Asset, Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>> = new Map();
   const assetCurrent30m: Map<Asset, { windowIdx: number; bar: { time: string; open: number; high: number; low: number; close: number; volume: number } }> = new Map();
-  const assetHist30mBars: Map<Asset, Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>> = new Map();
   const assetToday1mBars: Map<Asset, Candle[]> = new Map();
+  const assetInstCandles: Map<Asset, Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>> = new Map();
+  const assetInstCloses: Map<Asset, number[]> = new Map();
+  const currentMarkets: Partial<Record<Asset, Market>> = {};
 
   for (const asset of availableFleet) {
     assetStats24h.set(asset, { high: 0, low: Infinity, volume: 0, firstOpen: 0 });
-    asset30mBars.set(asset, []);
     assetToday1mBars.set(asset, []);
     const hist30m = assetHistoricalMap.get(asset) || [];
-    assetHist30mBars.set(
+    const preHist = hist30m.map((h) => ({ time: h.timeStr, open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume }));
+    const preCloses = preHist.map((h) => h.close);
+    assetInstCandles.set(asset, preHist);
+    assetInstCloses.set(asset, preCloses);
+
+    currentMarkets[asset] = {
       asset,
-      hist30m.map((h) => ({ time: h.timeStr, open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume }))
-    );
+      name: asset,
+      symbol: asset,
+      price: 0,
+      change24h: 0,
+      high24h: 0,
+      low24h: Infinity,
+      volume24h: 0,
+      history: preCloses,
+      candles: preHist,
+      intradayCandles: assetToday1mBars.get(asset)!,
+      source: 'upstox',
+      isSynthetic: false,
+      lastUpdated: 0,
+    };
   }
 
   // Minute-by-Minute Replay Loop
@@ -422,7 +450,10 @@ async function replaySingleDay(
     const minuteCandles = candleMapByTime.get(timestamp);
     if (!minuteCandles) continue;
 
-    const currentMarkets: Partial<Record<Asset, Market>> = {};
+    const dBar = new Date(timestamp);
+    const mins = dBar.getHours() * 60 + dBar.getMinutes();
+    const windowIdx = Math.floor((mins - (9 * 60 + 15)) / 30);
+
     for (const asset of availableFleet) {
       const c = minuteCandles.get(asset);
       if (!c) continue;
@@ -438,24 +469,21 @@ async function replaySingleDay(
       }
       stats.volume += c.volume;
 
-      const dBar = new Date(c.timestamp);
-      const mins = dBar.getHours() * 60 + dBar.getMinutes();
-      const windowIdx = Math.floor((mins - (9 * 60 + 15)) / 30);
       const cur30m = assetCurrent30m.get(asset);
+      const instCandles = assetInstCandles.get(asset)!;
+      const instCloses = assetInstCloses.get(asset)!;
 
       if (!cur30m || cur30m.windowIdx !== windowIdx) {
-        if (cur30m) {
-          asset30mBars.get(asset)!.push(cur30m.bar);
-        }
-        assetCurrent30m.set(asset, {
-          windowIdx,
-          bar: { time: c.timeStr, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume },
-        });
+        const newBar = { time: c.timeStr, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume };
+        assetCurrent30m.set(asset, { windowIdx, bar: newBar });
+        instCandles.push(newBar);
+        instCloses.push(c.close);
       } else {
         cur30m.bar.high = Math.max(cur30m.bar.high, c.high);
         cur30m.bar.low = Math.min(cur30m.bar.low, c.low);
         cur30m.bar.close = c.close;
         cur30m.bar.volume += c.volume;
+        instCloses[instCloses.length - 1] = c.close;
       }
 
       const today1m = assetToday1mBars.get(asset)!;
@@ -468,28 +496,13 @@ async function replaySingleDay(
         volume: c.volume,
       });
 
-      const today30m = asset30mBars.get(asset)!;
-      const curBar = assetCurrent30m.get(asset)!.bar;
-      const preHist = assetHist30mBars.get(asset)!;
-      const institutionalCandles = [...preHist, ...today30m, curBar];
-      const institutionalHistory = institutionalCandles.map((cand) => cand.close);
-
-      currentMarkets[asset] = {
-        asset,
-        name: asset,
-        symbol: asset,
-        price: c.close,
-        change24h: stats.firstOpen > 0 ? ((c.close - stats.firstOpen) / stats.firstOpen) * 100 : 0,
-        high24h: stats.high,
-        low24h: stats.low,
-        volume24h: stats.volume,
-        history: institutionalHistory,
-        candles: institutionalCandles,
-        intradayCandles: today1m,
-        source: 'upstox',
-        isSynthetic: false,
-        lastUpdated: timestamp,
-      };
+      const mkt = currentMarkets[asset]!;
+      mkt.price = c.close;
+      mkt.change24h = stats.firstOpen > 0 ? ((c.close - stats.firstOpen) / stats.firstOpen) * 100 : 0;
+      mkt.high24h = stats.high;
+      mkt.low24h = stats.low;
+      mkt.volume24h = stats.volume;
+      mkt.lastUpdated = timestamp;
     }
 
     // Match Pending Buy Limit Orders
@@ -806,6 +819,9 @@ async function replaySingleDay(
   const wins = closedTrades.filter((t) => t.pnl > 0);
   const losses = closedTrades.filter((t) => t.pnl <= 0);
 
+  // Free day candle cache from memory to prevent heap leak across multi-month runs
+  MEM_CACHE.clear();
+
   return {
     date: targetDate,
     dayOfWeek: dayNames[d.getDay()],
@@ -821,7 +837,6 @@ async function replaySingleDay(
     maxDrawdownPct,
     closedTrades,
     eventsCount: replayEvents.length,
-    events: replayEvents,
     finalFleet: appState.autonomousPilot?.activeFleet,
   };
 }
@@ -833,6 +848,7 @@ async function runMultiDayWindowReplay() {
   let profile: AutonomousPilotProfile = 'balanced';
   let compounding = true;
   let broker: 'upstox' | 'flattrade' = 'flattrade';
+  let prototype: PilotPrototypeVersion = 'prototype_2_adaptive_brain';
   let tag = '';
   let fromDate: string | undefined;
   let startDate: string | undefined;
@@ -848,6 +864,12 @@ async function runMultiDayWindowReplay() {
       capital = Number(arg.split('=')[1]) || 40000;
     } else if (arg === '--capital' && i + 1 < args.length) {
       capital = Number(args[++i]) || 40000;
+    } else if (arg.startsWith('--prototype=')) {
+      const pr = arg.split('=')[1].toLowerCase();
+      prototype = (pr.includes('1') || pr === 'prototype_1_classic') ? 'prototype_1_classic' : 'prototype_2_adaptive_brain';
+    } else if (arg === '--prototype' && i + 1 < args.length) {
+      const pr = args[++i].toLowerCase();
+      prototype = (pr.includes('1') || pr === 'prototype_1_classic') ? 'prototype_1_classic' : 'prototype_2_adaptive_brain';
     } else if (arg.startsWith('--profile=')) {
       const p = arg.split('=')[1].toLowerCase();
       if (p === 'conservative' || p === 'balanced' || p === 'momentum' || p === 'elite_runner') {
@@ -902,6 +924,7 @@ async function runMultiDayWindowReplay() {
   console.log('='.repeat(80));
   console.log(`  AUTONOMOUS QUANT PILOT — ${daysCount}-DAY ROLLING FLEET AUDIT`);
   console.log('='.repeat(80));
+  console.log(`Engine Prototype:     ${prototype === 'prototype_1_classic' ? 'PROTOTYPE 1 (Classic Benchmark Baseline - ₹29,005)' : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'}`);
   console.log(`Execution Venue:      ${broker.toUpperCase()} (${broker === 'flattrade' ? 'Zero Brokerage Retail-Algo Engine' : 'Traditional Discount Broker'})`);
   console.log(`Window Scope:         ${daysCount} Completed Indian Market Trading Sessions`);
   console.log(`Dates Range:          ${tradingDays[0]} → ${tradingDays[tradingDays.length - 1]}`);
@@ -919,13 +942,45 @@ async function runMultiDayWindowReplay() {
   const allClosedTrades: ReplayTrade[] = [];
   let persistentFleet: Record<string, AssetFleetStatus> | undefined = undefined;
 
+  let currentMonthStr = '';
+  let monthlyPnl = 0;
+  let monthlyDaysCount = 0;
+
   for (let idx = 0; idx < tradingDays.length; idx++) {
     const day = tradingDays[idx];
+    const monthStr = day.substring(0, 7);
+    if (monthStr !== currentMonthStr) {
+      currentMonthStr = monthStr;
+      monthlyPnl = 0;
+      monthlyDaysCount = 0;
+    }
+    monthlyDaysCount++;
+    const dailyAvgPnl = monthlyDaysCount > 0 ? monthlyPnl / monthlyDaysCount : 0;
+    const rollingMonthlyContext: RollingMonthlyPnlContext = {
+      rollingMonthlyPnl: monthlyPnl,
+      daysEvaluatedInMonth: monthlyDaysCount,
+      dailyAvgPnl,
+      targetDailyPnl: 100.0,
+      targetMonthlyPnl: monthlyDaysCount * 100.0,
+      targetPaceRatio: dailyAvgPnl / 100.0,
+      activePosture: dailyAvgPnl >= 95 || monthlyPnl >= 1800 ? 'CAPITAL_DEFENSE_LOCKED' : (monthlyPnl <= 0 || monthlyDaysCount <= 3 ? 'MOMENTUM_EXPANSION' : 'BALANCED_HARVEST'),
+      postureRationale: `Day ${monthlyDaysCount} of ${monthStr}: ₹${monthlyPnl.toFixed(2)} accumulated.`,
+    };
+
     const sessionCapital = compounding ? currentNav : capital;
     process.stdout.write(`  [Day ${String(idx + 1).padStart(2)}/${daysCount}] ${day} ... `);
 
     const startTime = Date.now();
-    const result = await replaySingleDay(day, sessionCapital, profile, broker, persistentFleet);
+    const result = await replaySingleDay(
+      day,
+      sessionCapital,
+      profile,
+      broker,
+      persistentFleet,
+      prototype,
+      rollingMonthlyContext
+    );
+    monthlyPnl += result.netPnl;
     if (result.finalFleet) {
       persistentFleet = result.finalFleet;
     }
@@ -1088,6 +1143,7 @@ async function runMultiDayWindowReplay() {
         windowDays: daysCount,
         startDate: tradingDays[0],
         endDate: tradingDays[tradingDays.length - 1],
+        prototype,
         profile,
         startingCapital: capital,
         endingNav: currentNav,

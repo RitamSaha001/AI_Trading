@@ -31,6 +31,7 @@ import {
   QuantitativeOpportunity,
   AutonomousPilotState,
   PilotActionLog,
+  PilotPrototypeVersion,
 } from './types';
 import { LiveOrderProposalData } from './components/LiveOrderConfirmationModal';
 import {
@@ -254,6 +255,7 @@ type Ctx = {
   autonomousPilot: AutonomousPilotState;
   toggleAutonomousPilot: () => void;
   setPilotProfile: (profile: AutonomousPilotProfile) => void;
+  setPilotPrototypeVersion: (version: PilotPrototypeVersion) => void;
   setPilotExecutionMode: (mode: 'full_autonomous' | 'semi_autonomous') => void;
   emergencyDisarmPilot: () => void;
   clearPilotLogs: () => void;
@@ -3730,6 +3732,22 @@ export function Provider({ children }: { children: React.ReactNode }) {
     ApiClient.updatePilotConfig({ profile }).then(() => ApiClient.triggerPilotSweep()).catch(() => {});
   }, [markets, triggerToast, upstoxAccount?.connected]);
 
+  const setPilotPrototypeVersion = useCallback((version: PilotPrototypeVersion) => {
+    setState((prev) => {
+      const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
+      const updated = {
+        ...current,
+        prototypeVersion: version,
+      };
+      return { ...prev, autonomousPilot: updated };
+    });
+    const versionName = version === 'prototype_1_classic'
+      ? 'Prototype 1 (Classic Quant Baseline - ₹29,005)'
+      : 'Prototype 2 (Adaptive 30-Day Master Brain)';
+    triggerToast('Pilot Engine Switched', `Active model set to ${versionName}.`, 'info');
+    ApiClient.updatePilotConfig({ prototypeVersion: version } as any).catch(() => {});
+  }, [triggerToast]);
+
   const setPilotExecutionMode = useCallback((mode: 'full_autonomous' | 'semi_autonomous') => {
     setState((prev) => {
       const current = prev.autonomousPilot || createDefaultAutonomousPilotState(prev.startingEquity);
@@ -4072,6 +4090,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       autonomousPilot,
       toggleAutonomousPilot,
       setPilotProfile,
+      setPilotPrototypeVersion,
       setPilotExecutionMode,
       emergencyDisarmPilot,
       clearPilotLogs,
@@ -4189,6 +4208,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
       autonomousPilot,
       toggleAutonomousPilot,
       setPilotProfile,
+      setPilotPrototypeVersion,
       setPilotExecutionMode,
       emergencyDisarmPilot,
       clearPilotLogs,

@@ -12,7 +12,7 @@
  * with strict risk bounds (<= ₹400-500/trade, <= 2.0-2.5% max drawdown, 0 overnight risk).
  */
 
-import { PilotStrategyKind, Market, Asset } from '../../types';
+import { PilotStrategyKind, Market, Asset, MasterBrainAdaptivePosture, RollingMonthlyPnlContext } from '../../types';
 import { FleetMacroBreadthResult } from './macroRegimeEngine';
 import { SectorRankingResult } from './sectorMomentumEngine';
 import { MultiTimeframeConfluenceResult } from './multiTimeframeConfluence';
@@ -284,6 +284,139 @@ export function evaluateStrategyMasterBrain(inputs: MasterBrainInputs): BrainDir
   }
 
   return baseDirective;
+}
+
+export interface MonthlyPnlGovernorResult {
+  posture: MasterBrainAdaptivePosture;
+  riskPerTradePct: number;
+  targetCashBufferPct: number;
+  minRiskReward: number;
+  stopLossAtrMultiplier: number;
+  takeProfitAtrMultiplier: number;
+  minAciThreshold: number;
+  maxConcurrentPositions: number;
+  maxDailyEntries: number;
+  stagnancyMaxDurationMs: number;
+  allowAdverseDriftCut: boolean;
+  trancheTargets: TrancheTargetConfig;
+  rationale: string;
+}
+
+/**
+ * Prototype 2: Rolling 30-Day Monthly P&L Governor
+ * Intelligently governs desk posture (MOMENTUM_EXPANSION, BALANCED_HARVEST, CAPITAL_DEFENSE_LOCKED)
+ * based on the month-to-date P&L pace towards the ₹100/day on ₹40,000 capital target (~₹2,000/month).
+ */
+export function evaluateMonthlyPnlGovernor(
+  monthlyCtx?: RollingMonthlyPnlContext,
+  capital: number = 40000
+): MonthlyPnlGovernorResult {
+  if (!monthlyCtx) {
+    return {
+      posture: 'BALANCED_HARVEST',
+      riskPerTradePct: 1.0,
+      targetCashBufferPct: 45,
+      minRiskReward: 2.2,
+      stopLossAtrMultiplier: 2.0,
+      takeProfitAtrMultiplier: 4.4,
+      minAciThreshold: 55,
+      maxConcurrentPositions: 2,
+      maxDailyEntries: 3,
+      stagnancyMaxDurationMs: 90 * 60 * 1000,
+      allowAdverseDriftCut: false,
+      trancheTargets: {
+        tranche1Atr: 1.25,
+        tranche2Atr: 2.00,
+        guaranteedLockAtr: 0.35,
+        runnerMode: 'TIGHT_RATCHET',
+      },
+      rationale: 'Baseline Balanced Harvest active: Default configuration.',
+    };
+  }
+
+  const rollingPnl = monthlyCtx.rollingMonthlyPnl;
+  const daysInMonth = Math.max(1, monthlyCtx.daysEvaluatedInMonth);
+  const dailyAvgPnl = monthlyCtx.dailyAvgPnl;
+  const expectedPnl = daysInMonth * thresholds.MONTHLY_DAILY_TARGET_PROFIT_INR;
+
+  // 1. Target Achieved: Average of ~₹100/day (>= ₹95/day) on ₹40k achieved OR >= ₹1,800 total banked
+  // Shift to Conservative Capital Guardian to lock in the green month with zero giveback!
+  const isTargetAchieved = (dailyAvgPnl >= thresholds.MONTHLY_PROFIT_LOCK_PACE_INR && rollingPnl >= 1000 && daysInMonth >= 5) ||
+    rollingPnl >= thresholds.MONTHLY_PROFIT_LOCK_ABS_INR;
+
+  if (isTargetAchieved) {
+    return {
+      posture: 'CAPITAL_DEFENSE_LOCKED',
+      riskPerTradePct: 0.65,
+      targetCashBufferPct: 65,
+      minRiskReward: 2.8,
+      stopLossAtrMultiplier: 1.5,
+      takeProfitAtrMultiplier: 3.8,
+      minAciThreshold: 72,
+      maxConcurrentPositions: 1,
+      maxDailyEntries: 2,
+      stagnancyMaxDurationMs: 45 * 60 * 1000,
+      allowAdverseDriftCut: true,
+      trancheTargets: {
+        tranche1Atr: 1.10,
+        tranche2Atr: 1.60,
+        guaranteedLockAtr: 0.25,
+        runnerMode: 'TIGHT_RATCHET',
+      },
+      rationale: `Monthly Target Reached (+₹${rollingPnl.toFixed(2)} banked at ₹${dailyAvgPnl.toFixed(2)}/day avg). Conservative Capital Defense armed: 65% cash buffer, 0.65% risk, fee-armor profit locking.`,
+    };
+  }
+
+  // 2. Behind Pace / Low P&L: Push towards profit via Momentum Expansion
+  // Broadens profit targets, increases risk budget, and prioritizes trend breakouts to generate alpha.
+  const isBehindPace = rollingPnl < expectedPnl * thresholds.MONTHLY_BEHIND_PACE_RATIO ||
+    rollingPnl <= 0 ||
+    daysInMonth <= 3;
+
+  if (isBehindPace) {
+    return {
+      posture: 'MOMENTUM_EXPANSION',
+      riskPerTradePct: 1.35,
+      targetCashBufferPct: 35,
+      minRiskReward: 2.2,
+      stopLossAtrMultiplier: 2.2,
+      takeProfitAtrMultiplier: 4.8,
+      minAciThreshold: 55,
+      maxConcurrentPositions: 2,
+      maxDailyEntries: 3,
+      stagnancyMaxDurationMs: 90 * 60 * 1000,
+      allowAdverseDriftCut: false,
+      trancheTargets: {
+        tranche1Atr: 1.50,
+        tranche2Atr: 2.50,
+        guaranteedLockAtr: 0.35,
+        runnerMode: 'CHANDELIER',
+      },
+      rationale: `Monthly P&L (+₹${rollingPnl.toFixed(2)}) behind target pace (expected ₹${expectedPnl.toFixed(2)}). Momentum Expansion active: 1.35% risk, 35% cash buffer, multi-ATR breakout runner scaling.`,
+    };
+  }
+
+  // 3. Steady Compounding: Balanced Alpha Harvester
+  return {
+    posture: 'BALANCED_HARVEST',
+    riskPerTradePct: 1.0,
+    targetCashBufferPct: 45,
+    minRiskReward: 2.2,
+    stopLossAtrMultiplier: 2.0,
+    takeProfitAtrMultiplier: 4.4,
+    minAciThreshold: 55,
+    maxConcurrentPositions: 2,
+    maxDailyEntries: 3,
+    stagnancyMaxDurationMs: 90 * 60 * 1000,
+    allowAdverseDriftCut: false,
+    trancheTargets: {
+      tranche1Atr: 1.25,
+      tranche2Atr: 2.00,
+      guaranteedLockAtr: 0.35,
+      runnerMode: 'TIGHT_RATCHET',
+    },
+    rationale: `Monthly P&L (+₹${rollingPnl.toFixed(2)}) on track at ₹${dailyAvgPnl.toFixed(2)}/day pace. Balanced Alpha Harvesting active.`,
+  };
 }
 
 /**

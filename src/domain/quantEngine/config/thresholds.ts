@@ -93,6 +93,10 @@ export const SESSION_OPENING_NOISE_END_MIN = 9 * 60 + 30;
 export const SESSION_MORNING_END_MIN = 11 * 60 + 30;
 /** Midday Consolidation / European Pre-Open Window End (13:15 IST) */
 export const SESSION_MIDDAY_END_MIN = 13 * 60 + 15;
+/** Midday Dead-Zone Curfew Start: Institutional lunch liquidity drop (12:20 IST) */
+export const SESSION_MIDDAY_CURFEW_START_MIN = 12 * 60 + 20;
+/** Midday Dead-Zone Curfew End: Institutional lunch liquidity recovery (13:00 IST) */
+export const SESSION_MIDDAY_CURFEW_END_MIN = 13 * 60;
 /** Intraday Entry Curfew: No new position entries permitted after this time (14:00 IST) */
 export const SESSION_INTRADAY_ENTRY_CURFEW_MIN = 14 * 60;
 /** Late-Day Liquidation & Unwinding Window Start (14:15 IST) */
@@ -143,8 +147,8 @@ export const MAX_ENTRY_VWAP_EXTENSION_ATR = 1.25;
 // ============================================================================
 // SCENARIO 7: Stagnant Capital / Dead Trade Expiration
 // ============================================================================
-/** Maximum duration to hold a stagnant position before initiating time stop (90 minutes in ms) */
-export const STAGNANT_TRADE_MAX_DURATION_MS = 90 * 60 * 1000;
+/** Maximum duration to hold a stagnant position before initiating time stop (45 minutes in ms) */
+export const STAGNANT_TRADE_MAX_DURATION_MS = 45 * 60 * 1000;
 /** Maximum price oscillation range in ATR defining a stagnant position (+/- 0.25 ATR) */
 export const STAGNANT_TRADE_PRICE_RANGE_ATR = 0.25;
 /** Volume ratio relative to 20-period average below which trade is deemed volume-faded */
@@ -163,6 +167,18 @@ export const MODE_40_1_ASSET_ALLOCATION_PCT = 40.0;
 export const MODE_35_2_ASSET_ALLOCATION_PCT = 35.0;
 /** Minimum relative conviction ratio (Score #2 / Score #1) required to activate Mode 35-2 (0.85) */
 export const CONVICTION_RATIO_MIN = 0.85;
+
+// ============================================================================
+// SCENARIO 9: Earnings Season Macro Throttle & Fee Armor
+// ============================================================================
+/** Elevated Alpha Conviction Index required during high-volatility corporate earnings season */
+export const EARNINGS_SEASON_MIN_ACI = 67;
+/** Elevated minimum volume surge multiplier required during earnings season */
+export const EARNINGS_SEASON_MIN_VOLUME_SURGE = 1.35;
+/** Maximum concurrent open MIS positions permitted during earnings season in neutral/choppy breadth */
+export const EARNINGS_SEASON_MAX_POSITIONS = 2;
+/** Maximum concurrent open MIS positions permitted during earnings season when market breadth is in bullish expansion */
+export const EARNINGS_SEASON_MAX_POSITIONS_BULLISH = 3;
 /** Maximum rolling pairwise correlation permitted between pick #1 and pick #2 in Mode 35-2 (0.50) */
 export const MAX_PAIRWISE_CORRELATION_MODE_B = 0.50;
 /** Maximum concurrent active intraday MIS positions permitted on accounts < ₹100k */
@@ -237,3 +253,16 @@ export const HURST_SUPER_TREND_THRESHOLD = 0.62;
 
 /** Ornstein-Uhlenbeck Z-score threshold for extreme mean-reverting entry (|Z| >= 1.8) */
 export const OU_EXTREME_ZSCORE_THRESHOLD = 1.80;
+
+// ============================================================================
+// PROTOTYPE 2: 30-DAY ROLLING MONTHLY P&L GOVERNOR CONSTANTS
+// ============================================================================
+/** Target daily net P&L baseline for ₹40,000 capital (INR 100.00 / day) */
+export const MONTHLY_DAILY_TARGET_PROFIT_INR = 100.0;
+/** Daily average profit run-rate at which Master Brain locks into Capital Defense (INR 95.00 / day) */
+export const MONTHLY_PROFIT_LOCK_PACE_INR = 95.0;
+/** Absolute monthly profit threshold at which Capital Defense locks in green month (INR 1,800.00) */
+export const MONTHLY_PROFIT_LOCK_ABS_INR = 1800.0;
+/** Ratio of expected month-to-date pace below which Momentum Expansion is activated (0.70) */
+export const MONTHLY_BEHIND_PACE_RATIO = 0.70;
+

@@ -154,7 +154,15 @@ async function updateLiveDashboard(auditDir: string, capital: number) {
   } catch {}
 }
 
-function runYearProcess(cfg: YearConfig, capital: number, profile: string, broker: string, resetDaily = false, auditDir = 'artifacts/fleet-replay-audit'): Promise<string> {
+function runYearProcess(
+  cfg: YearConfig,
+  capital: number,
+  profile: string,
+  broker: string,
+  resetDaily = false,
+  auditDir = 'artifacts/fleet-replay-audit',
+  prototype = 'prototype_2_adaptive_brain'
+): Promise<string> {
   return new Promise((resolve, reject) => {
     liveStatuses[cfg.year] = {
       year: cfg.year,
@@ -181,15 +189,19 @@ function runYearProcess(cfg: YearConfig, capital: number, profile: string, broke
       `--profile=${profile}`,
       `--broker=${broker}`,
       `--tag=${cfg.tag}`,
+      `--prototype=${prototype}`,
     ];
     if (resetDaily) {
       args.push('--reset-daily');
     }
 
-    const child = spawn('npx', ['tsx', ...args], {
+    const child = spawn('/usr/bin/nice', ['-n', '10', 'npx', 'tsx', ...args], {
       cwd: process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS || ''} --max-old-space-size=4096`.trim(),
+      },
     });
 
     let stdoutData = '';
@@ -292,23 +304,33 @@ async function main() {
   let profile = 'balanced';
   let broker = 'flattrade';
   let resetDaily = false;
-  let concurrency = 5;
+  let concurrency = 2;
+  let prototype = 'prototype_2_adaptive_brain';
 
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
     if (a.startsWith('--capital=')) capital = Number(a.split('=')[1]) || 40000;
     else if (a === '--capital' && i + 1 < rawArgs.length) capital = Number(rawArgs[++i]) || 40000;
+    else if (a.startsWith('--prototype=')) {
+      const pr = a.split('=')[1].toLowerCase();
+      prototype = (pr.includes('1') || pr === 'prototype_1_classic') ? 'prototype_1_classic' : 'prototype_2_adaptive_brain';
+    } else if (a === '--prototype' && i + 1 < rawArgs.length) {
+      const pr = rawArgs[++i].toLowerCase();
+      prototype = (pr.includes('1') || pr === 'prototype_1_classic') ? 'prototype_1_classic' : 'prototype_2_adaptive_brain';
+    }
     else if (a.startsWith('--profile=')) profile = a.split('=')[1];
     else if (a === '--profile' && i + 1 < rawArgs.length) profile = rawArgs[++i];
     else if (a.startsWith('--broker=')) broker = a.split('=')[1];
     else if (a === '--broker' && i + 1 < rawArgs.length) broker = rawArgs[++i];
     else if (a === '--reset-daily') resetDaily = true;
-    else if (a.startsWith('--concurrency=')) concurrency = Number(a.split('=')[1]) || 5;
+    else if (a.startsWith('--concurrency=')) concurrency = Number(a.split('=')[1]) || 2;
+    else if (a === '--concurrency' && i + 1 < rawArgs.length) concurrency = Number(rawArgs[++i]) || 2;
   }
 
   console.log('='.repeat(95));
   console.log('  AUTONOMOUS QUANT MASTER BRAIN — 5-YEAR COMPREHENSIVE HISTORICAL AUDIT');
   console.log('='.repeat(95));
+  console.log(`Engine Prototype:   ${prototype === 'prototype_1_classic' ? 'PROTOTYPE 1 (Classic Baseline - ₹29,005)' : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'}`);
   console.log(`Historical Scope:   2022-01-03 → 2026-09-11 (1,231 Sessions across 5 Years)`);
   console.log(`Fleet Universe:     100 NIFTY Liquid Equities (1-Minute Historical Candles)`);
   console.log(`Capital Baseline:   ₹${capital.toLocaleString('en-IN')} with 5x MIS Intraday Leverage`);
@@ -328,7 +350,7 @@ async function main() {
   async function runPool() {
     const pool = new Set<Promise<any>>();
     for (const cfg of YEARS) {
-      const p: Promise<any> = runYearProcess(cfg, capital, profile, broker, resetDaily, auditDir).then(() => {
+      const p: Promise<any> = runYearProcess(cfg, capital, profile, broker, resetDaily, auditDir, prototype).then(() => {
         pool.delete(p);
       });
       pool.add(p);
