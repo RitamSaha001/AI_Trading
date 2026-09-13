@@ -89,8 +89,8 @@ function GlassCard({
     <div
       id={id}
       className={`${
-        interactive ? 'pro-card-interactive' : 'liquid-glass-subtle'
-      } rounded-2xl sm:rounded-[24px] p-4 sm:p-5 md:p-6 border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] transition-all duration-200 ${className}`}
+        interactive ? 'liquid-glass-card-interactive' : 'liquid-glass-card'
+      } rounded-2xl sm:rounded-[26px] p-4 sm:p-5 md:p-6 transition-all duration-300 ${className}`}
     >
       {children}
     </div>
@@ -166,7 +166,7 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => setWizardOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200/90 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-zinc-800 liquid-glass-button-secondary rounded-xl shadow-xs transition-all cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
               <span>Setup Guide</span>
@@ -175,7 +175,7 @@ export function Dashboard() {
               type="button"
               onClick={refreshAI}
               disabled={aiLoading}
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-zinc-800 bg-white/80 hover:bg-white border border-zinc-200/90 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-zinc-800 liquid-glass-button-secondary rounded-xl shadow-xs transition-all cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${aiLoading ? 'animate-spin text-indigo-600' : 'text-zinc-500'}`} />
               <span>{aiLoading ? 'Analyzing...' : 'Refresh Technicals'}</span>
@@ -188,13 +188,13 @@ export function Dashboard() {
       {state.accountMode === 'upstox' ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between pb-1 flex-wrap gap-2">
-            <div className="flex items-center gap-1.5 p-1 bg-zinc-100/90 rounded-xl border border-zinc-200/80 text-xs">
+            <div className="flex items-center gap-1.5 p-1 liquid-glass-pill text-xs">
               <button
                 type="button"
                 onClick={() => setDashboardTab('pilot')}
-                className={`px-3.5 py-1.5 font-semibold rounded-lg transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 font-semibold rounded-full transition-all cursor-pointer spring-press ${
                   dashboardTab === 'pilot'
-                    ? 'bg-white text-zinc-950 shadow-xs'
+                    ? 'bg-zinc-950 text-white shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
@@ -203,9 +203,9 @@ export function Dashboard() {
               <button
                 type="button"
                 onClick={() => setDashboardTab('upstox_analytics')}
-                className={`px-3.5 py-1.5 font-semibold rounded-lg transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 font-semibold rounded-full transition-all cursor-pointer spring-press ${
                   dashboardTab === 'upstox_analytics'
-                    ? 'bg-white text-zinc-950 shadow-xs'
+                    ? 'bg-zinc-950 text-white shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
@@ -262,10 +262,10 @@ export function Dashboard() {
                 key={a}
                 type="button"
                 onClick={() => setSelectedAsset(a)}
-                className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl text-left border transition-all duration-200 cursor-pointer spring-press ${
+                className={`p-3 sm:p-4 rounded-xl sm:rounded-[22px] text-left transition-all duration-200 cursor-pointer spring-press ${
                   isSelected
-                    ? 'bg-white border-zinc-950 shadow-md ring-1 ring-zinc-950 scale-[1.01]'
-                    : 'pro-card-interactive border-black/[0.06] hover:bg-white'
+                    ? 'liquid-glass-card ring-2 ring-zinc-950 scale-[1.01]'
+                    : 'liquid-glass-card-interactive'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1 gap-1">
@@ -645,8 +645,8 @@ export function Dashboard() {
       </div>
 
       {/* Quantitative AI Workflows & Stress Testing Desk */}
-      <div className="pro-card rounded-2xl sm:rounded-[24px] p-4 sm:p-5 md:p-6 border border-zinc-200/90 shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-200/70">
+      <div className="liquid-glass-card rounded-2xl sm:rounded-[26px] p-4 sm:p-5 md:p-6 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-black/[0.06]">
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
               <Sparkles className="w-4 h-4 text-indigo-400" />
@@ -654,7 +654,7 @@ export function Dashboard() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold tracking-tight text-zinc-950">Quantitative Copilot Workflows</h3>
-                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                <span className="text-[10px] font-mono font-medium px-2.5 py-0.5 rounded-full liquid-glass-pill text-emerald-800">
                   Real-Time AI Grounding
                 </span>
               </div>
@@ -666,7 +666,7 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat()}
-            className="px-4 py-2 text-xs font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-xl shadow-xs transition-all self-start md:self-auto flex items-center gap-2 cursor-pointer spring-press"
+            className="px-4 py-2 text-xs font-semibold text-white liquid-glass-button-primary shadow-xs transition-all self-start md:self-auto flex items-center gap-2 cursor-pointer"
           >
             <span>Open Copilot Terminal</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -677,7 +677,7 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat('Sense market danger across my portfolio. Audit drawdowns, concentration risk, and downside volatility.')}
-            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs spring-press flex flex-col justify-between cursor-pointer"
+            className="p-3.5 rounded-2xl liquid-glass-card-interactive text-left transition-all group flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center shrink-0">
@@ -691,7 +691,7 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat('Run an Indian portfolio stress test simulating a 10% Nifty 50 selloff and sector rotation, and tell me my projected loss and survivability rating.')}
-            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs spring-press flex flex-col justify-between cursor-pointer"
+            className="p-3.5 rounded-2xl liquid-glass-card-interactive text-left transition-all group flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center shrink-0">
@@ -705,7 +705,7 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat(`Synthesize an institutional VWAP momentum strategy bot for ${selectedAsset} with dynamic ATR profit brackets and deploy it.`)}
-            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs spring-press flex flex-col justify-between cursor-pointer"
+            className="p-3.5 rounded-2xl liquid-glass-card-interactive text-left transition-all group flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center shrink-0">
@@ -719,7 +719,7 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => openChat(`Create a Smart Value-Weighted DCA accumulation plan for ${selectedAsset} with dip buying multipliers.`)}
-            className="p-3.5 rounded-xl bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/80 hover:border-zinc-300 text-left transition-all group shadow-2xs spring-press flex flex-col justify-between cursor-pointer"
+            className="p-3.5 rounded-2xl liquid-glass-card-interactive text-left transition-all group flex flex-col justify-between cursor-pointer"
           >
             <div className="flex items-center gap-2 mb-2">
               <div className="w-7 h-7 rounded-lg bg-zinc-200/70 text-zinc-800 flex items-center justify-center shrink-0">
@@ -853,10 +853,10 @@ export function Markets() {
               key={cat}
               type="button"
               onClick={() => setCategory(cat)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
                 isActive
                   ? 'bg-zinc-950 text-white shadow-xs font-semibold'
-                  : 'bg-white/80 text-zinc-600 hover:text-zinc-950 hover:bg-white border border-black/[0.05]'
+                  : 'liquid-glass-pill text-zinc-600 hover:text-zinc-950 hover:bg-white'
               }`}
             >
               <span>{cat}</span>
@@ -869,7 +869,7 @@ export function Markets() {
       </div>
 
       {/* Filter and Sort Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-4 rounded-2xl bg-white/70 border border-black/[0.06] backdrop-blur-md">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-4 rounded-[24px] liquid-glass-card">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
           <input
@@ -877,17 +877,17 @@ export function Markets() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={`Search across ${INDIAN_ASSETS.length} NSE/BSE equities by symbol or name...`}
-            className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900 transition-all"
+            className="w-full pl-9 pr-4 py-2 text-xs liquid-glass-input text-zinc-900 outline-none"
           />
         </div>
 
         <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 text-xs">
-          <div className="flex items-center gap-1 bg-black/[0.03] p-1 rounded-xl border border-black/[0.04]">
+          <div className="flex items-center gap-1 liquid-glass-pill p-1">
             <button
               type="button"
               onClick={() => setSortKey('change')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                sortKey === 'change' ? 'bg-white text-zinc-950 shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
+              className={`px-2.5 py-1 rounded-full font-medium transition-all ${
+                sortKey === 'change' ? 'bg-zinc-950 text-white shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
               }`}
             >
               24h Change
@@ -895,8 +895,8 @@ export function Markets() {
             <button
               type="button"
               onClick={() => setSortKey('price')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                sortKey === 'price' ? 'bg-white text-zinc-950 shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
+              className={`px-2.5 py-1 rounded-full font-medium transition-all ${
+                sortKey === 'price' ? 'bg-zinc-950 text-white shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
               }`}
             >
               Price
@@ -904,8 +904,8 @@ export function Markets() {
             <button
               type="button"
               onClick={() => setSortKey('volume')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                sortKey === 'volume' ? 'bg-white text-zinc-950 shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
+              className={`px-2.5 py-1 rounded-full font-medium transition-all ${
+                sortKey === 'volume' ? 'bg-zinc-950 text-white shadow-2xs' : 'text-zinc-500 hover:text-zinc-900'
               }`}
             >
               Volume
@@ -916,10 +916,10 @@ export function Markets() {
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-xl border transition-all ${
+              className={`p-1.5 rounded-full transition-all ${
                 viewMode === 'grid'
-                  ? 'bg-zinc-950 text-white border-zinc-950'
-                  : 'bg-white text-zinc-500 hover:text-zinc-950 border-black/[0.06]'
+                  ? 'bg-zinc-950 text-white shadow-xs'
+                  : 'liquid-glass-pill text-zinc-500 hover:text-zinc-950'
               }`}
               title="Grid View"
             >
@@ -1513,7 +1513,8 @@ export function Portfolio() {
       </div>
 
       {/* System Health & Safety Sentinel Cockpit Card */}
-      <div className="p-6 rounded-[28px] bg-white border border-black/[0.06] shadow-sm space-y-4">
+      {/* System Health & Safety Sentinel Cockpit Card */}
+      <div className="liquid-glass-card rounded-[28px] p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-black/[0.05]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs">
@@ -1522,7 +1523,7 @@ export function Portfolio() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-zinc-950 tracking-tight">System Health &amp; Safety Sentinel</h3>
-                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full liquid-glass-pill text-emerald-700">
                   Armed &amp; Protecting
                 </span>
               </div>
@@ -1533,7 +1534,7 @@ export function Portfolio() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-zinc-500">Risk Policy:</span>
-            <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-xl bg-zinc-100 text-zinc-800 border border-zinc-200">
+            <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full liquid-glass-pill text-zinc-800">
               {(state.lossPreventionMode || 'strict').toUpperCase()}
             </span>
           </div>
@@ -1541,7 +1542,7 @@ export function Portfolio() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 1. Risk Policy */}
-          <div className="p-3.5 rounded-2xl bg-zinc-50/70 border border-black/[0.04]">
+          <div className="p-3.5 rounded-2xl liquid-glass-subtle">
             <span className="text-[11px] font-semibold text-zinc-500 block">Active Risk Policy</span>
             <div className="flex items-center gap-1.5 mt-1">
               <span className="text-sm font-bold text-zinc-900 capitalize">{(state.lossPreventionMode || 'strict')} Mode</span>
@@ -1556,7 +1557,7 @@ export function Portfolio() {
           </div>
 
           {/* 2. Strategy Circuit Breakers */}
-          <div className="p-3.5 rounded-2xl bg-zinc-50/70 border border-black/[0.04]">
+          <div className="p-3.5 rounded-2xl liquid-glass-subtle">
             <span className="text-[11px] font-semibold text-zinc-500 block">Circuit Breakers</span>
             <div className="flex items-center gap-1.5 mt-1">
               {state.strategies.some((s) => s.circuitBreakerTriggered) ? (
@@ -1579,7 +1580,7 @@ export function Portfolio() {
           </div>
 
           {/* 3. Data Freshness */}
-          <div className="p-3.5 rounded-2xl bg-zinc-50/70 border border-black/[0.04]">
+          <div className="p-3.5 rounded-2xl liquid-glass-subtle">
             <span className="text-[11px] font-semibold text-zinc-500 block">Data Freshness</span>
             <div className="flex items-center gap-1.5 mt-1">
               {(() => {
@@ -1614,7 +1615,7 @@ export function Portfolio() {
           </div>
 
           {/* 4. Pending Orders & Reserved Capital */}
-          <div className="p-3.5 rounded-2xl bg-zinc-50/70 border border-black/[0.04]">
+          <div className="p-3.5 rounded-2xl liquid-glass-subtle">
             <span className="text-[11px] font-semibold text-zinc-500 block">Pending Orders &amp; Capital</span>
             <div className="flex items-center gap-1.5 mt-1">
               {(() => {
@@ -1825,7 +1826,7 @@ export function Portfolio() {
                 const avgCost = state.avgBuyPrice?.[a];
 
                 return (
-                  <tr key={a} className="hover:bg-black/[0.015] transition-colors">
+                  <tr key={a} className="liquid-glass-table-row">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div
@@ -2135,7 +2136,7 @@ export function Orders() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* AI Auto-Pilot Safe Sizing & Bracket Assist */}
-            <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-emerald-500/10 border border-indigo-500/20 flex items-center justify-between gap-3">
+            <div className="p-3 rounded-2xl liquid-glass-subtle border border-indigo-500/20 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
                   <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
@@ -2148,21 +2149,21 @@ export function Orders() {
               <button
                 type="button"
                 onClick={handleAutoPilotFill}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition-all apple-btn-tactile shrink-0"
+                className="px-3 py-1.5 liquid-glass-button-primary text-white rounded-full text-xs font-semibold shadow-2xs transition-all shrink-0"
               >
                 Auto-Fill Bracket
               </button>
             </div>
 
             {/* Buy / Sell Tabs */}
-            <div className="grid grid-cols-2 p-1 rounded-2xl bg-black/[0.04] border border-black/[0.04]">
+            <div className="grid grid-cols-2 p-1 rounded-full liquid-glass-pill">
               <button
                 type="button"
                 onClick={() => setSide('buy')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer spring-press ${
+                className={`py-2 text-xs font-bold rounded-full transition-all cursor-pointer spring-press ${
                   side === 'buy'
                     ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-zinc-600 hover:text-zinc-900'
+                    : 'text-zinc-600 hover:text-zinc-950'
                 }`}
               >
                 Buy (Long)
@@ -2170,10 +2171,10 @@ export function Orders() {
               <button
                 type="button"
                 onClick={() => setSide('sell')}
-                className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer spring-press ${
+                className={`py-2 text-xs font-bold rounded-full transition-all cursor-pointer spring-press ${
                   side === 'sell'
                     ? 'bg-rose-600 text-white shadow-xs'
-                    : 'text-zinc-600 hover:text-zinc-900'
+                    : 'text-zinc-600 hover:text-zinc-950'
                 }`}
               >
                 Sell (Short/Close)
@@ -2190,7 +2191,7 @@ export function Orders() {
                   setSelectedAsset(a);
                   if (markets[a]) setLimitPriceStr(markets[a].price.toFixed(2));
                 }}
-                className="w-full px-3.5 py-2.5 text-xs bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 font-medium"
+                className="w-full px-3.5 py-2.5 text-xs liquid-glass-input rounded-xl outline-none font-medium"
               >
                 {['Banking', 'IT', 'Energy', 'Auto', 'Pharma', 'FMCG'].map((cat) => {
                   const list = INDIAN_ASSETS.filter((x) => (META[x]?.category || 'Other') === cat);
@@ -2219,10 +2220,10 @@ export function Orders() {
                   <button
                     type="button"
                     onClick={() => setProduct('CNC')}
-                    className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all flex flex-col items-center ${
+                    className={`py-2 px-3 text-xs font-semibold rounded-2xl transition-all flex flex-col items-center cursor-pointer spring-press ${
                       product === 'CNC'
-                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
-                        : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
+                        ? 'bg-zinc-950 text-white shadow-xs'
+                        : 'liquid-glass-pill text-zinc-700'
                     }`}
                   >
                     <span className="font-bold">Delivery (CNC)</span>
@@ -2231,10 +2232,10 @@ export function Orders() {
                   <button
                     type="button"
                     onClick={() => setProduct('MIS')}
-                    className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all flex flex-col items-center ${
+                    className={`py-2 px-3 text-xs font-semibold rounded-2xl transition-all flex flex-col items-center cursor-pointer spring-press ${
                       product === 'MIS'
-                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs'
-                        : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
+                        ? 'bg-zinc-950 text-white shadow-xs'
+                        : 'liquid-glass-pill text-zinc-700'
                     }`}
                   >
                     <span className="font-bold">Intraday (MIS)</span>
@@ -2247,14 +2248,14 @@ export function Orders() {
             {/* Order Type */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-zinc-700">Order Style</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 p-1 rounded-full liquid-glass-pill">
                 <button
                   type="button"
                   onClick={() => setOrderType('market')}
-                  className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
+                  className={`py-2 text-xs font-semibold rounded-full transition-all cursor-pointer spring-press ${
                     orderType === 'market'
-                      ? 'bg-black text-white border-black shadow-xs'
-                      : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
+                      ? 'bg-zinc-950 text-white shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-950'
                   }`}
                 >
                   Market (Instant)
@@ -2265,10 +2266,10 @@ export function Orders() {
                     setOrderType('limit');
                     if (!limitPriceStr && m) setLimitPriceStr(m.price.toFixed(2));
                   }}
-                  className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
+                  className={`py-2 text-xs font-semibold rounded-full transition-all cursor-pointer spring-press ${
                     orderType === 'limit'
-                      ? 'bg-black text-white border-black shadow-xs'
-                      : 'bg-white text-zinc-700 border-black/[0.08] hover:bg-black/[0.02]'
+                      ? 'bg-zinc-950 text-white shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-950'
                   }`}
                 >
                   Limit Order
@@ -2278,7 +2279,7 @@ export function Orders() {
 
             {/* Limit Price Input if limit order */}
             {orderType === 'limit' && (
-              <div className="space-y-1.5 p-3 rounded-xl bg-indigo-500/[0.04] border border-indigo-500/15">
+              <div className="space-y-1.5 p-3 rounded-2xl liquid-glass-subtle border border-indigo-500/15">
                 <div className="flex items-center justify-between text-xs">
                   <label className="font-semibold text-indigo-950">Limit Target Price ({isIndian ? '₹' : '$'})</label>
                   <span className="text-zinc-500 text-[11px]">Mark: {formatMoney(m?.price || 0)}</span>
@@ -2289,13 +2290,13 @@ export function Orders() {
                   value={limitPriceStr}
                   onChange={(e) => setLimitPriceStr(e.target.value)}
                   placeholder={m ? m.price.toFixed(2) : '0.00'}
-                  className="w-full px-3.5 py-2 text-xs font-mono font-semibold bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 text-zinc-900"
+                  className="w-full px-3.5 py-2 text-xs font-mono font-semibold liquid-glass-input rounded-xl outline-none text-zinc-900"
                 />
                 {!isTickSizeValid ? (
                   <button
                     type="button"
                     onClick={alignTickSize}
-                    className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 mt-1 flex items-center gap-1"
+                    className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 mt-1 flex items-center gap-1"
                   >
                     <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
                     <span>Price must be multiple of ₹0.05. Click to round to ₹{(Math.round(Number(limitPriceStr) * 20) / 20).toFixed(2)}</span>
@@ -2325,7 +2326,7 @@ export function Orders() {
                 value={amountStr}
                 onChange={(e) => setAmountStr(e.target.value)}
                 placeholder="0"
-                className="w-full px-3.5 py-2.5 text-xs font-mono font-semibold bg-white border border-black/[0.08] rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-zinc-900"
+                className="w-full px-3.5 py-2.5 text-xs font-mono font-semibold liquid-glass-input rounded-xl outline-none text-zinc-900"
               />
 
               {/* Quick % buttons */}
@@ -2335,7 +2336,7 @@ export function Orders() {
                     key={pct}
                     type="button"
                     onClick={() => handleQuickPercent(pct)}
-                    className="py-1 text-[11px] font-medium text-zinc-600 bg-black/[0.03] hover:bg-black/[0.06] rounded-lg transition-all"
+                    className="py-1 text-[11px] font-medium text-zinc-600 liquid-glass-pill transition-all spring-press"
                   >
                     {pct}%
                   </button>
@@ -2353,7 +2354,7 @@ export function Orders() {
                   value={takeProfitStr}
                   onChange={(e) => setTakeProfitStr(e.target.value)}
                   placeholder={m ? (m.price * 1.05).toFixed(2) : ''}
-                  className="w-full px-2.5 py-1.5 text-xs font-mono bg-white border border-black/[0.08] rounded-xl outline-none"
+                  className="w-full px-2.5 py-1.5 text-xs font-mono liquid-glass-input rounded-xl outline-none"
                 />
               </div>
               <div className="space-y-1">
@@ -2364,7 +2365,7 @@ export function Orders() {
                   value={stopLossStr}
                   onChange={(e) => setStopLossStr(e.target.value)}
                   placeholder={m ? (m.price * 0.95).toFixed(2) : ''}
-                  className="w-full px-2.5 py-1.5 text-xs font-mono bg-white border border-black/[0.08] rounded-xl outline-none"
+                  className="w-full px-2.5 py-1.5 text-xs font-mono liquid-glass-input rounded-xl outline-none"
                 />
               </div>
             </div>

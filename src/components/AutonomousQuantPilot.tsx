@@ -710,11 +710,11 @@ export function AutonomousQuantPilot() {
   };
 
   return (
-    <div className="w-full bg-white/95 backdrop-blur-md rounded-2xl p-5 sm:p-6 border border-zinc-200/90 shadow-xs space-y-6 transition-all">
+    <div className="w-full liquid-glass-card rounded-2xl sm:rounded-[28px] p-5 sm:p-6 space-y-6 transition-all">
       {/* ========================================================================= */}
       {/* 1. EXECUTIVE COMMAND BAR                                                  */}
       {/* ========================================================================= */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-zinc-200/70">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-black/[0.06]">
         <div className="flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-zinc-950 text-white flex items-center justify-center shadow-xs shrink-0">
             <Cpu className="w-5 h-5 text-indigo-400" />
@@ -844,10 +844,10 @@ export function AutonomousQuantPilot() {
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Metric 1: Monthly Target Pacing */}
-        <div className="p-4 rounded-xl bg-zinc-50/80 border border-zinc-200/80 space-y-1">
+        <div className="p-4 rounded-2xl liquid-glass-subtle space-y-1 hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
             <span>Target Run-Rate</span>
-            <span className="font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+            <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
               ≥ ₹1,000 / mo
             </span>
           </div>
@@ -867,10 +867,10 @@ export function AutonomousQuantPilot() {
         </div>
 
         {/* Metric 2: Available Capital & Net Worth */}
-        <div className="p-4 rounded-xl bg-zinc-50/80 border border-zinc-200/80 space-y-1">
+        <div className="p-4 rounded-2xl liquid-glass-subtle space-y-1 hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
             <span>Available Capital</span>
-            <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+            <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
               100% Liquid
             </span>
           </div>
@@ -886,10 +886,10 @@ export function AutonomousQuantPilot() {
         </div>
 
         {/* Metric 3: Dynamic Buying Power */}
-        <div className="p-4 rounded-xl bg-zinc-50/80 border border-zinc-200/80 space-y-1">
+        <div className="p-4 rounded-2xl liquid-glass-subtle space-y-1 hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
             <span>Intraday Buying Power</span>
-            <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+            <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
               MIS 5x Margin
             </span>
           </div>
@@ -903,10 +903,10 @@ export function AutonomousQuantPilot() {
         </div>
 
         {/* Metric 4: Risk Sentinel & Circuit Breaker */}
-        <div className="p-4 rounded-xl bg-zinc-50/80 border border-zinc-200/80 space-y-1">
+        <div className="p-4 rounded-2xl liquid-glass-subtle space-y-1 hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
             <span>Capital Protection</span>
-            <span className={`font-bold px-1.5 py-0.5 rounded border ${
+            <span className={`font-bold px-2 py-0.5 rounded-full border ${
               isTripped ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
             }`}>
               {isTripped ? 'TRIPPED' : 'ARMED & ACTIVE'}
@@ -1281,24 +1281,24 @@ export function AutonomousQuantPilot() {
       {/* ========================================================================= */}
       {/* 5. STREAMLINED DESK TABS                                                  */}
       {/* ========================================================================= */}
-      <div className="flex items-center justify-between border-b border-zinc-200 pb-2 flex-wrap gap-2 pt-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center justify-between border-b border-black/[0.06] pb-2 flex-wrap gap-2 pt-2">
+        <div className="flex items-center gap-1.5 flex-wrap p-1 liquid-glass-pill">
           {/* TAB: ACTIVE POSITIONS */}
           <button
             type="button"
             onClick={() => setActiveTab('positions')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
               activeTab === 'positions'
-                ? 'bg-zinc-900 text-white shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
+                ? 'bg-zinc-950 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-950'
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
             <span>Active Positions</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
               activePositionsList.length > 0
                 ? (activeTab === 'positions' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800 font-bold')
-                : (activeTab === 'positions' ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-700')
+                : (activeTab === 'positions' ? 'bg-white/20 text-white' : 'bg-black/[0.06] text-zinc-700')
             }`}>
               {activePositionsList.length}
             </span>
@@ -1308,15 +1308,15 @@ export function AutonomousQuantPilot() {
           <button
             type="button"
             onClick={() => setActiveTab('opportunities')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
               activeTab === 'opportunities'
-                ? 'bg-zinc-900 text-white shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
+                ? 'bg-zinc-950 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-950'
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
             <span>Opportunity Scanner</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
               activeTab === 'opportunities' ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-700'
             }`}>
               {opportunities.length}
@@ -1327,16 +1327,16 @@ export function AutonomousQuantPilot() {
           <button
             type="button"
             onClick={() => setActiveTab('fleet')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
               activeTab === 'fleet'
-                ? 'bg-zinc-900 text-white shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
+                ? 'bg-zinc-950 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-950'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
             <span>Fleet Coverage</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
-              activeTab === 'fleet' ? 'bg-white/20 text-white' : 'bg-zinc-100 text-zinc-600'
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              activeTab === 'fleet' ? 'bg-white/20 text-white' : 'bg-black/[0.06] text-zinc-600'
             }`}>
               {UPSTOX_FLEET_ASSETS.length}
             </span>
@@ -1346,15 +1346,15 @@ export function AutonomousQuantPilot() {
           <button
             type="button"
             onClick={() => setActiveTab('quant_lab')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
               activeTab === 'quant_lab'
                 ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-zinc-600 hover:text-indigo-900 hover:bg-indigo-50/60'
+                : 'text-zinc-600 hover:text-indigo-900'
             }`}
           >
             <Calculator className="w-3.5 h-3.5" />
             <span>Quant Lab &bull; Simulator</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-indigo-100 text-indigo-800 font-mono font-bold">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 font-mono font-bold">
               ₹1L Calc
             </span>
           </button>
@@ -1363,17 +1363,17 @@ export function AutonomousQuantPilot() {
           <button
             type="button"
             onClick={() => setActiveTab('logs')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all flex items-center gap-1.5 cursor-pointer spring-press ${
               activeTab === 'logs'
-                ? 'bg-zinc-900 text-white shadow-xs'
-                : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100'
+                ? 'bg-zinc-950 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-950'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
             <span>Execution Audit</span>
             {actionLogs.length > 0 && (
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
-                activeTab === 'logs' ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-700'
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                activeTab === 'logs' ? 'bg-white/20 text-white' : 'bg-black/[0.06] text-zinc-700'
               }`}>
                 {actionLogs.length}
               </span>
