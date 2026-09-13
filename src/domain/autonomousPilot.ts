@@ -101,7 +101,7 @@ export function createDefaultAutonomousPilotState(startingValue = 50000): Autono
   return {
     enabled: false,
     profile: 'conservative',
-    prototypeVersion: 'prototype_2_adaptive_brain',
+    prototypeVersion: 'prototype_1_classic',
     rollingMonthlyContext: {
       rollingMonthlyPnl: 0,
       daysEvaluatedInMonth: 1,

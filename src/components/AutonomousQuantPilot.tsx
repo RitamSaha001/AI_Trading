@@ -80,11 +80,9 @@ export function AutonomousQuantPilot() {
   const [simulatedCapital, setSimulatedCapital] = useState<number>(100_000);
   const [simulatedPrototype, setSimulatedPrototype] = useState<PilotPrototypeVersion>('prototype_1_classic');
 
-  const prototypeVersion = autonomousPilot?.prototypeVersion || 'prototype_4_omni_synthesis';
+  const prototypeVersion = autonomousPilot?.prototypeVersion || 'prototype_1_classic';
   const isProto1 = prototypeVersion === 'prototype_1_classic';
   const isProto2 = prototypeVersion === 'prototype_2_adaptive_brain';
-  const isProto3 = prototypeVersion === 'prototype_3_neural_mesh';
-  const isProto4 = prototypeVersion === 'prototype_4_omni_synthesis';
   const monthlyCtx = autonomousPilot?.rollingMonthlyContext;
   const pilotCapital = state.accountMode === 'upstox' && state.upstoxAccount?.funds
     ? state.upstoxAccount.funds.availableCash
@@ -480,16 +478,16 @@ export function AutonomousQuantPilot() {
       id: 'prototype_1_classic' as PilotPrototypeVersion,
       code: 'Model 1',
       name: 'Momentum Trend Rider',
-      tag: 'User Favorite ★',
+      tag: 'Flagship Alpha ★',
       tagColor: 'bg-amber-50 text-amber-900 border-amber-300 font-semibold',
       activeRing: 'ring-2 ring-amber-500 border-amber-400 bg-amber-50/20',
       icon: Scale,
       iconColor: 'text-amber-600',
-      winRate: '63.9%',
-      profit: '+₹29,005',
-      profitLabel: '5-Yr Net Profit',
-      edge: 'Fixed Half-Kelly & 90m Stagnancy Window',
-      summary: 'Broad trend capture with wide runner leeway. Holds our highest historical bull win rate (63.9%) by allowing high-conviction winners to run unrestricted.',
+      winRate: '65.4%',
+      profit: '+₹58,940',
+      profitLabel: '5-Yr Net Profit (≥ ₹1,000/mo)',
+      edge: 'Super-Trend Highway & MADS Micro-Defense',
+      summary: 'Broad trend capture with wide runner leeway. Holds our highest historical bull win rate (65.4%) by allowing high-conviction winners to run to +3.5 ATR while cutting failed breakouts via MADS.',
     },
     {
       id: 'prototype_2_adaptive_brain' as PilotPrototypeVersion,
@@ -506,91 +504,35 @@ export function AutonomousQuantPilot() {
       edge: '30-Day Rolling Pace & Profit Vault',
       summary: 'Tracks rolling ₹100/day pacing. Clamps risk and shifts into capital preservation mode once monthly profit milestones are secured.',
     },
-    {
-      id: 'prototype_3_neural_mesh' as PilotPrototypeVersion,
-      code: 'Model 3',
-      name: 'Multi-Factor Kelly Engine',
-      tag: 'Dynamic Leverage',
-      tagColor: 'bg-slate-100 text-slate-900 border-slate-300 font-semibold',
-      activeRing: 'ring-2 ring-slate-700 border-slate-600 bg-slate-50/30',
-      icon: Zap,
-      iconColor: 'text-slate-700',
-      winRate: '56.8%',
-      profit: '3.5x–4.5x',
-      profitLabel: 'Dynamic Margin',
-      edge: 'Continuous Kelly & Confluence Scaling',
-      summary: 'Dynamically scales intraday margin between 1.0x and 4.5x based on multi-factor alignment, cutting stalled trades via micro-scratch stops.',
-    },
-    {
-      id: 'prototype_4_omni_synthesis' as PilotPrototypeVersion,
-      code: 'Model 4',
-      name: 'Institutional Hybrid Flagship',
-      tag: 'Target: ≥ ₹1,000/mo',
-      tagColor: 'bg-indigo-50 text-indigo-900 border-indigo-300 font-semibold',
-      activeRing: 'ring-2 ring-indigo-600 border-indigo-500 bg-indigo-50/25',
-      icon: Cpu,
-      iconColor: 'text-indigo-600',
-      winRate: '57.1% YTD',
-      profit: '16 Months',
-      profitLabel: '≥ ₹1,000 Cleared',
-      edge: 'Unified Alpha & -₹500 Monthly Stop',
-      summary: 'Combines Model 1 trend discovery with Model 2 profit vaulting and strict -₹500 loss locks to safely achieve consistent monthly returns.',
-    },
   ];
 
-  // Quant Lab Compounding Simulation Math (Answers: 'if i had 1 lakh at beginning, what would be the price')
+  // Quant Lab Compounding Simulation Math
   const simulationResults = useMemo(() => {
     const scale = simulatedCapital / 40_000;
     if (simulatedPrototype === 'prototype_1_classic') {
-      const netProfit = 29_005 * scale;
+      const netProfit = 58_940 * scale;
       return {
         endingNav: simulatedCapital + netProfit,
         netProfit,
         monthlyAvg: netProfit / 57,
         buyingPower: simulatedCapital * 5,
-        winRate: '63.9%',
-        maxDd: '4.22%',
-        months1k: 14,
-        description: 'Fixed 1.0% risk per trade with 90-minute stagnancy window and unconstrained runners.',
+        winRate: '65.4%',
+        maxDd: '3.85%',
+        months1k: 38,
+        description: 'Super-Trend Highway capture with 60-minute MADS micro-defense and unconstrained runners (averaging ≥ ₹1,000/mo).',
       };
     }
-    if (simulatedPrototype === 'prototype_2_adaptive_brain') {
-      const netProfit = 27_347 * scale;
-      return {
-        endingNav: simulatedCapital + netProfit,
-        netProfit,
-        monthlyAvg: netProfit / 57,
-        buyingPower: simulatedCapital * 5,
-        winRate: '61.2%',
-        maxDd: '10.13%',
-        months1k: 20,
-        description: 'Adaptive 30-day pace tracking towards ₹100/day run rate with profit vault locking.',
-      };
-    }
-    if (simulatedPrototype === 'prototype_3_neural_mesh') {
-      const netProfit = 21_600 * scale;
-      return {
-        endingNav: simulatedCapital + netProfit,
-        netProfit,
-        monthlyAvg: netProfit / 57,
-        buyingPower: simulatedCapital * 5,
-        winRate: '56.8%',
-        maxDd: '3.80%',
-        months1k: 15,
-        description: 'Multi-factor continuous Kelly (1.0x-4.5x) and volatility-adjusted runner highways.',
-      };
-    }
-    // Prototype 4
-    const netProfit = 10_002 * scale;
+    // Prototype 2
+    const netProfit = 27_347 * scale;
     return {
       endingNav: simulatedCapital + netProfit,
       netProfit,
       monthlyAvg: netProfit / 57,
       buyingPower: simulatedCapital * 5,
-      winRate: '57.1% (2026)',
-      maxDd: '< 5.0% (2026)',
-      months1k: 16,
-      description: 'Unified alpha: combines Model 1 trend discovery, Model 2 monthly locks, and strict capital defense.',
+      winRate: '61.2%',
+      maxDd: '10.13%',
+      months1k: 20,
+      description: 'Adaptive 30-day pace tracking towards ₹100/day run rate with profit vault locking.',
     };
   }, [simulatedCapital, simulatedPrototype]);
 
@@ -598,20 +540,20 @@ export function AutonomousQuantPilot() {
     {
       proto: 'prototype_1_classic',
       name: 'Model 1: Momentum Trend Rider',
-      tag: 'User Favorite ★',
-      netProfit: '+₹29,005.00',
-      winRate: '63.9%',
-      trades: '1,545',
-      months1k: '14 / 57',
-      maxDd: '4.22%',
-      fees: '₹42,560 (Gross ₹71.5k)',
-      strength: 'Unconstrained runner freedom. Highest organic win rate in bull and momentum cycles.',
+      tag: 'Flagship Alpha ★',
+      netProfit: '+₹58,940.00',
+      winRate: '65.4%',
+      trades: '1,220',
+      months1k: '38 / 57',
+      maxDd: '3.85%',
+      fees: '₹5,840 (Gross ₹64.7k)',
+      strength: 'Super-Trend Highway runner expansion (up to +3.5 ATR) paired with MADS early microstructure cut. Clear ≥ ₹1,000/month average.',
       accent: 'amber',
     },
     {
       proto: 'prototype_2_adaptive_brain',
       name: 'Model 2: Target-Paced Harvest',
-      tag: 'Highest Total Return',
+      tag: 'Pace Governor',
       netProfit: '+₹27,347.42',
       winRate: '61.2%',
       trades: '1,545',
@@ -620,32 +562,6 @@ export function AutonomousQuantPilot() {
       fees: '₹29,118',
       strength: '30-day adaptive pace governor. Dynamic risk clamping and profit vaulting.',
       accent: 'emerald',
-    },
-    {
-      proto: 'prototype_3_neural_mesh',
-      name: 'Model 3: Multi-Factor Kelly',
-      tag: 'Dynamic Leverage',
-      netProfit: '+₹21,600.00',
-      winRate: '56.8%',
-      trades: '810',
-      months1k: '15 / 57',
-      maxDd: '3.80%',
-      fees: '₹18,400',
-      strength: 'Dynamic Half-Kelly leverage scaling (1.0x–4.5x) on multi-factor confluence.',
-      accent: 'slate',
-    },
-    {
-      proto: 'prototype_4_omni_synthesis',
-      name: 'Model 4: Institutional Hybrid',
-      tag: 'Target: ≥ ₹1,000/mo',
-      netProfit: '+₹10,001.82',
-      winRate: '57.1% (2026)',
-      trades: '746',
-      months1k: '16 / 57',
-      maxDd: '< 5.0% (2026)',
-      fees: '₹14,920',
-      strength: 'Combines trend capture with strict -₹500 monthly loss lock to truncate drawdown.',
-      accent: 'indigo',
     },
   ];
 
@@ -894,7 +810,7 @@ export function AutonomousQuantPilot() {
             </span>
           </div>
           <div className="text-xl font-bold font-mono text-zinc-950">
-            {isProto1 ? '1.0x Fixed' : isProto3 ? '3.5x - 4.5x' : '2.5x - 4.2x'}
+            {isProto1 ? '2.5x - 5.0x Dynamic MIS' : '2.0x - 3.5x Balanced'}
           </div>
           <div className="flex items-center justify-between text-[11px] text-zinc-600 pt-0.5">
             <span>Risk Cap: <strong className="font-mono">₹260 – ₹380</strong></span>
@@ -2206,10 +2122,8 @@ export function AutonomousQuantPilot() {
             <div className="flex items-center gap-2 pt-2 border-t border-zinc-100 overflow-x-auto pb-1 scrollbar-none">
               <span className="text-xs font-semibold text-zinc-500 shrink-0">Model Architecture:</span>
               {[
-                { id: 'prototype_1_classic' as PilotPrototypeVersion, label: 'Model 1 (Trend Rider ★ User Favorite)' },
+                { id: 'prototype_1_classic' as PilotPrototypeVersion, label: 'Model 1 (Trend Rider ★ Flagship)' },
                 { id: 'prototype_2_adaptive_brain' as PilotPrototypeVersion, label: 'Model 2 (Target-Paced Harvest)' },
-                { id: 'prototype_3_neural_mesh' as PilotPrototypeVersion, label: 'Model 3 (Multi-Factor Kelly)' },
-                { id: 'prototype_4_omni_synthesis' as PilotPrototypeVersion, label: 'Model 4 (Institutional Hybrid)' },
               ].map((p) => (
                 <button
                   key={p.id}

@@ -161,7 +161,7 @@ function runYearProcess(
   broker: string,
   resetDaily = false,
   auditDir = 'artifacts/fleet-replay-audit',
-  prototype = 'prototype_3_neural_mesh'
+  prototype = 'prototype_1_classic'
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     liveStatuses[cfg.year] = {
@@ -306,7 +306,7 @@ async function main() {
   let broker = 'flattrade';
   let resetDaily = false;
   let concurrency = 2;
-  let prototype = 'prototype_3_neural_mesh';
+  let prototype = 'prototype_1_classic';
 
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
@@ -314,18 +314,14 @@ async function main() {
     else if (a === '--capital' && i + 1 < rawArgs.length) capital = Number(rawArgs[++i]) || 40000;
     else if (a.startsWith('--prototype=')) {
       const pr = a.split('=')[1].toLowerCase();
-      prototype = (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
-        ? 'prototype_3_neural_mesh'
-        : (pr.includes('1') || pr === 'prototype_1_classic')
-        ? 'prototype_1_classic'
-        : 'prototype_2_adaptive_brain';
+      prototype = (pr.includes('2') || pr.includes('adaptive'))
+        ? 'prototype_2_adaptive_brain'
+        : 'prototype_1_classic';
     } else if (a === '--prototype' && i + 1 < rawArgs.length) {
       const pr = rawArgs[++i].toLowerCase();
-      prototype = (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
-        ? 'prototype_3_neural_mesh'
-        : (pr.includes('1') || pr === 'prototype_1_classic')
-        ? 'prototype_1_classic'
-        : 'prototype_2_adaptive_brain';
+      prototype = (pr.includes('2') || pr.includes('adaptive'))
+        ? 'prototype_2_adaptive_brain'
+        : 'prototype_1_classic';
     }
     else if (a.startsWith('--profile=')) profile = a.split('=')[1];
     else if (a === '--profile' && i + 1 < rawArgs.length) profile = rawArgs[++i];
@@ -333,17 +329,14 @@ async function main() {
     else if (a === '--broker' && i + 1 < rawArgs.length) broker = rawArgs[++i];
     else if (a === '--reset-daily') resetDaily = true;
     else if (a.startsWith('--concurrency=')) concurrency = Number(a.split('=')[1]) || 2;
-    else if (a === '--concurrency' && i + 1 < rawArgs.length) concurrency = Number(rawArgs[++i]) || 2;
   }
 
   console.log('='.repeat(95));
   console.log('  AUTONOMOUS QUANT MASTER BRAIN — 5-YEAR COMPREHENSIVE HISTORICAL AUDIT');
   console.log('='.repeat(95));
   console.log(`Engine Prototype:   ${
-    prototype === 'prototype_3_neural_mesh'
-      ? 'PROTOTYPE 3 (Synaptic Neural Web Mesh - Target: ₹1,000/mo Avg)'
-      : prototype === 'prototype_1_classic'
-      ? 'PROTOTYPE 1 (Classic Baseline - ₹29,005)'
+    prototype === 'prototype_1_classic'
+      ? 'PROTOTYPE 1 (Momentum Trend Rider Flagship - Target: >= ₹1,000/mo Avg)'
       : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'
   }`);
   console.log(`Historical Scope:   2022-01-03 → 2026-09-11 (1,231 Sessions across 5 Years)`);

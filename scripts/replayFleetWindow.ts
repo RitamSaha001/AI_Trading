@@ -238,7 +238,7 @@ async function replaySingleDay(
   profile: AutonomousPilotProfile,
   broker: 'upstox' | 'flattrade' = 'upstox',
   persistentFleet?: Record<string, AssetFleetStatus>,
-  prototypeVersion: PilotPrototypeVersion = 'prototype_3_neural_mesh',
+  prototypeVersion: PilotPrototypeVersion = 'prototype_1_classic',
   rollingMonthlyContext?: RollingMonthlyPnlContext
 ): Promise<DayReplaySummary> {
   const assetHistoricalMap: Map<Asset, RawCandle[]> = new Map();
@@ -848,7 +848,7 @@ async function runMultiDayWindowReplay() {
   let profile: AutonomousPilotProfile = 'balanced';
   let compounding = true;
   let broker: 'upstox' | 'flattrade' = 'flattrade';
-  let prototype: PilotPrototypeVersion = 'prototype_3_neural_mesh';
+  let prototype: PilotPrototypeVersion = 'prototype_1_classic';
   let tag = '';
   let fromDate: string | undefined;
   let startDate: string | undefined;
@@ -866,22 +866,14 @@ async function runMultiDayWindowReplay() {
       capital = Number(args[++i]) || 40000;
     } else if (arg.startsWith('--prototype=')) {
       const pr = arg.split('=')[1].toLowerCase();
-      prototype = (pr.includes('4') || pr.includes('omni') || pr === 'prototype_4_omni_synthesis')
-        ? 'prototype_4_omni_synthesis'
-        : (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
-        ? 'prototype_3_neural_mesh'
-        : (pr.includes('1') || pr === 'prototype_1_classic')
-        ? 'prototype_1_classic'
-        : 'prototype_2_adaptive_brain';
+      prototype = (pr.includes('2') || pr.includes('adaptive'))
+        ? 'prototype_2_adaptive_brain'
+        : 'prototype_1_classic';
     } else if (arg === '--prototype' && i + 1 < args.length) {
       const pr = args[++i].toLowerCase();
-      prototype = (pr.includes('4') || pr.includes('omni') || pr === 'prototype_4_omni_synthesis')
-        ? 'prototype_4_omni_synthesis'
-        : (pr.includes('3') || pr.includes('neural') || pr === 'prototype_3_neural_mesh')
-        ? 'prototype_3_neural_mesh'
-        : (pr.includes('1') || pr === 'prototype_1_classic')
-        ? 'prototype_1_classic'
-        : 'prototype_2_adaptive_brain';
+      prototype = (pr.includes('2') || pr.includes('adaptive'))
+        ? 'prototype_2_adaptive_brain'
+        : 'prototype_1_classic';
     } else if (arg.startsWith('--profile=')) {
       const p = arg.split('=')[1].toLowerCase();
       if (p === 'conservative' || p === 'balanced' || p === 'momentum' || p === 'elite_runner') {
@@ -940,12 +932,8 @@ async function runMultiDayWindowReplay() {
   console.log(`Starting Capital:     ₹${capital.toLocaleString('en-IN')}`);
   console.log(`Risk Profile:         ${profile.toUpperCase()}`);
   console.log(`Engine Prototype:     ${
-    prototype === 'prototype_4_omni_synthesis'
-      ? 'PROTOTYPE 4 (Omni-Synaptic Master Synthesis - Target: >=₹1,000/mo Avg)'
-      : prototype === 'prototype_3_neural_mesh'
-      ? 'PROTOTYPE 3 (Synaptic Neural Web Mesh - Target: ₹1,000/mo Avg)'
-      : prototype === 'prototype_1_classic'
-      ? 'PROTOTYPE 1 (Classic Benchmark Baseline - ₹29,005)'
+    prototype === 'prototype_1_classic'
+      ? 'PROTOTYPE 1 (Momentum Trend Rider Flagship - Target: >= ₹1,000/mo Avg)'
       : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'
   }`);
   console.log(`Execution Venue:      ${broker.toUpperCase()} (${broker === 'flattrade' ? 'Zero Brokerage Retail-Algo Engine' : 'Traditional Discount Broker'})`);
