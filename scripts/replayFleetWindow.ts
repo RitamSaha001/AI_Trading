@@ -238,7 +238,7 @@ async function replaySingleDay(
   profile: AutonomousPilotProfile,
   broker: 'upstox' | 'flattrade' = 'upstox',
   persistentFleet?: Record<string, AssetFleetStatus>,
-  prototypeVersion: PilotPrototypeVersion = 'prototype_2_adaptive_brain',
+  prototypeVersion: PilotPrototypeVersion = 'prototype_3_neural_mesh',
   rollingMonthlyContext?: RollingMonthlyPnlContext
 ): Promise<DayReplaySummary> {
   const assetHistoricalMap: Map<Asset, RawCandle[]> = new Map();
@@ -848,7 +848,7 @@ async function runMultiDayWindowReplay() {
   let profile: AutonomousPilotProfile = 'balanced';
   let compounding = true;
   let broker: 'upstox' | 'flattrade' = 'flattrade';
-  let prototype: PilotPrototypeVersion = 'prototype_2_adaptive_brain';
+  let prototype: PilotPrototypeVersion = 'prototype_3_neural_mesh';
   let tag = '';
   let fromDate: string | undefined;
   let startDate: string | undefined;

@@ -161,7 +161,7 @@ function runYearProcess(
   broker: string,
   resetDaily = false,
   auditDir = 'artifacts/fleet-replay-audit',
-  prototype = 'prototype_2_adaptive_brain'
+  prototype = 'prototype_3_neural_mesh'
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     liveStatuses[cfg.year] = {
@@ -181,6 +181,7 @@ function runYearProcess(
     };
 
     console.log(`[Launch] Starting replay for ${cfg.year} (${cfg.startDate} → ${cfg.endDate}, ${cfg.totalDays} sessions)...`);
+    const yearTag = `${cfg.tag}-${prototype}`;
     const args = [
       'scripts/replayFleetWindow.ts',
       `--start=${cfg.startDate}`,
@@ -188,7 +189,7 @@ function runYearProcess(
       `--capital=${capital}`,
       `--profile=${profile}`,
       `--broker=${broker}`,
-      `--tag=${cfg.tag}`,
+      `--tag=${yearTag}`,
       `--prototype=${prototype}`,
     ];
     if (resetDaily) {
@@ -305,7 +306,7 @@ async function main() {
   let broker = 'flattrade';
   let resetDaily = false;
   let concurrency = 2;
-  let prototype = 'prototype_2_adaptive_brain';
+  let prototype = 'prototype_3_neural_mesh';
 
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
@@ -398,7 +399,8 @@ async function main() {
   for (const cfg of YEARS) {
     let loadedData: any = null;
     const allFiles = readdirSync(auditDir);
-    const taggedFile = allFiles.find((f: string) => f.includes(cfg.tag) && f.endsWith('.json'));
+    const taggedFile = allFiles.find((f: string) => f.includes(`${cfg.tag}-${prototype}`) && f.endsWith('.json'))
+      || allFiles.find((f: string) => f.includes(cfg.tag) && f.endsWith('.json'));
     if (taggedFile) {
       const raw = await readFile(join(auditDir, taggedFile), 'utf-8');
       loadedData = JSON.parse(raw);
