@@ -19,7 +19,7 @@ export const INDIAN_EQUITY_ENTITIES: EntityMapping[] = [
   { symbol: "SBIN", name: "State Bank of India", aliases: ["state bank of india", "sbi", "sbin", "state bank"] },
   { symbol: "BHARTIARTL", name: "Bharti Airtel", aliases: ["bharti airtel", "airtel", "sunil mittal"] },
   { symbol: "KOTAKBANK", name: "Kotak Mahindra Bank", aliases: ["kotak mahindra bank", "kotak bank", "kotak", "uday kotak"] },
-  { symbol: "LT", name: "Larsen & Toubro", aliases: ["larsen & toubro", "larsen and toubro", "l&t", "lt", "larsen"] },
+  { symbol: "LT", name: "Larsen & Toubro", aliases: ["larsen & toubro", "larsen and toubro", "l&t", "larsen"] },
   { symbol: "ITC", name: "ITC Limited", aliases: ["itc", "itc limited"] },
   { symbol: "HINDUNILVR", name: "Hindustan Unilever", aliases: ["hindustan unilever", "hul", "unilever"] },
   { symbol: "AXISBANK", name: "Axis Bank", aliases: ["axis bank", "axis"] },
@@ -101,8 +101,11 @@ export function extractEntitiesFromText(text: string): { tickers: string[]; enti
       }
     }
     if (!matched) {
-      const symbolPattern = new RegExp("\\b" + escapeRegex(entity.symbol) + "\\b", "i");
-      if (symbolPattern.test(lower)) {
+      // For short 2-character symbols (like LT), require uppercase match to prevent false positives from HTML &lt; or typos
+      const flags = entity.symbol.length <= 2 ? "" : "i";
+      const targetText = entity.symbol.length <= 2 ? text : lower;
+      const symbolPattern = new RegExp("\\b" + escapeRegex(entity.symbol) + "\\b", flags);
+      if (symbolPattern.test(targetText)) {
         matchedTickers.add(entity.symbol);
         entityNames.add(entity.name);
       }
