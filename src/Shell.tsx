@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useLumen } from './store';
 import { ASSETS, Asset } from './types';
 import { SettingsModal } from './Settings';
@@ -133,6 +133,94 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [indianBrokerDrawerOpen, setIndianBrokerDrawerOpen] = useState(false);
+
+  // Apple Gliding Liquid Dock Navigation State & Refs
+  const navContainerRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, top: 0, width: 0, height: 0, ready: false });
+  const [dropTab, setDropTab] = useState<Route | null>(null);
+  const [dropKey, setDropKey] = useState(0);
+
+  // Apple Gliding Desk Switcher State & Refs
+  const deskContainerRef = useRef<HTMLDivElement>(null);
+  const paperBtnRef = useRef<HTMLButtonElement>(null);
+  const upstoxBtnRef = useRef<HTMLButtonElement>(null);
+  const [deskPill, setDeskPill] = useState({ left: 0, top: 0, width: 0, height: 0, ready: false });
+  const [deskDropMode, setDeskDropMode] = useState<string | null>(null);
+  const [deskDropKey, setDeskDropKey] = useState(0);
+
+  const updateDockPill = useCallback(() => {
+    const container = navContainerRef.current;
+    const activeEl = tabRefs.current[route];
+    if (!container || !activeEl) return;
+
+    setIndicatorStyle({
+      left: activeEl.offsetLeft,
+      top: activeEl.offsetTop,
+      width: activeEl.offsetWidth,
+      height: activeEl.offsetHeight,
+      ready: true,
+    });
+  }, [route]);
+
+  const updateDeskPill = useCallback(() => {
+    const container = deskContainerRef.current;
+    const activeEl = accountMode === 'paper' ? paperBtnRef.current : upstoxBtnRef.current;
+    if (!container || !activeEl) return;
+
+    setDeskPill({
+      left: activeEl.offsetLeft,
+      top: activeEl.offsetTop,
+      width: activeEl.offsetWidth,
+      height: activeEl.offsetHeight,
+      ready: true,
+    });
+  }, [accountMode]);
+
+  useEffect(() => {
+    updateDockPill();
+    setDropTab(route);
+    setDropKey((prev) => prev + 1);
+    const timer = setTimeout(updateDockPill, 60);
+    return () => clearTimeout(timer);
+  }, [route, updateDockPill]);
+
+  useEffect(() => {
+    updateDeskPill();
+    setDeskDropMode(accountMode);
+    setDeskDropKey((prev) => prev + 1);
+    const timer = setTimeout(updateDeskPill, 60);
+    return () => clearTimeout(timer);
+  }, [accountMode, updateDeskPill]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      updateDockPill();
+      updateDeskPill();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updateDockPill, updateDeskPill]);
+
+  const handleTabClick = (path: Route) => {
+    setDropTab(path);
+    setDropKey((prev) => prev + 1);
+    go(path);
+  };
+
+  const handleDeskClick = (mode: 'paper' | 'upstox') => {
+    setDeskDropMode(mode);
+    setDeskDropKey((prev) => prev + 1);
+    if (mode === 'upstox') {
+      if (!upstoxAccount?.connected) {
+        openUpstoxDrawer();
+      } else {
+        setAccountMode('upstox');
+      }
+    } else {
+      setAccountMode('paper');
+    }
+  };
 
   // Global Keyboard Shortcut: ⌘K or Ctrl+K to jump to search
   useEffect(() => {
@@ -301,52 +389,78 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* Right Header Actions */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Professional Segmented Desk Switcher */}
-          <div className="inline-flex items-center p-0.5 rounded-full bg-zinc-100/90 border border-black/[0.06] shrink-0">
+          {/* Professional Segmented Desk Switcher with Apple Gliding Spring Pill */}
+          <div
+            ref={deskContainerRef}
+            className="relative inline-flex items-center p-0.5 rounded-full bg-zinc-100/90 border border-black/[0.06] shrink-0"
+          >
+            {/* Apple Gliding Desk Active Pill */}
+            <div
+              className="liquid-desk-active-pill"
+              style={{
+                transform: `translate3d(${deskPill.left}px, ${deskPill.top}px, 0)`,
+                width: `${deskPill.width}px`,
+                height: `${deskPill.height}px`,
+                opacity: deskPill.ready ? 1 : 0,
+              }}
+            />
+
             <button
+              ref={paperBtnRef}
               type="button"
-              onClick={() => setAccountMode('paper')}
-              className={`px-2.5 py-1 text-[11px] rounded-full transition-all flex items-center gap-1.5 font-medium cursor-pointer ${
+              onClick={() => handleDeskClick('paper')}
+              className={`relative z-10 px-2.5 py-1 text-[11px] rounded-full transition-colors flex items-center gap-1.5 font-medium cursor-pointer ${
                 accountMode === 'paper'
-                  ? 'bg-white text-zinc-950 font-semibold shadow-2xs'
+                  ? (!deskPill.ready ? 'bg-white shadow-2xs ' : '') + 'text-zinc-950 font-semibold'
                   : 'text-zinc-500 hover:text-zinc-900'
               }`}
               title="Switch to Simulated Paper Sandbox"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-              <span>Paper</span>
+              {deskDropMode === 'paper' && (
+                <>
+                  <span key={`desk-ripple-${deskDropKey}`} className="liquid-drop-ripple" />
+                  <span key={`desk-sheen-${deskDropKey}`} className="liquid-drop-sheen" />
+                </>
+              )}
+              <div className={`flex items-center gap-1.5 ${deskDropMode === 'paper' ? 'animate-drop-bounce' : ''}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                <span>Paper</span>
+              </div>
             </button>
 
             <button
+              ref={upstoxBtnRef}
               type="button"
-              onClick={() => {
-                if (!upstoxAccount?.connected) {
-                  openUpstoxDrawer();
-                } else {
-                  setAccountMode('upstox');
-                }
-              }}
-              className={`px-2.5 py-1 text-[11px] rounded-full transition-all flex items-center gap-1.5 font-medium cursor-pointer ${
+              onClick={() => handleDeskClick('upstox')}
+              className={`relative z-10 px-2.5 py-1 text-[11px] rounded-full transition-colors flex items-center gap-1.5 font-medium cursor-pointer ${
                 accountMode === 'upstox'
-                  ? 'bg-white text-zinc-950 font-semibold shadow-2xs'
+                  ? (!deskPill.ready ? 'bg-white shadow-2xs ' : '') + 'text-zinc-950 font-semibold'
                   : upstoxAccount?.connected
                   ? 'text-indigo-600 hover:text-indigo-900'
                   : 'text-zinc-500 hover:text-zinc-900'
               }`}
               title={upstoxAccount?.connected ? 'Upstox (NSE / BSE Live Desk)' : 'Connect Upstox Demat'}
             >
-              <span
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  upstoxAccount?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'
-                }`}
-              />
-              <span>Upstox</span>
-              <span className="hidden md:inline text-[10px] text-zinc-400 font-normal">NSE</span>
+              {deskDropMode === 'upstox' && (
+                <>
+                  <span key={`desk-ripple-${deskDropKey}`} className="liquid-drop-ripple" />
+                  <span key={`desk-sheen-${deskDropKey}`} className="liquid-drop-sheen" />
+                </>
+              )}
+              <div className={`flex items-center gap-1.5 ${deskDropMode === 'upstox' ? 'animate-drop-bounce' : ''}`}>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    upstoxAccount?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'
+                  }`}
+                />
+                <span>Upstox</span>
+                <span className="hidden md:inline text-[10px] text-zinc-400 font-normal">NSE</span>
+              </div>
             </button>
             <button
               type="button"
               onClick={() => setIndianBrokerDrawerOpen(true)}
-              className="px-2 py-1 text-[11px] rounded-full transition-all flex items-center gap-1 text-zinc-500 hover:text-zinc-900 cursor-pointer"
+              className="relative z-10 px-2 py-1 text-[11px] rounded-full transition-all flex items-center gap-1 text-zinc-500 hover:text-zinc-900 cursor-pointer"
               title="Connect Kotak Neo or Flattrade"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -523,35 +637,75 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          {/* Center Wing: Primary Liquid Dock Segmented Navigation */}
-          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          {/* Center Wing: Primary Liquid Dock Segmented Navigation with Apple Gliding Spring Pill */}
+          <div
+            ref={navContainerRef}
+            className="relative flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5"
+          >
+            {/* Apple Gliding Liquid Glass Active Pill */}
+            <div
+              className="liquid-dock-active-pill"
+              style={{
+                transform: `translate3d(${indicatorStyle.left}px, ${indicatorStyle.top}px, 0)`,
+                width: `${indicatorStyle.width}px`,
+                height: `${indicatorStyle.height}px`,
+                opacity: indicatorStyle.ready ? 1 : 0,
+              }}
+            />
+
             {nav.map(({ path, label, icon: Icon }) => {
               const isActive = route === path;
               return (
                 <button
                   key={path}
+                  ref={(el) => {
+                    tabRefs.current[path] = el;
+                  }}
                   type="button"
-                  onClick={() => go(path)}
-                  className={`liquid-dock-item flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-medium cursor-pointer ${
+                  onClick={() => handleTabClick(path)}
+                  className={`liquid-dock-item relative flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-colors ${
                     isActive
-                      ? 'active'
+                      ? (!indicatorStyle.ready ? 'bg-[#18181b] ' : '') + 'text-white'
                       : 'text-zinc-600 hover:text-zinc-950 hover:bg-black/[0.04]'
                   }`}
                   title={label}
                 >
-                  <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isActive ? 'text-white' : 'text-zinc-500'}`} />
-                  <span className={`${isActive ? 'font-bold' : ''} ${['Alerts', 'Strategies'].includes(label) ? 'hidden lg:inline' : 'hidden sm:inline'}`}>
-                    {label}
-                  </span>
-                  {label === 'Alerts' && unreadAlerts > 0 && (
+                  {/* Drop-like liquid ripple & sheen on active change */}
+                  {dropTab === path && (
+                    <>
+                      <span key={`dock-ripple-${dropKey}`} className="liquid-drop-ripple" />
+                      <span key={`dock-sheen-${dropKey}`} className="liquid-drop-sheen" />
+                    </>
+                  )}
+                  <div
+                    className={`relative z-10 flex items-center gap-1.5 ${
+                      isActive && dropTab === path ? 'animate-drop-bounce' : ''
+                    }`}
+                  >
+                    <Icon
+                      className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors ${
+                        isActive ? 'text-white' : 'text-zinc-500'
+                      }`}
+                    />
                     <span
-                      className={`px-1.5 py-0.2 text-[9px] font-bold rounded-full ${
-                        isActive ? 'bg-white/20 text-white' : 'bg-rose-500/15 text-rose-600'
+                      className={`${isActive ? 'font-bold' : ''} ${
+                        ['Alerts', 'Strategies'].includes(label)
+                          ? 'hidden lg:inline'
+                          : 'hidden sm:inline'
                       }`}
                     >
-                      {unreadAlerts}
+                      {label}
                     </span>
-                  )}
+                    {label === 'Alerts' && unreadAlerts > 0 && (
+                      <span
+                        className={`px-1.5 py-0.2 text-[9px] font-bold rounded-full transition-colors ${
+                          isActive ? 'bg-white/20 text-white' : 'bg-rose-500/15 text-rose-600'
+                        }`}
+                      >
+                        {unreadAlerts}
+                      </span>
+                    )}
+                  </div>
                 </button>
               );
             })}
@@ -559,11 +713,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
           {/* Right Wing: Apple Music-style Now Playing Portfolio Widget & Nexus Copilot */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Live Portfolio Mini-Player Widget */}
+            {/* Live Portfolio Mini-Player Widget with Spring Press & Hover Lift */}
             <button
               type="button"
-              onClick={() => go('/portfolio')}
-              className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/[0.03] hover:bg-black/[0.06] border border-black/[0.04] transition-all cursor-pointer group"
+              onClick={() => {
+                setDropTab('/portfolio');
+                setDropKey((k) => k + 1);
+                go('/portfolio');
+              }}
+              className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/[0.03] hover:bg-black/[0.06] border border-black/[0.04] transition-all cursor-pointer group hover:-translate-y-0.5 active:scale-95 spring-smooth"
               title="Open Portfolio Ledger"
             >
               <div className="flex flex-col text-left font-tabular leading-tight">
@@ -574,17 +732,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </div>
             </button>
 
-            {/* Nexus Copilot Glass Pill */}
+            {/* Nexus Copilot Glass Pill with Spring Bouncy Click */}
             {(() => {
               const danger = senseMarketDanger(state, markets);
               return (
                 <button
                   type="button"
                   onClick={() => (chatOpen ? closeChat() : openChat())}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-zinc-950 text-white hover:bg-zinc-900 shadow-sm transition-all active:scale-95 cursor-pointer shrink-0"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-zinc-950 text-white hover:bg-zinc-900 shadow-sm transition-all hover:-translate-y-0.5 active:scale-90 spring-smooth cursor-pointer shrink-0 group"
                   title="Open Nexus Quant Copilot"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-300 group-hover:rotate-12 transition-transform" />
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-300 group-hover:rotate-12 transition-transform duration-300" />
                   <span className="text-[11px] font-semibold hidden md:inline">Nexus</span>
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${

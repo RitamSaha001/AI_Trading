@@ -59,6 +59,8 @@
 :root {
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring-press: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring-drop: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .spring-smooth {
@@ -155,20 +157,153 @@
   border-top-right-radius: inherit;
 }
 
+/* Apple Gliding Liquid Dock Active Pill */
+.liquid-dock-active-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 9999px;
+  background: #18181b;
+  box-shadow: 
+    0 4px 16px -2px rgba(0, 0, 0, 0.28),
+    0 1px 3px 0 rgba(0, 0, 0, 0.16),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.4);
+  transition: 
+    transform 440ms var(--ease-spring-bounce),
+    width 340ms var(--ease-spring-bounce),
+    height 340ms ease,
+    opacity 200ms ease;
+  will-change: transform, width;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.liquid-dock-active-pill::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+/* Apple Gliding Desk Switcher Active Pill */
+.liquid-desk-active-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.08), 0 1px 1.5px 0 rgba(0, 0, 0, 0.04);
+  transition: 
+    transform 380ms var(--ease-spring-bounce),
+    width 300ms var(--ease-spring-bounce),
+    height 300ms ease,
+    opacity 200ms ease;
+  will-change: transform, width;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Apple Droplet Impact & Spring Bounce Animation */
+@keyframes apple-drop-bounce {
+  0% {
+    transform: translateY(3.5px) scale(0.9);
+  }
+  38% {
+    transform: translateY(-2.8px) scale(1.08);
+  }
+  68% {
+    transform: translateY(1.2px) scale(0.98);
+  }
+  88% {
+    transform: translateY(-0.4px) scale(1.01);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-drop-bounce {
+  animation: apple-drop-bounce 0.46s var(--ease-spring-bounce) forwards;
+}
+
+/* Liquid Ripple Wave on Button Drop */
+@keyframes liquid-drop-ripple {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.75;
+  }
+  45% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.liquid-drop-ripple {
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.2) 50%, transparent 75%);
+  pointer-events: none;
+  animation: liquid-drop-ripple 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 1;
+}
+
+/* Caustic Specular Glint Sweep */
+@keyframes drop-sheen-sweep {
+  0% {
+    transform: translateX(-100%) skewX(-20deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(220%) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+.liquid-drop-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.liquid-drop-sheen::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  animation: drop-sheen-sweep 0.5s ease-out forwards;
+}
+
 .liquid-dock-item {
   position: relative;
-  transition: all 0.2s var(--ease-spring);
+  z-index: 1;
+  transition: color 0.25s ease, transform 0.22s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 .liquid-dock-item:hover {
   transform: translateY(-2px);
 }
 .liquid-dock-item:active {
-  transform: translateY(0) scale(0.95);
-}
-.liquid-dock-item.active {
-  background: #18181b;
-  color: #ffffff;
-  box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.2), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25);
+  transform: translateY(1px) scale(0.92);
+  transition-duration: 0.08s;
 }
 
 .liquid-glass-dark {
