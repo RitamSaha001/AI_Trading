@@ -6,15 +6,19 @@ import {
   ArrowRight,
   ArrowUpRight,
   Award,
+  BarChart2,
   Calculator,
   Check,
   CheckCircle2,
+  ChevronRight,
   Clock,
   Compass,
   Cpu,
   DollarSign,
+  Filter,
   Layers,
   Octagon,
+  Radio,
   RefreshCw,
   Scale,
   Search,
@@ -23,7 +27,10 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  TrendingDown,
   TrendingUp,
+  Wifi,
+  WifiOff,
   XCircle,
   Zap,
 } from 'lucide-react';
@@ -60,6 +67,8 @@ export function AutonomousQuantPilot() {
     executePilotRecommendation,
     resetPilotCircuitBreaker,
     order,
+    setSelectedAsset,
+    openUpstoxDrawer,
   } = useLumen();
 
   const [activeTab, setActiveTab] = useState<'positions' | 'opportunities' | 'fleet' | 'quant_lab' | 'logs'>('positions');
@@ -92,8 +101,21 @@ export function AutonomousQuantPilot() {
   const opportunities = autonomousPilot?.activeOpportunities || [];
   const activeFleet = autonomousPilot?.activeFleet || initializeFleetStatus();
   const rateLimitStatus = autonomousPilot?.rateLimitStatus || createDefaultRateLimitStatus();
+  const marketSession = isMarketSessionOpen();
+  const isLiveUpstox = state.accountMode === 'upstox';
+  const pv = portfolioValue(state, markets);
+  const pnl = totalPortfolioPnl(state, markets);
+  const currentCash = state.accountMode === 'upstox'
+    ? (state.upstoxAccount?.funds?.availableCash ??
+        (state.upstoxAccount?.balances?.INR?.free !== undefined
+          ? Number(state.upstoxAccount.balances.INR.free)
+          : state.cash))
+    : state.cash;
+  const minCashFloorPct = Math.max(15, profileConfig.targetCashBufferPct);
+  const minRequiredCash = pv * (minCashFloorPct / 100);
+
   const [fleetSectorFilter, setFleetSectorFilter] = useState<string>('ALL');
-  const [fleetReputationFilter, setFleetReputationFilter] = useState<'ALL' | 'TOP_ALPHA' | 'COOLDOWN'>('ALL');
+  const [fleetCategoryFilter, setFleetCategoryFilter] = useState<'ALL' | 'POSITIONS' | 'GAINERS' | 'DECLINERS'>('ALL');
   const [fleetSearchQuery, setFleetSearchQuery] = useState<string>('');
   const [logFilterCategory, setLogFilterCategory] = useState<'all' | 'trades' | 'ratchets' | 'risk' | 'system'>('all');
   const [logSelectedAsset, setLogSelectedAsset] = useState<string>('ALL');
@@ -163,32 +185,34 @@ export function AutonomousQuantPilot() {
     return activePositionsList.reduce((acc, pos) => acc + pos.pnlAmt, 0);
   }, [activePositionsList]);
 
-  // Asset dynamic reputation scoring (Institutional Quality Rating 0-100)
-  const getAssetReputation = (asset: string, fleetItem?: any) => {
-    const hurst = fleetItem?.hurst ?? 0.52;
-    const baseScore = Math.round(50 + (hurst - 0.5) * 150);
-    const alphaLeaders: Record<string, number> = {
-      TRENT: 96,
-      BEL: 94,
-      HAL: 92,
-      SUNPHARMA: 90,
-      BHARTIARTL: 88,
-      RELIANCE: 86,
-      TCS: 85,
-      HDFCBANK: 84,
-      INFY: 83,
-      ICICIBANK: 82,
-      LT: 81,
-      ITC: 80,
-    };
-    return alphaLeaders[asset] || Math.min(95, Math.max(35, baseScore));
-  };
+  // Real Fleet Market Breadth & Factor Metrics
+  const gainersCount = useMemo(() => {
+    return UPSTOX_FLEET_ASSETS.filter((a) => (markets[a]?.change24h || 0) > 0).length;
+  }, [markets]);
+
+  const declinersCount = useMemo(() => {
+    return UPSTOX_FLEET_ASSETS.filter((a) => (markets[a]?.change24h || 0) < 0).length;
+  }, [markets]);
+
+  const advancingCount = gainersCount;
+  const decliningCount = declinersCount;
+  const breadthRatio = useMemo(() => {
+    const total = advancingCount + decliningCount || 1;
+    return (advancingCount - decliningCount) / total;
+  }, [advancingCount, decliningCount]);
+
+  const avgFleetHurst = useMemo(() => {
+    const sum = UPSTOX_FLEET_ASSETS.reduce((acc, a) => acc + (activeFleet[a]?.hurst || 0.65), 0);
+    return sum / (UPSTOX_FLEET_ASSETS.length || 1);
+  }, [activeFleet]);
 
   const fleetSectors = useMemo(() => {
     const sectors = new Set<string>();
     for (const asset of UPSTOX_FLEET_ASSETS) {
       const fleetItem = activeFleet[asset];
-      if (fleetItem?.sector) sectors.add(fleetItem.sector);
+      const meta = META[asset];
+      const sector = fleetItem?.sector || (meta as any)?.sector;
+      if (sector) sectors.add(sector);
     }
     return ['ALL', ...Array.from(sectors).sort()];
   }, [activeFleet]);
@@ -196,19 +220,25 @@ export function AutonomousQuantPilot() {
   const filteredFleetAssets = useMemo(() => {
     return UPSTOX_FLEET_ASSETS.filter((asset) => {
       const meta = META[asset];
+      const mkt = markets[asset];
       const fleetItem = activeFleet[asset];
-      const sector = fleetItem?.sector || 'Equities';
-      const rep = getAssetReputation(asset, fleetItem);
+      const sector = fleetItem?.sector || (meta as any)?.sector || 'Equities';
+      const unitsHeld = state.positions[asset] || fleetItem?.unitsHeld || 0;
+      const change24h = mkt?.change24h || 0;
 
       if (fleetSectorFilter !== 'ALL' && sector.toLowerCase() !== fleetSectorFilter.toLowerCase()) {
         return false;
       }
 
-      if (fleetReputationFilter === 'TOP_ALPHA' && rep < 80) {
+      if (fleetCategoryFilter === 'POSITIONS' && unitsHeld <= 0) {
         return false;
       }
 
-      if (fleetReputationFilter === 'COOLDOWN' && fleetItem?.state !== 'COOLDOWN') {
+      if (fleetCategoryFilter === 'GAINERS' && change24h <= 0) {
+        return false;
+      }
+
+      if (fleetCategoryFilter === 'DECLINERS' && change24h >= 0) {
         return false;
       }
 
@@ -216,12 +246,174 @@ export function AutonomousQuantPilot() {
         const query = fleetSearchQuery.toLowerCase().trim();
         const matchesSymbol = asset.toLowerCase().includes(query);
         const matchesName = meta?.name?.toLowerCase().includes(query);
-        if (!matchesSymbol && !matchesName) return false;
+        const matchesSector = sector.toLowerCase().includes(query);
+        if (!matchesSymbol && !matchesName && !matchesSector) return false;
       }
 
       return true;
     });
-  }, [fleetSectorFilter, fleetReputationFilter, fleetSearchQuery, activeFleet]);
+  }, [fleetSectorFilter, fleetCategoryFilter, fleetSearchQuery, activeFleet, markets, state.positions]);
+
+  const handleInspectAsset = (asset: Asset) => {
+    setSelectedAsset(asset);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const formatIndianVolume = (vol?: number) => {
+    if (!vol || vol <= 0) return '—';
+    if (vol >= 10_000_000) {
+      return `${(vol / 10_000_000).toFixed(2)} Cr`;
+    }
+    if (vol >= 100_000) {
+      return `${(vol / 100_000).toFixed(2)} L`;
+    }
+    if (vol >= 1_000) {
+      return `${(vol / 1_000).toFixed(1)} k`;
+    }
+    return vol.toLocaleString('en-IN');
+  };
+
+  const getHurstInterpretation = (h: number) => {
+    if (h >= 0.65) {
+      return { label: 'Strong Trend', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+    }
+    if (h >= 0.55) {
+      return { label: 'Moderate Trend', color: 'text-sky-700 bg-sky-50 border-sky-200' };
+    }
+    if (h <= 0.45) {
+      return { label: 'Mean Reverting', color: 'text-purple-700 bg-purple-50 border-purple-200' };
+    }
+    return { label: 'Random Walk', color: 'text-zinc-600 bg-zinc-100 border-zinc-200' };
+  };
+
+  const renderDayRangeBar = (current: number, low?: number, high?: number) => {
+    if (!low || !high || high <= low) return null;
+    const clampedCurrent = Math.min(Math.max(current, low), high);
+    const pct = Math.round(((clampedCurrent - low) / (high - low)) * 100);
+    return (
+      <div className="w-24 sm:w-28 space-y-1">
+        <div className="flex items-center justify-between text-[9px] font-mono text-zinc-400">
+          <span>{moneyINR(low, 0, 0)}</span>
+          <span>{moneyINR(high, 0, 0)}</span>
+        </div>
+        <div className="w-full h-1 bg-zinc-100 rounded-full overflow-hidden relative">
+          <div
+            className="absolute top-0 bottom-0 w-2 h-full bg-zinc-900 rounded-full -translate-x-1/2"
+            style={{ left: `${pct}%` }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const getFleetAssetStatus = (asset: string, fleetItem?: any, unitsHeld: number = 0) => {
+    // 1. Broker Offline State (Upstox selected but not connected)
+    if (isLiveUpstox && !state.upstoxAccount?.connected) {
+      if (unitsHeld > 0) {
+        return (
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200" title="Held in local ledger, broker offline">
+            <WifiOff className="w-3 h-3 text-amber-600" />
+            Offline (Held)
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 border border-zinc-200" title="Gateway disconnected; automated execution inactive">
+          <WifiOff className="w-3 h-3 text-zinc-400" />
+          Broker Offline
+        </span>
+      );
+    }
+
+    // 2. Market Session Closed (Weekend, Pre-Open, Post-Close)
+    if (!marketSession.isOpen) {
+      if (unitsHeld > 0) {
+        return (
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200" title="Holding carried overnight/weekend">
+            <Clock className="w-3 h-3 text-indigo-500" />
+            Held (Overnight)
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-500 border border-zinc-200" title={`NSE Market closed (${marketSession.sessionDescription})`}>
+          <Clock className="w-3 h-3 text-zinc-400" />
+          Closed (NSE)
+        </span>
+      );
+    }
+
+    // 3. Autopilot Disarmed / Standby
+    if (!isEnabled) {
+      if (unitsHeld > 0) {
+        return (
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-800 border border-zinc-300" title="Held in portfolio while autopilot is disarmed">
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+            Held (Manual)
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-500 border border-zinc-200" title="Autopilot disarmed">
+          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+          Standby
+        </span>
+      );
+    }
+
+    // 4. Circuit Breaker Tripped
+    if (isTripped) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-rose-50 text-rose-800 border border-rose-200">
+          <ShieldAlert className="w-3 h-3 text-rose-600" />
+          Halted
+        </span>
+      );
+    }
+
+    // 5. Active Market Hours & Autopilot Armed
+    if (unitsHeld > 0) {
+      if (fleetItem?.state === 'TRAILING_PROFIT') {
+        return (
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Trailing Profit
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Active Position
+        </span>
+      );
+    }
+
+    if (fleetItem?.state === 'COOLDOWN') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+          <AlertTriangle className="w-3 h-3 text-amber-500" />
+          Cooldown
+        </span>
+      );
+    }
+
+    if (fleetItem?.state === 'ORDER_PENDING') {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+          Order Pending
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-md bg-sky-50/70 text-sky-800 border border-sky-200/80">
+        <Radio className="w-3 h-3 text-sky-600 animate-pulse" />
+        Live Scanning
+      </span>
+    );
+  };
 
   const actionLogs = autonomousPilot?.actionLogs || [];
 
@@ -243,23 +435,11 @@ export function AutonomousQuantPilot() {
     return true;
   });
 
-  const pv = portfolioValue(state, markets);
-  const pnl = totalPortfolioPnl(state, markets);
   const avgOpportunityConfidence = useMemo(() => {
     if (opportunities.length === 0) return 82.0;
     const sum = opportunities.reduce((acc, opp) => acc + (opp.compositeScore || 75), 0);
     return Math.round((sum / opportunities.length) * 10) / 10;
   }, [opportunities]);
-  const currentCash = state.accountMode === 'upstox'
-    ? (state.upstoxAccount?.funds?.availableCash ??
-        (state.upstoxAccount?.balances?.INR?.free !== undefined
-          ? Number(state.upstoxAccount.balances.INR.free)
-          : state.cash))
-    : state.cash;
-  const minCashFloorPct = Math.max(15, profileConfig.targetCashBufferPct);
-  const minRequiredCash = pv * (minCashFloorPct / 100);
-  const marketSession = isMarketSessionOpen();
-  const isLiveUpstox = state.accountMode === 'upstox';
 
   // Periodic scan to keep telemetry fresh
   useEffect(() => {
@@ -788,102 +968,204 @@ export function AutonomousQuantPilot() {
         </div>
 
         {/* Natural Language Executive Briefing */}
-        <div className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 text-xs text-zinc-300 leading-relaxed">
-          <strong className="text-white">Current Market Assessment: </strong>
-          NIFTY 50 breadth is positive (+0.74 Advance/Decline) with low realized intraday volatility. Trend persistence memory is elevated (<span className="font-mono text-emerald-400">H = 0.81</span>), signaling high reliability for continuation setups. Sector relative strength is concentrated in Defence and IT. 
-          {activePositionsList.length === 0 
-            ? ' No capital is currently at risk; the desk is holding 100% liquid cash while scanning for ≥ 2.5:1 risk-reward opportunities.'
-            : ` The desk holds ${activePositionsList.length} active position(s) with trailing stops engaged.`}
+        <div className="p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800/80 text-xs text-zinc-300 leading-relaxed space-y-1.5">
+          <div className="flex items-center gap-2">
+            <strong className="text-white font-semibold">Executive Market Assessment:</strong>
+            {!marketSession.isOpen ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
+                <Clock className="w-2.5 h-2.5 text-zinc-400" />
+                {marketSession.sessionDescription}
+              </span>
+            ) : isLiveUpstox && !state.upstoxAccount?.connected ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800">
+                <WifiOff className="w-2.5 h-2.5 text-amber-400" />
+                Broker Offline
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live Session Active
+              </span>
+            )}
+          </div>
+          <p>
+            {!marketSession.isOpen ? (
+              <>
+                The NSE Cash Market is currently closed (<span className="text-zinc-200 font-medium">{marketSession.sessionDescription}</span>). Live order routing and intraday entry signals are paused. Monitored universe reflects last closing settlement prices with breadth at <span className="font-mono text-zinc-200 font-semibold">{advancingCount} advancing vs {decliningCount} declining</span>. {activePositionsList.length === 0 ? 'No capital is currently at risk across the desk.' : `The desk is carrying ${activePositionsList.length} overnight position(s) with protective stops recorded in state.`} Entry evaluation will reactivate automatically at 09:15 IST.
+              </>
+            ) : isLiveUpstox && !state.upstoxAccount?.connected ? (
+              <>
+                Upstox execution gateway is disconnected. The pilot is running in observation-only mode and cannot route live exchange orders. Universe breadth stands at <span className="font-mono text-zinc-200 font-semibold">{advancingCount} advancing / {decliningCount} declining</span> with average trend persistence <span className="font-mono text-emerald-400 font-semibold">H = {avgFleetHurst.toFixed(2)}</span>. Connect your Upstox broker credentials to permit autonomous order dispatch.
+              </>
+            ) : !isEnabled ? (
+              <>
+                Autonomous Quant Pilot is disarmed. Risk supervisor and automated order routing are idle. Monitored fleet breadth is <span className="font-mono text-zinc-200 font-semibold">{advancingCount} Adv / {decliningCount} Dec</span> (H = {avgFleetHurst.toFixed(2)}). {activePositionsList.length === 0 ? 'Portfolio holds 100% liquid cash reserves.' : `Account holds ${activePositionsList.length} active position(s).`} Arm the pilot to engage autonomous strategy execution.
+              </>
+            ) : isTripped ? (
+              <>
+                Execution halted: Capital protection circuit breaker is tripped ({autonomousPilot?.tripReason || 'Drawdown limit reached'}). All pending entry orders are suppressed to defend account equity. Reset or recalibrate baseline capital to resume.
+              </>
+            ) : (
+              <>
+                Live market session is open ({marketSession.sessionDescription}). NIFTY 100 universe breadth is <span className="font-mono text-emerald-400 font-semibold">{breadthRatio >= 0 ? '+' : ''}{(breadthRatio * 100).toFixed(0)}% net</span> ({advancingCount} advancing vs {decliningCount} declining). Fleet trend persistence memory is <span className="font-mono text-emerald-400 font-semibold">H = {avgFleetHurst.toFixed(2)}</span> ({avgFleetHurst >= 0.6 ? 'strong continuation regime' : 'mean-reverting / choppy conditions'}). {activePositionsList.length === 0 ? 'No open exposure; engine is scanning 36 liquid equities for high-conviction breakout & pullback setups.' : `Holding ${activePositionsList.length} active position(s) with dynamic Chandelier trailing stops and multi-tranche profit targets active.`}
+              </>
+            )}
+          </p>
         </div>
 
-        {/* 8 Quantitative Factor Tiles */}
+        {/* 8 Quantitative Factor Tiles (Real Live Data) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          {/* 1. Macro Breadth */}
           <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-zinc-400">
               <span>Macro Breadth</span>
-              <span className="font-mono text-emerald-400 font-bold">+0.74</span>
+              <span className={`font-mono font-bold ${breadthRatio >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {advancingCount}A / {decliningCount}D
+              </span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '74%' }} />
+              <div
+                className={`h-full rounded-full ${breadthRatio >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                style={{ width: `${Math.round((advancingCount / (UPSTOX_FLEET_ASSETS.length || 1)) * 100)}%` }}
+              />
             </div>
-            <span className="text-[10px] text-zinc-400 block truncate">Advancing Index</span>
+            <span className="text-[10px] text-zinc-400 block truncate">
+              {breadthRatio >= 0 ? '+' : ''}{(breadthRatio * 100).toFixed(0)}% Net Breadth
+            </span>
           </div>
 
+          {/* 2. Trend Persistence */}
           <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-zinc-400">
               <span>Trend Persistence</span>
-              <span className="font-mono text-emerald-400 font-bold">H=0.81</span>
+              <span className="font-mono text-emerald-400 font-bold">H={avgFleetHurst.toFixed(2)}</span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '81%' }} />
+              <div
+                className="h-full bg-emerald-500 rounded-full"
+                style={{ width: `${Math.round(avgFleetHurst * 100)}%` }}
+              />
             </div>
-            <span className="text-[10px] text-zinc-400 block truncate">Long-Memory Trend</span>
+            <span className="text-[10px] text-zinc-400 block truncate">
+              {avgFleetHurst >= 0.65 ? 'Long-Memory Trend' : avgFleetHurst >= 0.55 ? 'Moderate Trend' : 'Mean Reverting'}
+            </span>
           </div>
 
+          {/* 3. Session Status */}
           <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-zinc-400">
-              <span>Order Flow Volume</span>
-              <span className="font-mono text-emerald-400 font-bold">2.4x</span>
+              <span>NSE Market</span>
+              <span className={`font-mono font-bold ${marketSession.isOpen ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                {marketSession.isOpen ? 'LIVE' : 'CLOSED'}
+              </span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '85%' }} />
+              <div
+                className={`h-full rounded-full ${marketSession.isOpen ? 'bg-emerald-500' : 'bg-zinc-600'}`}
+                style={{ width: marketSession.isOpen ? '100%' : '0%' }}
+              />
             </div>
-            <span className="text-[10px] text-zinc-400 block truncate">Institutional Inflow</span>
+            <span className="text-[10px] text-zinc-400 block truncate" title={marketSession.sessionDescription}>
+              {marketSession.sessionDescription}
+            </span>
           </div>
 
+          {/* 4. Execution Gateway */}
           <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-zinc-400">
-              <span>Timeframe Alignment</span>
-              <span className="font-mono text-emerald-400 font-bold">90%</span>
+              <span>Gateway</span>
+              <span className={`font-mono font-bold ${
+                isLiveUpstox
+                  ? state.upstoxAccount?.connected
+                    ? 'text-emerald-400'
+                    : 'text-amber-400'
+                  : 'text-indigo-300'
+              }`}>
+                {isLiveUpstox ? (state.upstoxAccount?.connected ? 'Upstox Online' : 'Offline') : 'Paper Ledger'}
+              </span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '90%' }} />
+              <div
+                className={`h-full rounded-full ${
+                  isLiveUpstox
+                    ? state.upstoxAccount?.connected
+                      ? 'bg-emerald-500'
+                      : 'bg-amber-500'
+                    : 'bg-indigo-500'
+                }`}
+                style={{ width: isLiveUpstox ? (state.upstoxAccount?.connected ? '100%' : '20%') : '100%' }}
+              />
             </div>
-            <span className="text-[10px] text-zinc-400 block truncate">1m / 5m / 30m Confluence</span>
+            <span className="text-[10px] text-zinc-400 block truncate">
+              {isLiveUpstox ? (state.upstoxAccount?.connected ? 'Live API Connected' : 'Broker Key Disconnected') : 'Simulated Sandbox'}
+            </span>
           </div>
 
+          {/* 5. Deployed Exposure */}
           <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-zinc-400">
-              <span>Sector Relative Strength</span>
-              <span className="font-mono text-emerald-400 font-bold">Top 5%</span>
+              <span>Fleet Exposure</span>
+              <span className="font-mono text-zinc-200 font-bold">
+                {moneyINR(pv - currentCash, 0, 0)}
+              </span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '92%' }} />
+              <div
+                className="h-full bg-indigo-500 rounded-full"
+                style={{ width: `${Math.min(100, Math.round(((pv - currentCash) / (pv || 1)) * 100))}%` }}
+              />
             </div>
-            <span className="text-[10px] text-zinc-400 block truncate">Defence & Auto Leaders</span>
+            <span className="text-[10px] text-zinc-400 block truncate">
+              {(((pv - currentCash) / (pv || 1)) * 100).toFixed(1)}% Capital Deployed
+            </span>
           </div>
 
+          {/* 6. Liquid Cash Buffer */}
           <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-zinc-400">
-              <span>VWAP Anchor Distance</span>
-              <span className="font-mono text-amber-400 font-bold">+0.15%</span>
+              <span>Free Margin</span>
+              <span className="font-mono text-emerald-400 font-bold">
+                {moneyINR(currentCash, 0, 0)}
+              </span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-amber-500 rounded-full" style={{ width: '65%' }} />
+              <div
+                className="h-full bg-emerald-500 rounded-full"
+                style={{ width: `${Math.min(100, Math.round((currentCash / (pv || 1)) * 100))}%` }}
+              />
             </div>
-            <span className="text-[10px] text-zinc-400 block truncate">Equilibrium Zone</span>
+            <span className="text-[10px] text-zinc-400 block truncate">
+              {((currentCash / (pv || 1)) * 100).toFixed(1)}% Liquid Reserve
+            </span>
           </div>
 
+          {/* 7. Active Concurrency */}
           <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-zinc-400">
-              <span>Asset Quality Score</span>
-              <span className="font-mono text-emerald-400 font-bold">92 / 100</span>
+              <span>MIS Slots</span>
+              <span className="font-mono text-zinc-200 font-bold">{activePositionsList.length} / 4</span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '92%' }} />
+              <div
+                className="h-full bg-sky-500 rounded-full"
+                style={{ width: `${Math.min(100, Math.round((activePositionsList.length / 4) * 100))}%` }}
+              />
             </div>
-            <span className="text-[10px] text-zinc-400 block truncate">High-Liquidity Fleet</span>
+            <span className="text-[10px] text-zinc-400 block truncate">
+              {activePositionsList.length > 0 ? `${activePositionsList.length} Positions Active` : 'All 4 Slots Open'}
+            </span>
           </div>
 
+          {/* 8. Target Velocity */}
           <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-zinc-400">
-              <span>Target Velocity</span>
-              <span className="font-mono text-purple-300 font-bold">₹50 / day</span>
+              <span>Target Run-Rate</span>
+              <span className="font-mono text-purple-300 font-bold">₹1,000 / mo</span>
             </div>
             <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-              <div className="h-full bg-purple-500 rounded-full" style={{ width: '78%' }} />
+              <div className="h-full bg-purple-500 rounded-full" style={{ width: '75%' }} />
             </div>
-            <span className="text-[10px] text-zinc-400 block truncate">Pacing to ₹1,000/mo</span>
+            <span className="text-[10px] text-zinc-400 block truncate">₹50 / session target pace</span>
           </div>
         </div>
       </div>
@@ -1467,27 +1749,169 @@ export function AutonomousQuantPilot() {
       )}
 
       {/* ========================================================================= */}
-      {/* 8. TAB 3: MONITORED FLEET & QUALITY COVERAGE                             */}
+      {/* 8. TAB 3: MONITORED FLEET & OPERATIONAL TELEMETRY                         */}
       {/* ========================================================================= */}
       {activeTab === 'fleet' && (
-        <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-xs text-zinc-500 px-1">
-            <span>
-              Active coverage of <strong>{UPSTOX_FLEET_ASSETS.length} Liquid Equities (NIFTY 100)</strong> with institutional quality scoring
-            </span>
-            <span className="text-[11px] text-zinc-400">
-              Deterministic Multi-Factor Scoring &bull; Zero Static Blacklists
-            </span>
+        <div className="space-y-4">
+          {/* Operational Readiness Header (4 Sleek Telemetry Cards) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {/* 1. Market Session */}
+            <div className="p-3.5 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                <span className="font-semibold uppercase tracking-wider">Exchange Session</span>
+                <span className="inline-flex items-center gap-1 font-mono text-[10px]">
+                  <span className={`w-2 h-2 rounded-full ${marketSession.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'}`} />
+                  {marketSession.isOpen ? 'LIVE' : 'CLOSED'}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-zinc-900 truncate">
+                {marketSession.isOpen ? 'NSE Cash Market Open' : 'NSE Market Closed'}
+              </div>
+              <div className="text-[11px] text-zinc-500 truncate" title={marketSession.sessionDescription}>
+                {marketSession.sessionDescription}
+              </div>
+            </div>
+
+            {/* 2. Quant Pilot State */}
+            <div className="p-3.5 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                <span className="font-semibold uppercase tracking-wider">Quant Desk State</span>
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                  !isEnabled
+                    ? 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                    : isTripped
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}>
+                  {!isEnabled ? 'STANDBY' : isTripped ? 'HALTED' : 'ARMED'}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-zinc-900 truncate">
+                {!isEnabled
+                  ? 'Autopilot Disarmed'
+                  : isTripped
+                  ? 'Circuit Breaker Tripped'
+                  : executionMode === 'full_autonomous'
+                  ? 'Autonomous Execution'
+                  : 'Advisor Approval Mode'}
+              </div>
+              <div className="text-[11px] text-zinc-500 truncate">
+                {!isEnabled
+                  ? 'Order dispatch paused'
+                  : isTripped
+                  ? 'Risk circuit tripped'
+                  : `${activePositionsList.length} active positions managed`}
+              </div>
+            </div>
+
+            {/* 3. Execution Gateway */}
+            <div className="p-3.5 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                <span className="font-semibold uppercase tracking-wider">Order Gateway</span>
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                  isLiveUpstox
+                    ? state.upstoxAccount?.connected
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                }`}>
+                  {isLiveUpstox
+                    ? state.upstoxAccount?.connected
+                      ? 'CONNECTED'
+                      : 'OFFLINE'
+                    : 'SIMULATION'}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-zinc-900 truncate">
+                {isLiveUpstox
+                  ? state.upstoxAccount?.connected
+                    ? 'Upstox Live Broker'
+                    : 'Upstox Disconnected'
+                  : 'Paper Trading Engine'}
+              </div>
+              <div className="text-[11px] text-zinc-500 truncate">
+                {isLiveUpstox ? (
+                  state.upstoxAccount?.connected ? (
+                    `User: ${state.upstoxAccount.accountId || state.upstoxAccount.accountName || 'Linked'}`
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openUpstoxDrawer}
+                      className="text-amber-700 hover:text-amber-800 font-semibold underline cursor-pointer"
+                    >
+                      Click to connect API &rarr;
+                    </button>
+                  )
+                ) : (
+                  'Zero-latency virtual fills'
+                )}
+              </div>
+            </div>
+
+            {/* 4. Universe Exposure */}
+            <div className="p-3.5 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                <span className="font-semibold uppercase tracking-wider">Fleet Universe</span>
+                <span className="text-[10px] font-mono text-zinc-600 font-bold">
+                  {activePositionsList.length} / {UPSTOX_FLEET_ASSETS.length} Held
+                </span>
+              </div>
+              <div className="text-sm font-bold text-zinc-900">
+                {moneyINR(totalOpenPnl)}
+                <span className={`text-xs ml-1.5 font-normal ${totalOpenPnl >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  ({totalOpenPnl >= 0 ? '+' : ''}{((totalOpenPnl / (pv || 1)) * 100).toFixed(2)}%)
+                </span>
+              </div>
+              <div className="text-[11px] text-zinc-500 truncate">
+                {advancingCount} Gainers &bull; {decliningCount} Decliners
+              </div>
+            </div>
           </div>
 
-          {/* Filters Bar */}
-          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {/* Conditional Gateway Warning Alert if Upstox is disconnected */}
+          {isLiveUpstox && !state.upstoxAccount?.connected && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <WifiOff className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold block">Upstox Trading Gateway Disconnected</span>
+                  <span className="text-amber-700">Real orders cannot be routed to exchange. The fleet is in observation-only mode until access token is linked.</span>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setFleetReputationFilter('ALL')}
-                className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all shrink-0 cursor-pointer ${
-                  fleetReputationFilter === 'ALL'
+                onClick={openUpstoxDrawer}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-all text-xs shrink-0 cursor-pointer shadow-2xs"
+              >
+                Connect Upstox Broker &rarr;
+              </button>
+            </div>
+          )}
+
+          {/* Session Closed Alert */}
+          {!marketSession.isOpen && (
+            <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200 text-zinc-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs shadow-2xs">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                <span>
+                  <strong>NSE Cash Market is Closed:</strong> {marketSession.sessionDescription}. Telemetry reflects the latest settlement prices. Automated strategy entry resumes at 09:15 IST.
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-zinc-500 shrink-0">
+                Mon–Fri 09:15–15:30 IST
+              </span>
+            </div>
+          )}
+
+          {/* Filters Bar */}
+          <div className="flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between">
+            {/* Category Segmented Control */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => setFleetCategoryFilter('ALL')}
+                className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-all shrink-0 cursor-pointer ${
+                  fleetCategoryFilter === 'ALL'
                     ? 'bg-zinc-900 text-white shadow-2xs'
                     : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
                 }`}
@@ -1497,61 +1921,99 @@ export function AutonomousQuantPilot() {
 
               <button
                 type="button"
-                onClick={() => setFleetReputationFilter('TOP_ALPHA')}
-                className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
-                  fleetReputationFilter === 'TOP_ALPHA'
-                    ? 'bg-emerald-600 text-white shadow-2xs'
-                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                onClick={() => setFleetCategoryFilter('POSITIONS')}
+                className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                  fleetCategoryFilter === 'POSITIONS'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
                 }`}
               >
-                <Award className="w-3 h-3" />
-                <span>Top Quality Leaders (Score ≥ 80)</span>
+                <span>Active Positions</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono">
+                  {activePositionsList.length}
+                </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setFleetReputationFilter('COOLDOWN')}
-                className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
-                  fleetReputationFilter === 'COOLDOWN'
-                    ? 'bg-slate-700 text-white shadow-2xs'
-                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200'
+                onClick={() => setFleetCategoryFilter('GAINERS')}
+                className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                  fleetCategoryFilter === 'GAINERS'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
                 }`}
               >
-                <span>Cooldown / Throttled</span>
+                <TrendingUp className="w-3 h-3 text-emerald-600" />
+                <span>Gainers</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-mono">
+                  {gainersCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFleetCategoryFilter('DECLINERS')}
+                className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                  fleetCategoryFilter === 'DECLINERS'
+                    ? 'bg-rose-600 text-white shadow-2xs'
+                    : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200'
+                }`}
+              >
+                <TrendingDown className="w-3 h-3 text-rose-600" />
+                <span>Decliners</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 font-mono">
+                  {declinersCount}
+                </span>
               </button>
             </div>
 
-            <div className="relative shrink-0 sm:w-64">
-              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder={`Search ${UPSTOX_FLEET_ASSETS.length} equities...`}
-                value={fleetSearchQuery}
-                onChange={(e) => setFleetSearchQuery(e.target.value)}
-                className="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-zinc-200 rounded-lg outline-hidden focus:border-zinc-400 shadow-2xs"
-              />
+            {/* Sector Dropdown & Search Input */}
+            <div className="flex items-center gap-2 shrink-0">
+              <select
+                value={fleetSectorFilter}
+                onChange={(e) => setFleetSectorFilter(e.target.value)}
+                className="text-xs py-1.5 px-2.5 bg-white border border-zinc-200 rounded-lg outline-hidden focus:border-zinc-400 text-zinc-700 shadow-2xs cursor-pointer"
+              >
+                {fleetSectors.map((sector) => (
+                  <option key={sector} value={sector}>
+                    {sector === 'ALL' ? 'All Sectors' : sector}
+                  </option>
+                ))}
+              </select>
+
+              <div className="relative sm:w-52">
+                <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search symbol / name..."
+                  value={fleetSearchQuery}
+                  onChange={(e) => setFleetSearchQuery(e.target.value)}
+                  className="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-zinc-200 rounded-lg outline-hidden focus:border-zinc-400 shadow-2xs"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Table */}
+          {/* Clean Minimalist Telemetry Table */}
           <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-2xs">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-zinc-50 border-b border-zinc-200 text-[10px] uppercase font-semibold text-zinc-500">
+                <tr className="bg-zinc-50 border-b border-zinc-200 text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">
                   <th className="py-2.5 px-3.5">Asset / Sector</th>
-                  <th className="py-2.5 px-3">Spot Price</th>
-                  <th className="py-2.5 px-3">Model</th>
-                  <th className="py-2.5 px-3">Quality &amp; Hurst</th>
+                  <th className="py-2.5 px-3">Spot Price &amp; 24h</th>
+                  <th className="py-2.5 px-3 hidden sm:table-cell">Day Range (L - H)</th>
+                  <th className="py-2.5 px-3 hidden md:table-cell">24h Volume</th>
+                  <th className="py-2.5 px-3">Model &amp; Hurst</th>
                   <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3">Target Brackets</th>
-                  <th className="py-2.5 px-3.5 text-right">Position &amp; Net P&amp;L</th>
+                  <th className="py-2.5 px-3.5 text-right">Holding &amp; P&amp;L</th>
+                  <th className="py-2.5 px-3 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {filteredFleetAssets.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-zinc-500 text-xs">
-                      No equities found matching "{fleetSearchQuery}".
+                    <td colSpan={8} className="py-10 text-center text-zinc-500 text-xs">
+                      No equities found matching the current filters.
                     </td>
                   </tr>
                 )}
@@ -1566,15 +2028,17 @@ export function AutonomousQuantPilot() {
                     : (mkt?.price || meta?.basePrice || 100);
                   const price = authoritativePrice;
                   const strat = fleetItem?.assignedStrategy || 'Breakout Rider';
-                  const hurst = fleetItem?.hurst ?? 0.50;
+                  const hurst = fleetItem?.hurst ?? 0.65;
+                  const hurstInfo = getHurstInterpretation(hurst);
                   const unitsHeld = state.positions[asset] || fleetItem?.unitsHeld || 0;
                   const avgPrice = state.avgBuyPrice?.[asset] || fleetItem?.entryPrice || price;
                   const pnlAmt = unitsHeld > 0 ? (price - avgPrice) * unitsHeld : 0;
                   const pnlPct = unitsHeld > 0 && avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0;
-                  const reputation = getAssetReputation(asset, fleetItem);
+                  const change24h = mkt?.change24h || 0;
 
                   return (
-                    <tr key={asset} className="hover:bg-zinc-50/80 transition-colors">
+                    <tr key={asset} className="hover:bg-zinc-50/90 transition-colors">
+                      {/* Asset & Sector */}
                       <td className="py-2.5 px-3.5">
                         <div className="flex items-center gap-2.5">
                           <div
@@ -1587,84 +2051,88 @@ export function AutonomousQuantPilot() {
                             <div className="font-bold text-zinc-950 flex items-center gap-1.5">
                               {asset}
                               <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 border border-zinc-200">
-                                {fleetItem?.sector || 'Equities'}
+                                {fleetItem?.sector || (meta as any)?.sector || 'Equities'}
                               </span>
                             </div>
-                            <div className="text-[10px] text-zinc-500 truncate max-w-[140px]">
+                            <div className="text-[10px] text-zinc-500 truncate max-w-[130px]">
                               {meta?.name || asset}
                             </div>
                           </div>
                         </div>
                       </td>
 
+                      {/* Spot Price & 24h Change */}
                       <td className="py-2.5 px-3">
                         <div className="font-mono font-bold text-zinc-900">
                           {moneyINR(price)}
                         </div>
-                        <div className={`text-[10px] font-mono ${
-                          (mkt?.change24h || 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                        <div className={`text-[10px] font-mono font-semibold ${
+                          change24h >= 0 ? 'text-emerald-700' : 'text-rose-700'
                         }`}>
-                          {(mkt?.change24h || 0) >= 0 ? '+' : ''}{(mkt?.change24h || 0).toFixed(2)}%
+                          {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3">
-                        <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded-md border ${getStrategyBadge(strat)}`}>
-                          {strat}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded border ${
-                            reputation >= 85
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                              : reputation >= 70
-                              ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                              : 'bg-zinc-100 text-zinc-700 border-zinc-200'
-                          }`}>
-                            Score: {reputation}/100
-                          </span>
-                        </div>
-                        <div className="text-[10px] font-mono text-zinc-400 mt-0.5">
-                          Hurst H={hurst.toFixed(2)}
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3">
-                        {getLifecycleBadge(fleetItem?.state)}
-                      </td>
-
-                      <td className="py-2.5 px-3 font-mono text-[11px]">
-                        {unitsHeld > 0 && fleetItem?.stopLossPrice ? (
-                          <div className="space-y-0.5">
-                            <div className="text-rose-700 font-medium">
-                              SL: {moneyINR(fleetItem.stopLossPrice)}
-                            </div>
-                            <div className="text-emerald-700 font-medium">
-                              TP: {moneyINR(fleetItem.takeProfitPrice || price * 1.04)}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-zinc-400 text-[10px]">
-                            Half-Kelly: <span className="font-semibold text-zinc-600">{(fleetItem?.kellyFraction || 1.0).toFixed(2)}x</span>
-                          </div>
+                      {/* Day Range Bar */}
+                      <td className="py-2.5 px-3 hidden sm:table-cell">
+                        {renderDayRangeBar(price, mkt?.low24h, mkt?.high24h) || (
+                          <span className="text-[10px] text-zinc-400 font-mono">—</span>
                         )}
                       </td>
 
+                      {/* 24h Volume */}
+                      <td className="py-2.5 px-3 hidden md:table-cell font-mono text-[11px] text-zinc-600">
+                        {formatIndianVolume(mkt?.volume24h)}
+                      </td>
+
+                      {/* Quantitative Model & Hurst */}
+                      <td className="py-2.5 px-3">
+                        <div>
+                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.2 rounded-md border ${getStrategyBadge(strat)}`}>
+                            {strat}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-[10px] font-mono font-semibold text-zinc-700">
+                            H={hurst.toFixed(2)}
+                          </span>
+                          <span className={`text-[9px] font-medium px-1 rounded border ${hurstInfo.color}`}>
+                            {hurstInfo.label}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Operational Status Badge */}
+                      <td className="py-2.5 px-3">
+                        {getFleetAssetStatus(asset, fleetItem, unitsHeld)}
+                      </td>
+
+                      {/* Position & Net P&L */}
                       <td className="py-2.5 px-3.5 text-right font-mono">
                         {unitsHeld > 0 ? (
                           <div>
                             <div className="font-bold text-zinc-900">
-                              {unitsHeld} shares
+                              {unitsHeld} shs @ {moneyINR(avgPrice, 0, 0)}
                             </div>
                             <div className={`text-[10px] font-semibold ${pnlAmt >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                               {pnlAmt >= 0 ? '+' : ''}{moneyINR(pnlAmt)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
                             </div>
                           </div>
                         ) : (
-                          <span className="text-zinc-400 text-[11px]">0 shares</span>
+                          <span className="text-zinc-400 text-[11px]">—</span>
                         )}
+                      </td>
+
+                      {/* Inspect Desk Button */}
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleInspectAsset(asset as Asset)}
+                          className="text-[11px] font-semibold px-2 py-1 rounded-md bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition-all cursor-pointer border border-zinc-200"
+                          title={`Inspect ${asset} in the Trading Desk`}
+                        >
+                          Inspect &rarr;
+                        </button>
                       </td>
                     </tr>
                   );
