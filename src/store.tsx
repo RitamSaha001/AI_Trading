@@ -525,19 +525,48 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
   const stateRef = useRef(state);
   const marketsRef = useRef(markets);
+  const lastToastRef = useRef<{ key: string; ts: number }>({ key: '', ts: 0 });
   const toastTimeoutRef = useRef<any>(null);
   const orderRef = useRef<any>(null);
   const cancelRef = useRef<any>(null);
 
   const triggerToast = useCallback((title: string, message: string, type: 'success' | 'info' | 'warn' = 'info') => {
+    // 1. Completely silence background system telemetry and internal sync events
+    const lowerTitle = title.toLowerCase();
+    const lowerMsg = message.toLowerCase();
+    if (
+      lowerTitle.includes('state synchronized') ||
+      lowerTitle.includes('balances synced') ||
+      lowerTitle.includes('web3 balances synced') ||
+      lowerMsg.includes('synchronized with another active tab') ||
+      lowerMsg.includes('refreshed from server')
+    ) {
+      return;
+    }
+
+    // 2. Intelligent anti-spam: deduplicate identical toasts within 12 seconds
+    const now = Date.now();
+    const key = `${title}:::${message}`;
+    if (lastToastRef.current.key === key && now - lastToastRef.current.ts < 12000) {
+      return;
+    }
+
+    // 3. Global anti-spam throttling: prevent toasts firing faster than once every 1.2s
+    if (now - lastToastRef.current.ts < 1200) {
+      return;
+    }
+
+    lastToastRef.current = { key, ts: now };
+
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setActiveToast({ id: Math.random().toString(), title, message, type });
     toastTimeoutRef.current = setTimeout(() => {
       setActiveToast(null);
-    }, 4500);
+    }, 3800);
   }, []);
 
   const dismissToast = useCallback(() => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setActiveToast(null);
   }, []);
 
@@ -2053,7 +2082,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
     };
   }, [syncPilotState, syncUpstoxAccount]);
 
-  // Cross-tab synchronization
+  // Cross-tab synchronization (silent background state hydration)
   useEffect(() => {
     return initCrossTabSync((newState) => {
       setState((prev) => {
@@ -2064,9 +2093,8 @@ export function Provider({ children }: { children: React.ReactNode }) {
           notifications: [...incomingNotifs, ...prev.notifications].slice(0, 100),
         };
       });
-      triggerToast('State Synchronized', 'Trading desk synchronized with another active tab.', 'info');
     });
-  }, [triggerToast]);
+  }, []);
 
   // Storage Quota Warning listener
   useEffect(() => {

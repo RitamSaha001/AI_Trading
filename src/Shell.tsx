@@ -788,27 +788,53 @@ export function Shell({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Toast Notification Container */}
+      {/* Apple Liquid Glass Floating Toast Banner (Top Right on Desktop, Top Capsule on Mobile - NEVER occludes bottom dock) */}
       {activeToast && (
-        <div className="fixed bottom-20 lg:bottom-6 left-3 right-3 sm:left-6 sm:right-auto z-50 max-w-md bg-white/95 backdrop-blur-2xl border border-black/[0.08] shadow-2xl rounded-2xl p-4 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
-          <div className="mt-0.5">
-            {activeToast.type === 'success' ? (
-              <CheckCircle className="w-5 h-5 text-emerald-500" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-indigo-500" />
-            )}
+        <div className="fixed top-20 right-3 sm:right-6 z-50 max-w-sm sm:max-w-md w-[calc(100%-1.5rem)] sm:w-auto pointer-events-none animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="pointer-events-auto apple-toast-banner rounded-2xl p-3.5 sm:p-4 flex items-start gap-3 relative overflow-hidden">
+            <div className="mt-0.5 shrink-0">
+              {activeToast.type === 'success' ? (
+                <div className="w-7 h-7 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20 shadow-2xs">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                </div>
+              ) : activeToast.type === 'warn' ? (
+                <div className="w-7 h-7 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20 shadow-2xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                </div>
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-600 flex items-center justify-center border border-indigo-500/20 shadow-2xs">
+                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 pr-1">
+              <h4 className="text-xs font-semibold text-zinc-950 tracking-tight">{activeToast.title}</h4>
+              <p className="text-xs text-zinc-600 mt-0.5 leading-snug">{activeToast.message}</p>
+            </div>
+            <button
+              type="button"
+              onClick={dismissToast}
+              className="shrink-0 p-1.5 rounded-full text-zinc-400 hover:text-zinc-700 hover:bg-black/[0.04] transition-colors cursor-pointer"
+              title="Dismiss notification"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+            {/* Apple Countdown Progress Line */}
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-black/[0.04]">
+              <div
+                className={`h-full ${
+                  activeToast.type === 'success'
+                    ? 'bg-emerald-500'
+                    : activeToast.type === 'warn'
+                    ? 'bg-amber-500'
+                    : 'bg-indigo-500'
+                } opacity-70`}
+                style={{
+                  animation: 'toastCountdown 3.8s linear forwards',
+                }}
+              />
+            </div>
           </div>
-          <div className="flex-1">
-            <h4 className="text-xs font-semibold text-zinc-900">{activeToast.title}</h4>
-            <p className="text-xs text-zinc-600 mt-0.5">{activeToast.message}</p>
-          </div>
-          <button
-            type="button"
-            onClick={dismissToast}
-            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-black/[0.04]"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
       )}
 
