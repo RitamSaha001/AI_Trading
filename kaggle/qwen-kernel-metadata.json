@@ -1,0 +1,21 @@
+{
+  "id": "ritamsaha00178/lumen-alpha-3b-qwen-finetune",
+  "title": "Lumen Alpha 3B Qwen Finetune",
+  "code_file": "lumen_alpha_3b_qwen_finetune.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "machine_shape": "NvidiaTeslaT4",
+  "keywords": [
+    "finance",
+    "machine-learning",
+    "artificial-intelligence",
+    "quantitative-finance"
+  ],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": []
+}

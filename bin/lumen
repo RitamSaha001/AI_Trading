@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 REPO_DIR="/Users/ritamsaha/Downloads/ai_trading"
-exec npx --prefix "$REPO_DIR" tsx "$REPO_DIR/scripts/lumen_terminal_chat.ts" "$@"
+exec python3 "$REPO_DIR/scripts/lumen_native_runner.py" "$@"

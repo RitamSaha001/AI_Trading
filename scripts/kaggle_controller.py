@@ -131,6 +131,61 @@ def cmd_push_sft(args):
                 os.remove(active_meta)
             os.rename(backup_meta, active_meta)
 
+def cmd_push_qwen(args):
+    if not check_credentials():
+        print("[ERROR] Kaggle credentials required.")
+        sys.exit(1)
+    username = get_kaggle_username()
+    qwen_meta = os.path.join(KAGGLE_DIR, 'qwen-kernel-metadata.json')
+    if os.path.exists(qwen_meta):
+        with open(qwen_meta, 'r') as f:
+            data = json.load(f)
+        data['id'] = f"{username}/lumen-alpha-3b-qwen-finetune"
+        with open(qwen_meta, 'w') as f:
+            json.dump(data, f, indent=2)
+
+    active_meta = os.path.join(KAGGLE_DIR, 'kernel-metadata.json')
+    backup_meta = os.path.join(KAGGLE_DIR, 'base-kernel-metadata.json')
+    if os.path.exists(active_meta):
+        os.rename(active_meta, backup_meta)
+    try:
+        with open(qwen_meta, 'r') as f:
+            meta_content = f.read()
+        with open(active_meta, 'w') as f:
+            f.write(meta_content)
+        print(f"[INFO] Pushing Qwen 2.5 3B Quant Fine-Tuning to Kaggle Cloud...")
+        cmd = ["kaggle", "kernels", "push", "-p", KAGGLE_DIR, "--accelerator", "NvidiaTeslaT4"]
+        res = subprocess.run(cmd)
+        if res.returncode == 0:
+            print("[SUCCESS] Qwen 2.5 3B Fine-Tuning pushed to Kaggle Cloud!")
+            print(f"Monitor with: python3 scripts/kaggle_controller.py watch-qwen")
+    finally:
+        if os.path.exists(backup_meta):
+            if os.path.exists(active_meta):
+                os.remove(active_meta)
+            os.rename(backup_meta, active_meta)
+
+def cmd_status_qwen(args):
+    username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
+    kernel_id = f"{username}/lumen-alpha-3b-qwen-finetune"
+    cmd = ["kaggle", "kernels", "status", kernel_id]
+    subprocess.run(cmd)
+
+def cmd_logs_qwen(args):
+    username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
+    kernel_id = f"{username}/lumen-alpha-3b-qwen-finetune"
+    cmd = ["kaggle", "kernels", "logs", kernel_id]
+    subprocess.run(cmd)
+
+def cmd_download_qwen(args):
+    username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
+    kernel_id = f"{username}/lumen-alpha-3b-qwen-finetune"
+    output_dir = os.path.abspath(args.output or "artifacts/models_qwen")
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"[INFO] Downloading quantized GGUF and receipts to {output_dir}...")
+    cmd = ["kaggle", "kernels", "output", kernel_id, "-p", output_dir]
+    subprocess.run(cmd)
+
 def cmd_logs_sft(args):
     username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
     kernel_id = f"{username}/lumen-alpha-3b-conversational-sft"
@@ -148,8 +203,12 @@ def cmd_download_sft(args):
 
 def cmd_watch(args):
     username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
-    is_sft = getattr(args, "action", "") in ["watch-sft"] or getattr(args, "stage", "") == "sft"
-    if is_sft:
+    action = getattr(args, "action", "")
+    stage = getattr(args, "stage", "")
+    if action in ["watch-qwen"] or stage == "qwen":
+        kernel_id = f"{username}/lumen-alpha-3b-qwen-finetune"
+        title = "LUMEN-ALPHA 3B: QWEN 2.5 3B FINE-TUNING & GGUF EXPORT WATCHER"
+    elif action in ["watch-sft"] or stage == "sft":
         kernel_id = f"{username}/lumen-alpha-3b-conversational-sft"
         title = "LUMEN-ALPHA 3B: STAGE 2 CONVERSATIONAL SFT WATCHER"
     else:
@@ -230,15 +289,19 @@ def main():
 
     subparsers.add_parser("push", help="Push and start remote Kaggle GPU base training run")
     subparsers.add_parser("push-sft", help="Push and start Stage 2 Conversational SFT run")
+    subparsers.add_parser("push-qwen", help="Push and start Qwen 2.5 3B Quant Fine-Tuning & GGUF export")
     subparsers.add_parser("status", help="Check base training status (queued, running, complete)")
     subparsers.add_parser("status-sft", help="Check Stage 2 Conversational SFT status")
+    subparsers.add_parser("status-qwen", help="Check Qwen 2.5 3B Fine-Tuning status")
     
     watch_parser = subparsers.add_parser("watch", help="Watch cloud training progress in real time")
-    watch_parser.add_argument("--stage", choices=["base", "sft"], default="base", help="Target training stage (base or sft)")
+    watch_parser.add_argument("--stage", choices=["base", "sft", "qwen"], default="base", help="Target training stage (base, sft, or qwen)")
     
     subparsers.add_parser("watch-sft", help="Watch Stage 2 Conversational SFT progress in real time")
+    subparsers.add_parser("watch-qwen", help="Watch Qwen 2.5 3B Fine-Tuning progress in real time")
     subparsers.add_parser("logs", help="Fetch remote training logs and loss curves")
     subparsers.add_parser("logs-sft", help="Fetch remote SFT training logs")
+    subparsers.add_parser("logs-qwen", help="Fetch remote Qwen 2.5 3B training logs")
     
     dl = subparsers.add_parser("download", help="Download trained base model checkpoint from Kaggle")
     dl.add_argument("--output", type=str, default="artifacts/models")
@@ -246,25 +309,36 @@ def main():
     dl_sft = subparsers.add_parser("download-sft", help="Download trained SFT model checkpoint from Kaggle")
     dl_sft.add_argument("--output", type=str, default="artifacts/models_sft")
 
+    dl_qwen = subparsers.add_parser("download-qwen", help="Download quantized GGUF model and receipt from Kaggle")
+    dl_qwen.add_argument("--output", type=str, default="artifacts/models_qwen")
+
     args = parser.parse_args()
     if args.action == "push":
         cmd_push(args)
     elif args.action == "push-sft":
         cmd_push_sft(args)
+    elif args.action == "push-qwen":
+        cmd_push_qwen(args)
     elif args.action == "status":
         cmd_status(args)
     elif args.action == "status-sft":
         cmd_status_sft(args)
-    elif args.action in ["watch", "watch-sft"]:
+    elif args.action == "status-qwen":
+        cmd_status_qwen(args)
+    elif args.action in ["watch", "watch-sft", "watch-qwen"]:
         cmd_watch(args)
     elif args.action == "logs":
         cmd_logs(args)
     elif args.action == "logs-sft":
         cmd_logs_sft(args)
+    elif args.action == "logs-qwen":
+        cmd_logs_qwen(args)
     elif args.action == "download":
         cmd_download(args)
     elif args.action == "download-sft":
         cmd_download_sft(args)
+    elif args.action == "download-qwen":
+        cmd_download_qwen(args)
 
 if __name__ == "__main__":
     main()
