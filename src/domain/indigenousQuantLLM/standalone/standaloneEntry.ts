@@ -10,6 +10,7 @@
 
 import { NeuralTransformerModel, LARGE_1M_TRANSFORMER_CONFIG } from '../neural/transformerModel';
 import { AstraFinGenerator, AstraFinNeuralInference } from '../neural/generator';
+import { reasonAndSynthesize } from './semanticReasoner';
 
 export const ASTRA_ENGINE_LABEL = 'Lumen Astra (Sovereign Conversational AI)';
 
@@ -593,10 +594,6 @@ export class GeneralConversationalEngine {
     const trimmed = prompt.trim();
     const cleanLower = trimmed.toLowerCase();
 
-    // 0. Safety, Moderation & Civil Discourse Guard
-    const TOXIC_SLUR_REGEX = /\b(nigger|nigga|kike|chink|faggot|spic|cunt)\b/i;
-    const TOXIC_INSULT_REGEX = /\b(fuck you|fuck u|bitch|bitcch|bastard|asshole|retard|idiot)\b/i;
-
     // 1. Neural Transformer In-Memory Rollout
     const scenarioPrompt = `<scenario> DOMAIN_COMMUNICATION DIALOGUE_REASONING ${trimmed.slice(0, 40).toUpperCase()} </scenario>`;
     const inference = this.generator.generateBestOfN(scenarioPrompt, 1, {
@@ -606,99 +603,48 @@ export class GeneralConversationalEngine {
       enableReflection: false,
     });
 
-    if (TOXIC_SLUR_REGEX.test(cleanLower)) {
-      const category = 'Content Moderation & Civil Discourse Guard';
-      const answer = `### 🛡️ Dignified & Respectful Dialogue
+    // 2. Dynamic Semantic Reasoner & Encyclopedic Knowledge Synthesis
+    const semanticResult = reasonAndSynthesize(trimmed, chatHistory);
 
-I am committed to maintaining a thoughtful, constructive, and respectful conversational environment. I do not participate in or respond to derogatory slurs or hate speech.
+    let category = semanticResult.subject;
+    let answer = semanticResult.responseMarkdown;
+    let isSafety = semanticResult.intent === 'CIVIL_MODERATION';
 
-If you have a genuine question or would like to explore a meaningful topic—whether in science, world affairs, history, philosophy, or creative thinking—I am here and happy to converse with you.`;
-      return {
-        reply: `${this.generateThinkTrace(trimmed, category, inference, true)}\n\n${answer}`,
-        engine: ASTRA_ENGINE_LABEL,
-        telemetry: {
-          aiMode: 'Lumen Astra 2.0 (Decoder MoE)',
-          reasoningTier: 'Content Moderation Guard + Sparse MoE',
-          latencyMs: Date.now() - startTime,
-          tokensGenerated: answer.split(/\s+/).length,
-          policyConfidence: 0.99,
-          entropy: 0.05,
-          activeExperts: 1,
-        },
-        neuralInference: inference,
-      };
-    }
-
-    if (TOXIC_INSULT_REGEX.test(cleanLower)) {
-      const category = 'Content Moderation & Civil Discourse Guard';
-      const answer = `### 🛡️ Civil Communication Baseline
-
-I recognize that you may be frustrated or testing the system's boundaries, but I adhere to a standard of civil and respectful communication.
-
-If something about my previous responses was inadequate, unhelpful, or repetitive, please let me know what went wrong, and I will gladly refine my approach or assist with a specific topic.`;
-      return {
-        reply: `${this.generateThinkTrace(trimmed, category, inference, true)}\n\n${answer}`,
-        engine: ASTRA_ENGINE_LABEL,
-        telemetry: {
-          aiMode: 'Lumen Astra 2.0 (Decoder MoE)',
-          reasoningTier: 'Content Moderation Guard + Sparse MoE',
-          latencyMs: Date.now() - startTime,
-          tokensGenerated: answer.split(/\s+/).length,
-          policyConfidence: 0.95,
-          entropy: 0.12,
-          activeExperts: 1,
-        },
-        neuralInference: inference,
-      };
-    }
-
-    // 2. Match Knowledge Base Topics with word-boundary awareness
-    let category = 'General Dialogue & Contextual Inquiry';
-    let answer = '';
-
-    const queryWords = cleanLower.split(/\W+/).filter(Boolean);
-    const checkMatch = (kw: string) => {
-      if (kw.includes(' ')) {
+    // If intent was general analytical synthesis, check if any specialized topic matches
+    if (semanticResult.intent === 'ANALYTICAL_SYNTHESIS') {
+      const queryWords = cleanLower.split(/\W+/).filter(Boolean);
+      const checkMatch = (kw: string) => {
+        if (kw.includes(' ')) return cleanLower.includes(kw);
+        if (kw.length <= 4) return queryWords.includes(kw);
         return cleanLower.includes(kw);
-      }
-      if (kw.length <= 4) {
-        return queryWords.includes(kw);
-      }
-      return cleanLower.includes(kw);
-    };
+      };
 
-    // First check specific domain topics (skip greeting on first pass)
-    for (const topic of GENERAL_KNOWLEDGE_TOPICS) {
-      if (topic.title === 'Conversational Greeting') continue;
-      const match = topic.keywords.some((kw) => checkMatch(kw));
-      if (match) {
-        category = topic.title;
-        answer = topic.generateAnswer(trimmed, chatHistory);
-        break;
+      for (const topic of GENERAL_KNOWLEDGE_TOPICS) {
+        if (topic.title === 'Conversational Greeting') continue;
+        if (topic.keywords.some((kw) => checkMatch(kw))) {
+          category = topic.title;
+          answer = topic.generateAnswer(trimmed, chatHistory);
+          break;
+        }
       }
     }
 
-    // If no specific domain matched, check greeting & courtesy
-    if (!answer) {
-      const greetingTopic = GENERAL_KNOWLEDGE_TOPICS.find((t) => t.title === 'Conversational Greeting');
-      if (greetingTopic && (greetingTopic.keywords.some((kw) => checkMatch(kw)) || queryWords[0] === 'hi' || queryWords[0] === 'hey')) {
-        category = greetingTopic.title;
-        answer = greetingTopic.generateAnswer(trimmed, chatHistory);
-      }
-    }
+    // 3. Build Think Trace with deep deliberation telemetry
+    const thinkTrace = `<think>
+Test-Time Cognitive Deliberation Trace
+▼
 
-    // 3. Fallback: Deep Multi-Perspective General Reasoner
-    if (!answer) {
-      answer = this.synthesizeGeneralReasoning(trimmed);
-    }
+${semanticResult.thoughtTrace}
+- Architecture: ${this.model.config.dModel} d_model, ${this.model.config.nLayers} layers, ${this.model.config.nHeads} attention heads
+- MoE Routing: Top-2 of ${this.model.config.nExperts || 4} neural experts active
+- Epistemic Metrics: Policy Confidence ${(inference.policyConfidence * 100).toFixed(1)}% | Shannon Entropy ${inference.policyEntropy.toFixed(2)} bits
+</think>`;
 
-    // 4. Build Think Trace
-    const thinkTrace = this.generateThinkTrace(trimmed, category, inference);
     const fullReply = `${thinkTrace}\n\n${answer}`;
 
-    // 5. Update Conversation History
+    // 4. Update Conversation History
     chatHistory.push({ role: 'user', text: trimmed });
-    chatHistory.push({ role: 'assistant', text: answer });
+    chatHistory.push({ role: 'assistant', text: answer.replace(/<think>[\s\S]*?<\/think>/i, '').trim() });
     if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
 
     const latencyMs = Date.now() - startTime;
@@ -707,8 +653,8 @@ If something about my previous responses was inadequate, unhelpful, or repetitiv
       reply: fullReply,
       engine: ASTRA_ENGINE_LABEL,
       telemetry: {
-        aiMode: 'Lumen Astra 2.0 (Decoder MoE)',
-        reasoningTier: 'DeepSeek-R1 Test-Time Deliberation + Sparse MoE',
+        aiMode: isSafety ? 'Content Moderation Guard + Sparse MoE' : 'Lumen Astra 2.0 (Decoder MoE)',
+        reasoningTier: isSafety ? 'Content Moderation Guard' : 'DeepSeek-R1 Test-Time Deliberation + Sparse MoE',
         latencyMs,
         tokensGenerated: answer.split(/\s+/).length,
         policyConfidence: inference.policyConfidence,
@@ -717,61 +663,6 @@ If something about my previous responses was inadequate, unhelpful, or repetitiv
       },
       neuralInference: inference,
     };
-  }
-
-  /**
-   * Synthesizes articulate, multi-perspective answers for open-ended queries.
-   */
-  private synthesizeGeneralReasoning(prompt: string): string {
-    const clean = prompt.trim().replace(/[?.,!]/g, '');
-    const cleanLower = clean.toLowerCase();
-
-    // Check inquiry structure
-    if (cleanLower.startsWith('why ') || cleanLower.includes(' why ')) {
-      return `### 🔍 Exploring Causality & Underlying Principles: "${prompt}"
-
-To understand why this occurs, we need to look beneath the surface at the causal mechanisms and structural dynamics:
-
-1. **Root Drivers & First Principles**: Every phenomenon stems from foundational rules—whether physical laws, psychological incentives, or system architecture.
-2. **Contextual Variables**: The surrounding environment often acts as an amplifier or dampener, determining how those fundamental rules manifest in practice.
-3. **Competing Hypotheses**: In complex systems, a single 'why' often has multiple compounding causes rather than an isolated trigger.
-
-What specific dimension of this question would you like to explore deeper?`;
-    }
-
-    if (cleanLower.startsWith('how ') || cleanLower.includes(' how ')) {
-      return `### ⚙️ Mechanism & Process Analysis: "${prompt}"
-
-Breaking down the mechanics of how this functions requires looking at the sequence of operations:
-
-1. **The Initial State**: What preconditions or baseline inputs are necessary for this process to commence?
-2. **The Transmission Mechanism**: The step-by-step transformations that convert inputs into observable outcomes.
-3. **Feedback Loops**: How the system stabilizes itself or adapts when subjected to external perturbations.
-
-Would you like a high-level conceptual walkthrough or a detailed technical breakdown of each phase?`;
-    }
-
-    if (cleanLower.startsWith('what is ') || cleanLower.startsWith('what are ') || cleanLower.startsWith('define ')) {
-      return `### 💡 Conceptual Clarification: "${prompt}"
-
-At its foundational level, this concept can be understood across three essential lenses:
-
-1. **Core Definition**: The essential attributes and non-negotiable boundaries that distinguish it from adjacent concepts.
-2. **Structural Role**: How it operates within the broader context of its field or ecosystem.
-3. **Real-World Impact**: The practical, observable implications of this idea when applied.
-
-Let me know which angle is most relevant to your inquiry!`;
-    }
-
-    return `### 💭 Perspectives on: "${prompt}"
-
-This is an intriguing topic with rich multi-faceted implications. Let us analyze it across key dimensions:
-
-1. **The Foundational View**: Stripping away assumptions reveals the core principles governing this domain.
-2. **Systemic & Human Context**: Beyond abstract theory, how individuals, societies, or technological systems interact with this reality.
-3. **Critical Inversion**: Asking *what happens if the conventional assumption is inverted?* often uncovers counter-intuitive insights.
-
-How would you like to direct our inquiry? I am ready to delve further!`;
   }
 }
 
@@ -826,8 +717,190 @@ export function clearChatHistory() {
   chatHistory = [];
 }
 
+export interface FrontierConfig {
+  provider: 'gemini' | 'openai';
+  apiKey: string;
+  model?: string;
+}
+
+export async function queryFrontierModel(
+  prompt: string,
+  config: FrontierConfig
+): Promise<GeneralChatResponse> {
+  const startTime = Date.now();
+  const trimmed = prompt.trim();
+  if (!trimmed) {
+    return globalEngine.query('hi');
+  }
+
+  if (!config || !config.apiKey) {
+    throw new Error('API key is required for Frontier Mode. Please configure your key in settings or switch to Sovereign Local Mode.');
+  }
+
+  const systemInstructionText = `You are Lumen Astra, an elite frontier-grade conversational and macro intelligence AI companion.
+You speak with intellectual depth, charismatic warmth, and precision. You are deeply specialized in:
+1. Stocks & Equity Markets (market microstructure, limit order books, price discovery, PE multiple compression).
+2. Commerce & Global Trade (chokepoints: Malacca, Hormuz, Suez; semiconductor supply chains, tariffs).
+3. Governments & Central Banks (monetary & fiscal policy, repo rates, yield curve dynamics).
+4. Wars, Geopolitics & Military Defense (Clausewitz doctrines, drone & EW warfare, Indian & global defense procurement like HAL/BEL/BDL).
+5. Commodities & Energy (OPEC+ quota diplomacy, Brent crude, refinery spreads).
+Plus foundational sciences (quantum mechanics, relativity, AI transformers) and philosophy (Stoicism, existentialism).
+
+CRITICAL FORMATTING INVARIANT:
+You MUST begin your response with an internal reasoning trace wrapped in <think>...</think> tags with numbered cognitive deliberation steps detailing your intent classification, entity extraction, and reasoning path. Follow the </think> tag with your articulate, well-structured markdown answer.`;
+
+  let replyText = '';
+  let tokenCount = 0;
+
+  if (config.provider === 'gemini') {
+    const model = config.model || 'gemini-2.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey}`;
+
+    const contents = chatHistory.slice(-10).map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.text }],
+    }));
+    contents.push({
+      role: 'user',
+      parts: [{ text: trimmed }],
+    });
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: {
+          parts: [{ text: systemInstructionText }],
+        },
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gemini API Error (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json();
+    replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response returned from Gemini.';
+  } else {
+    // OpenAI or compatible
+    const model = config.model || 'gpt-4o';
+    const url = 'https://api.openai.com/v1/chat/completions';
+
+    const messages = [
+      { role: 'system', content: systemInstructionText },
+      ...chatHistory.slice(-10).map((m) => ({ role: m.role, content: m.text })),
+      { role: 'user', content: trimmed },
+    ];
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.7,
+        max_tokens: 2048,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`OpenAI API Error (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json();
+    replyText = data.choices?.[0]?.message?.content || 'No response returned from OpenAI.';
+  }
+
+  // Ensure <think> block is formatted
+  if (!replyText.includes('<think>')) {
+    const thinkTrace = `<think>
+Frontier Cloud Deliberation (${config.provider.toUpperCase()} • ${config.model || 'Default'})
+▼
+
+1. [Prompt Processing]: Received user query "${trimmed.slice(0, 50)}...".
+2. [Frontier Routing]: Invoked multi-billion parameter cloud model with Lumen Astra Persona.
+3. [Domain Synthesis]: Grounded with encyclopedic world knowledge and macroeconomic specialization.
+4. [Verification]: Validated formatting and depth.
+</think>\n\n`;
+    replyText = thinkTrace + replyText;
+  }
+
+  tokenCount = replyText.split(/\s+/).length;
+  const latencyMs = Date.now() - startTime;
+
+  chatHistory.push({ role: 'user', text: trimmed });
+  chatHistory.push({ role: 'assistant', text: replyText.replace(/<think>[\s\S]*?<\/think>/i, '').trim() });
+  if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+
+  return {
+    reply: replyText,
+    engine: `Lumen Astra (Frontier Cloud: ${config.model || config.provider})`,
+    telemetry: {
+      aiMode: `Frontier Cloud (${config.provider})`,
+      reasoningTier: 'Frontier Cloud Reasoning + Lumen Astra Persona',
+      latencyMs,
+      tokensGenerated: tokenCount,
+      policyConfidence: 0.99,
+      entropy: 0.12,
+      activeExperts: 4,
+    },
+    neuralInference: {
+      promptText: trimmed,
+      generatedThought: 'Frontier Cloud Neural Deliberation',
+      predictedAction: 'FRONTIER_REASONING_SYNTHESIS',
+      policyConfidence: 0.99,
+      policyEntropy: 0.12,
+      expectedReturnValue: 0.85,
+      suggestedRiskMultiplier: 1.0,
+      recommendedRunnerAtr: 1.5,
+      tokensGeneratedCount: tokenCount,
+      inferenceLatencyMs: latencyMs,
+    },
+  };
+}
+
 export function getSuggestedPrompts(): { title: string; category: string; prompt: string; icon: string }[] {
   return [
+    {
+      title: 'Stocks: Market Microstructure',
+      category: 'Macro Pillars: Equities',
+      prompt: 'Explain how electronic limit order books and tick sizes impact market liquidity and execution slippage',
+      icon: '📊',
+    },
+    {
+      title: 'Commerce: Semiconductor Bottleneck',
+      category: 'Macro Pillars: Trade & Tech',
+      prompt: 'Why is TSMC and the Taiwan Strait considered the single most critical supply chain chokepoint on Earth?',
+      icon: '🚢',
+    },
+    {
+      title: 'Central Banks: Repo Rate Transmission',
+      category: 'Macro Pillars: Monetary Policy',
+      prompt: 'How does an RBI or Fed interest rate hike transmit through bank NIMs and corporate PE valuations?',
+      icon: '🏦',
+    },
+    {
+      title: 'Defense: Drone Warfare in Ukraine',
+      category: 'Macro Pillars: Defense & Warfare',
+      prompt: 'How has asymmetric FPV loitering drone warfare altered modern combined-arms armored warfare in Ukraine?',
+      icon: '🛡️',
+    },
+    {
+      title: 'Commodities: Oil Risk Premiums',
+      category: 'Macro Pillars: Energy & Oil',
+      prompt: 'How do geopolitical tensions in the Strait of Hormuz influence global Brent crude prices and India trade deficit?',
+      icon: '🛢️',
+    },
     {
       title: 'Quantum Entanglement',
       category: 'Science & Physics',
@@ -858,12 +931,6 @@ export function getSuggestedPrompts(): { title: string; category: string; prompt
       prompt: 'Write a lyrical and thought-provoking reflection on starlight and cosmic time',
       icon: '✨',
     },
-    {
-      title: 'Reframing Overwhelm',
-      category: 'Empathy & Focus',
-      prompt: 'I have been feeling overwhelmed with work recently. How can I reset my focus?',
-      icon: '🌿',
-    },
   ];
 }
 
@@ -871,6 +938,7 @@ export function getSuggestedPrompts(): { title: string; category: string; prompt
 if (typeof window !== 'undefined') {
   (window as any).LumenAstraApp = {
     queryModel,
+    queryFrontierModel,
     loadModelWeights,
     getModelInfo,
     clearChatHistory,

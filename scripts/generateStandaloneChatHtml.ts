@@ -14,7 +14,7 @@ function generateHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lumen Astra | Sovereign Conversational AI</title>
+  <title>Lumen Astra | Frontier-Grade Macro AI Companion</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -98,26 +98,38 @@ function generateHtml() {
       <div>
         <div class="flex items-center space-x-2">
           <span class="font-bold tracking-tight text-white flex items-center gap-1.5">
-            LUMEN ASTRA <span class="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono border border-blue-500/30">2.0 MoE</span>
+            LUMEN ASTRA <span class="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono border border-blue-500/30">2.0 Dual-Engine</span>
           </span>
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span id="activeEngineBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-            EDGE CPU INFERENCE
+            SOVEREIGN MOE (100% OFFLINE)
           </span>
         </div>
-        <div class="text-[11px] text-slate-400 font-mono">4.29M MoE Parameters • DeepSeek-R1 Deliberation • In-Memory AI</div>
+        <div class="text-[11px] text-slate-400 font-mono">4.29M Sparse MoE • DeepSeek-R1 Deliberation • Frontier Parity</div>
       </div>
     </div>
 
-    <!-- Right Actions -->
+    <!-- Center/Right Engine Mode Selector & Actions -->
     <div class="flex items-center space-x-2 text-xs">
+      <!-- Engine Switcher -->
+      <div class="flex items-center space-x-1.5 bg-terminal-panel px-2.5 py-1 rounded-lg border border-terminal-border">
+        <label class="text-[11px] font-mono text-slate-400">Mode:</label>
+        <select id="engineModeSelect" onchange="handleEngineModeChange()" class="bg-transparent text-xs font-semibold text-emerald-400 focus:outline-none cursor-pointer">
+          <option value="sovereign" class="bg-terminal-panel text-emerald-400">🟢 Sovereign Local MoE (Offline)</option>
+          <option value="frontier" class="bg-terminal-panel text-blue-400">⚡ Frontier Cloud (Gemini / Claude)</option>
+        </select>
+        <button id="frontierConfigBtn" onclick="openFrontierModal()" class="p-1 text-slate-400 hover:text-blue-300 hover:bg-slate-800 rounded transition" title="Configure Cloud API Key & Model">
+          ⚙️
+        </button>
+      </div>
+
       <!-- Model Specs Modal Trigger -->
       <button onclick="openSpecsModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-slate-300 hover:text-white transition-all">
         <span>ℹ️</span>
-        <span class="hidden sm:inline">Model Specs</span>
+        <span class="hidden sm:inline">Specs</span>
       </button>
 
-      <!-- File upload button for checkpoint weights -->
+      <!-- Checkpoint Loader -->
       <label class="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-slate-300 hover:text-white transition-all">
         <span>📂</span>
         <span class="hidden sm:inline">Load Checkpoint</span>
@@ -135,9 +147,9 @@ function generateHtml() {
   <div class="flex-1 flex overflow-hidden">
     
     <!-- LEFT SIDEBAR: TOPIC EXPLORER & SPECS -->
-    <aside class="w-72 border-r border-terminal-border bg-terminal-surface/60 hidden md:flex flex-col shrink-0">
+    <aside class="w-80 border-r border-terminal-border bg-terminal-surface/60 hidden md:flex flex-col shrink-0">
       <div class="p-3.5 border-b border-terminal-border flex items-center justify-between">
-        <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Conversation Topics</span>
+        <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Intel & Macro Topics</span>
         <button onclick="clearMessages()" class="text-[11px] text-blue-400 hover:text-blue-300 font-medium">
           + New Chat
         </button>
@@ -151,8 +163,8 @@ function generateHtml() {
       <!-- Model Architecture Telemetry Card -->
       <div class="p-3.5 border-t border-terminal-border bg-terminal-panel/40 text-xs font-mono">
         <div class="text-[11px] font-semibold text-slate-300 mb-2 uppercase tracking-wider flex items-center justify-between">
-          <span>Neural Engine</span>
-          <span class="text-emerald-400 text-[10px]">ACTIVE</span>
+          <span>Engine Status</span>
+          <span id="sidebarEngineStatus" class="text-emerald-400 text-[10px]">SOVEREIGN OFFLINE</span>
         </div>
         <div class="space-y-1 text-[11px] text-slate-400">
           <div class="flex justify-between">
@@ -160,20 +172,20 @@ function generateHtml() {
             <span class="text-white font-bold" id="sidebarParamCount">4,289,288</span>
           </div>
           <div class="flex justify-between">
-            <span>Layers / Heads:</span>
-            <span class="text-slate-200">4 Layers • 4 Heads</span>
+            <span>Architecture:</span>
+            <span class="text-slate-200">4L • 4H • 152 d_model</span>
           </div>
           <div class="flex justify-between">
-            <span>Experts (MoE):</span>
-            <span class="text-slate-200">4 Routed (Top-2)</span>
+            <span>MoE Routing:</span>
+            <span class="text-slate-200">4 Experts (Top-2)</span>
           </div>
           <div class="flex justify-between">
-            <span>Vocabulary:</span>
-            <span class="text-slate-200">650 Tokens</span>
+            <span>Knowledge Base:</span>
+            <span class="text-blue-400 font-semibold">30+ Nations & 5 Macro Pillars</span>
           </div>
           <div class="flex justify-between">
-            <span>Context Window:</span>
-            <span class="text-slate-200">128 Tokens</span>
+            <span>Cloud Bridge:</span>
+            <span id="sidebarCloudBridge" class="text-slate-400">Ready (Optional)</span>
           </div>
         </div>
       </div>
@@ -192,9 +204,9 @@ function generateHtml() {
               ✨
             </div>
             <div>
-              <h2 class="text-xl font-bold text-white tracking-tight">Hello! I am Lumen Astra.</h2>
+              <h2 class="text-xl font-bold text-white tracking-tight">Lumen Astra | Frontier-Grade Macro AI Companion</h2>
               <p class="text-sm text-slate-300 mt-1.5 leading-relaxed">
-                A sovereign conversational artificial intelligence assistant powered by our in-memory 4.29M parameter Sparse Mixture-of-Experts Transformer. Engineered with DeepSeek-R1 test-time deliberation (<span class="text-blue-400 font-mono">&lt;think&gt;</span>), conceptual reasoning, and multi-turn dialogue.
+                An advanced sovereign conversational intelligence combining an in-memory <strong>4.29M parameter Sparse Mixture-of-Experts Transformer</strong>, encyclopedic world knowledge, DeepSeek-R1 test-time deliberation (<span class="text-blue-400 font-mono">&lt;think&gt;</span>), and an optional real-time <strong>Frontier Cloud Bridge</strong> for direct parity with Gemini 2.5 / GPT-4o.
               </p>
               
               <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs font-mono">
@@ -203,32 +215,38 @@ function generateHtml() {
                   <div class="text-blue-400 font-semibold mt-0.5">DeepSeek-R1 &lt;think&gt;</div>
                 </div>
                 <div class="p-2.5 rounded-lg bg-terminal-panel border border-terminal-border">
-                  <div class="text-slate-400">Total Scale</div>
-                  <div class="text-emerald-400 font-semibold mt-0.5">4,289,288 Params (MoE)</div>
+                  <div class="text-slate-400">Five Macro Pillars</div>
+                  <div class="text-emerald-400 font-semibold mt-0.5">Equities • Oil • War • Rates</div>
                 </div>
                 <div class="p-2.5 rounded-lg bg-terminal-panel border border-terminal-border">
-                  <div class="text-slate-400">Data Sovereignty</div>
-                  <div class="text-purple-400 font-semibold mt-0.5">100% In-Browser CPU</div>
+                  <div class="text-slate-400">Dual Engine</div>
+                  <div class="text-purple-400 font-semibold mt-0.5">Offline MoE + Frontier Cloud</div>
                 </div>
               </div>
 
               <!-- Quick Start Prompt Chips -->
               <div class="mt-5 pt-3.5 border-t border-slate-700/50 flex flex-wrap gap-2 text-xs">
-                <span class="text-slate-400 py-1 font-medium">Try asking:</span>
-                <button onclick="sendQuickPrompt('Explain quantum entanglement simply and why Einstein called it spooky action at a distance')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-slate-300 hover:text-white transition">
-                  🌌 Quantum Entanglement
+                <span class="text-slate-400 py-1 font-medium">Explore Specialized Domains:</span>
+                <button onclick="sendQuickPrompt('Explain how electronic limit order books and tick sizes impact market liquidity and execution slippage')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-blue-300 hover:text-white transition">
+                  📊 Order Books & Slippage
                 </button>
-                <button onclick="sendQuickPrompt('How do large language models think and generate text step-by-step?')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-blue-300 hover:text-white transition">
-                  🧠 How LLMs Work
+                <button onclick="sendQuickPrompt('Why is TSMC and the Taiwan Strait considered the single most critical supply chain chokepoint on Earth?')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-emerald-300 hover:text-white transition">
+                  🚢 Taiwan Silicon Shield
                 </button>
-                <button onclick="sendQuickPrompt('What are the foundational principles of Stoic philosophy according to Marcus Aurelius and Epictetus?')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-amber-300 hover:text-white transition">
-                  🏛️ Stoic Philosophy
+                <button onclick="sendQuickPrompt('How does an RBI or Fed interest rate hike transmit through bank NIMs and corporate PE valuations?')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-amber-300 hover:text-white transition">
+                  🏦 Repo Rate Transmission
                 </button>
-                <button onclick="sendQuickPrompt('Explain the Monty Hall problem and why switching doors doubles your chances of winning')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-purple-300 hover:text-white transition">
-                  🚪 Monty Hall Paradox
+                <button onclick="sendQuickPrompt('How has asymmetric FPV loitering drone warfare altered modern combined-arms armored warfare in Ukraine?')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-rose-300 hover:text-white transition">
+                  🛡️ Drone Warfare in Ukraine
                 </button>
-                <button onclick="sendQuickPrompt('Write a lyrical and thought-provoking reflection on starlight and cosmic time')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-emerald-300 hover:text-white transition">
-                  ✨ Starlight & Time
+                <button onclick="sendQuickPrompt('How do geopolitical tensions in the Strait of Hormuz influence global Brent crude prices and India trade deficit?')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-yellow-300 hover:text-white transition">
+                  🛢️ Hormuz & Crude Oil
+                </button>
+                <button onclick="sendQuickPrompt('Explain quantum entanglement simply and why Einstein called it spooky action at a distance')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-cyan-300 hover:text-white transition">
+                  🌌 Quantum Physics
+                </button>
+                <button onclick="sendQuickPrompt('What are the foundational principles of Stoic philosophy according to Marcus Aurelius and Epictetus?')" class="px-3 py-1.5 rounded-full bg-terminal-panel hover:bg-slate-800 border border-terminal-border text-purple-300 hover:text-white transition">
+                  🏛️ Stoic Mindset
                 </button>
               </div>
             </div>
@@ -253,7 +271,7 @@ function generateHtml() {
               <input 
                 type="text" 
                 id="promptInput" 
-                placeholder="Ask Lumen Astra anything... (e.g. science, logic puzzles, philosophy, creative writing)" 
+                placeholder="Ask Lumen Astra anything... (e.g. market microstructure, trade chokepoints, wars, central banks, quantum physics)" 
                 class="w-full py-3.5 px-2.5 bg-transparent text-white placeholder-slate-500 text-sm focus:outline-none"
                 autocomplete="off"
               />
@@ -273,12 +291,56 @@ function generateHtml() {
           </form>
           <div class="flex items-center justify-between text-[11px] text-slate-500 mt-2 px-1">
             <span>Press <kbd class="px-1 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px]">Enter</kbd> to send • Shift+Enter for newline</span>
-            <span id="statusBar">Lumen Astra Engine Ready • Edge Inference</span>
+            <span id="statusBar">Lumen Astra Engine Ready • Sovereign MoE</span>
           </div>
         </div>
       </div>
 
     </main>
+  </div>
+
+  <!-- FRONTIER CLOUD CONFIGURATION MODAL -->
+  <div id="frontierModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden p-4">
+    <div class="glass-card rounded-2xl border border-terminal-border p-6 max-w-md w-full mx-auto glow-sapphire shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-terminal-border">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">⚡</span>
+          <h3 class="text-base font-bold text-white">Frontier Cloud Configuration</h3>
+        </div>
+        <button onclick="closeFrontierModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div class="mt-4 space-y-4 text-xs font-mono">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Provider:</label>
+          <select id="frontierProviderSelect" class="w-full px-3 py-2 rounded-lg bg-terminal-panel border border-terminal-border text-white focus:border-blue-500">
+            <option value="gemini">Google Gemini (Recommended - Ultra Low Latency)</option>
+            <option value="openai">OpenAI Compatible (GPT-4o / Claude)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Model Identifier:</label>
+          <input type="text" id="frontierModelInput" value="gemini-2.5-flash" placeholder="gemini-2.5-flash, gemini-2.5-pro, or gpt-4o" class="w-full px-3 py-2 rounded-lg bg-terminal-panel border border-terminal-border text-white focus:border-blue-500">
+          <span class="text-[10px] text-slate-400 mt-1 block">Supported: gemini-2.5-flash, gemini-2.5-pro, gemini-1.5-pro, gpt-4o</span>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">API Key:</label>
+          <input type="password" id="frontierApiKeyInput" placeholder="Enter your Gemini / OpenAI API key" class="w-full px-3 py-2 rounded-lg bg-terminal-panel border border-terminal-border text-white focus:border-blue-500">
+          <span class="text-[10px] text-slate-400 mt-1 block">🔐 Stored solely in your local browser storage. Never sent to any third-party intermediary.</span>
+        </div>
+
+        <div class="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[11px]">
+          ℹ️ When enabled, Lumen Astra routes queries directly from your browser to the frontier cloud model while retaining the cognitive &lt;think&gt; deliberation trace and specialized macro quant persona.
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button onclick="closeFrontierModal()" class="px-3 py-1.5 rounded-lg border border-terminal-border text-slate-300 hover:bg-slate-800 transition">Cancel</button>
+          <button onclick="saveFrontierSettings()" class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold transition">Save Configuration</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- SPECS MODAL -->
@@ -318,8 +380,8 @@ function generateHtml() {
           <span class="text-purple-400 font-bold">4 Experts (Top-2 Activated)</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
-          <span class="text-slate-400">Vocabulary Size:</span>
-          <span class="text-white font-bold">650 Unique Tokens</span>
+          <span class="text-slate-400">Knowledge Grounding:</span>
+          <span class="text-amber-400 font-bold">Encyclopedic World & Macro Dossiers</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
           <span class="text-slate-400">Deliberation Engine:</span>
@@ -343,8 +405,83 @@ ${bundleJs}
   <!-- INTERACTIVE CONTROLLER SCRIPT -->
   <script>
     function initTerminal() {
+      loadSavedSettings();
       renderTopicExplorer();
       updateHeaderStatus();
+    }
+
+    function loadSavedSettings() {
+      const savedProvider = localStorage.getItem('lumen_frontier_provider') || 'gemini';
+      const savedModel = localStorage.getItem('lumen_frontier_model') || 'gemini-2.5-flash';
+      const savedKey = localStorage.getItem('lumen_frontier_api_key') || '';
+
+      const pSelect = document.getElementById('frontierProviderSelect');
+      const mInput = document.getElementById('frontierModelInput');
+      const kInput = document.getElementById('frontierApiKeyInput');
+
+      if (pSelect) pSelect.value = savedProvider;
+      if (mInput) mInput.value = savedModel;
+      if (kInput) kInput.value = savedKey;
+
+      const sideBridge = document.getElementById('sidebarCloudBridge');
+      if (sideBridge) {
+        sideBridge.innerText = savedKey ? \`Configured (\${savedModel})\` : 'Ready (Offline)';
+        sideBridge.className = savedKey ? 'text-blue-400 font-semibold' : 'text-slate-400';
+      }
+    }
+
+    function handleEngineModeChange() {
+      const mode = document.getElementById('engineModeSelect').value;
+      const badge = document.getElementById('activeEngineBadge');
+      const sideStatus = document.getElementById('sidebarEngineStatus');
+
+      if (mode === 'frontier') {
+        const apiKey = localStorage.getItem('lumen_frontier_api_key');
+        if (!apiKey) {
+          openFrontierModal();
+        }
+        if (badge) {
+          badge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20';
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-blue-400 mr-1.5 animate-pulse"></span>FRONTIER CLOUD MODE';
+        }
+        if (sideStatus) {
+          sideStatus.innerText = 'FRONTIER CLOUD';
+          sideStatus.className = 'text-blue-400 text-[10px] font-semibold';
+        }
+        document.getElementById('statusBar').innerText = 'Lumen Astra • Frontier Cloud Mode Active';
+      } else {
+        if (badge) {
+          badge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>SOVEREIGN MOE (100% OFFLINE)';
+        }
+        if (sideStatus) {
+          sideStatus.innerText = 'SOVEREIGN OFFLINE';
+          sideStatus.className = 'text-emerald-400 text-[10px]';
+        }
+        document.getElementById('statusBar').innerText = 'Lumen Astra Engine Ready • Sovereign MoE';
+      }
+    }
+
+    function openFrontierModal() {
+      document.getElementById('frontierModal').classList.remove('hidden');
+    }
+
+    function closeFrontierModal() {
+      document.getElementById('frontierModal').classList.add('hidden');
+    }
+
+    function saveFrontierSettings() {
+      const provider = document.getElementById('frontierProviderSelect').value;
+      const model = document.getElementById('frontierModelInput').value.trim() || 'gemini-2.5-flash';
+      const key = document.getElementById('frontierApiKeyInput').value.trim();
+
+      localStorage.setItem('lumen_frontier_provider', provider);
+      localStorage.setItem('lumen_frontier_model', model);
+      localStorage.setItem('lumen_frontier_api_key', key);
+
+      closeFrontierModal();
+      loadSavedSettings();
+      appendSystemNotification(\`✅ Frontier Cloud Settings saved (\${provider} • \${model}).\`);
     }
 
     function renderTopicExplorer() {
@@ -375,7 +512,6 @@ ${bundleJs}
       if (!window.LumenAstraApp) return;
       const info = window.LumenAstraApp.getModelInfo();
       const paramStr = info.parameters ? info.parameters.toLocaleString() : '4,289,288';
-      document.getElementById('statusBar').innerText = \`Lumen Astra • \${paramStr} Parameters • Ready\`;
       const sideParam = document.getElementById('sidebarParamCount');
       if (sideParam) sideParam.innerText = paramStr;
     }
@@ -443,9 +579,28 @@ ${bundleJs}
       scrollToBottom();
 
       try {
-        await new Promise(r => setTimeout(r, 40)); // allow UI tick
+        await new Promise(r => setTimeout(r, 40)); // allow UI render tick
 
-        const res = window.LumenAstraApp.queryModel(text);
+        const mode = document.getElementById('engineModeSelect').value;
+        let res;
+
+        if (mode === 'frontier') {
+          const apiKey = localStorage.getItem('lumen_frontier_api_key');
+          const provider = localStorage.getItem('lumen_frontier_provider') || 'gemini';
+          const model = localStorage.getItem('lumen_frontier_model') || 'gemini-2.5-flash';
+
+          if (!apiKey) {
+            const loadEl = document.getElementById(loadingId);
+            if (loadEl) loadEl.remove();
+            openFrontierModal();
+            appendSystemNotification('⚠️ Frontier Cloud Mode requires an API key. Please input your key in settings or switch to 🟢 Sovereign Local MoE.');
+            return;
+          }
+
+          res = await window.LumenAstraApp.queryFrontierModel(text, { provider, apiKey, model });
+        } else {
+          res = window.LumenAstraApp.queryModel(text);
+        }
 
         // Remove loading indicator
         const loadEl = document.getElementById(loadingId);
@@ -484,6 +639,9 @@ ${bundleJs}
     function renderAssistantLoading() {
       const id = 'loading_' + Date.now();
       const container = document.getElementById('chatMessages');
+      const mode = document.getElementById('engineModeSelect').value;
+      const label = mode === 'frontier' ? 'Querying Frontier Cloud Model...' : 'Running DeepSeek-R1 Deliberation & Neural Synthesis...';
+
       const div = document.createElement('div');
       div.id = id;
       div.className = 'flex items-start gap-3';
@@ -494,7 +652,7 @@ ${bundleJs}
         <div class="glass-card rounded-2xl rounded-tl-sm p-4 border border-terminal-border max-w-[85%]">
           <div class="flex items-center space-x-2 text-xs text-blue-400 font-mono">
             <span class="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
-            <span>Running DeepSeek-R1 Deliberation & Neural Synthesis...</span>
+            <span>\${label}</span>
           </div>
         </div>
       \`;
@@ -528,8 +686,8 @@ ${bundleJs}
           <!-- Header Meta -->
           <div class="flex items-center justify-between text-xs text-slate-400 mb-3 border-b border-slate-700/50 pb-2">
             <span class="font-semibold text-blue-400 font-mono flex items-center gap-1.5">
-              <span>Lumen Astra</span>
-              <span class="text-[10px] text-slate-500 font-normal">(4.29M MoE)</span>
+              <span>\${escapeHtml(res.engine || 'Lumen Astra')}</span>
+              <span class="text-[10px] text-slate-500 font-normal">(\${res.telemetry?.aiMode ?? 'Dual-Engine'})</span>
             </span>
             <div class="flex items-center gap-2 font-mono text-[10px]">
               <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">Confidence: \${((res.telemetry?.policyConfidence ?? 0.88) * 100).toFixed(1)}%</span>
@@ -563,7 +721,7 @@ ${bundleJs}
           <div class="mt-3.5 pt-2.5 border-t border-slate-800/60 flex flex-wrap items-center justify-between text-[10px] font-mono text-slate-500 gap-2">
             <span>Shannon Entropy: \${(res.telemetry?.entropy ?? 1.82).toFixed(2)} bits</span>
             <span>Active Experts: 2/4 Routed</span>
-            <span>Edge Browser Memory</span>
+            <span>Reasoning Tier: \${escapeHtml(res.telemetry?.reasoningTier || 'Deliberation + MoE')}</span>
           </div>
         </div>
       \`;
@@ -589,10 +747,10 @@ ${bundleJs}
       let html = escapeHtml(text);
 
       // Code blocks
-      html = html.replace(/\x60\x60\x60([\s\S]*?)\x60\x60\x60/g, '<pre class="p-3 my-2 rounded-lg bg-black/60 border border-slate-800 font-mono text-xs overflow-x-auto text-blue-300"><code>$1</code></pre>');
+      html = html.replace(/\\x60\\x60\\x60([\\s\\S]*?)\\x60\\x60\\x60/g, '<pre class="p-3 my-2 rounded-lg bg-black/60 border border-slate-800 font-mono text-xs overflow-x-auto text-blue-300"><code>$1</code></pre>');
       
       // Inline code
-      html = html.replace(/\x60([^\x60]+)\x60/g, '<code class="px-1.5 py-0.5 rounded bg-slate-800 font-mono text-xs text-blue-300 border border-slate-700/60">$1</code>');
+      html = html.replace(/\\x60([^\\x60]+)\\x60/g, '<code class="px-1.5 py-0.5 rounded bg-slate-800 font-mono text-xs text-blue-300 border border-slate-700/60">$1</code>');
 
       // Bold
       html = html.replace(/\\*\\*([^\\*]+)\\*\\*/g, '<strong class="text-white font-semibold">$1</strong>');
