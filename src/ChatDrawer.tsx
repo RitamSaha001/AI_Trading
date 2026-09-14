@@ -817,7 +817,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 <h2 className="text-sm font-semibold tracking-tight text-zinc-900">Nexus Intelligence</h2>
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-800 rounded-full">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  {state?.settings?.geminiApiKey ? 'Gemini 3 + Local Quant' : 'Local Quant AI (100% Offline)'}
+                  {state?.settings?.geminiApiKey ? 'Gemini 3 + AstraFin MoE' : 'Lumen-Astra-Fin 2.0 MoE (100% Offline)'}
                 </span>
                 {state?.settings?.geminiApiKey && (
                   <span className="text-[10px] font-mono text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">
@@ -825,7 +825,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-zinc-400 tracking-tight">Quantitative Desk &amp; Risk Sentinel</p>
+              <p className="text-[11px] text-zinc-400 tracking-tight">Lumen-Astra-Fin 2.0 Sovereign Neural LLM &amp; Risk Sentinel</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -851,7 +851,7 @@ export function ChatDrawer({ open, onClose }: { open: boolean; onClose: () => vo
               <div className="space-y-1">
                 <h3 className="text-sm font-semibold text-zinc-900 tracking-tight">Autonomous Financial Intelligence</h3>
                 <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-                  Institutional reasoning powered by Gemini 3 with offline local neural engine fallback.
+                  Autonomous quant reasoning powered by Lumen-Astra-Fin 2.0 with DeepSeek-R1 &lt;think&gt; deliberation and zero external API dependencies.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-left">

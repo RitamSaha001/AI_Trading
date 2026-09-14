@@ -81,9 +81,9 @@ describe('Integration: Advanced Quantitative Trading Platform End-to-End', () =>
     );
 
     expect(res.reply).toBeDefined();
-    expect(res.engine).toContain('Deterministic Quant Engine');
+    expect(res.engine).toContain('Lumen-Astra-Fin 2.0');
     expect(res.telemetry).toBeDefined();
-    expect(res.telemetry?.aiMode).toContain('Deterministic');
+    expect(res.telemetry?.aiMode).toContain('Lumen-Astra-Fin 2.0');
     expect(res.telemetry?.toolsUsed).toContain('calculate_portfolio_risk');
   });
 

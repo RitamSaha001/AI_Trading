@@ -513,9 +513,10 @@ export function Provider({ children }: { children: React.ReactNode }) {
   const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; text: string; actionProposal?: any; engine?: string; telemetry?: any; decision?: any }[]>([
     {
       role: 'assistant',
-      text: "Welcome to **Lumen Nexus**—your institutional quantitative trading intelligence. I analyze quantitative indicators (SMA/EMA ribbons, RSI, Bollinger Bands, ATR, VWAP), stress-test portfolios, synthesize algorithmic strategy bots, and execute mathematical capital allocation. Click the **`+`** icon below to launch any capability, or ask me directly.",
-      engine: 'Nexus Deterministic Quant Engine (Local Offline Mode)',
+      text: "Welcome to **Lumen Nexus**—powered by the **Lumen-Astra-Fin 2.0 Sovereign Neural LLM**. I analyze quantitative indicators (SMA/EMA ribbons, RSI, Bollinger Bands, ATR, VWAP), stress-test portfolios, synthesize algorithmic strategy bots, evaluate NSE microstructure (tick size ₹0.05, integer lots, ₹2,000 liquid floor), and execute mathematical capital allocation with DeepSeek-R1-style `<think>` deliberation. Click the **`+`** icon below to launch any capability, or ask me directly.",
+      engine: 'Lumen-Astra-Fin 2.0 (Sovereign Neural Quant LLM)',
     },
+
   ]);
   const [activeToast, setActiveToast] = useState<{ id: string; title: string; message: string; type: 'success' | 'info' | 'warn' } | null>(null);
 

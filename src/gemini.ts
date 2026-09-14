@@ -20,6 +20,7 @@ import {
   AgenticAllocationPlan,
 } from './domain/agentic';
 import { queryLocalQuantLLM, queryNexusDeterministicQuant, NexusQuantEngine } from './domain/localQuantLLM';
+import { globalAstraNexusBridge, ASTRA_ENGINE_LABEL } from './domain/indigenousQuantLLM/neural/nexusAstraBridge';
 import { GeminiLLMProvider } from './domain/llmProvider';
 import { runAgentLoop, AgentTelemetry } from './domain/agentLoop';
 import { TradingDecision } from './domain/decision';
@@ -40,6 +41,8 @@ export {
   queryLocalQuantLLM,
   queryNexusDeterministicQuant,
   NexusQuantEngine,
+  globalAstraNexusBridge,
+  ASTRA_ENGINE_LABEL,
 };
 export type { DangerAssessment, AgenticAllocationPlan };
 
@@ -441,27 +444,15 @@ export async function sendAIChat(
     }
   }
 
-  // Nexus Deterministic Quant Engine (Offline Fallback & Instant Slash Commands)
-  const localResult = queryNexusDeterministicQuant(text, s, markets, history);
-  const context = buildStructuredMarketContext(s, markets);
-  const rk = calculatePortfolioRisk(s, markets);
-
-  const fallbackTelemetry: AgentTelemetry = {
-    aiMode: 'Deterministic Quant Fallback (Offline Mode)',
-    reasoningTier: 'Deterministic Algorithmic Rules',
-    toolsUsed: ['calculate_portfolio_risk', 'sense_market_danger', 'calculate_indicators'],
-    dataFreshnessSec: context.assets[context.primaryAsset]?.dataFreshnessSec ?? 0,
-    dataQualityScore: context.metadata.overallDataQualityScore,
-    portfolioRiskLabel: rk.riskLabel,
-    portfolioRiskScore: rk.portfolioRiskScore,
-    loopIterations: 1,
-  };
+  // Lumen-Astra-Fin 2.0 Sovereign Neural LLM & Nexus Cognitive Engine
+  const astraResult = globalAstraNexusBridge.query(text, s, markets, history);
 
   return {
-    reply: localResult.reply,
-    actionProposal: localResult.actionProposal,
-    engine: localResult.engine,
-    telemetry: fallbackTelemetry,
-    decision: null,
+    reply: astraResult.reply,
+    actionProposal: astraResult.actionProposal,
+    engine: astraResult.engine,
+    telemetry: astraResult.telemetry,
+    decision: astraResult.decision,
   };
 }
+
