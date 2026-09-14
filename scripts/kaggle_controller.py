@@ -76,6 +76,12 @@ def cmd_status(args):
     cmd = ["kaggle", "kernels", "status", kernel_id]
     subprocess.run(cmd)
 
+def cmd_status_sft(args):
+    username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
+    kernel_id = f"{username}/lumen-alpha-3b-conversational-sft"
+    cmd = ["kaggle", "kernels", "status", kernel_id]
+    subprocess.run(cmd)
+
 def cmd_logs(args):
     username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
     kernel_id = f"{username}/lumen-alpha-3b-training"
@@ -161,7 +167,18 @@ def cmd_watch(args):
             print(f"[{ts}] {status_text} | {recent_progress if recent_progress else 'Worker active'}")
             
             if "COMPLETE" in status_text:
-                print("\n[SUCCESS] Cloud training run completed successfully!")
+                receipt_file = os.path.join(log_dir, "export_receipt.json")
+                print(f"\n[SUCCESS] Cloud training run completed successfully!")
+                if os.path.exists(receipt_file):
+                    try:
+                        with open(receipt_file, "r") as rf:
+                            receipt = json.load(rf)
+                            print(f"  Model: {receipt.get('model')}")
+                            print(f"  Status: {receipt.get('status')}")
+                            print(f"  Total Steps: {receipt.get('steps')}")
+                            print(f"  Total Parameters: {receipt.get('total_params'):,}")
+                    except Exception:
+                        pass
                 break
             if "ERROR" in status_text:
                 print("\n[ALERT] Cloud worker reported an error. Fetching logs...")
