@@ -234,30 +234,51 @@
     <header>
       <div class="brand">
         <h2 style="font-size: 18px; font-weight: 700; letter-spacing: -0.5px;">👑 Lumen-Alpha 3B Flagship</h2>
-        <span class="badge-live"><span class="pulse-dot"></span> LIVE CLOUD PIPELINE</span>
+        <span class="badge-live"><span class="pulse-dot"></span> STAGE 2 SFT ACTIVE</span>
       </div>
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <span style="font-size: 12px; color: var(--text-dim);">Cluster: <strong>Dual Tesla T4 (32 GB VRAM)</strong></span>
-        <a href="https://www.kaggle.com/code/ritamsaha00178/lumen-alpha-3b-training" target="_blank" class="btn-kaggle">
-          Open Kaggle Execution Live ↗
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <span style="font-size: 12px; color: var(--text-dim);">Cluster: <strong>Dual Tesla T4 (32 GB)</strong></span>
+        <a href="https://www.kaggle.com/code/ritamsaha00178/lumen-alpha-3b-training" target="_blank" style="font-size: 12px; color: var(--green); text-decoration: none; border: 1px solid rgba(16,185,129,0.3); padding: 5px 10px; border-radius: 6px;">
+          ✓ Stage 1 Base (2500/2500)
+        </a>
+        <a href="https://www.kaggle.com/code/ritamsaha00178/lumen-alpha-3b-conversational-sft" target="_blank" class="btn-kaggle">
+          Live Stage 2 SFT ↗
         </a>
       </div>
     </header>
 
+    <!-- Stage Navigation Cards -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+      <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div style="font-size: 11px; font-weight: 700; color: var(--green); text-transform: uppercase;">Stage 1: Base Pre-training</div>
+          <div style="font-size: 14px; font-weight: 600; margin-top: 2px;">3.02B Architecture + Tri-Stream Data</div>
+        </div>
+        <span style="background: var(--green); color: #030712; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px;">COMPLETE</span>
+      </div>
+      <div style="background: rgba(0, 242, 254, 0.05); border: 1px solid var(--accent); border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div style="font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase;">Stage 2: Conversational SFT</div>
+          <div style="font-size: 14px; font-weight: 600; margin-top: 2px;">1.5k Rich Dialogues + DeepSeek-R1 &lt;think&gt;</div>
+        </div>
+        <span style="background: var(--accent); color: #030712; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px; animation: pulse 1.5s infinite;">ACTIVE RUNNING</span>
+      </div>
+    </div>
+
     <!-- Progress Card -->
     <div class="progress-section">
       <div class="progress-header">
-        <span class="progress-title">Extended Curriculum Training Progress</span>
+        <span class="progress-title">Stage 2 Conversational SFT Progress (DeepSeek-R1 Reasoning Trajectories)</span>
         <span class="progress-percent" id="pctVal">0.0%</span>
       </div>
       <div class="progress-track">
         <div class="progress-fill" id="progressBar"></div>
       </div>
       <div class="meta-row">
-        <span>Step: <strong id="stepVal">0 / 2500</strong></span>
+        <span>Step: <strong id="stepVal">0 / 500</strong></span>
         <span>Throughput: <strong id="tokRate">-- tok/s</strong></span>
         <span>Elapsed: <strong id="elapsedVal">00:00</strong></span>
-        <span>Estimated ETA: <strong id="etaVal" style="color: var(--accent);">Calculating...</strong></span>
+        <span>Estimated ETA: <strong id="etaVal" style="color: var(--accent);">Active</strong></span>
       </div>
     </div>
 

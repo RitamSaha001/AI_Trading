@@ -131,11 +131,33 @@ def cmd_push_sft(args):
                 os.remove(active_meta)
             os.rename(backup_meta, active_meta)
 
+def cmd_logs_sft(args):
+    username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
+    kernel_id = f"{username}/lumen-alpha-3b-conversational-sft"
+    cmd = ["kaggle", "kernels", "logs", kernel_id]
+    subprocess.run(cmd)
+
+def cmd_download_sft(args):
+    username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
+    kernel_id = f"{username}/lumen-alpha-3b-conversational-sft"
+    output_dir = os.path.abspath(args.output or "artifacts/models_sft")
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"[INFO] Downloading trained SFT weights and receipts to {output_dir}...")
+    cmd = ["kaggle", "kernels", "output", kernel_id, "-p", output_dir]
+    subprocess.run(cmd)
+
 def cmd_watch(args):
     username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
-    kernel_id = f"{username}/lumen-alpha-3b-training"
+    is_sft = getattr(args, "action", "") in ["watch-sft"] or getattr(args, "stage", "") == "sft"
+    if is_sft:
+        kernel_id = f"{username}/lumen-alpha-3b-conversational-sft"
+        title = "LUMEN-ALPHA 3B: STAGE 2 CONVERSATIONAL SFT WATCHER"
+    else:
+        kernel_id = f"{username}/lumen-alpha-3b-training"
+        title = "LUMEN-ALPHA 3B: REAL-TIME KAGGLE CLOUD TRAINING WATCHER"
+        
     print("=" * 75)
-    print(f"  LUMEN-ALPHA 3B: REAL-TIME KAGGLE CLOUD TRAINING WATCHER")
+    print(f"  {title}")
     print(f"  Kernel: {kernel_id} | Accelerator: Dual Tesla T4")
     print(f"  Live URL: https://www.kaggle.com/code/{kernel_id}")
     print("=" * 75)
@@ -179,10 +201,15 @@ def cmd_watch(args):
             if "COMPLETE" in status_text:
                 print("\n" + "=" * 75)
                 print("  [SUCCESS] Cloud training run completed successfully (100.0%)!")
-                print("  Model: Lumen-Alpha 3B Flagship")
-                print("  Total Steps: 2,500 / 2,500")
-                print("  Total Parameters: 3,024,010,240")
-                print("  Weights saved at: /kaggle/working/lumen_alpha_3b.pt")
+                if is_sft:
+                    print("  Model: Lumen-Alpha 3B Conversational Flagship")
+                    print("  Stage: STAGE_2_SFT_ALIGNED")
+                    print("  Weights saved at: /kaggle/working/lumen_alpha_3b_conversational.pt")
+                else:
+                    print("  Model: Lumen-Alpha 3B Flagship")
+                    print("  Total Steps: 2,500 / 2,500")
+                    print("  Total Parameters: 3,024,010,240")
+                    print("  Weights saved at: /kaggle/working/lumen_alpha_3b.pt")
                 print("=" * 75)
                 break
             if "ERROR" in status_text:
@@ -201,14 +228,23 @@ def main():
     parser = argparse.ArgumentParser(description="Lumen-Alpha 3B Kaggle Controller")
     subparsers = parser.add_subparsers(dest="action", required=True)
 
-    subparsers.add_parser("push", help="Push and start remote Kaggle GPU training run")
+    subparsers.add_parser("push", help="Push and start remote Kaggle GPU base training run")
     subparsers.add_parser("push-sft", help="Push and start Stage 2 Conversational SFT run")
     subparsers.add_parser("status", help="Check base training status (queued, running, complete)")
     subparsers.add_parser("status-sft", help="Check Stage 2 Conversational SFT status")
-    subparsers.add_parser("watch", help="Watch cloud training progress in real time")
+    
+    watch_parser = subparsers.add_parser("watch", help="Watch cloud training progress in real time")
+    watch_parser.add_argument("--stage", choices=["base", "sft"], default="base", help="Target training stage (base or sft)")
+    
+    subparsers.add_parser("watch-sft", help="Watch Stage 2 Conversational SFT progress in real time")
     subparsers.add_parser("logs", help="Fetch remote training logs and loss curves")
-    dl = subparsers.add_parser("download", help="Download trained model checkpoint from Kaggle")
+    subparsers.add_parser("logs-sft", help="Fetch remote SFT training logs")
+    
+    dl = subparsers.add_parser("download", help="Download trained base model checkpoint from Kaggle")
     dl.add_argument("--output", type=str, default="artifacts/models")
+    
+    dl_sft = subparsers.add_parser("download-sft", help="Download trained SFT model checkpoint from Kaggle")
+    dl_sft.add_argument("--output", type=str, default="artifacts/models_sft")
 
     args = parser.parse_args()
     if args.action == "push":
@@ -219,12 +255,17 @@ def main():
         cmd_status(args)
     elif args.action == "status-sft":
         cmd_status_sft(args)
-    elif args.action == "watch":
+    elif args.action in ["watch", "watch-sft"]:
         cmd_watch(args)
     elif args.action == "logs":
         cmd_logs(args)
+    elif args.action == "logs-sft":
+        cmd_logs_sft(args)
     elif args.action == "download":
         cmd_download(args)
+    elif args.action == "download-sft":
+        cmd_download_sft(args)
 
 if __name__ == "__main__":
     main()
+
