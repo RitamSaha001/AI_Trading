@@ -364,6 +364,10 @@ export class RealtimeModelBenchmark {
 
   private static defaultGenerator?: AstraFinGenerator;
 
+  public static setGenerator(gen: AstraFinGenerator): void {
+    this.defaultGenerator = gen;
+  }
+
   public static getGenerator(): AstraFinGenerator {
     if (!this.defaultGenerator) {
       const model = new NeuralTransformerModel(LARGE_1M_TRANSFORMER_CONFIG);
@@ -391,8 +395,11 @@ export class RealtimeModelBenchmark {
       `3. [Epistemic Telemetry]: Policy Confidence = ${(inference.policyConfidence * 100).toFixed(1)}% | Shannon Entropy = ${inference.policyEntropy} bits.`,
       `4. [Invariants Check]: ₹0.05 tick size verified, ₹2,000 cash floor preserved, 2nd-order Taylor expansion derived.`,
       `5. [Directive]: Emitted policy directive "${inference.predictedAction}".`,
-      '</think>',
-    ].join('\n');
+    ];
+    if (inference.generatedThought && inference.generatedThought.trim().length > 0) {
+      thinkTrace.push(`• [Neural Latent CoT]: ${inference.generatedThought.trim()}`);
+    }
+    thinkTrace.push('</think>');
 
     const responseText = `${thinkTrace}\n\n[Lumen-Astra-Fin 2.0 Autonomous Quant Solution]\nScenario: ${sc.title}\nAnalytical derivation completed with zero arithmetic approximation. All exchange invariants and risk hurdles satisfied.`;
 

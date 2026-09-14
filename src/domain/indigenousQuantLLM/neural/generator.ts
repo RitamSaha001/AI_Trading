@@ -13,20 +13,25 @@ export interface GenerationOptions {
   temperature?: number;
   topP?: number;
   topK?: number;
+  minP?: number;
   repetitionPenalty?: number;
+  noRepeatNgramSize?: number;
   enableGrammarMask?: boolean;
   enableReflection?: boolean;
 }
 
 export const DEFAULT_GEN_OPTIONS: GenerationOptions = {
   maxNewTokens: 32,
-  temperature: 0.7,
+  temperature: 0.6,
   topP: 0.9,
   topK: 20,
-  repetitionPenalty: 1.35,
+  minP: 0.05,
+  repetitionPenalty: 1.4,
+  noRepeatNgramSize: 3,
   enableGrammarMask: true,
   enableReflection: true,
 };
+
 
 export interface AstraFinNeuralInference {
   promptText: string;
@@ -83,7 +88,7 @@ export class AstraFinGenerator {
       }
 
       // Repetition Penalty to prevent degenerate token loops
-      const repPenalty = opts.repetitionPenalty ?? 1.35;
+      const repPenalty = opts.repetitionPenalty ?? 1.4;
       if (repPenalty > 1.0) {
         const recentTokens = new Set(tokens.slice(-16));
         for (const prevTok of recentTokens) {
@@ -97,8 +102,36 @@ export class AstraFinGenerator {
         }
       }
 
-      // Sample next token ID using temperature & top-p
-      const nextTokenId = this.sampleNextToken(logits, opts.temperature ?? 0.7, opts.topP ?? 0.9, opts.topK ?? 20);
+      // No-Repeat N-Gram Blocker (strictly prevents periodic token loops)
+      const ngramSize = opts.noRepeatNgramSize ?? 3;
+      if (ngramSize > 1 && newTokens.length >= ngramSize - 1) {
+        const prefix = newTokens.slice(-(ngramSize - 1));
+        for (let i = 0; i <= newTokens.length - ngramSize; i++) {
+          let match = true;
+          for (let j = 0; j < ngramSize - 1; j++) {
+            if (newTokens[i + j] !== prefix[j]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            const bannedToken = newTokens[i + ngramSize - 1];
+            if (bannedToken !== undefined && logits[bannedToken] !== undefined) {
+              logits[bannedToken] = -Infinity;
+            }
+          }
+        }
+      }
+
+      // Sample next token ID using temperature, top-p, and min-p
+      const nextTokenId = this.sampleNextToken(
+        logits,
+        opts.temperature ?? 0.6,
+        opts.topP ?? 0.9,
+        opts.topK ?? 20,
+        opts.minP ?? 0.05
+      );
+
 
       tokens.push(nextTokenId);
       newTokens.push(nextTokenId);
@@ -127,17 +160,6 @@ export class AstraFinGenerator {
       if (!prm.passedVerification) {
         hasReflected = true;
         reflectionNote = prm.critiqueSteps.find((s) => s.reasoningFlawDetected)?.reasoningFlawDetected || 'Contradiction detected';
-        
-        // Inject reflection tokens and self-correct action to safe defense
-        const reflectionText = ` <reflection> ${reflectionNote} - Auto-correcting to STAND_ASIDE </reflection> <action> STAND_ASIDE </action>`;
-        const reflectionTokens = DomainTokenizer.encode(reflectionText);
-        for (const rTok of reflectionTokens) {
-          if (tokens.length < this.model.config.maxSeqLen) {
-            tokens.push(rTok);
-            newTokens.push(rTok);
-          }
-        }
-        finalCache = this.model.forward(tokens);
         predictedAction = 'STAND_ASIDE';
         policyConfidence = 0.95;
         expectedReturnValue = 0.0;
@@ -233,9 +255,15 @@ export class AstraFinGenerator {
   }
 
   /**
-   * Temperature, Top-K, and Nucleus (Top-P) token sampling.
+   * Temperature, Top-K, Nucleus (Top-P), and Min-P token sampling.
    */
-  private sampleNextToken(logits: number[], temperature: number, topP: number, topK: number): number {
+  private sampleNextToken(
+    logits: number[],
+    temperature: number,
+    topP: number,
+    topK: number,
+    minP: number = 0.05
+  ): number {
     // Suppress special structural tokens from being generated as text
     logits[0] = -Infinity; // <pad>
     logits[1] = -Infinity; // <bos>
@@ -255,14 +283,26 @@ export class AstraFinGenerator {
     }
 
     // Apply Temperature
-    const scaled = logits.map((l) => l / temperature);
+    const scaled = logits.map((l) => (l === -Infinity ? -1e9 : l / temperature));
     const maxVal = Math.max(...scaled);
-    const exps = scaled.map((s) => Math.exp(s - maxVal));
+    const exps = scaled.map((s) => (s < -1e8 ? 0 : Math.exp(s - maxVal)));
     const sumExps = exps.reduce((a, b) => a + b, 0);
-    const probs = exps.map((e) => e / (sumExps || 1));
+    const rawProbs = exps.map((e) => e / (sumExps || 1));
+
+    // Min-P Filtering: filter out tokens where prob < minP * maxProb
+    const maxProb = Math.max(...rawProbs);
+    const minThreshold = maxProb * minP;
+    const probs = rawProbs.map((p) => (p < minThreshold ? 0 : p));
 
     // Sort indices by probability descending for Top-K & Top-P filtering
-    const indexed = probs.map((p, i) => ({ prob: p, id: i })).sort((a, b) => b.prob - a.prob);
+    const indexed = probs
+      .map((p, i) => ({ prob: p, id: i }))
+      .filter((item) => item.prob > 0)
+      .sort((a, b) => b.prob - a.prob);
+
+    if (indexed.length === 0) {
+      return 2; // <eos>
+    }
 
     // Filter Top-K
     const topKItems = indexed.slice(0, Math.min(topK, indexed.length));
@@ -278,7 +318,7 @@ export class AstraFinGenerator {
 
     // Re-normalize nucleus probabilities
     const nucleusSum = nucleus.reduce((acc, it) => acc + it.prob, 0);
-    const r = Math.random() * nucleusSum;
+    const r = Math.random() * (nucleusSum || 1);
     let running = 0;
     for (const item of nucleus) {
       running += item.prob;
@@ -287,6 +327,7 @@ export class AstraFinGenerator {
       }
     }
 
-    return nucleus[0]?.id ?? 0;
+    return nucleus[0]?.id ?? 2;
   }
+
 }

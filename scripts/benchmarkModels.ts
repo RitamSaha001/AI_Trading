@@ -21,13 +21,32 @@
  *   npx tsx scripts/benchmarkModels.ts
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { RealtimeModelBenchmark } from '../src/domain/indigenousQuantLLM/benchmarking/realtimeBenchmark';
+import { NeuralTransformerModel, LARGE_1M_TRANSFORMER_CONFIG } from '../src/domain/indigenousQuantLLM/neural/transformerModel';
+import { AstraFinGenerator } from '../src/domain/indigenousQuantLLM/neural/generator';
 
 function main() {
   console.log('========================================================================================');
   console.log('         LUMEN-ASTRA-FIN 2.0 vs FRONTIER MODELS: REAL-TIME QUANT BENCHMARK              ');
   console.log('                 (Comprehensive 6-Factor Institutional Evaluation)                      ');
   console.log('========================================================================================\n');
+
+  // Load trained weights if checkpoint exists
+  const checkpointPath = path.resolve(process.cwd(), 'artifacts/fleet-replay-audit/lumen-astra-fin-weights-1m.json');
+  if (fs.existsSync(checkpointPath)) {
+    try {
+      const model = new NeuralTransformerModel(LARGE_1M_TRANSFORMER_CONFIG);
+      const rawWeights = fs.readFileSync(checkpointPath, 'utf8');
+      model.loadWeights(rawWeights);
+      const gen = new AstraFinGenerator(model);
+      RealtimeModelBenchmark.setGenerator(gen);
+      console.log(`[Checkpoint Loaded] Active weights loaded from ${checkpointPath} (${model.countParameters().toLocaleString()} parameters)`);
+    } catch (e) {
+      console.warn('[Checkpoint Warning] Failed to load checkpoint, using fresh model:', e);
+    }
+  }
 
   const report = RealtimeModelBenchmark.runBenchmark();
 

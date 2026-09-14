@@ -147,8 +147,8 @@ export const MAX_ENTRY_VWAP_EXTENSION_ATR = 1.25;
 // ============================================================================
 // SCENARIO 7: Stagnant Capital / Dead Trade Expiration
 // ============================================================================
-/** Maximum duration to hold a stagnant position before initiating time stop (45 minutes in ms) */
-export const STAGNANT_TRADE_MAX_DURATION_MS = 45 * 60 * 1000;
+/** Maximum duration to hold a stagnant position before initiating time stop (90 minutes in ms) */
+export const STAGNANT_TRADE_MAX_DURATION_MS = 90 * 60 * 1000;
 /** Maximum price oscillation range in ATR defining a stagnant position (+/- 0.25 ATR) */
 export const STAGNANT_TRADE_PRICE_RANGE_ATR = 0.25;
 /** Volume ratio relative to 20-period average below which trade is deemed volume-faded */

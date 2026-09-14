@@ -412,29 +412,11 @@ export function tickAutonomousPilot(
 
   // 1. Check Circuit Breaker & Prototype Version
   const prototypeVersion = pilot?.prototypeVersion || 'prototype_1_classic';
-  const isPrototype1 = prototypeVersion === 'prototype_1_classic';
-  const profileKey = isPrototype1 ? 'balanced' : (pilot?.profile || 'balanced');
+  const profileKey = pilot?.profile || 'balanced';
   const profile = PILOT_PROFILES[profileKey];
   const isEliteRunner = profileKey === 'elite_runner';
   const cbCheck = checkPilotCircuitBreaker(state, pv, profileKey);
-
-  // Prototype 2: 30-Day Rolling Monthly P&L Governor
   const monthlyGovernor = evaluateMonthlyPnlGovernor(pilot?.rollingMonthlyContext, pv);
-  const effectiveCashBufferPct = isPrototype1
-    ? 35
-    : monthlyGovernor.targetCashBufferPct;
-  const effectiveRiskPerTradePct = isPrototype1
-    ? 1.0
-    : monthlyGovernor.riskPerTradePct;
-  const effectiveMinRiskReward = isPrototype1
-    ? 2.2
-    : monthlyGovernor.minRiskReward;
-  const effectiveStopLossAtrMult = isPrototype1
-    ? 1.5
-    : monthlyGovernor.stopLossAtrMultiplier;
-  const effectiveTakeProfitAtrMult = isPrototype1
-    ? 3.5
-    : monthlyGovernor.takeProfitAtrMultiplier;
 
   if (cbCheck.tripped) {
     return {
@@ -524,8 +506,8 @@ export function tickAutonomousPilot(
   // Adaptive Cash Buffer Floor: In active morning & afternoon expansion windows,
   // lower cash buffer floor to 20% to allow multi-slot allocation while preserving safety
   const minCashFloorPct = (timingQuality.phase === 'MORNING_EXPANSION' || timingQuality.phase === 'AFTERNOON_EXPANSION')
-    ? Math.min(effectiveCashBufferPct, thresholds.ACTIVE_MORNING_CASH_BUFFER_PCT)
-    : Math.max(15, effectiveCashBufferPct);
+    ? Math.min(profile.targetCashBufferPct, thresholds.ACTIVE_MORNING_CASH_BUFFER_PCT)
+    : Math.max(15, profile.targetCashBufferPct);
   const minRequiredCash = pv * (minCashFloorPct / 100);
   let allocatableCash = Math.max(0, currentCash - minRequiredCash);
 
@@ -773,10 +755,7 @@ export function tickAutonomousPilot(
       atr,
       elapsedMs,
       volumeSurgeRatio,
-      1.0,
-      isPrototype1,
-      isPrototype1 ? 60 * 60 * 1000 : monthlyGovernor.stagnancyMaxDurationMs,
-      isPrototype1 ? true : monthlyGovernor.allowAdverseDriftCut
+      1.0
     );
 
     let exitOrderQueued = false;
@@ -846,51 +825,6 @@ export function tickAutonomousPilot(
       });
     }
 
-    // MICROSTRUCTURE ADVERSE DRIFT DEFENSE (MADS Early Scratch)
-    const isInitialRiskStage = trancheStage === 0 && currentStop < avgBuyPrice;
-    if (!exitOrderQueued && isInitialRiskStage && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
-      const elapsedMinutes = Math.floor((now - (fleetStatus.entryTimestamp || now)) / 60000);
-      const adverseDrift = evaluateMicrostructureAdverseDrift(
-        avgBuyPrice,
-        price,
-        atr,
-        elapsedMinutes,
-        vwap,
-        highWaterMark,
-        trancheStage
-      );
-
-      if (adverseDrift.shouldScratch) {
-        ordersToDispatch.push({
-          asset,
-          side: 'sell',
-          amount: currentHolding,
-          price: alignToTickSize(price, asset),
-          type: 'market',
-          product: exitProduct,
-          strategyName: `Auto-Pilot: MADS Micro-Loss Exit`,
-          reason: adverseDrift.reason,
-        });
-
-        rateLimits.requestsThisMinute++;
-        rateLimits.lastDispatchedAt = now;
-        lifecycleState = 'COOLDOWN';
-        trancheStage = 0;
-        exitOrderQueued = true;
-
-        newActionLogs.push({
-          id: `log_mads_scratch_${asset}_${now}`,
-          timestamp: now,
-          asset,
-          action: 'STOP_LOSS' as any,
-          strategy,
-          detail: adverseDrift.reason,
-          price,
-          status: 'EXECUTED',
-        });
-      }
-    }
-
     // Micro-Loss Defense: VWAP Structure Invalidation Exit for Breakout / Trend Strategies
     // If a trend breakout trade (Hurst Trend Rider, Candle Price Action, Momentum Scalper)
     // drops and closes below VWAP (price < vwap * 0.9985) while still in initial risk (trancheStage === 0 && currentStop < avgBuyPrice),
@@ -898,6 +832,7 @@ export function tickAutonomousPilot(
     // Liquidate immediately with a micro-loss (~₹50-120) instead of riding it all the way down to a full -1.5 ATR stop loss (~₹350)!
     const isBreakoutStrategy = (strategy as string) === 'Hurst Trend Rider' || (strategy as string) === 'Candle Price Action' || (strategy as string) === 'Momentum Scalper';
     const isVwapBroken = vwap > 0 && price < vwap * 0.9985;
+    const isInitialRiskStage = trancheStage === 0 && currentStop < avgBuyPrice;
 
     if (!exitOrderQueued && isBreakoutStrategy && isVwapBroken && isInitialRiskStage && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       const vwapInvalidationReason = `Breakout Failed: Price (₹${price.toFixed(2)}) broke below institutional VWAP support (₹${vwap.toFixed(2)}). Micro-loss capital defense exit.`;
@@ -1202,40 +1137,6 @@ export function tickAutonomousPilot(
     price: number;
     convictionBonus?: number;
     brainDirective: BrainDirective;
-  }
-
-  const isCurfewActive = isIndianAsset(UPSTOX_FLEET_ASSETS[0]) && (istMinutes < 600 || istMinutes >= thresholds.SESSION_INTRADAY_ENTRY_CURFEW_MIN);
-  const maxConcurrencyLimit = isPrototype1
-    ? thresholds.MAX_CONCURRENT_MIS_POSITIONS
-    : Math.min(thresholds.MAX_CONCURRENT_MIS_POSITIONS, monthlyGovernor.maxConcurrentPositions);
-  const effectiveMaxConcurrent = dailyLossCount >= 1
-    ? 1
-    : maxConcurrencyLimit;
-  const availableConcurrentSlots = Math.max(
-    0,
-    effectiveMaxConcurrent - activePositionCount - pendingBuyAssets.size
-  );
-  const maxAllowedDailyEntries = isPrototype1
-    ? (dailyLossCount >= 1 ? 2 : thresholds.MAX_DAILY_MIS_ENTRIES)
-    : monthlyGovernor.maxDailyEntries;
-  const canScreenCandidates = !isCurfewActive &&
-    availableConcurrentSlots > 0 &&
-    dailyTradesCount < maxAllowedDailyEntries &&
-    allocatableCash >= 2000;
-
-  // Ultra-Fast Candidate Screening Bypass:
-  // If curfew is active, all concurrent slots are occupied, daily entry cap reached, or cash buffer floor is hit,
-  // skip the heavy 100-asset indicator math, fleet macro breadth, and sector ranking calculations completely.
-  if (!canScreenCandidates) {
-    return {
-      updatedFleet,
-      updatedRateLimits: rateLimits,
-      newActionLogs,
-      ordersToDispatch,
-      ordersToCancel,
-      circuitBreakerTripped: false,
-      monthlyGovernorResult: monthlyGovernor,
-    };
   }
 
   const candidatePool: CandidateSetup[] = [];
@@ -1802,6 +1703,14 @@ export function tickAutonomousPilot(
     return stage === 0 && stop < buyPrice;
   });
 
+  const effectiveMaxConcurrent = (dayHasLoss || dailyLossCount >= 1)
+    ? 1
+    : thresholds.MAX_CONCURRENT_MIS_POSITIONS;
+
+  const availableConcurrentSlots = Math.max(
+    0,
+    effectiveMaxConcurrent - activePositionCount - pendingBuyAssets.size
+  );
   const maxNewEntries = Math.min(allocationDecision.maxPositions, availableConcurrentSlots, 1);
   let dispatchedMisEntries = 0;
 
@@ -1841,9 +1750,11 @@ export function tickAutonomousPilot(
     if (isSystemicShock) continue;
     if (!selectedAllocationAssets.has(asset)) continue;
 
-    // Emergency Breaking Adverse News Veto: Block any new entries if asset has breaking negative news
+    // Pre-Entry Adverse News Veto & Sentiment Guard:
+    // Strictly reject entry if asset has breaking negative news or negative sentiment
     const candNewsVeto = NewsCatalystRegistry.checkEmergencyVeto(asset, now);
-    if (candNewsVeto.hasVeto) {
+    const candSentimentStatus = NewsCatalystRegistry.getTickerStatus(asset, now);
+    if (candNewsVeto.hasVeto || (candSentimentStatus.recentArticlesCount > 0 && candSentimentStatus.compositeSentiment < -0.30)) {
       continue;
     }
 
@@ -1859,9 +1770,7 @@ export function tickAutonomousPilot(
       continue;
     }
 
-    let minAciRequired = isPrototype1
-      ? Math.max(cand.brainDirective.minAciThreshold, 64)
-      : Math.max(cand.brainDirective.minAciThreshold, monthlyGovernor.minAciThreshold);
+    let minAciRequired = cand.brainDirective.minAciThreshold;
     if (isEliteRunner) {
       minAciRequired = Math.max(minAciRequired, 72);
     }
@@ -1870,10 +1779,6 @@ export function tickAutonomousPilot(
     }
     if (isThursday) {
       minAciRequired = Math.max(minAciRequired, 68);
-    }
-    // Earnings Season Macro Throttle: Require ACI >= 70 during high-volatility corporate earnings windows (Prototype 2 only)
-    if (!isPrototype1 && isEarningsSeason) {
-      minAciRequired = Math.max(minAciRequired, thresholds.EARNINGS_SEASON_MIN_ACI);
     }
     // Impaired Dynamic Reputation: Require ACI >= 75 for degraded assets
     const candAssetFleet = state.autonomousPilot?.activeFleet?.[asset];
@@ -1894,7 +1799,7 @@ export function tickAutonomousPilot(
     if (alreadyTradedToday) {
       continue;
     }
-    if (dailyMisEntries + dispatchedMisEntries >= maxAllowedDailyEntries) {
+    if (dailyMisEntries + dispatchedMisEntries >= thresholds.MAX_DAILY_MIS_ENTRIES) {
       const recentDailyCap = state.autonomousPilot?.actionLogs?.find(
         (l) => l.asset === asset && l.action === 'SKIPPED' && l.detail?.includes('Daily MIS entry governor') && now - l.timestamp < 300_000
       );
@@ -1905,20 +1810,14 @@ export function tickAutonomousPilot(
           asset,
           action: 'SKIPPED',
           strategy,
-          detail: `Daily MIS entry governor: ${maxAllowedDailyEntries} entries already dispatched today. No new intraday position.`,
+          detail: `Daily MIS entry governor: ${thresholds.MAX_DAILY_MIS_ENTRIES} entries already dispatched today. No new intraday position.`,
           price,
           status: 'BLOCKED',
         });
       }
       continue;
     }
-    const maxEarningsPositions = (macroBreadth.macroRegime === 'BULL_MOMENTUM' || macroBreadth.advanceDeclineRatio >= 1.5)
-      ? thresholds.EARNINGS_SEASON_MAX_POSITIONS_BULLISH
-      : thresholds.EARNINGS_SEASON_MAX_POSITIONS;
-    const effectiveMaxNewEntries = (!isPrototype1 && isEarningsSeason)
-      ? Math.min(maxNewEntries, maxEarningsPositions)
-      : maxNewEntries;
-    if (dispatchedMisEntries >= effectiveMaxNewEntries) {
+    if (dispatchedMisEntries >= maxNewEntries) {
       const recentConcurrencyCap = state.autonomousPilot?.actionLogs?.find(
         (l) => l.asset === asset && l.action === 'SKIPPED' && l.detail?.includes('MIS concurrency limiter') && now - l.timestamp < 300_000
       );
@@ -1987,19 +1886,19 @@ export function tickAutonomousPilot(
       : strategy === 'VWAP Band Mean Reversion'
       ? 0.70
       : marginMultiplier >= 3.5 && (ranked?.alphaConvictionIndex || 0) >= 55
-      ? Math.min(effectiveStopLossAtrMult, 0.75)
+      ? Math.min(profile.stopLossAtrMultiplier, 0.75)
       : marginMultiplier >= 2.5
-      ? Math.min(effectiveStopLossAtrMult, 0.85)
+      ? Math.min(profile.stopLossAtrMultiplier, 0.85)
       : marginMultiplier >= 2.0
-      ? Math.min(effectiveStopLossAtrMult, 1.00)
-      : effectiveStopLossAtrMult;
+      ? Math.min(profile.stopLossAtrMultiplier, 1.00)
+      : profile.stopLossAtrMultiplier;
 
     const effectiveStopAtrMult = cand.brainDirective?.dailyPnlRegime === 'DEFENSIVE_RECOVERY'
       ? Math.min(baseStopAtrMult, 0.75)
       : baseStopAtrMult;
     const stopLossDist = Math.max(limitPrice * 0.0035, atr * effectiveStopAtrMult);
     const stopLossPrice = alignToTickSize(limitPrice - stopLossDist, asset);
-    const activeTrancheTargets = cand.brainDirective?.trancheTargets ?? (!isPrototype1 ? monthlyGovernor.trancheTargets : undefined);
+    const activeTrancheTargets = cand.brainDirective?.trancheTargets;
     const takeProfitPrice = activeTrancheTargets
       ? alignToTickSize(limitPrice + atr * activeTrancheTargets.tranche1Atr, asset)
       : strategy === 'Momentum Scalper'
@@ -2008,13 +1907,14 @@ export function tickAutonomousPilot(
       ? alignToTickSize(limitPrice + atr * 1.30, asset)
       : strategy === 'VWAP Band Mean Reversion'
       ? alignToTickSize(Math.max(limitPrice + atr * 1.10, cand.vwap * 0.999), asset)
-      : alignToTickSize(limitPrice + stopLossDist * effectiveMinRiskReward, asset);
+      : alignToTickSize(limitPrice + stopLossDist * profile.minRiskReward, asset);
     // Adaptive Trend Expansion: In confirmed high-Hurst super-trends (H >= 0.62) with Squeeze Release,
+    // or verified corporate news catalyst (order win / earnings beat),
     // dynamically expand Tranche 2 take-profit multiplier by 20% to capture larger multi-ATR trend runners!
-    const isSuperTrend = cand.hurst >= 0.62 && cand.squeezeStatus === 'SQUEEZE_OFF';
+    const isSuperTrend = (cand.hurst >= 0.62 && cand.squeezeStatus === 'SQUEEZE_OFF') || candNewsCatalyst.hasCatalyst;
     const dynamicTpMultiplier = isSuperTrend
-      ? effectiveTakeProfitAtrMult * 1.20
-      : effectiveTakeProfitAtrMult;
+      ? profile.takeProfitAtrMultiplier * 1.20
+      : profile.takeProfitAtrMultiplier;
     const takeProfit2Price = activeTrancheTargets
       ? alignToTickSize(limitPrice + atr * activeTrancheTargets.tranche2Atr, asset)
       : strategy === 'Momentum Scalper'
@@ -2036,6 +1936,7 @@ export function tickAutonomousPilot(
     if (cand.hurst > 0.60) estimatedWinRate += 0.03;
     if ((ranked?.relativeStrengthPct || 0) > 0) estimatedWinRate += 0.03;
     if ((ranked?.alphaConvictionIndex || 0) >= 75) estimatedWinRate += 0.03;
+    if (candNewsCatalyst.hasCatalyst) estimatedWinRate += 0.05;
     // Conviction-Aware Kelly Dampener: Reduce sizing for marginal entries (ACI 50-60)
     // and slightly boost sizing for solid entries (ACI 60-75) to concentrate capital on best setups
     const aci = ranked?.alphaConvictionIndex || 0;
@@ -2066,13 +1967,14 @@ export function tickAutonomousPilot(
 
     // Sizing via Fractional Risk Budget multiplied by Half-Kelly multiplier
     // Conviction-Weighted Dynamic Sizing:
-    // Elite tier (ACI >= 75): ₹350 max risk (82%+ win rate)
+    // Elite tier (ACI >= 75): ₹380 max risk (82%+ win rate)
     // High conviction (ACI 68-74): ₹280 max risk (70%+ win rate)
     // Standard tier (ACI < 68): ₹200 max risk
-    const baseRiskCapital = pv * (effectiveRiskPerTradePct / 100);
-    const convictionBoost = cand.brainDirective?.riskBudgetMultiplier ?? ((ranked?.alphaConvictionIndex || 0) >= 60 ? 1.15 : 1.0);
+    const baseRiskCapital = pv * (profile.maxRiskPerTradePct / 100);
+    const newsRiskMultiplier = candNewsCatalyst.hasCatalyst ? 1.25 : 1.0;
+    const convictionBoost = (cand.brainDirective?.riskBudgetMultiplier ?? ((ranked?.alphaConvictionIndex || 0) >= 60 ? 1.15 : 1.0)) * newsRiskMultiplier;
     if (convictionBoost <= 0) continue;
-    const riskCap = aci >= 75 ? 380 : aci >= 68 ? 280 : 200;
+    const riskCap = (effectiveAci >= 75 || candNewsCatalyst.hasCatalyst) ? 380 : effectiveAci >= 68 ? 280 : 200;
     const maxRiskCapital = Math.min(riskCap, baseRiskCapital * kellyRes.recommendedSizeMultiplier * convictionBoost);
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
 
@@ -2123,7 +2025,7 @@ export function tickAutonomousPilot(
       const minUnitsForViability = Math.ceil(effectiveMinNotional / limitPrice);
       const elevatedNotional = minUnitsForViability * limitPrice;
       const elevatedRisk = minUnitsForViability * riskPerShare;
-      const maxAllowedRisk = pv * (effectiveRiskPerTradePct * 1.5 / 100);
+      const maxAllowedRisk = pv * (profile.maxRiskPerTradePct * 1.5 / 100);
 
       const requiredCashForElevation = elevatedNotional / marginMultiplier;
       if (

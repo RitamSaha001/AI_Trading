@@ -410,37 +410,20 @@ async function replaySingleDay(
   };
 
   const assetStats24h: Map<Asset, { high: number; low: number; volume: number; firstOpen: number }> = new Map();
+  const asset30mBars: Map<Asset, Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>> = new Map();
   const assetCurrent30m: Map<Asset, { windowIdx: number; bar: { time: string; open: number; high: number; low: number; close: number; volume: number } }> = new Map();
+  const assetHist30mBars: Map<Asset, Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>> = new Map();
   const assetToday1mBars: Map<Asset, Candle[]> = new Map();
-  const assetInstCandles: Map<Asset, Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>> = new Map();
-  const assetInstCloses: Map<Asset, number[]> = new Map();
-  const currentMarkets: Partial<Record<Asset, Market>> = {};
 
   for (const asset of availableFleet) {
     assetStats24h.set(asset, { high: 0, low: Infinity, volume: 0, firstOpen: 0 });
+    asset30mBars.set(asset, []);
     assetToday1mBars.set(asset, []);
     const hist30m = assetHistoricalMap.get(asset) || [];
-    const preHist = hist30m.map((h) => ({ time: h.timeStr, open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume }));
-    const preCloses = preHist.map((h) => h.close);
-    assetInstCandles.set(asset, preHist);
-    assetInstCloses.set(asset, preCloses);
-
-    currentMarkets[asset] = {
+    assetHist30mBars.set(
       asset,
-      name: asset,
-      symbol: asset,
-      price: 0,
-      change24h: 0,
-      high24h: 0,
-      low24h: Infinity,
-      volume24h: 0,
-      history: preCloses,
-      candles: preHist,
-      intradayCandles: assetToday1mBars.get(asset)!,
-      source: 'upstox',
-      isSynthetic: false,
-      lastUpdated: 0,
-    };
+      hist30m.map((h) => ({ time: h.timeStr, open: h.open, high: h.high, low: h.low, close: h.close, volume: h.volume }))
+    );
   }
 
   // Minute-by-Minute Replay Loop
@@ -450,10 +433,7 @@ async function replaySingleDay(
     const minuteCandles = candleMapByTime.get(timestamp);
     if (!minuteCandles) continue;
 
-    const dBar = new Date(timestamp);
-    const mins = dBar.getHours() * 60 + dBar.getMinutes();
-    const windowIdx = Math.floor((mins - (9 * 60 + 15)) / 30);
-
+    const currentMarkets: Partial<Record<Asset, Market>> = {};
     for (const asset of availableFleet) {
       const c = minuteCandles.get(asset);
       if (!c) continue;
@@ -469,21 +449,24 @@ async function replaySingleDay(
       }
       stats.volume += c.volume;
 
+      const dBar = new Date(c.timestamp);
+      const mins = dBar.getHours() * 60 + dBar.getMinutes();
+      const windowIdx = Math.floor((mins - (9 * 60 + 15)) / 30);
       const cur30m = assetCurrent30m.get(asset);
-      const instCandles = assetInstCandles.get(asset)!;
-      const instCloses = assetInstCloses.get(asset)!;
 
       if (!cur30m || cur30m.windowIdx !== windowIdx) {
-        const newBar = { time: c.timeStr, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume };
-        assetCurrent30m.set(asset, { windowIdx, bar: newBar });
-        instCandles.push(newBar);
-        instCloses.push(c.close);
+        if (cur30m) {
+          asset30mBars.get(asset)!.push(cur30m.bar);
+        }
+        assetCurrent30m.set(asset, {
+          windowIdx,
+          bar: { time: c.timeStr, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume },
+        });
       } else {
         cur30m.bar.high = Math.max(cur30m.bar.high, c.high);
         cur30m.bar.low = Math.min(cur30m.bar.low, c.low);
         cur30m.bar.close = c.close;
         cur30m.bar.volume += c.volume;
-        instCloses[instCloses.length - 1] = c.close;
       }
 
       const today1m = assetToday1mBars.get(asset)!;
@@ -496,13 +479,28 @@ async function replaySingleDay(
         volume: c.volume,
       });
 
-      const mkt = currentMarkets[asset]!;
-      mkt.price = c.close;
-      mkt.change24h = stats.firstOpen > 0 ? ((c.close - stats.firstOpen) / stats.firstOpen) * 100 : 0;
-      mkt.high24h = stats.high;
-      mkt.low24h = stats.low;
-      mkt.volume24h = stats.volume;
-      mkt.lastUpdated = timestamp;
+      const today30m = asset30mBars.get(asset)!;
+      const curBar = assetCurrent30m.get(asset)!.bar;
+      const preHist = assetHist30mBars.get(asset)!;
+      const institutionalCandles = [...preHist, ...today30m, curBar];
+      const institutionalHistory = institutionalCandles.map((cand) => cand.close);
+
+      currentMarkets[asset] = {
+        asset,
+        name: asset,
+        symbol: asset,
+        price: c.close,
+        change24h: stats.firstOpen > 0 ? ((c.close - stats.firstOpen) / stats.firstOpen) * 100 : 0,
+        high24h: stats.high,
+        low24h: stats.low,
+        volume24h: stats.volume,
+        history: institutionalHistory,
+        candles: institutionalCandles,
+        intradayCandles: today1m,
+        source: 'upstox',
+        isSynthetic: false,
+        lastUpdated: timestamp,
+      };
     }
 
     // Match Pending Buy Limit Orders

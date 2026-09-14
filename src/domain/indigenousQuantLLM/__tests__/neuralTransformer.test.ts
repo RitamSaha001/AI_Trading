@@ -304,5 +304,27 @@ describe('Lumen-Astra-Fin Neural: Direct Preference Optimization (DPO)', () => {
     expect(summary.pairsTrained).toBe(1);
     expect(summary.finalDpoLoss).toBeGreaterThan(0);
   });
+
+  it('synthesizes elite institutional corpus across 6 quantitative desks', () => {
+    const premiumScenarios = ScenarioDatasetBuilder.synthesizePremiumInstitutionalCorpus(DomainTokenizer, 30);
+    expect(premiumScenarios.length).toBe(30);
+    expect(premiumScenarios[0].thoughtText).toBeDefined();
+    expect(premiumScenarios[0].targetTokens.length).toBeGreaterThan(0);
+    const hasAlpha = premiumScenarios.some((s) => s.thoughtText.includes('systematic alpha scan') || s.thoughtText.includes('hurst'));
+    const hasGreeks = premiumScenarios.some((s) => s.thoughtText.includes('taylor expansion') || s.thoughtText.includes('gamma'));
+    expect(hasAlpha).toBe(true);
+    expect(hasGreeks).toBe(true);
+  });
+
+  it('builds professionalism DPO pairs with anti-repetition penalization', () => {
+    const profPairs = ScenarioDatasetBuilder.buildProfessionalismDPOPairs(DomainTokenizer, 10);
+    expect(profPairs.length).toBe(10);
+    expect(profPairs[0].winningThought).toBeDefined();
+    expect(profPairs[0].losingThought).toBeDefined();
+    expect(profPairs[0].winningTokens.length).toBeGreaterThan(0);
+    expect(profPairs[0].losingTokens.length).toBeGreaterThan(0);
+    const antiRepetition = profPairs.some((p) => p.losingThought.includes('analyzing market conditions for'));
+    expect(antiRepetition).toBe(true);
+  });
 });
 

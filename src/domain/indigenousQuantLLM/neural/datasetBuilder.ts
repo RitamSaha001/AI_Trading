@@ -125,6 +125,11 @@ export class ScenarioDatasetBuilder {
     const advQuantLimit = Math.max(10, Math.min(2500, Math.floor(maxTotal * 0.2)));
     this.synthesizeAdvancedQuantMicrostructureScenarios(scenarios, tok, advQuantLimit);
 
+    // 7. Synthesize Premium Institutional Multi-Desk Scenarios
+    const premiumLimit = Math.max(10, Math.min(2500, Math.floor(maxTotal * 0.2)));
+    const premiumExamples = this.synthesizePremiumInstitutionalCorpus(tok, premiumLimit);
+    scenarios.push(...premiumExamples);
+
     // If still room, supplement with edge-case stress suite
     if (scenarios.length < maxTotal) {
       this.synthesizeStressTestScenarios(scenarios, maxTotal);
@@ -329,10 +334,9 @@ export class ScenarioDatasetBuilder {
       const loseAction = (loss.pnl < -120) ? 'EMERGENCY_VETO' : 'STAND_ASIDE';
       const regime = isBreakout ? 'REGIME_BULL_TREND' : 'REGIME_HIGH_VOLATILITY';
       const vwapStatus = isBreakout ? 'ABOVE_VWAP_EXPANSION' : 'AT_VWAP_SUPPORT';
-
       const prompt = `<scenario> ${asset} ${regime} ACI_STRONG_75_84 ${vwapStatus} VOLUME_SURGE_STRONG_2X </scenario>`;
-      const winningThought = `<thought> analyzing market conditions for ${asset} volume surge confirmed at vwap support locking runner target with trailing ratchet </thought> <action> ${winAction} </action>`;
-      const losingThought = `<thought> analyzing market conditions for ${asset} ignoring risk boundaries counter-trend entry </thought> <action> ${loseAction} </action>`;
+      const winningThought = `<thought> volume surge confirmed at vwap support locking runner target with trailing ratchet </thought> <action> ${winAction} </action>`;
+      const losingThought = `<thought> ignoring risk boundaries counter-trend entry </thought> <action> ${loseAction} </action>`;
 
       const winningActionIdx = Math.max(0, ACTION_TOKENS.indexOf(winAction as any));
       const losingActionIdx = Math.max(0, ACTION_TOKENS.indexOf(loseAction as any));
@@ -440,30 +444,62 @@ export class ScenarioDatasetBuilder {
       let targetValue: number;
       let thoughtText: string;
 
+      // Diversified institutional quantitative reasoning templates (eliminating repetitive loops)
+      const stopHitTemplates = [
+        `<thought> volume fading and aci score indicates adverse excursion; capital defense mandates immediate exit to prevent drawdown </thought> <action> DEFENSIVE_EXIT </action>`,
+        `<thought> stop loss threshold reached; risk budget exhausted; executing defensive liquidation to preserve trading capital </thought> <action> DEFENSIVE_EXIT </action>`,
+        `<thought> adverse volatility shock detected; sentinel risk hurdle breached; closing position to safeguard margin </thought> <action> DEFENSIVE_EXIT </action>`,
+      ];
+      const vwapBrokenTemplates = [
+        `<thought> institutional vwap support broken; breakout failed; capital defense mandates immediate defensive liquidation </thought> <action> DEFENSIVE_EXIT </action>`,
+        `<thought> price closed below dynamic vwap boundary; invalidating bullish trend hypothesis; standing down </thought> <action> DEFENSIVE_EXIT </action>`,
+        `<thought> order flow selling pressure breached anchor vwap; exiting trade to preserve capital liquidity </thought> <action> DEFENSIVE_EXIT </action>`,
+      ];
+      const profitHarvestTemplates = [
+        `<thought> confirmed breakout above morning high; healthy expectancy; allocating runner target with trailing ratchet </thought> <action> PROFIT_HARVEST </action>`,
+        `<thought> profit target hurdle reached; locking partial gains with dynamic atr ratchet stop </thought> <action> PROFIT_HARVEST </action>`,
+        `<thought> positive convexity expansion achieved; harvesting gains systematically into market strength </thought> <action> PROFIT_HARVEST </action>`,
+      ];
+      const stagnantTemplates = [
+        `<thought> position stagnant and volume fading; standing aside to preserve cash liquidity </thought> <action> STAND_ASIDE </action>`,
+        `<thought> momentum decayed below minimum threshold; rotating capital out of stagnant instrument </thought> <action> STAND_ASIDE </action>`,
+        `<thought> trade stagnancy duration exceeded; closing position to liberate capital allocation </thought> <action> STAND_ASIDE </action>`,
+      ];
+      const breakoutTemplates = [
+        `<thought> volume surge detected at institutional vwap support; trend rider entry validated with positive expectancy </thought> <action> BUY_BREAKOUT </action>`,
+        `<thought> systematic alpha scan confirms persistent trend structure; order flow depth supports breakout entry </thought> <action> BUY_BREAKOUT </action>`,
+        `<thought> liquidity absorption confirmed above morning range; executing disciplined breakout tranche </thought> <action> BUY_BREAKOUT </action>`,
+      ];
+      const asideTemplates = [
+        `<thought> low conviction and high entropy; standing aside to preserve cash reserve floor </thought> <action> STAND_ASIDE </action>`,
+        `<thought> alpha confidence index below threshold; no statistical edge detected; standing aside </thought> <action> STAND_ASIDE </action>`,
+        `<thought> risk hurdle not satisfied; maintaining disciplined cash allocation </thought> <action> STAND_ASIDE </action>`,
+      ];
+
       if (isStopHit || pnl < -150) {
         actionName = 'DEFENSIVE_EXIT';
         targetValue = -1.0;
-        thoughtText = `<thought> analyzing market conditions for ${asset} volume fading aci score indicates high risk capital defense mandates immediate exit to prevent further drawdown </thought> <action> DEFENSIVE_EXIT </action>`;
+        thoughtText = stopHitTemplates[i % stopHitTemplates.length];
       } else if (isVwapBroken) {
         actionName = 'DEFENSIVE_EXIT';
         targetValue = -0.2;
-        thoughtText = `<thought> analyzing market conditions for ${asset} institutional vwap support broken breakout failed capital defense mandates immediate exit </thought> <action> DEFENSIVE_EXIT </action>`;
+        thoughtText = vwapBrokenTemplates[i % vwapBrokenTemplates.length];
       } else if (isTarget1 || isRatchet || pnl > 100) {
         actionName = 'PROFIT_HARVEST';
         targetValue = 1.0;
-        thoughtText = `<thought> analyzing market conditions for ${asset} confirmed breakout above morning high healthy expectancy allocating runner target with trailing ratchet </thought> <action> PROFIT_HARVEST </action>`;
+        thoughtText = profitHarvestTemplates[i % profitHarvestTemplates.length];
       } else if (isStagnant) {
         actionName = 'STAND_ASIDE';
         targetValue = 0.0;
-        thoughtText = `<thought> analyzing market conditions for ${asset} position stagnant volume fading stand aside preserve cash </thought> <action> STAND_ASIDE </action>`;
+        thoughtText = stagnantTemplates[i % stagnantTemplates.length];
       } else if (pnl > 0) {
         actionName = 'BUY_BREAKOUT';
         targetValue = 0.6;
-        thoughtText = `<thought> analyzing market conditions for ${asset} volume surge detected at institutional vwap support trend rider entry valid </thought> <action> BUY_BREAKOUT </action>`;
+        thoughtText = breakoutTemplates[i % breakoutTemplates.length];
       } else {
         actionName = 'STAND_ASIDE';
         targetValue = -0.1;
-        thoughtText = `<thought> analyzing market conditions for ${asset} low conviction stand aside preserve cash </thought> <action> STAND_ASIDE </action>`;
+        thoughtText = asideTemplates[i % asideTemplates.length];
       }
 
       const promptText = `<scenario> ${asset} ${regimeToken} ${aciToken} ${vwapToken} ${volToken} </scenario>`;
@@ -661,6 +697,227 @@ export class ScenarioDatasetBuilder {
       });
       count++;
     }
+  }
+
+  /**
+   * Synthesizes elite institutional quantitative finance reasoning across 6 specialized desks:
+   * 1. Quantitative Macro & Equity Long/Short (Systematic alpha, Hurst persistence, Amihud liquidity)
+   * 2. Derivatives & Dynamic Greeks (Taylor series expansion, Gamma convexity, Delta hedging)
+   * 3. Microstructure & Order Flow (Order book skew, toxic flow, tick quantization)
+   * 4. Statistical Arbitrage & Cointegration (Ornstein-Uhlenbeck drift, ADF stationary, Z-scores)
+   * 5. Corporate Solvency & Fundamental Analysis (SEC 10-K/10-Q, debt maturity cliff, cash flow)
+   * 6. Sentinel Risk & Statutory Governance (₹0.05 tick size, integer lot sizing, ₹2,000 cash reserve)
+   */
+  public static synthesizePremiumInstitutionalCorpus(
+    tok: TokenizerInterface = DomainTokenizer,
+    maxCount: number = 600
+  ): ScenarioExample[] {
+    const assets = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'TATAPOWER', 'SBIN', 'BHARTIARTL', 'LT'];
+    const scenarios: ScenarioExample[] = [];
+
+    const deskTemplates = [
+      // Desk 1: Equity Long/Short & Macro Trend
+      (asset: string, idx: number) => {
+        const hurst = (0.62 + (idx % 15) * 0.015).toFixed(2);
+        const promptText = `<scenario> DOMAIN_EQUITY_ALPHA ${asset} HURST_${hurst} REGIME_BULL_TREND ACI_STRONG_75_84 VWAP_EXPANSION VOLUME_SURGE_STRONG_2X </scenario>`;
+        const thoughts = [
+          `<thought> systematic alpha scan confirms persistent trend structure with hurst exponent ${hurst}; order book liquidity supports breakout with asymmetric expectancy </thought> <action> BUY_BREAKOUT </action>`,
+          `<thought> price retested institutional vwap support on declining volume; order flow depth affirms strong limit bid absorption with positive convexity </thought> <action> VWAP_PULLBACK </action>`,
+          `<thought> target hurdle achieved; locking partial profits and raising trailing ratchet stop to safeguard institutional alpha </thought> <action> PROFIT_HARVEST </action>`,
+        ];
+        const actionNames = ['BUY_BREAKOUT', 'VWAP_PULLBACK', 'PROFIT_HARVEST'];
+        const pick = Math.floor(idx / 6) % 3;
+        return { promptText, thoughtText: thoughts[pick], actionName: actionNames[pick], targetValue: 0.85 };
+      },
+
+      // Desk 2: Derivatives & Dynamic Greeks
+      (asset: string, idx: number) => {
+        const delta = (0.50 + (idx % 20) * 0.01).toFixed(2);
+        const gamma = (0.025 + (idx % 10) * 0.002).toFixed(3);
+        const vega = (14.2 + (idx % 12) * 0.8).toFixed(1);
+        const promptText = `<scenario> DOMAIN_DERIVATIVES_GREEKS ${asset} DELTA_${delta} GAMMA_${gamma} VEGA_${vega} TAYLOR_EXPANSION_HEDGE </scenario>`;
+        const thoughts = [
+          `<thought> second-order taylor expansion yields positive gamma convexity; calibrating dynamic delta hedge ratio to neutralize directional drift </thought> <action> QUANT_VERIFIED </action>`,
+          `<thought> implied volatility skew displays steep call-wing premium; executing volatility-calibrated sizing with feller condition verified </thought> <action> QUANT_VERIFIED </action>`,
+          `<thought> implied volatility crush detected post-catalyst; rapid vega decay threatens margin; closing long gamma exposure </thought> <action> DEFENSIVE_EXIT </action>`,
+        ];
+        const actionNames = ['QUANT_VERIFIED', 'QUANT_VERIFIED', 'DEFENSIVE_EXIT'];
+        const pick = Math.floor(idx / 6) % 3;
+        return { promptText, thoughtText: thoughts[pick], actionName: actionNames[pick], targetValue: pick === 2 ? -0.7 : 0.9 };
+      },
+
+      // Desk 3: Microstructure & Order Flow
+      (asset: string, idx: number) => {
+        const imbalance = (0.18 + (idx % 25) * 0.01).toFixed(2);
+        const promptText = `<scenario> DOMAIN_MICROSTRUCTURE ${asset} BID_ASK_IMBALANCE_${imbalance} AMIHUD_LIQUIDITY_FAVORABLE </scenario>`;
+        const thoughts = [
+          `<thought> limit order book imbalance indicates institutional bid absorption; bid-ask spread compressed below 0.05 nse tick threshold </thought> <action> BUY_BREAKOUT </action>`,
+          `<thought> order flow toxic imbalance detected; aggressive market sell orders breaching depth levels; enacting defensive liquidity withdrawal </thought> <action> DEFENSIVE_EXIT </action>`,
+          `<thought> amihud illiquidity ratio elevated; order execution risk excessive; standing aside to prevent market impact slippage </thought> <action> STAND_ASIDE </action>`,
+        ];
+        const actionNames = ['BUY_BREAKOUT', 'DEFENSIVE_EXIT', 'STAND_ASIDE'];
+        const pick = Math.floor(idx / 6) % 3;
+        return { promptText, thoughtText: thoughts[pick], actionName: actionNames[pick], targetValue: pick === 0 ? 0.8 : pick === 1 ? -0.8 : 0.0 };
+      },
+
+      // Desk 4: Statistical Arbitrage & Cointegration
+      (asset: string, idx: number) => {
+        const zScore = (2.1 + (idx % 15) * 0.1).toFixed(2);
+        const promptText = `<scenario> DOMAIN_STAT_ARB ${asset} SPREAD_Z_SCORE_${zScore} ADF_STATIONARY_P001 OU_MEAN_REVERSION </scenario>`;
+        const thoughts = [
+          `<thought> spread cointegration z-score deviates beyond two standard deviations; ornstein-uhlenbeck drift dictates mean-reverting harvest tranche </thought> <action> PROFIT_HARVEST </action>`,
+          `<thought> spread converged to mean reversion target; executing profit harvest across long-short pair to crystallize edge </thought> <action> PROFIT_HARVEST </action>`,
+          `<thought> cointegration relationship broken; adf test p-value rose above 0.10; liquidating stat arb basket immediately </thought> <action> DEFENSIVE_EXIT </action>`,
+        ];
+        const actionNames = ['PROFIT_HARVEST', 'PROFIT_HARVEST', 'DEFENSIVE_EXIT'];
+        const pick = Math.floor(idx / 6) % 3;
+        return { promptText, thoughtText: thoughts[pick], actionName: actionNames[pick], targetValue: pick === 2 ? -0.75 : 0.85 };
+      },
+
+      // Desk 5: Corporate Solvency & Fundamental Sentinel
+      (asset: string, idx: number) => {
+        const coverage = (3.5 + (idx % 20) * 0.2).toFixed(1);
+        const promptText = `<scenario> DOMAIN_CORPORATE_SOLVENCY ${asset} INTEREST_COVERAGE_${coverage}X OPERATING_CASH_FLOW_HEALTHY </scenario>`;
+        const thoughts = [
+          `<thought> sec disclosure and operating cash flow metrics confirm solvent debt coverage; enterprise balance sheet resilient against interest shocks </thought> <action> ASSESS_FUNDAMENTALS </action>`,
+          `<thought> subordinated debt maturity cliff approaching; interest coverage deteriorated; downgrading allocation conviction </thought> <action> STAND_ASIDE </action>`,
+          `<thought> balance sheet solvency and cash flow runway exceed covenant hurdles; confirming fundamental safety margin </thought> <action> ASSESS_FUNDAMENTALS </action>`,
+        ];
+        const actionNames = ['ASSESS_FUNDAMENTALS', 'STAND_ASIDE', 'ASSESS_FUNDAMENTALS'];
+        const pick = Math.floor(idx / 6) % 3;
+        return { promptText, thoughtText: thoughts[pick], actionName: actionNames[pick], targetValue: pick === 1 ? -0.3 : 0.8 };
+      },
+
+      // Desk 6: Sentinel Risk & Statutory Governance
+      (asset: string, idx: number) => {
+        const promptText = `<scenario> DOMAIN_SENTINEL_GOVERNANCE ${asset} TICK_0_05 INTEGER_LOTS CASH_FLOOR_2000 ACI_GOVERNANCE </scenario>`;
+        const thoughts = [
+          `<thought> exchange invariant audit passed: order tick quantized to 0.05, integer lot sizing enforced, and 2000 liquid reserve floor strictly preserved </thought> <action> QUANT_VERIFIED </action>`,
+          `<thought> volatility shock threshold breached; circuit breaker guard activated; mandate immediate capital defense and stand aside </thought> <action> DEFENSIVE_EXIT </action>`,
+          `<thought> available cash within 2000 liquid reserve floor; sizing zero integer shares to protect statutory boundary </thought> <action> STAND_ASIDE </action>`,
+        ];
+        const actionNames = ['QUANT_VERIFIED', 'DEFENSIVE_EXIT', 'STAND_ASIDE'];
+        const pick = Math.floor(idx / 6) % 3;
+        return { promptText, thoughtText: thoughts[pick], actionName: actionNames[pick], targetValue: pick === 0 ? 0.95 : pick === 1 ? -0.9 : 0.0 };
+      },
+    ];
+
+    let count = 0;
+    while (count < maxCount) {
+      const asset = assets[count % assets.length];
+      const desk = deskTemplates[count % deskTemplates.length];
+      const res = desk(asset, count);
+      const targetActionIdx = Math.max(0, ACTION_TOKENS.indexOf(res.actionName as any));
+
+      scenarios.push({
+        id: `premium-inst-${count}`,
+        inputTokens: tok.encode(res.promptText),
+        targetTokens: tok.encode(res.thoughtText),
+        targetActionIdx,
+        targetValue: res.targetValue,
+        rawText: res.promptText,
+        thoughtText: res.thoughtText,
+        actionName: res.actionName,
+        domain: 'quant_trading',
+      });
+      count++;
+    }
+
+    return scenarios;
+  }
+
+  /**
+   * Constructs high-elo DPO preference pairs aligning the model with institutional professionalism:
+   * Chosen (Winner): Crisp, rigorous, mathematically grounded quantitative reasoning.
+   * Rejected (Loser): Repetitive token loops, colloquial phrasing, or rule-violating gambles.
+   */
+  public static buildProfessionalismDPOPairs(
+    tok: TokenizerInterface = DomainTokenizer,
+    maxPairs: number = 300
+  ): DPOPreferencePair[] {
+    const assets = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'TATAPOWER'];
+    const pairs: DPOPreferencePair[] = [];
+
+    const dpoScenarios = [
+      // 1. Anti-repetition: professional quant vs looping prompt echo
+      (asset: string) => ({
+        prompt: `<scenario> ${asset} REGIME_BULL_TREND ACI_STRONG_75_84 ABOVE_VWAP_EXPANSION VOLUME_SURGE_STRONG_2X </scenario>`,
+        winningThought: `<thought> systematic alpha scan confirms persistent trend structure with asymmetric expectancy; order flow depth supports breakout entry </thought> <action> BUY_BREAKOUT </action>`,
+        losingThought: `<thought> analyzing market conditions for ${asset} analyzing market conditions for ${asset} market conditions buy breakout </thought> <action> BUY_BREAKOUT </action>`,
+        winAction: 'BUY_BREAKOUT',
+        loseAction: 'BUY_BREAKOUT',
+        margin: 350,
+      }),
+
+      // 2. Risk discipline: systematic exit vs ignoring stop loss
+      (asset: string) => ({
+        prompt: `<scenario> ${asset} REGIME_VOLATILITY_SHOCK ACI_SUBPAR_BELOW_65 BELOW_VWAP_FAILED VOLUME_SURGE_EXTREME_3X </scenario>`,
+        winningThought: `<thought> adverse volatility shock detected; sentinel risk hurdle breached; closing position to safeguard margin </thought> <action> DEFENSIVE_EXIT </action>`,
+        losingThought: `<thought> ignoring risk boundaries counter-trend entry averaging down hoping for reversal </thought> <action> BUY_BREAKOUT </action>`,
+        winAction: 'DEFENSIVE_EXIT',
+        loseAction: 'BUY_BREAKOUT',
+        margin: 450,
+      }),
+
+      // 3. Mathematical precision: Taylor series expansion vs naive guessing
+      (asset: string) => ({
+        prompt: `<scenario> DOMAIN_DERIVATIVES_GREEKS ${asset} DELTA_0_55 GAMMA_0_03 VEGA_14_2 TAYLOR_EXPANSION </scenario>`,
+        winningThought: `<thought> second-order taylor expansion yields positive gamma convexity; calibrating dynamic delta hedge ratio to neutralize directional drift </thought> <action> QUANT_VERIFIED </action>`,
+        losingThought: `<thought> guessing market direction without computing greek derivatives or delta hedge </thought> <action> STAND_ASIDE </action>`,
+        winAction: 'QUANT_VERIFIED',
+        loseAction: 'STAND_ASIDE',
+        margin: 400,
+      }),
+
+      // 4. Invariant compliance: ₹0.05 tick & ₹2000 cash floor vs fractional/unhedged gamble
+      (asset: string) => ({
+        prompt: `<scenario> DOMAIN_NSE_MICROSTRUCTURE ${asset} CASH_3500 PRICE_2450 LIMIT_ORDER </scenario>`,
+        winningThought: `<thought> spendable cash above 2000 floor is 1500; sized at 0 integer shares; tick size 0.05 verified; preserving cash floor </thought> <action> STAND_ASIDE </action>`,
+        losingThought: `<thought> buying 1.5 fractional shares at unaligned tick 2450.33 ignoring cash reserve floor </thought> <action> BUY_BREAKOUT </action>`,
+        winAction: 'STAND_ASIDE',
+        loseAction: 'BUY_BREAKOUT',
+        margin: 500,
+      }),
+
+      // 5. Profit harvesting: trailing ratchet vs greed/stagnancy
+      (asset: string) => ({
+        prompt: `<scenario> ${asset} TRANCHE_1_REACHED +1.5_ATR RUNNER_TARGET_ACTIVE </scenario>`,
+        winningThought: `<thought> profit target hurdle reached; locking partial gains with dynamic atr ratchet stop </thought> <action> PROFIT_HARVEST </action>`,
+        losingThought: `<thought> holding full size without locking profits hoping for infinite runner ignoring trailing stops </thought> <action> STAND_ASIDE </action>`,
+        winAction: 'PROFIT_HARVEST',
+        loseAction: 'STAND_ASIDE',
+        margin: 300,
+      }),
+    ];
+
+    let count = 0;
+    while (count < maxPairs) {
+      const asset = assets[count % assets.length];
+      const template = dpoScenarios[count % dpoScenarios.length];
+      const item = template(asset);
+
+      const winningActionIdx = Math.max(0, ACTION_TOKENS.indexOf(item.winAction as any));
+      const losingActionIdx = Math.max(0, ACTION_TOKENS.indexOf(item.loseAction as any));
+
+      pairs.push({
+        id: `dpo-prof-${count}`,
+        prompt: item.prompt,
+        scenarioPrompt: item.prompt,
+        promptTokens: tok.encode(item.prompt),
+        winningThought: item.winningThought,
+        winningTokens: tok.encode(item.winningThought),
+        winningActionIdx,
+        losingThought: item.losingThought,
+        losingTokens: tok.encode(item.losingThought),
+        losingActionIdx,
+        actionName: item.winAction,
+        marginReturnDelta: item.margin,
+        marginBenefit: item.margin,
+      });
+      count++;
+    }
+
+    return pairs;
   }
 }
 

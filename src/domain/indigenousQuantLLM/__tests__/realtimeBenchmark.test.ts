@@ -11,9 +11,9 @@ describe('RealtimeModelBenchmark Suite', () => {
   it('verifies LARGE_1M_TRANSFORMER_CONFIG parameter count exceeds 1,000,000 parameters', () => {
     const model = new NeuralTransformerModel(LARGE_1M_TRANSFORMER_CONFIG);
     const count = model.countParameters();
-    // 3.75M Sparse MoE parameters (>1,000,000 dense / MoE parameters)
+    // 3.79M Sparse MoE parameters (>1,000,000 dense / MoE parameters)
     expect(count).toBeGreaterThan(1_000_000);
-    expect(count).toBe(3_748_464);
+    expect(count).toBe(3_789_360);
   });
 
   it('verifies STANDARD_BENCHMARK_SCENARIOS contains 6 institutional quantitative domains', () => {

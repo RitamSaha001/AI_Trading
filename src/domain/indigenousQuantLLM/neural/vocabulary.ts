@@ -118,6 +118,34 @@ export const REASONING_WORDS = [
   'cash', 'healthy', 'expectancy', 'verified', 'prm', 'consensus', 'expansion'
 ] as const;
 
+export const INSTITUTIONAL_QUANT_WORDS = [
+  // Grammar & Connectives
+  'the', 'is', 'a', 'an', 'in', 'of', 'and', 'or', 'to', 'with', 'by', 'from', 'as', 'on',
+  'this', 'that', 'which', 'be', 'are', 'not', 'have', 'has', 'will', 'shows', 'indicates',
+  'calculated', 'derived', 'verified', 'confirms', 'breaches', 'exceeds', 'satisfies',
+  // Mathematical Derivatives & Greeks
+  'delta', 'gamma', 'vega', 'theta', 'vanna', 'volga', 'taylor', 'expansion', 'curvature',
+  'hedge', 'ratio', 'order', 'second', 'closed', 'form', 'analytical', 'solution', 'partial',
+  'derivative', 'black', 'scholes', 'heston', 'stochastic', 'volatility', 'feller', 'condition',
+  'boundary', 'variance', 'drift', 'mean', 'reversion', 'ornstein', 'uhlenbeck', 'equilibrium',
+  'sigma', 'standard', 'deviation', 'z_score', 'cointegration', 'stationary', 'stationarity',
+  'adf', 'p_value', 'hypothesis', 'rejection',
+  // Microstructure & Exchange Invariants
+  'microstructure', 'order_flow', 'imbalance', 'depth', 'liquidity', 'bid', 'ask', 'spread',
+  'amihud', 'illiquidity', 'tick', 'size', 'quantization', 'integer', 'lot', 'shares',
+  'mandatory', 'liquid', 'cash', 'reserve', 'floor', 'statutory', 'charges', 'execution',
+  'slippage', 'notional', 'margin', 'leverage', 'mis', 'circuit_breaker', 'intraday',
+  // Sentinel Risk & Governance
+  'sentinel', 'defense', 'veto', 'volatility_shock', 'drawdown', 'preservation', 'halt',
+  'circuit', 'breaker', 'epistemic', 'uncertainty', 'shannon', 'entropy', 'bits', 'confidence',
+  'process', 'reward', 'critic', 'prm', 'expected', 'value', 'var', 'parametric', 'stress_test',
+  'governance', 'sovereign',
+  // Corporate Finance & Valuation
+  'solvency', 'balance_sheet', 'quick_ratio', 'current_assets', 'liabilities', 'inventory',
+  'receivables', 'ebitda', 'debt', 'coverage', 'altman', 'z', 'score', 'piotroski', 'f',
+  'sec', '10k', '10q', 'operating', 'revenue', 'interest', 'expense'
+] as const;
+
 // Assemble Complete Vocabulary
 const ALL_TOKENS: string[] = [
   ...SPECIAL_TOKENS,
@@ -126,7 +154,9 @@ const ALL_TOKENS: string[] = [
   ...QUANT_DESCRIPTOR_TOKENS,
   ...INDIAN_ASSETS,
   ...REASONING_WORDS,
+  ...INSTITUTIONAL_QUANT_WORDS,
 ];
+
 
 // Unique set deduplication
 export const VOCABULARY: string[] = Array.from(new Set(ALL_TOKENS));

@@ -1,4 +1,5 @@
-import { NewsSentimentAnalysis, TickerSentimentStatus } from "./types";
+import { NewsSentimentAnalysis, TickerSentimentStatus, SentimentPolarity } from "./types";
+import { AstraFinCognitiveEngine, AstraFinDirective } from "../indigenousQuantLLM";
 
 export interface EmergencyVetoResult {
   hasVeto: boolean;
@@ -105,17 +106,27 @@ export class NewsCatalystRegistry {
     const catalyst = this.checkAlphaCatalyst(sym, now);
     const list = this.tickerAnalyses.get(sym) || [];
 
-    // Calculate rolling weighted sentiment
+    // Calculate rolling weighted sentiment within the active 5-hour window
     let compositeSentiment = 0;
+    let activeArticlesCount = 0;
+    let latestValidAnalysis: NewsSentimentAnalysis | undefined = undefined;
+
     if (list.length > 0) {
       let totalWeight = 0;
       let weightedSum = 0;
-      for (let i = 0; i < Math.min(list.length, 5); i++) {
-        const item = list[i];
+      for (const item of list) {
         const ageHours = (now - item.publishedAt) / (60 * 60 * 1000);
-        const recencyWeight = Math.max(0.1, 1.0 - ageHours * 0.2); // Decay over 5 hours
-        weightedSum += item.score * recencyWeight;
-        totalWeight += recencyWeight;
+        // Strictly prevent temporal leakage (future articles in historical replay or articles > 24h old)
+        if (ageHours < 0 || ageHours > 24) continue;
+        activeArticlesCount++;
+        if (!latestValidAnalysis) latestValidAnalysis = item;
+
+        // Linear recency decay over 5 hours; 0 weight if > 5 hours old
+        const recencyWeight = Math.max(0, 1.0 - ageHours / 5.0);
+        if (recencyWeight > 0) {
+          weightedSum += item.score * recencyWeight;
+          totalWeight += recencyWeight;
+        }
       }
       compositeSentiment = totalWeight > 0 ? Number((weightedSum / totalWeight).toFixed(2)) : 0;
     }
@@ -127,9 +138,9 @@ export class NewsCatalystRegistry {
       activeCatalyst: catalyst.hasCatalyst,
       catalystReason: catalyst.reason,
       compositeSentiment,
-      recentArticlesCount: list.length,
-      lastArticleTimestamp: list.length > 0 ? list[0].publishedAt : 0,
-      latestAnalysis: list.length > 0 ? list[0] : undefined,
+      recentArticlesCount: activeArticlesCount,
+      lastArticleTimestamp: latestValidAnalysis ? latestValidAnalysis.publishedAt : 0,
+      latestAnalysis: latestValidAnalysis,
     };
   }
 
@@ -138,6 +149,46 @@ export class NewsCatalystRegistry {
    */
   public static getRecentFeed(limit = 50): NewsSentimentAnalysis[] {
     return this.recentAnalyses.slice(0, limit);
+  }
+
+  /**
+   * Evaluates a headline through the indigenous Lumen-Astra-Fin 1.0 LLM engine
+   * and automatically ingests its directives into the registry.
+   */
+  public static processWithAstraFin(headline: string, source = 'ASTRA_FIN_LLM', now: number = Date.now()): AstraFinDirective[] {
+    const directives = AstraFinCognitiveEngine.deliberate(headline, now);
+    for (const d of directives) {
+      const isEmergencyVeto = d.hasEmergencyVeto;
+      const isAlphaCatalyst = d.hasAlphaCatalyst;
+      const sentiment: SentimentPolarity = d.action === 'STRONG_BUY' || d.action === 'ACCUMULATE'
+        ? 'POSITIVE'
+        : d.action === 'EMERGENCY_VETO' || d.action === 'STAND_ASIDE'
+        ? 'NEGATIVE'
+        : 'NEUTRAL';
+      const score = sentiment === 'POSITIVE' ? 0.85 : sentiment === 'NEGATIVE' ? -0.85 : 0.0;
+      const urgency = isEmergencyVeto ? 95 : isAlphaCatalyst ? 88 : 40;
+
+      const analysis: NewsSentimentAnalysis = {
+        articleId: `astra_${d.symbol}_${now}`,
+        headline,
+        source,
+        publishedAt: now,
+        sentiment,
+        score,
+        confidence: Number((d.confidenceScore / 100).toFixed(2)),
+        urgency,
+        category: isEmergencyVeto ? 'REGULATORY_SANCTION' : isAlphaCatalyst ? 'ORDER_WIN' : 'GENERAL_MARKET',
+        matchedTickers: [d.symbol],
+        isEmergencyVeto,
+        isAlphaCatalyst,
+        keyEntities: [d.symbol],
+        salienceReasoning: d.rationale,
+        processingLatencyMs: d.reasoningTrace?.inferenceLatencyMs ?? 5,
+      };
+
+      this.ingest(analysis);
+    }
+    return directives;
   }
 
   /**

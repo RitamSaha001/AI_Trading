@@ -905,13 +905,9 @@ export function deadTradeStagnancyExit(
   atr: number,
   elapsedMs: number,
   currentVolume: number = 0,
-  avgVolume: number = 0,
-  isPrototype1: boolean = false,
-  maxDurationOverride?: number,
-  allowAdverseDrift?: boolean
+  avgVolume: number = 0
 ): { shouldExit: boolean; reason: string } {
-  const maxDuration = maxDurationOverride ?? (isPrototype1 ? (90 * 60 * 1000) : thresholds.STAGNANT_TRADE_MAX_DURATION_MS);
-  if (elapsedMs < maxDuration) {
+  if (elapsedMs < thresholds.STAGNANT_TRADE_MAX_DURATION_MS) {
     return { shouldExit: false, reason: 'Trade duration within active execution window.' };
   }
 
@@ -927,12 +923,7 @@ export function deadTradeStagnancyExit(
   // Range stagnant: price oscillation within +/- 0.25 ATR with fading volume
   const isRangeStagnant = Math.abs(priceMoveAtr) < thresholds.STAGNANT_TRADE_PRICE_RANGE_ATR && isVolumeFading;
 
-  // Persistent adverse drift: position has stalled underwater (<= -0.35 ATR) for full duration
-  // or is negative (<= -0.28 ATR) with actively dying volume. Deactivated in Prototype 1 baseline.
-  const canAdverseDrift = allowAdverseDrift !== undefined ? allowAdverseDrift : !isPrototype1;
-  const isAdverseDrift = canAdverseDrift && (priceMoveAtr <= -0.35 || (priceMoveAtr <= -0.28 && isVolumeFading));
-
-  if (isFailedTrade || isRangeStagnant || isAdverseDrift) {
+  if (isFailedTrade || isRangeStagnant) {
     // If the trade is solidly profitable (> 0.20 ATR), let dynamic trailing ratchets manage it
     if (priceMoveAtr > 0.20) {
       return { shouldExit: false, reason: 'Active momentum or price expansion present.' };

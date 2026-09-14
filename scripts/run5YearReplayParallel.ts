@@ -392,8 +392,7 @@ async function main() {
   for (const cfg of YEARS) {
     let loadedData: any = null;
     const allFiles = readdirSync(auditDir);
-    const taggedFile = allFiles.find((f: string) => f.includes(`${cfg.tag}-${prototype}`) && f.endsWith('.json'))
-      || allFiles.find((f: string) => f.includes(cfg.tag) && f.endsWith('.json'));
+    const taggedFile = allFiles.find((f: string) => f.includes(`${cfg.tag}-${prototype}`) && f.endsWith('.json'));
     if (taggedFile) {
       const raw = await readFile(join(auditDir, taggedFile), 'utf-8');
       loadedData = JSON.parse(raw);

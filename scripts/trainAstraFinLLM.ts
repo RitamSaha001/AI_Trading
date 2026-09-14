@@ -36,6 +36,7 @@ function parseArgs(): {
   maxScenarios: number;
   dpoEpochs: number;
   configType: 'default' | '1m';
+  fineTune: boolean;
 } {
   const args = process.argv.slice(2);
   let epochs = 5;
@@ -44,17 +45,27 @@ function parseArgs(): {
   let maxScenarios = 3000;
   let dpoEpochs = 3;
   let configType: 'default' | '1m' = 'default';
+  let fineTune = false;
+  let lrSpecified = false;
 
   for (const a of args) {
     if (a.startsWith('--epochs=')) epochs = parseInt(a.split('=')[1], 10);
     if (a.startsWith('--batch-size=')) batchSize = parseInt(a.split('=')[1], 10);
-    if (a.startsWith('--lr=')) lr = parseFloat(a.split('=')[1]);
+    if (a.startsWith('--lr=')) {
+      lr = parseFloat(a.split('=')[1]);
+      lrSpecified = true;
+    }
     if (a.startsWith('--max-scenarios=')) maxScenarios = parseInt(a.split('=')[1], 10);
     if (a.startsWith('--dpo-epochs=')) dpoEpochs = parseInt(a.split('=')[1], 10);
     if (a.startsWith('--config=')) configType = a.split('=')[1] === '1m' ? '1m' : 'default';
+    if (a === '--fine-tune' || a === '--finetune') fineTune = true;
   }
 
-  return { epochs, batchSize, lr, maxScenarios, dpoEpochs, configType };
+  if (fineTune && !lrSpecified) {
+    lr = 0.0001;
+  }
+
+  return { epochs, batchSize, lr, maxScenarios, dpoEpochs, configType, fineTune };
 }
 
 
@@ -107,7 +118,7 @@ async function loadJsonlFile(filePath: string, maxLines = 1000): Promise<any[]> 
 }
 
 async function main() {
-  const { epochs, batchSize, lr, maxScenarios, dpoEpochs, configType } = parseArgs();
+  const { epochs, batchSize, lr, maxScenarios, dpoEpochs, configType, fineTune } = parseArgs();
 
   console.log('================================================================================');
   console.log('           LUMEN-ASTRA-FIN 2.0: SOVEREIGN NEURAL TRANSFORMER TRAINING           ');
@@ -232,6 +243,23 @@ async function main() {
     configType === '1m' ? 'lumen-astra-fin-weights-1m.json' : 'lumen-astra-fin-weights.json'
   );
 
+  if (fineTune) {
+    if (fs.existsSync(checkpointPath)) {
+      try {
+        const rawJson = fs.readFileSync(checkpointPath, 'utf8');
+        model.loadWeights(rawJson);
+        console.log(`\n🎯 [Fine-Tuning Mode Activated]`);
+        console.log(`  • Loaded existing checkpoint from: ${checkpointPath}`);
+        console.log(`  • Initializing fine-tuning with conservative LR: ${lr}`);
+        console.log(`  • Preserving core representations while adapting to expanded vocabulary (${model.config.vocabSize} tokens)`);
+      } catch (err) {
+        console.warn(`[Fine-Tuning] Failed to load checkpoint ${checkpointPath}:`, err);
+      }
+    } else {
+      console.log(`\n⚠️ [Fine-Tuning] Checkpoint not found at ${checkpointPath}. Training from scratch.`);
+    }
+  }
+
   // ============================================================================
   // STAGE 1: MULTI-TASK SUPERVISED PRETRAINING / SFT
   // ============================================================================
@@ -275,11 +303,15 @@ async function main() {
   // STAGE 2: DIRECT PREFERENCE OPTIMIZATION (DPO) ON TRADE TRAJECTORIES
   // ============================================================================
   console.log('\n================================================================================');
-  console.log(' STAGE 2: DIRECT PREFERENCE OPTIMIZATION (DPO) ON HISTORICAL TRADE TRAJECTORIES ');
+  console.log(' STAGE 2: DIRECT PREFERENCE OPTIMIZATION (DPO) WITH PROFESSIONALISM ALIGNMENT   ');
   console.log('================================================================================');
 
-  const dpoPairs = ScenarioDatasetBuilder.buildDPOPreferencePairs(allClosedTrades, undefined, 400);
-  console.log(`[DPO] Extracted ${dpoPairs.length} paired winning vs losing trade trajectories.`);
+  const tradePairs = ScenarioDatasetBuilder.buildDPOPreferencePairs(allClosedTrades, undefined, 250);
+  const profPairs = ScenarioDatasetBuilder.buildProfessionalismDPOPairs(undefined, 250);
+  const dpoPairs: DPOPreferencePair[] = [...tradePairs, ...profPairs];
+  console.log(
+    `[DPO] Assembled ${tradePairs.length} trade pairs + ${profPairs.length} professionalism & anti-repetition pairs (${dpoPairs.length} total).`
+  );
 
   if (dpoPairs.length > 0) {
     const dpoTrainer = new DPOTrainer(model, 0.1);

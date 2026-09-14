@@ -571,11 +571,37 @@ export class NeuralTransformerModel {
    */
   public loadWeights(jsonStr: string): void {
     const data = JSON.parse(jsonStr);
-    if (data.config) this.config = { ...this.config, ...data.config };
-    if (data.W_emb) this.W_emb = data.W_emb;
-    if (data.W_pos) this.W_pos = data.W_pos;
+    if (data.config) {
+      // Preserve current model's vocabSize and maxSeqLen if larger
+      const currentVocab = this.config.vocabSize;
+      const currentSeqLen = this.config.maxSeqLen;
+      this.config = { ...this.config, ...data.config };
+      if (currentVocab > this.config.vocabSize) this.config.vocabSize = currentVocab;
+      if (currentSeqLen > this.config.maxSeqLen) this.config.maxSeqLen = currentSeqLen;
+    }
+
+    if (data.W_emb) {
+      for (let r = 0; r < Math.min(this.W_emb.length, data.W_emb.length); r++) {
+        for (let c = 0; c < Math.min(this.W_emb[r].length, data.W_emb[r].length); c++) {
+          this.W_emb[r][c] = data.W_emb[r][c];
+        }
+      }
+    }
+    if (data.W_pos) {
+      for (let r = 0; r < Math.min(this.W_pos.length, data.W_pos.length); r++) {
+        for (let c = 0; c < Math.min(this.W_pos[r].length, data.W_pos[r].length); c++) {
+          this.W_pos[r][c] = data.W_pos[r][c];
+        }
+      }
+    }
     if (data.layers) this.layers = data.layers;
-    if (data.W_lm) this.W_lm = data.W_lm;
+    if (data.W_lm) {
+      for (let r = 0; r < Math.min(this.W_lm.length, data.W_lm.length); r++) {
+        for (let c = 0; c < Math.min(this.W_lm[r].length, data.W_lm[r].length); c++) {
+          this.W_lm[r][c] = data.W_lm[r][c];
+        }
+      }
+    }
     if (data.W_policy) this.W_policy = data.W_policy;
     if (data.W_value) this.W_value = data.W_value;
     if (data.optimizerStep) this.optimizerStep = data.optimizerStep;

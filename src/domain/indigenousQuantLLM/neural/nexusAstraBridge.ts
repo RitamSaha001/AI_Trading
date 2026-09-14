@@ -252,21 +252,29 @@ ${factorRows}
     state: AppState,
     asset: Asset
   ): string {
+    const deskName = state.accountMode === 'upstox' ? 'NSE Institutional Equities (Upstox Live Engine)' : 'Quantitative Digital Assets';
     const lines: string[] = [
       '<think>',
-      `1. [Observation]: Primary asset focus is ${asset} | Desk: ${state.accountMode === 'upstox' ? 'NSE Indian Equities (Upstox Live)' : 'Digital Crypto'}.`,
-      `2. [Transformer MoE Routing]: Activated Top-2 of 4 routed experts with NTK-scaled RoPE context.`,
+      `1. [Observation & Telemetry]: Primary asset focus: ${asset} | Desk: ${deskName}.`,
+      `2. [Transformer MoE Routing]: Activated Top-2 of 4 routed experts with NTK-scaled RoPE context window.`,
       `3. [Epistemic Telemetry]: Policy Confidence = ${(inference.policyConfidence * 100).toFixed(1)}% | Shannon Entropy = ${inference.policyEntropy} bits.`,
-      `4. [Process Reward Assessment]: Expected return proxy = ${inference.expectedReturnValue} | Rank score = ${inference.candidateRankScore ?? 0}.`,
-      `5. [Directive Extraction]: Emitted policy directive "${inference.predictedAction}" with ${inference.suggestedRiskMultiplier}x risk multiplier.`,
+      `4. [Process Reward Assessment]: Expected return proxy = ${inference.expectedReturnValue} | PRM Rank Score = ${inference.candidateRankScore ?? 0}.`,
     ];
+
+    if (inference.generatedThought && inference.generatedThought.trim().length > 0) {
+      lines.push(`5. [Neural Latent CoT]: ${inference.generatedThought.trim()}`);
+    }
+
+    lines.push(
+      `6. [Directive Extraction]: Emitted institutional directive "${inference.predictedAction}" with ${inference.suggestedRiskMultiplier}x risk budget multiplier.`
+    );
 
     if (inference.hasReflected) {
       lines.push(
-        `6. [Test-Time Reflection & Backtracking]: ${inference.reflectionNote || 'Adversarial hazard detected; backtracked to defensive stance'}.`
+        `7. [Test-Time Reflection & Backtracking]: ${inference.reflectionNote || 'Adversarial hazard detected; backtracked to defensive stance'}.`
       );
     } else {
-      lines.push('6. [Verification]: Passed all schema invariants and Process Reward Critic gates without contradictions.');
+      lines.push('7. [Verification]: Passed all schema invariants, ₹0.05 tick size quantization, and ₹2,000 cash reserve floor.');
     }
 
     lines.push('</think>');
