@@ -286,7 +286,7 @@ export const COUNTRY_DOSSIERS: CountryDossier[] = [
 export const CONFLICT_DOSSIERS: ConflictDossier[] = [
   {
     name: 'The War in Ukraine',
-    aliases: ['ukraine war', 'russo-ukrainian war', 'invasion of ukraine', 'war in ukraine'],
+    aliases: ['ukraine war', 'russo-ukrainian war', 'invasion of ukraine', 'war in ukraine', 'warfare in ukraine', 'drone warfare in ukraine', 'fpv drone', 'fpv'],
     theater: 'Eastern and Southern Europe (Ukraine, Black Sea, Western Russia)',
     era: '2014–Present (Full-Scale Invasion launched February 24, 2022)',
     belligerents: 'Russian Federation (supported by Belarus, Iranian drones, North Korean munitions) vs. Ukraine (supported by NATO, US, EU logistics, intelligence, and weapons)',

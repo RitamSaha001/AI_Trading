@@ -234,21 +234,7 @@ Feel free to present any question or scenario!`,
     };
   }
 
-  // 4. Country Dossier Lookup
-  const country = findCountryDossier(lower);
-  if (country) {
-    return {
-      intent: 'COUNTRY_GEOPOLITICS',
-      subject: country.name,
-      thoughtTrace: `1. [Entity Extraction]: Identified nation entity "${country.name}" across query tokens.
-2. [Knowledge Graph Traversal]: Retrieved structured geopolitical dossier: Capital (${country.capital}), Continent (${country.continent}), Borders, Economic Pillars, and Strategic Context.
-3. [Synthesis Strategy]: Constructing an authoritative, four-dimensional geopolitical profile.
-4. [MoE Routing]: Routed to Geopolitical & Macro Intelligence Experts.`,
-      responseMarkdown: formatCountryResponse(country),
-    };
-  }
-
-  // 5. Conflict & Military Strategy Lookup
+  // 4. Conflict & Military Strategy Lookup (Higher specificity than country)
   const conflict = findConflictDossier(lower);
   if (conflict) {
     return {
@@ -262,7 +248,7 @@ Feel free to present any question or scenario!`,
     };
   }
 
-  // 6. Macro Sector Lookup
+  // 5. Macro Sector Lookup (Higher specificity than country)
   const macro = findMacroSectorDossier(lower);
   if (macro) {
     return {
@@ -273,6 +259,20 @@ Feel free to present any question or scenario!`,
 3. [Cognitive Synthesis]: Formulating a rigorous macroeconomic chain-of-transmission response.
 4. [MoE Routing]: Activated Top-2 Financial Economics & Macro Structure Experts.`,
       responseMarkdown: formatMacroResponse(macro),
+    };
+  }
+
+  // 6. Country Dossier Lookup
+  const country = findCountryDossier(lower);
+  if (country) {
+    return {
+      intent: 'COUNTRY_GEOPOLITICS',
+      subject: country.name,
+      thoughtTrace: `1. [Entity Extraction]: Identified nation entity "${country.name}" across query tokens.
+2. [Knowledge Graph Traversal]: Retrieved structured geopolitical dossier: Capital (${country.capital}), Continent (${country.continent}), Borders, Economic Pillars, and Strategic Context.
+3. [Synthesis Strategy]: Constructing an authoritative, four-dimensional geopolitical profile.
+4. [MoE Routing]: Routed to Geopolitical & Macro Intelligence Experts.`,
+      responseMarkdown: formatCountryResponse(country),
     };
   }
 
