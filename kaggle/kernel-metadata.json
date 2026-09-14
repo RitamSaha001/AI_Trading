@@ -1,0 +1,21 @@
+{
+  "id": "ritamsaha00178/lumen-alpha-3b-training",
+  "title": "Lumen Alpha 3B Training",
+  "code_file": "lumen_alpha_3b_training.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "keywords": [
+    "finance",
+    "deepseek",
+    "moe",
+    "transformers",
+    "quant"
+  ],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": []
+}
