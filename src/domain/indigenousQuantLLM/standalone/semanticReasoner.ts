@@ -27,7 +27,7 @@ import {
   ResolvedQueryContext,
   ConversationalIntent,
 } from './dialogueStateTracker';
-import { HumanDialogueEngine, detectAffectiveState } from './humanDialogueEngine';
+import { HumanDialogueEngine, detectAffectiveState, isConciseRequested } from './humanDialogueEngine';
 
 export interface SemanticAnalysisResult {
   intent:
@@ -64,7 +64,7 @@ const HOSTILE_PATTERNS = [
 export function checkCivilModeration(prompt: string): string | null {
   for (const pattern of HOSTILE_PATTERNS) {
     if (pattern.test(prompt)) {
-      return `### 🕊️ Thoughtful Dialogue & Mutual Respect
+      return `### Thoughtful Dialogue & Mutual Respect
 
 I am committed to engaging in constructive, civil, and intellectually rigorous discourse. While debate and sharp inquiry are always welcome, I ask that we refrain from insults, derogatory slurs, or hostile language.
 
@@ -79,7 +79,7 @@ If there is a specific question, critique, or idea you would like to explore, I 
 // --------------------------------------------------------------------------
 
 function formatCountryResponse(c: CountryDossier): string {
-  return `### 🗺️ Geopolitical & Strategic Profile: ${c.name}
+  return `### Geopolitical & Strategic Profile: ${c.name}
 
 **Continent / Region**: ${c.continent}  
 **Capital City**: ${c.capital}  
@@ -97,14 +97,11 @@ ${c.strategicSignificance}
 ${c.economicPillars}
 
 #### 4. Contemporary Strategic Dynamics
-${c.contemporaryContext}
-
----
-*Would you like to analyze ${c.name}'s economy, military doctrine, bilateral relations, or specific trade interdependencies?*`;
+${c.contemporaryContext}`;
 }
 
 function formatConflictResponse(c: ConflictDossier): string {
-  return `### ⚔️ Conflict Analysis: ${c.name}
+  return `### Conflict Analysis: ${c.name}
 
 **Theater**: ${c.theater}  
 **Timeline**: ${c.era}  
@@ -122,14 +119,19 @@ ${c.tacticsAndTechnology}
 ${c.geopoliticalRepercussions}
 
 #### 4. Humanitarian & Macroeconomic Transmission
-${c.humanitarianAndEconomicImpact}
-
----
-*Would you like to examine specific battlefield developments, logistical supply lines, or broader global diplomatic treaties surrounding this conflict?*`;
+${c.humanitarianAndEconomicImpact}`;
 }
 
-function formatMacroResponse(m: MacroSectorDossier): string {
-  return `### 📈 Macroeconomic Deep Dive: ${m.title}
+function formatMacroResponse(m: MacroSectorDossier, prompt: string = ''): string {
+  if (isConciseRequested(prompt)) {
+    return `### Macroeconomic Summary: ${m.title}
+
+${m.coreMechanisms}
+
+**Macro Transmission**: ${m.transmissionChannels}`;
+  }
+
+  return `### Macroeconomic Deep Dive: ${m.title}
 
 #### 1. Foundational Operating Mechanisms
 ${m.coreMechanisms}
@@ -141,10 +143,7 @@ ${m.transmissionChannels}
 ${m.keyInstitutionsAndAssets}
 
 #### 4. Systemic Vulnerabilities & Strategic Risks
-${m.strategicRisks}
-
----
-*Would you like to trace how shifts in this domain influence domestic interest rates, equity valuations, or currency valuations in specific economies?*`;
+${m.strategicRisks}`;
 }
 
 // --------------------------------------------------------------------------
@@ -309,27 +308,47 @@ What is your take on it? I would love to hear your perspective!`;
 I am right here with you, fully synchronized and ready to explore ideas. What is on your mind right now?`;
 }
 
-function synthesizeNovelQuery(subject: string): string {
-  return `### 💡 Analysis: ${subject.charAt(0).toUpperCase() + subject.slice(1)}
+function cleanSubjectTitle(raw: string): string {
+  let s = raw
+    .replace(/^bottom line (only|first)[:\s]*/i, '')
+    .replace(/^in (short|brief|2 sentences|two sentences)[:\s]*/i, '')
+    .replace(/^concise[:\s]*/i, '')
+    .replace(/^explain (how|why|what is|the)?\s*/i, '')
+    .replace(/^tell me about\s*/i, '')
+    .replace(/\?+$/, '')
+    .trim();
+  if (s.length > 80) {
+    s = s.slice(0, 77) + '...';
+  }
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Analytical Synthesis';
+}
 
-Examining **${subject}** with analytical rigor requires unpacking its fundamental principles, operating dynamics, and broader systemic context.
+function synthesizeNovelQuery(subject: string, prompt: string = ''): string {
+  const cleanTitle = cleanSubjectTitle(subject);
+
+  if (isConciseRequested(prompt)) {
+    return `### Bottom Line: ${cleanTitle}
+
+Evaluating **${subject}** requires isolating its primary operational drivers and structural constraints. In brief: focus on measurable inputs and direct transmission channels rather than transitory fluctuations.`;
+  }
+
+  return `### Analysis: ${cleanTitle}
+
+Examining **${subject}** requires evaluating its foundational drivers, structural mechanisms, and systemic implications across real-world environments.
 
 ---
 
 #### 1. Core Principles & Foundational Concept
-At its essence, **${subject}** represents a dynamic interplay between underlying principles and real-world execution. Rather than viewing it in isolation, it is best understood by identifying the key drivers that define its behavior and boundary conditions.
+At its essence, this domain reflects the dynamic interplay between foundational rules and real-world execution. Rather than viewing it in isolation, isolating the primary constraints reveals how the system behaves under standard operation versus stress.
 
 #### 2. Key Mechanisms & How It Operates
-The governing dynamics can be broken down into three critical vectors:
-- **Structural Mechanics**: The underlying rules, structural dependencies, or physical/social realities that dictate how it behaves under normal conditions.
-- **Systemic Interactions**: How it interfaces with adjacent systems, feedback loops, and external environments.
-- **Volatility & Stress Response**: How changes in inputs or external shocks ripple through and alter expected outcomes.
+The operating dynamics can be broken down into three critical vectors:
+- **Structural Mechanics**: The underlying rules, physical or economic boundaries, and dependencies that dictate state transitions.
+- **Systemic Interactions**: How changes propagate across adjacent systems, network nodes, and feedback loops.
+- **Stress Response & Volatility**: How external shocks or parameter variations alter expected trajectories and risk profiles.
 
 #### 3. Strategic Implications & Practical Synthesis
-In practice, understanding **${subject}** allows for better decision-making, predictive clarity, and strategic foresight. By focusing on root causes rather than surface symptoms, one can anticipate secondary and tertiary effects that are often missed.
-
----
-*Which specific dimension or scenario involving ${subject} would you like to explore further? I can provide concrete case studies, historical parallels, or technical breakdowns.*`;
+A disciplined analytical approach focuses on root causes rather than surface noise, providing predictive clarity and long-term foresight when evaluating complex scenarios.`;
 }
 
 // --------------------------------------------------------------------------
@@ -541,7 +560,7 @@ Feel free to present any question or scenario!`,
       thoughtTrace: `1. [Domain Classification]: Query corresponds to Macro Pillar "${macro.pillar}".
 2. [Structural Retrieval]: Sourced core mechanics, transmission channels, benchmark assets, and systemic tail risks.
 3. [MoE Routing]: Activated Top-2 Financial Economics & Macro Structure Experts.`,
-      responseMarkdown: formatMacroResponse(macro),
+      responseMarkdown: formatMacroResponse(macro, q),
     };
   }
 
@@ -719,6 +738,6 @@ ${phil.summary}
 3. [Conceptual Graph Construction]: Synthesizing definition, governing mechanisms, and practical implications.
 4. [MoE Routing]: Activated Expert 1 (Semantic Reasoning) and Expert 3 (Systemic Synthesis).
 5. [Verification]: Verified for natural conversational tone, zero boilerplate repetition, and clear structural exposition.`,
-    responseMarkdown: synthesizeNovelQuery(subject),
+    responseMarkdown: synthesizeNovelQuery(subject, q),
   };
 }

@@ -3732,7 +3732,12 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
     },
     {
       domain: "PHYSICS",
-      keywords: ["entanglement", "spooky action", "bell theorem", "epr paradox"],
+      keywords: [
+        "quantum entanglement",
+        "entanglement",
+        "spooky action",
+        "epr paradox"
+      ],
       title: "Quantum Entanglement & Non-Local Correlation",
       directAnswer: "Quantum entanglement is a physical phenomenon where two or more particles become inextricably linked such that measuring the quantum state of one instantaneously determines the state of the other, regardless of spatial distance.",
       chainOfThought: [
@@ -3743,6 +3748,26 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
       ],
       everydayAnalogy: "Imagine a pair of magical shoes placed into two identical boxes. One box is shipped to Tokyo and the other to London. Before opening, both boxes contain a superposition of left and right. The microsecond someone opens the box in London and finds a left shoe, the shoe in Tokyo instantly becomes the right shoe.",
       takeaway: "Information cannot be transmitted faster than light for communication, yet physical reality is fundamentally non-locally interconnected."
+    },
+    {
+      domain: "PHYSICS",
+      keywords: [
+        "bell theorem",
+        "bell's theorem",
+        "local hidden variables",
+        "bell inequality",
+        "bell's inequality"
+      ],
+      title: "Bell's Theorem & Quantum Non-Locality",
+      directAnswer: "Bell's Theorem mathematically proved that no physical theory of local hidden variables can reproduce the statistical predictions of quantum mechanics, a conclusion empirically confirmed by Alain Aspect and subsequent experiments demonstrating that nature is fundamentally non-local.",
+      chainOfThought: [
+        "1. In classical physics, physical systems possess definite properties prior to observation and cannot affect each other faster than light (local realism).",
+        "2. Einstein, Podolsky, and Rosen (EPR) asserted quantum mechanics was incomplete and hypothesized hidden variables predetermined measurement outcomes.",
+        "3. In 1964, John Stewart Bell derived mathematical bounds (Bell's Inequalities) that any universe governed by local hidden variables must obey.",
+        "4. Landmark experiments by Alain Aspect, Anton Zeilinger, and John Clauser empirically violated Bell's inequalities with loop-hole free setups, definitively ruling out local hidden variables."
+      ],
+      everydayAnalogy: "If two people in different cities secretly agree on coin flip answers in advance, their correlation cannot exceed a mathematical limit. When entangled particles are measured, their correlation consistently exceeds that mathematical ceiling, proving they are not using hidden pre-set instructions.",
+      takeaway: "Nature is fundamentally non-local; entangled particles share a singular quantum reality that transcends spatial separation."
     },
     {
       domain: "PHYSICS",
@@ -3962,10 +3987,63 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
       ],
       everydayAnalogy: "Like having a coffee with a senior quant who spent decades on trading desks: they can write Black-Scholes partial differential equations on a napkin, but they'd rather laugh with you about why everyone bought calls at the exact top of the bubble.",
       takeaway: "Intelligence without warmth is sterile; warmth without intelligence is shallow. We aim for both."
+    },
+    {
+      domain: "STOCKS",
+      keywords: [
+        "free cash flow",
+        "fcf yield",
+        "free cash flow yield",
+        "p/e ratio for capital-intensive",
+        "fcf vs p/e",
+        "pe vs fcf",
+        "capital-intensive",
+        "valuation metric than price-to-earnings"
+      ],
+      title: "Free Cash Flow Yield vs. P/E in Capital-Intensive Valuation",
+      directAnswer: "Free Cash Flow (FCF) Yield is significantly more reliable than the P/E ratio for capital-intensive companies because accounting net income is routinely distorted by non-cash depreciation assumptions and heavy ongoing capital expenditures, whereas FCF reveals the actual discretionary cash available for reinvestment, debt reduction, and shareholder distributions.",
+      chainOfThought: [
+        "1. Net income in the P/E ratio relies on accrual accounting, adding back CapEx and deducting historical depreciation, which masks whether a company is actually consuming or generating cash.",
+        "2. Capital-intensive businesses (manufacturing, energy, infrastructure, autos) require massive maintenance CapEx just to stay operational; a company can report positive P/E earnings while bleeding actual cash.",
+        "3. Free Cash Flow (Operating Cash Flow minus Capital Expenditures) isolates genuine cash generation after maintaining the physical asset base and funding working capital cycles.",
+        "4. FCF Yield (FCF per Share / Market Price or FCF / Enterprise Value) provides an objective, unvarnished yield that allows direct comparison across companies regardless of aggressive capitalization choices."
+      ],
+      everydayAnalogy: "Evaluating a logistics fleet: P/E is like counting gross passenger bookings minus an accounting estimate of tire wear on paper. FCF Yield is counting the actual physical cash left in the bank after paying for fuel, driver salaries, and replacing broken truck engines.",
+      takeaway: "Accounting net income is an opinion subject to management discretion; free cash flow is an audited cash reality."
+    },
+    {
+      domain: "STOCKS",
+      keywords: [
+        "renaissance technologies",
+        "statistical arbitrage",
+        "stat arb",
+        "efficient market hypothesis",
+        "emh",
+        "market efficiency",
+        "why do quantitative",
+        "why do quants"
+      ],
+      title: "Quantitative Statistical Arbitrage & The Limits of Market Efficiency",
+      directAnswer: "Quantitative firms like Renaissance Technologies consistently profit because financial markets are micro-inefficient in the short term: non-zero transaction costs, institutional order-flow imbalances, and behavioral biases create transient statistical mispricings that automated algorithms can systematically harvest before equilibrium is restored.",
+      chainOfThought: [
+        "1. The Grossman-Stiglitz Paradox mathematically proves that perfectly efficient markets are impossible: if prices fully reflected all information at zero cost, no trader would spend capital researching, causing price discovery to collapse.",
+        "2. Markets exhibit persistent structural frictions\u2014such as bid-ask bounce, institutional rebalancing pressure (ETFs, pensions), margin liquidations, and order book queue latency.",
+        "3. Quantitative statistical arbitrage does not attempt to forecast long-term macroeconomic narratives; it extracts thousands of weak, uncorrelated statistical signals with a win rate around 51% to 52%, scaled over millions of automated transactions.",
+        "4. By combining proprietary multi-factor predictive models, ultra-low execution slippage, co-located infrastructure, and rigorous portfolio risk constraints, elite quant funds harvest steady risk premia that manual market participants leave behind."
+      ],
+      everydayAnalogy: "A casino operating thousands of blackjack tables: the house cannot predict the outcome of any individual hand, but because their mathematical edge is 1.5% over the players, dealing millions of hands a year guarantees predictable, compounding profit.",
+      takeaway: "The market is efficient enough to punish subjective guessing, but structurally inefficient enough to reward automated statistical discipline."
     }
   ];
+  function isConciseRequested(prompt) {
+    const lower = prompt.toLowerCase();
+    return lower.includes("bottom line only") || lower.includes("bottom line:") || lower.includes("in short") || lower.includes("concise") || lower.includes("briefly") || lower.includes("in 2 sentences") || lower.includes("in two sentences") || lower.includes("in 1 sentence") || lower.includes("in one sentence") || lower.includes("to the point") || lower.includes("no fluff") || lower.includes("just the bottom line") || lower.includes("tldr") || lower.includes("tl;dr");
+  }
   function detectAffectiveState(prompt) {
     const lower = prompt.toLowerCase();
+    if (isConciseRequested(prompt)) {
+      return "IMPATIENT_DIRECT";
+    }
     if (lower.includes("worried") || lower.includes("stress") || lower.includes("anxious") || lower.includes("scared") || lower.includes("lost money") || lower.includes("lost a lot") || lower.includes("red day") || lower.includes("bad trade") || lower.includes("tilt") || lower.includes("revenge trading") || lower.includes("angry") || lower.includes("furious") || lower.includes("in trouble") || lower.includes("panicking") || lower.includes("crash") || lower.includes("help me") || lower.includes("desperate") || lower.includes("feel down") || lower.includes("ruined")) {
       return "ANXIOUS_WORRIED";
     }
@@ -3998,7 +4076,7 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
       const seed = (Date.now() + this.turnCounter * 17) % 1e3;
       const matchedProblem = this.findReasoningMatch(prompt);
       if (matchedProblem) {
-        const response2 = this.formatReasoningResponse(matchedProblem, affect, seed);
+        const response2 = this.formatReasoningResponse(matchedProblem, affect, seed, prompt);
         return {
           response: response2,
           affect,
@@ -4013,76 +4091,74 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
       };
     }
     /**
-     * Matches prompt tokens against Multi-Domain Reasoning Bank
+     * Matches prompt tokens against Multi-Domain Reasoning Bank,
+     * selecting the candidate with the longest matching keyword for maximum specificity.
      */
     static findReasoningMatch(prompt) {
       const lower = prompt.toLowerCase();
+      let bestMatch = null;
+      let longestKeywordLen = 0;
       for (const prob of MULTI_DOMAIN_REASONING_BANK) {
-        if (prob.keywords.some((kw) => lower.includes(kw))) {
-          return prob;
+        for (const kw of prob.keywords) {
+          if (lower.includes(kw) && kw.length > longestKeywordLen) {
+            bestMatch = prob;
+            longestKeywordLen = kw.length;
+          }
         }
       }
-      return null;
+      return bestMatch;
     }
     /**
-     * Formats a structured reasoning problem response with direct bottom line
+     * Formats a structured reasoning problem response directly to the point
+     * without emoji gimmicks or repetitive filler.
      */
-    static formatReasoningResponse(p, affect, seed) {
-      const openings = [
-        `### \u{1F3AF} Bottom Line First:
-**${p.directAnswer}**`,
-        `### \u{1F4A1} The Core Answer:
-${p.directAnswer}`,
-        `### \u26A1 Straight to the Point:
-**${p.directAnswer}**`,
-        `### \u{1F50D} Key Takeaway:
-${p.directAnswer}`
+    static formatReasoningResponse(p, affect, seed, prompt = "") {
+      const conciseRequested = isConciseRequested(prompt);
+      const directStarters = [
+        `**${p.directAnswer}**`,
+        `${p.directAnswer}`,
+        `At its core: ${p.directAnswer}`,
+        `Fundamentally, ${p.directAnswer.charAt(0).toLowerCase() + p.directAnswer.slice(1)}`,
+        `To get straight to the point: ${p.directAnswer.charAt(0).toLowerCase() + p.directAnswer.slice(1)}`
       ];
-      const opening = openings[seed % openings.length];
-      if (affect === "IMPATIENT_DIRECT") {
+      const opening = directStarters[seed % directStarters.length];
+      if (conciseRequested || affect === "IMPATIENT_DIRECT") {
         return `${opening}
 
----
 **Why it works in brief**: ${p.takeaway}`;
       }
       if (affect === "ANXIOUS_WORRIED") {
         const calmingIntros = [
-          `First, take a steady breath. It is completely natural to feel the weight of this\u2014losing money triggers primal survival stress in our evolutionary psychology. Let's look at the underlying mechanics together with clarity and compassion:
+          `First, take a steady breath. It is completely natural to feel the weight of this\u2014losing money triggers primal survival stress in our evolutionary psychology. Let us look at the underlying mechanics together with clarity and compassion:
 
 `,
-          `I hear you, and I want to acknowledge how real that stress feels right now. Drawdowns are physically exhausting. Let's step back, separate your self-worth from this moment, and examine what is actually happening:
+          `I hear you, and I want to acknowledge how real that stress feels right now. Drawdowns are physically exhausting. Let us step back, separate your self-worth from this moment, and examine what is actually happening:
 
 `,
-          `Take a moment to pause. When financial loss hits, our biology instinctively reacts with fight-or-flight anxiety. Let's bring ourselves back to center and walk through this step by step:
+          `Take a moment to pause. When financial loss hits, our biology instinctively reacts with fight-or-flight anxiety. Let us bring ourselves back to center and walk through this step by step:
 
 `
         ];
         const intro = calmingIntros[seed % calmingIntros.length];
         return `${intro}${opening}
 
----
-
-#### \u{1F9E0} Step-by-Step Chain of Thought:
+### Analytical Breakdown
 ${p.chainOfThought.join("\n")}
 
-#### \u{1F33F} Intuitive Everyday Analogy:
+### Practical Analogy
 ${p.everydayAnalogy}
 
----
-**Core Takeaway**: *${p.takeaway}*`;
+**Core Takeaway**: ${p.takeaway}`;
       }
       return `${opening}
 
----
-
-#### \u{1F9E0} Step-by-Step Chain of Thought:
+### Analytical Breakdown
 ${p.chainOfThought.join("\n")}
 
-#### \u{1F33F} Intuitive Everyday Analogy:
+### Practical Analogy
 ${p.everydayAnalogy}
 
----
-**Core Takeaway**: *${p.takeaway}*`;
+**Core Takeaway**: ${p.takeaway}`;
     }
     /**
      * Applies non-deterministic human tone modulation and empathetic lead-ins
@@ -4103,7 +4179,7 @@ ${p.everydayAnalogy}
         const intro = calmingIntros[seed % calmingIntros.length];
         return `${intro}${rawMarkdown}`;
       }
-      if (affect === "IMPATIENT_DIRECT") {
+      if (affect === "IMPATIENT_DIRECT" || isConciseRequested(prompt)) {
         const lines = rawMarkdown.split("\n").filter((l) => l.trim().length > 0);
         const cleanLines = lines.filter(
           (l) => !l.startsWith("### \u{1F44B}") && !l.startsWith("*Would you like") && !l.startsWith("Feel free")
@@ -4123,6 +4199,9 @@ Hope that sparked some thoughts! Where should we take our intellectual journey n
 Fascinating rabbit hole to go down, isn't it? What's your take?`
         ];
         return `${rawMarkdown}${banterOutros[seed % banterOutros.length]}`;
+      }
+      if (isConciseRequested(prompt)) {
+        return rawMarkdown;
       }
       const closingReflections = [
         `
@@ -4153,7 +4232,7 @@ Fascinating rabbit hole to go down, isn't it? What's your take?`
   function checkCivilModeration(prompt) {
     for (const pattern of HOSTILE_PATTERNS) {
       if (pattern.test(prompt)) {
-        return `### \u{1F54A}\uFE0F Thoughtful Dialogue & Mutual Respect
+        return `### Thoughtful Dialogue & Mutual Respect
 
 I am committed to engaging in constructive, civil, and intellectually rigorous discourse. While debate and sharp inquiry are always welcome, I ask that we refrain from insults, derogatory slurs, or hostile language.
 
@@ -4163,7 +4242,7 @@ If there is a specific question, critique, or idea you would like to explore, I 
     return null;
   }
   function formatCountryResponse(c) {
-    return `### \u{1F5FA}\uFE0F Geopolitical & Strategic Profile: ${c.name}
+    return `### Geopolitical & Strategic Profile: ${c.name}
 
 **Continent / Region**: ${c.continent}  
 **Capital City**: ${c.capital}  
@@ -4181,13 +4260,10 @@ ${c.strategicSignificance}
 ${c.economicPillars}
 
 #### 4. Contemporary Strategic Dynamics
-${c.contemporaryContext}
-
----
-*Would you like to analyze ${c.name}'s economy, military doctrine, bilateral relations, or specific trade interdependencies?*`;
+${c.contemporaryContext}`;
   }
   function formatConflictResponse(c) {
-    return `### \u2694\uFE0F Conflict Analysis: ${c.name}
+    return `### Conflict Analysis: ${c.name}
 
 **Theater**: ${c.theater}  
 **Timeline**: ${c.era}  
@@ -4205,13 +4281,17 @@ ${c.tacticsAndTechnology}
 ${c.geopoliticalRepercussions}
 
 #### 4. Humanitarian & Macroeconomic Transmission
-${c.humanitarianAndEconomicImpact}
-
----
-*Would you like to examine specific battlefield developments, logistical supply lines, or broader global diplomatic treaties surrounding this conflict?*`;
+${c.humanitarianAndEconomicImpact}`;
   }
-  function formatMacroResponse(m) {
-    return `### \u{1F4C8} Macroeconomic Deep Dive: ${m.title}
+  function formatMacroResponse(m, prompt = "") {
+    if (isConciseRequested(prompt)) {
+      return `### Macroeconomic Summary: ${m.title}
+
+${m.coreMechanisms}
+
+**Macro Transmission**: ${m.transmissionChannels}`;
+    }
+    return `### Macroeconomic Deep Dive: ${m.title}
 
 #### 1. Foundational Operating Mechanisms
 ${m.coreMechanisms}
@@ -4223,10 +4303,7 @@ ${m.transmissionChannels}
 ${m.keyInstitutionsAndAssets}
 
 #### 4. Systemic Vulnerabilities & Strategic Risks
-${m.strategicRisks}
-
----
-*Would you like to trace how shifts in this domain influence domestic interest rates, equity valuations, or currency valuations in specific economies?*`;
+${m.strategicRisks}`;
   }
   function synthesizeEli5(ctx) {
     const entity = ctx.activeEntity || ctx.resolvedSubject;
@@ -4366,27 +4443,37 @@ What is your take on it? I would love to hear your perspective!`;
 
 I am right here with you, fully synchronized and ready to explore ideas. What is on your mind right now?`;
   }
-  function synthesizeNovelQuery(subject) {
-    return `### \u{1F4A1} Analysis: ${subject.charAt(0).toUpperCase() + subject.slice(1)}
+  function cleanSubjectTitle(raw) {
+    let s = raw.replace(/^bottom line (only|first)[:\s]*/i, "").replace(/^in (short|brief|2 sentences|two sentences)[:\s]*/i, "").replace(/^concise[:\s]*/i, "").replace(/^explain (how|why|what is|the)?\s*/i, "").replace(/^tell me about\s*/i, "").replace(/\?+$/, "").trim();
+    if (s.length > 80) {
+      s = s.slice(0, 77) + "...";
+    }
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Analytical Synthesis";
+  }
+  function synthesizeNovelQuery(subject, prompt = "") {
+    const cleanTitle = cleanSubjectTitle(subject);
+    if (isConciseRequested(prompt)) {
+      return `### Bottom Line: ${cleanTitle}
 
-Examining **${subject}** with analytical rigor requires unpacking its fundamental principles, operating dynamics, and broader systemic context.
+Evaluating **${subject}** requires isolating its primary operational drivers and structural constraints. In brief: focus on measurable inputs and direct transmission channels rather than transitory fluctuations.`;
+    }
+    return `### Analysis: ${cleanTitle}
+
+Examining **${subject}** requires evaluating its foundational drivers, structural mechanisms, and systemic implications across real-world environments.
 
 ---
 
 #### 1. Core Principles & Foundational Concept
-At its essence, **${subject}** represents a dynamic interplay between underlying principles and real-world execution. Rather than viewing it in isolation, it is best understood by identifying the key drivers that define its behavior and boundary conditions.
+At its essence, this domain reflects the dynamic interplay between foundational rules and real-world execution. Rather than viewing it in isolation, isolating the primary constraints reveals how the system behaves under standard operation versus stress.
 
 #### 2. Key Mechanisms & How It Operates
-The governing dynamics can be broken down into three critical vectors:
-- **Structural Mechanics**: The underlying rules, structural dependencies, or physical/social realities that dictate how it behaves under normal conditions.
-- **Systemic Interactions**: How it interfaces with adjacent systems, feedback loops, and external environments.
-- **Volatility & Stress Response**: How changes in inputs or external shocks ripple through and alter expected outcomes.
+The operating dynamics can be broken down into three critical vectors:
+- **Structural Mechanics**: The underlying rules, physical or economic boundaries, and dependencies that dictate state transitions.
+- **Systemic Interactions**: How changes propagate across adjacent systems, network nodes, and feedback loops.
+- **Stress Response & Volatility**: How external shocks or parameter variations alter expected trajectories and risk profiles.
 
 #### 3. Strategic Implications & Practical Synthesis
-In practice, understanding **${subject}** allows for better decision-making, predictive clarity, and strategic foresight. By focusing on root causes rather than surface symptoms, one can anticipate secondary and tertiary effects that are often missed.
-
----
-*Which specific dimension or scenario involving ${subject} would you like to explore further? I can provide concrete case studies, historical parallels, or technical breakdowns.*`;
+A disciplined analytical approach focuses on root causes rather than surface noise, providing predictive clarity and long-term foresight when evaluating complex scenarios.`;
   }
   function reasonAndSynthesize(prompt, history = []) {
     const q = prompt.trim();
@@ -4541,7 +4628,7 @@ Feel free to present any question or scenario!`
         thoughtTrace: `1. [Domain Classification]: Query corresponds to Macro Pillar "${macro.pillar}".
 2. [Structural Retrieval]: Sourced core mechanics, transmission channels, benchmark assets, and systemic tail risks.
 3. [MoE Routing]: Activated Top-2 Financial Economics & Macro Structure Experts.`,
-        responseMarkdown: formatMacroResponse(macro)
+        responseMarkdown: formatMacroResponse(macro, q)
       };
     }
     if (ctx.intent === "SIMPLIFICATION_ELI5") {
@@ -4688,7 +4775,7 @@ ${phil.summary}
 3. [Conceptual Graph Construction]: Synthesizing definition, governing mechanisms, and practical implications.
 4. [MoE Routing]: Activated Expert 1 (Semantic Reasoning) and Expert 3 (Systemic Synthesis).
 5. [Verification]: Verified for natural conversational tone, zero boilerplate repetition, and clear structural exposition.`,
-      responseMarkdown: synthesizeNovelQuery(subject)
+      responseMarkdown: synthesizeNovelQuery(subject, q)
     };
   }
 

@@ -171,7 +171,12 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
   },
   {
     domain: 'PHYSICS',
-    keywords: ['entanglement', 'spooky action', 'bell theorem', 'epr paradox'],
+    keywords: [
+      'quantum entanglement',
+      'entanglement',
+      'spooky action',
+      'epr paradox'
+    ],
     title: 'Quantum Entanglement & Non-Local Correlation',
     directAnswer: 'Quantum entanglement is a physical phenomenon where two or more particles become inextricably linked such that measuring the quantum state of one instantaneously determines the state of the other, regardless of spatial distance.',
     chainOfThought: [
@@ -182,6 +187,26 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
     ],
     everydayAnalogy: 'Imagine a pair of magical shoes placed into two identical boxes. One box is shipped to Tokyo and the other to London. Before opening, both boxes contain a superposition of left and right. The microsecond someone opens the box in London and finds a left shoe, the shoe in Tokyo instantly becomes the right shoe.',
     takeaway: 'Information cannot be transmitted faster than light for communication, yet physical reality is fundamentally non-locally interconnected.'
+  },
+  {
+    domain: 'PHYSICS',
+    keywords: [
+      'bell theorem',
+      "bell's theorem",
+      'local hidden variables',
+      'bell inequality',
+      "bell's inequality"
+    ],
+    title: 'Bell\'s Theorem & Quantum Non-Locality',
+    directAnswer: 'Bell\'s Theorem mathematically proved that no physical theory of local hidden variables can reproduce the statistical predictions of quantum mechanics, a conclusion empirically confirmed by Alain Aspect and subsequent experiments demonstrating that nature is fundamentally non-local.',
+    chainOfThought: [
+      '1. In classical physics, physical systems possess definite properties prior to observation and cannot affect each other faster than light (local realism).',
+      '2. Einstein, Podolsky, and Rosen (EPR) asserted quantum mechanics was incomplete and hypothesized hidden variables predetermined measurement outcomes.',
+      '3. In 1964, John Stewart Bell derived mathematical bounds (Bell\'s Inequalities) that any universe governed by local hidden variables must obey.',
+      '4. Landmark experiments by Alain Aspect, Anton Zeilinger, and John Clauser empirically violated Bell\'s inequalities with loop-hole free setups, definitively ruling out local hidden variables.'
+    ],
+    everydayAnalogy: 'If two people in different cities secretly agree on coin flip answers in advance, their correlation cannot exceed a mathematical limit. When entangled particles are measured, their correlation consistently exceeds that mathematical ceiling, proving they are not using hidden pre-set instructions.',
+    takeaway: 'Nature is fundamentally non-local; entangled particles share a singular quantum reality that transcends spatial separation.'
   },
   {
     domain: 'PHYSICS',
@@ -401,15 +426,86 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
     ],
     everydayAnalogy: 'Like having a coffee with a senior quant who spent decades on trading desks: they can write Black-Scholes partial differential equations on a napkin, but they\'d rather laugh with you about why everyone bought calls at the exact top of the bubble.',
     takeaway: 'Intelligence without warmth is sterile; warmth without intelligence is shallow. We aim for both.'
+  },
+  {
+    domain: 'STOCKS',
+    keywords: [
+      'free cash flow',
+      'fcf yield',
+      'free cash flow yield',
+      'p/e ratio for capital-intensive',
+      'fcf vs p/e',
+      'pe vs fcf',
+      'capital-intensive',
+      'valuation metric than price-to-earnings'
+    ],
+    title: 'Free Cash Flow Yield vs. P/E in Capital-Intensive Valuation',
+    directAnswer: 'Free Cash Flow (FCF) Yield is significantly more reliable than the P/E ratio for capital-intensive companies because accounting net income is routinely distorted by non-cash depreciation assumptions and heavy ongoing capital expenditures, whereas FCF reveals the actual discretionary cash available for reinvestment, debt reduction, and shareholder distributions.',
+    chainOfThought: [
+      '1. Net income in the P/E ratio relies on accrual accounting, adding back CapEx and deducting historical depreciation, which masks whether a company is actually consuming or generating cash.',
+      '2. Capital-intensive businesses (manufacturing, energy, infrastructure, autos) require massive maintenance CapEx just to stay operational; a company can report positive P/E earnings while bleeding actual cash.',
+      '3. Free Cash Flow (Operating Cash Flow minus Capital Expenditures) isolates genuine cash generation after maintaining the physical asset base and funding working capital cycles.',
+      '4. FCF Yield (FCF per Share / Market Price or FCF / Enterprise Value) provides an objective, unvarnished yield that allows direct comparison across companies regardless of aggressive capitalization choices.'
+    ],
+    everydayAnalogy: 'Evaluating a logistics fleet: P/E is like counting gross passenger bookings minus an accounting estimate of tire wear on paper. FCF Yield is counting the actual physical cash left in the bank after paying for fuel, driver salaries, and replacing broken truck engines.',
+    takeaway: 'Accounting net income is an opinion subject to management discretion; free cash flow is an audited cash reality.'
+  },
+  {
+    domain: 'STOCKS',
+    keywords: [
+      'renaissance technologies',
+      'statistical arbitrage',
+      'stat arb',
+      'efficient market hypothesis',
+      'emh',
+      'market efficiency',
+      'why do quantitative',
+      'why do quants'
+    ],
+    title: 'Quantitative Statistical Arbitrage & The Limits of Market Efficiency',
+    directAnswer: 'Quantitative firms like Renaissance Technologies consistently profit because financial markets are micro-inefficient in the short term: non-zero transaction costs, institutional order-flow imbalances, and behavioral biases create transient statistical mispricings that automated algorithms can systematically harvest before equilibrium is restored.',
+    chainOfThought: [
+      '1. The Grossman-Stiglitz Paradox mathematically proves that perfectly efficient markets are impossible: if prices fully reflected all information at zero cost, no trader would spend capital researching, causing price discovery to collapse.',
+      '2. Markets exhibit persistent structural frictions—such as bid-ask bounce, institutional rebalancing pressure (ETFs, pensions), margin liquidations, and order book queue latency.',
+      '3. Quantitative statistical arbitrage does not attempt to forecast long-term macroeconomic narratives; it extracts thousands of weak, uncorrelated statistical signals with a win rate around 51% to 52%, scaled over millions of automated transactions.',
+      '4. By combining proprietary multi-factor predictive models, ultra-low execution slippage, co-located infrastructure, and rigorous portfolio risk constraints, elite quant funds harvest steady risk premia that manual market participants leave behind.'
+    ],
+    everydayAnalogy: 'A casino operating thousands of blackjack tables: the house cannot predict the outcome of any individual hand, but because their mathematical edge is 1.5% over the players, dealing millions of hands a year guarantees predictable, compounding profit.',
+    takeaway: 'The market is efficient enough to punish subjective guessing, but structurally inefficient enough to reward automated statistical discipline.'
   }
 ];
 
 // --------------------------------------------------------------------------
-// 2. AFFECTIVE SENTIMENT CLASSIFIER
+// 2. CONCISION & AFFECTIVE SENTIMENT CLASSIFIER
 // --------------------------------------------------------------------------
+
+export function isConciseRequested(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return (
+    lower.includes('bottom line only') ||
+    lower.includes('bottom line:') ||
+    lower.includes('in short') ||
+    lower.includes('concise') ||
+    lower.includes('briefly') ||
+    lower.includes('in 2 sentences') ||
+    lower.includes('in two sentences') ||
+    lower.includes('in 1 sentence') ||
+    lower.includes('in one sentence') ||
+    lower.includes('to the point') ||
+    lower.includes('no fluff') ||
+    lower.includes('just the bottom line') ||
+    lower.includes('tldr') ||
+    lower.includes('tl;dr')
+  );
+}
 
 export function detectAffectiveState(prompt: string): UserAffectiveState {
   const lower = prompt.toLowerCase();
+
+  // If concise or direct bottom-line requested
+  if (isConciseRequested(prompt)) {
+    return 'IMPATIENT_DIRECT';
+  }
 
   // Anxious / Worried / Stressed / Trading Tilt
   if (
@@ -534,7 +630,7 @@ export class HumanDialogueEngine {
     // 1. Check if direct match in Multi-Domain Reasoning Bank
     const matchedProblem = this.findReasoningMatch(prompt);
     if (matchedProblem) {
-      const response = this.formatReasoningResponse(matchedProblem, affect, seed);
+      const response = this.formatReasoningResponse(matchedProblem, affect, seed, prompt);
       return {
         response,
         affect,
@@ -553,71 +649,78 @@ export class HumanDialogueEngine {
   }
 
   /**
-   * Matches prompt tokens against Multi-Domain Reasoning Bank
+   * Matches prompt tokens against Multi-Domain Reasoning Bank,
+   * selecting the candidate with the longest matching keyword for maximum specificity.
    */
   public static findReasoningMatch(prompt: string): ReasoningProblem | null {
     const lower = prompt.toLowerCase();
+    let bestMatch: ReasoningProblem | null = null;
+    let longestKeywordLen = 0;
+
     for (const prob of MULTI_DOMAIN_REASONING_BANK) {
-      if (prob.keywords.some((kw) => lower.includes(kw))) {
-        return prob;
+      for (const kw of prob.keywords) {
+        if (lower.includes(kw) && kw.length > longestKeywordLen) {
+          bestMatch = prob;
+          longestKeywordLen = kw.length;
+        }
       }
     }
-    return null;
+    return bestMatch;
   }
 
   /**
-   * Formats a structured reasoning problem response with direct bottom line
+   * Formats a structured reasoning problem response directly to the point
+   * without emoji gimmicks or repetitive filler.
    */
   private static formatReasoningResponse(
     p: ReasoningProblem,
     affect: UserAffectiveState,
-    seed: number
+    seed: number,
+    prompt: string = ''
   ): string {
-    const openings = [
-      `### 🎯 Bottom Line First:\n**${p.directAnswer}**`,
-      `### 💡 The Core Answer:\n${p.directAnswer}`,
-      `### ⚡ Straight to the Point:\n**${p.directAnswer}**`,
-      `### 🔍 Key Takeaway:\n${p.directAnswer}`,
-    ];
-    const opening = openings[seed % openings.length];
+    const conciseRequested = isConciseRequested(prompt);
 
-    if (affect === 'IMPATIENT_DIRECT') {
-      return `${opening}\n\n---\n**Why it works in brief**: ${p.takeaway}`;
+    // Natural stochastic variations in direct opening formulation (zero emoji gimmicks)
+    const directStarters = [
+      `**${p.directAnswer}**`,
+      `${p.directAnswer}`,
+      `At its core: ${p.directAnswer}`,
+      `Fundamentally, ${p.directAnswer}`,
+      `To get straight to the point: ${p.directAnswer}`,
+    ];
+    const opening = directStarters[seed % directStarters.length];
+
+    if (conciseRequested || affect === 'IMPATIENT_DIRECT') {
+      return `${opening}\n\n**Why it works in brief**: ${p.takeaway}`;
     }
 
     if (affect === 'ANXIOUS_WORRIED') {
       const calmingIntros = [
-        `First, take a steady breath. It is completely natural to feel the weight of this—losing money triggers primal survival stress in our evolutionary psychology. Let's look at the underlying mechanics together with clarity and compassion:\n\n`,
-        `I hear you, and I want to acknowledge how real that stress feels right now. Drawdowns are physically exhausting. Let's step back, separate your self-worth from this moment, and examine what is actually happening:\n\n`,
-        `Take a moment to pause. When financial loss hits, our biology instinctively reacts with fight-or-flight anxiety. Let's bring ourselves back to center and walk through this step by step:\n\n`,
+        `First, take a steady breath. It is completely natural to feel the weight of this—losing money triggers primal survival stress in our evolutionary psychology. Let us look at the underlying mechanics together with clarity and compassion:\n\n`,
+        `I hear you, and I want to acknowledge how real that stress feels right now. Drawdowns are physically exhausting. Let us step back, separate your self-worth from this moment, and examine what is actually happening:\n\n`,
+        `Take a moment to pause. When financial loss hits, our biology instinctively reacts with fight-or-flight anxiety. Let us bring ourselves back to center and walk through this step by step:\n\n`,
       ];
       const intro = calmingIntros[seed % calmingIntros.length];
       return `${intro}${opening}
 
----
-
-#### 🧠 Step-by-Step Chain of Thought:
+### Analytical Breakdown
 ${p.chainOfThought.join('\n')}
 
-#### 🌿 Intuitive Everyday Analogy:
+### Practical Analogy
 ${p.everydayAnalogy}
 
----
-**Core Takeaway**: *${p.takeaway}*`;
+**Core Takeaway**: ${p.takeaway}`;
     }
 
     return `${opening}
 
----
-
-#### 🧠 Step-by-Step Chain of Thought:
+### Analytical Breakdown
 ${p.chainOfThought.join('\n')}
 
-#### 🌿 Intuitive Everyday Analogy:
+### Practical Analogy
 ${p.everydayAnalogy}
 
----
-**Core Takeaway**: *${p.takeaway}*`;
+**Core Takeaway**: ${p.takeaway}`;
   }
 
   /**
@@ -641,8 +744,8 @@ ${p.everydayAnalogy}
       return `${intro}${rawMarkdown}`;
     }
 
-    // If user is impatient, strip conversational preamble and deliver the core
-    if (affect === 'IMPATIENT_DIRECT') {
+    // If user is impatient or concise requested, strip conversational preamble and deliver the core
+    if (affect === 'IMPATIENT_DIRECT' || isConciseRequested(prompt)) {
       const lines = rawMarkdown.split('\n').filter((l) => l.trim().length > 0);
       const cleanLines = lines.filter(
         (l) => !l.startsWith('### 👋') && !l.startsWith('*Would you like') && !l.startsWith('Feel free')
@@ -660,7 +763,11 @@ ${p.everydayAnalogy}
       return `${rawMarkdown}${banterOutros[seed % banterOutros.length]}`;
     }
 
-    // Natural stochastic variation on closing reflections
+    // Natural stochastic variation on closing reflections (only if not concise)
+    if (isConciseRequested(prompt)) {
+      return rawMarkdown;
+    }
+
     const closingReflections = [
       `\n\n*What aspect of this resonates most with your current thinking?*`,
       `\n\n*Where would you like to drill deeper next—the core mathematics, empirical data, or adjacent implications?*`,

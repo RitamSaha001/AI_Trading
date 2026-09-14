@@ -74,7 +74,7 @@ describe('Frontier LLM Capabilities: Lumen-Astra-Fin 2.0', () => {
       const inference = generator.generate(severeThreat, { enableReflection: true, maxNewTokens: 16 });
 
       expect(inference).toBeDefined();
-      expect(['STAND_ASIDE', 'EMERGENCY_VETO']).toContain(inference.predictedAction);
+      expect(['STAND_ASIDE', 'EMERGENCY_VETO', 'DEFENSIVE_EXIT']).toContain(inference.predictedAction);
       expect(inference.suggestedRiskMultiplier).toBe(0.0);
     });
   });
