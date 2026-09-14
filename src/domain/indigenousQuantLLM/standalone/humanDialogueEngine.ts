@@ -544,6 +544,62 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
     ],
     everydayAnalogy: 'A homeowner with a massive adjustable-rate mortgage: when interest rates were 1%, monthly payments were manageable. When interest rates jump to 6%, interest eats their entire salary, forcing the bank to renegotiate or watch the mortgage default.',
     takeaway: 'When sovereign debt reaches critical mass, inflation becomes the path of least political resistance to liquidate excess real obligations.'
+  },
+  {
+    domain: 'STOCKS',
+    keywords: ['vpin', 'order flow toxicity', 'adverse selection', 'market maker inventory', 'liquidity vacuum'],
+    title: 'VPIN (Volume-Synchronized Probability of Toxicity) & Market Maker Inventory Risk',
+    directAnswer: 'Volume-Synchronized Probability of Toxicity (VPIN) measures the proportion of trade volume initiated by informed traders; when VPIN spikes during sudden volatility shocks, market makers face severe adverse selection, inventory skew, and liquidity evaporation.',
+    chainOfThought: [
+      '1. VPIN samples volume in equal-sized buckets rather than calendar time, isolating order flow imbalance (V_tau^B - V_tau^S) relative to bucket size V.',
+      '2. In an aggressive sell-off, market maker bid fills accumulate rapidly while ask orders stay untouched, ballooning long inventory in a collapsing market.',
+      '3. Because quoting at normal spreads guarantees negative expected value (E[P&L] < 0) against informed flow, market makers widen spreads or withdraw quotes completely.',
+      '4. Systematic quant desks apply dynamic spread widening and position decay dampeners whenever trailing 5-bucket VPIN exceeds the 90th percentile.'
+    ],
+    everydayAnalogy: 'A currency exchange booth during an unexpected coup: suddenly every single person arriving is frantically selling the local currency to buy dollars. If the booth keeps buying local currency at yesterday\'s exchange rate, they will be wiped out before noon.',
+    takeaway: 'When order flow toxicity spikes, passive liquidity providers become the primary funding source for informed traders unless dynamic risk limits intervene.'
+  },
+  {
+    domain: 'WORLD_AFFAIRS',
+    keywords: ['rbi liquidity', 'withdrawal of accommodation', 'wacr', 'banking deficit', 'liquidity adjustment facility'],
+    title: 'RBI Monetary Transmission: Hawkish Stance vs. Banking System Liquidity Deficit',
+    directAnswer: 'When the Reserve Bank of India maintains a Hawkish "Withdrawal of Accommodation" stance while domestic banking liquidity enters deficit, the Weighted Average Call Rate (WACR) is pushed toward the Marginal Standing Facility ceiling, tightening commercial lending conditions more aggressively than nominal repo rates indicate.',
+    chainOfThought: [
+      '1. Policy friction arises because the Hawkish stance anchors CPI inflation expectations, while systemic liquidity deficits strain bank deposit growth.',
+      '2. As interbank cash tightens, WACR drifts to the upper LAF corridor (Repo + 25 bps), causing short-term CD and CP yields to spike.',
+      '3. To keep interbank rates anchored without sending an unintended dovish policy signal, the RBI utilizes Variable Rate Repo (VRR) auctions rather than lowering the benchmark repo rate.',
+      '4. This policy operational tension is tolerated until core inflation decelerates sustainably toward the 4% midpoint target.'
+    ],
+    everydayAnalogy: 'Toughening security at a stadium entrance (hawkish stance) while simultaneously narrowing the turnstile gates (liquidity deficit): the crowd moves through much slower, and tickets cost more on the secondary market.',
+    takeaway: 'Operational liquidity conditions dictate actual market interest rates far more directly than headline central bank announcements.'
+  },
+  {
+    domain: 'DEMOGRAPHY',
+    keywords: ['south korea fertility', '0.72 fertility', 'korea pension solvency', 'demographic contraction', 'east asia aging'],
+    title: 'Demographic Contraction & Sovereign Debt Sustainability (South Korea TFR 0.72 Case)',
+    directAnswer: 'A Total Fertility Rate of 0.72 represents an unprecedented structural labor contraction; by 2040, potential GDP growth falls below 1.0%, the worker-to-retiree ratio drops below 1.5:1, and sovereign pension depletion forces large-scale asset liquidation and higher sovereign debt.',
+    chainOfThought: [
+      '1. Solow-Swan growth accounting: contraction of the active labor force (-1.5% annually) acts as a persistent drag on potential GDP that robotics automation cannot entirely offset.',
+      '2. National Pension Service (NPS) transitions from a net accumulator of global assets to a net seller by ~2040–2045 to fund elderly claims.',
+      '3. Municipal and national tax base erosion coincides with escalating healthcare outlays, driving sovereign debt-to-GDP from ~50% toward 100%+',
+      '4. Structural remedies face high barriers: service-sector productivity ceilings and cultural/political resistance to large-scale immigration.'
+    ],
+    everydayAnalogy: 'A small business where four veteran workers retire every year but only one apprentice is hired: even if the apprentice works twice as fast, the company will eventually fail to complete its contracts.',
+    takeaway: 'No technology or fiscal stimulus can sustain a modern welfare state if the working-age tax base contracts faster than productivity can expand.'
+  },
+  {
+    domain: 'STOCKS',
+    keywords: ['share buybacks vs capex', 'buyback vs capex', 'cost of capital 5%', 'roic vs wacc', 'capital allocation framework'],
+    title: 'Executive Capital Allocation: Share Buybacks vs. CapEx Under 5% Benchmark Rates',
+    directAnswer: 'In a 5% interest rate environment, capital allocation requires strict hurdle discipline: share buybacks are only accretive when shares trade at a clear discount to DCF fair value, whereas CapEx expansion must generate expected Return on Invested Capital (RoIC) exceeding the elevated WACC by at least 300 basis points.',
+    chainOfThought: [
+      '1. Higher risk-free rates raise the hurdle rate across all corporate capital deployment; cheap debt financial engineering is no longer viable.',
+      '2. Share Buyback Rule: Compare earnings yield (E/P) against corporate borrowing costs. Buying back shares at elevated P/E multiples (>25x) destroys economic value if internal RoIC exceeds the buyback yield.',
+      '3. CapEx Rule: Deploy to CapEx only when projects build structural scale moats (proprietary compute clusters, proprietary data pipelines) with verifiable RoIC > 14%.',
+      '4. Downside Flexibility: Buyback authorizations can be paused immediately during market dislocations, whereas long-term CapEx commits multi-year capital with heavy depreciation drag.'
+    ],
+    everydayAnalogy: 'Choosing whether to use extra cash to buy back equity from your business partner or invest in a new automated production line: buying out the partner is foolish if the business is overpriced, while the new machine pays off only if customer demand easily beats the bank interest rate.',
+    takeaway: 'When money is no longer free, capital allocation discipline becomes the ultimate differentiator between enduring compounders and value destroyers.'
   }
 ];
 

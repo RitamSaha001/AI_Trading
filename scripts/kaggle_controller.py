@@ -41,6 +41,7 @@ def update_metadata_username(username):
     with open(METADATA_FILE, 'r') as f:
         meta = json.load(f)
     meta['id'] = f"{username}/lumen-alpha-3b-training"
+    meta['machine_shape'] = "NvidiaTeslaT4"
     with open(METADATA_FILE, 'w') as f:
         json.dump(meta, f, indent=2)
     return True
@@ -60,10 +61,10 @@ def cmd_push(args):
     username = get_kaggle_username()
     if username:
         update_metadata_username(username)
-        print(f"[INFO] Updated Kaggle kernel ID to: {username}/lumen-alpha-3b-training")
+        print(f"[INFO] Updated Kaggle kernel ID to: {username}/lumen-alpha-3b-training (Accelerator: NvidiaTeslaT4)")
 
     print(f"[INFO] Pushing notebook from {KAGGLE_DIR} to Kaggle Cloud...")
-    cmd = ["kaggle", "kernels", "push", "-p", KAGGLE_DIR]
+    cmd = ["kaggle", "kernels", "push", "-p", KAGGLE_DIR, "--accelerator", "NvidiaTeslaT4"]
     res = subprocess.run(cmd)
     if res.returncode == 0:
         print("[SUCCESS] Kernel pushed to Kaggle. Training has started on Cloud GPU/TPU!")
@@ -90,12 +91,54 @@ def cmd_download(args):
     cmd = ["kaggle", "kernels", "output", kernel_id, "-p", output_dir]
     subprocess.run(cmd)
 
+def cmd_push_sft(args):
+    if not check_credentials():
+        print("[ERROR] Kaggle credentials required.")
+        sys.exit(1)
+    username = get_kaggle_username()
+    sft_meta = os.path.join(KAGGLE_DIR, 'sft-kernel-metadata.json')
+    if os.path.exists(sft_meta):
+        with open(sft_meta, 'r') as f:
+            data = json.load(f)
+        data['id'] = f"{username}/lumen-alpha-3b-conversational-sft"
+        data['kernel_sources'] = [f"{username}/lumen-alpha-3b-training"]
+        with open(sft_meta, 'w') as f:
+            json.dump(data, f, indent=2)
+    # Temporary copy metadata to kernel-metadata.json for push
+    active_meta = os.path.join(KAGGLE_DIR, 'kernel-metadata.json')
+    backup_meta = os.path.join(KAGGLE_DIR, 'base-kernel-metadata.json')
+    if os.path.exists(active_meta):
+        os.rename(active_meta, backup_meta)
+    try:
+        with open(sft_meta, 'r') as f:
+            meta_content = f.read()
+        with open(active_meta, 'w') as f:
+            f.write(meta_content)
+        print(f"[INFO] Pushing Stage 2 Conversational SFT to Kaggle Cloud...")
+        cmd = ["kaggle", "kernels", "push", "-p", KAGGLE_DIR, "--accelerator", "NvidiaTeslaT4"]
+        res = subprocess.run(cmd)
+        if res.returncode == 0:
+            print("[SUCCESS] Stage 2 Conversational SFT pushed to Kaggle Cloud!")
+    finally:
+        if os.path.exists(backup_meta):
+            if os.path.exists(active_meta):
+                os.remove(active_meta)
+            os.rename(backup_meta, active_meta)
+
+def cmd_status_sft(args):
+    username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
+    kernel_id = f"{username}/lumen-alpha-3b-conversational-sft"
+    cmd = ["kaggle", "kernels", "status", kernel_id]
+    subprocess.run(cmd)
+
 def main():
     parser = argparse.ArgumentParser(description="Lumen-Alpha 3B Kaggle Controller")
     subparsers = parser.add_subparsers(dest="action", required=True)
 
     subparsers.add_parser("push", help="Push and start remote Kaggle GPU training run")
-    subparsers.add_parser("status", help="Check remote training status (queued, running, complete)")
+    subparsers.add_parser("push-sft", help="Push and start Stage 2 Conversational SFT run")
+    subparsers.add_parser("status", help="Check base training status (queued, running, complete)")
+    subparsers.add_parser("status-sft", help="Check Stage 2 Conversational SFT status")
     subparsers.add_parser("logs", help="Fetch remote training logs and loss curves")
     dl = subparsers.add_parser("download", help="Download trained model checkpoint from Kaggle")
     dl.add_argument("--output", type=str, default="artifacts/models")
@@ -103,8 +146,12 @@ def main():
     args = parser.parse_args()
     if args.action == "push":
         cmd_push(args)
+    elif args.action == "push-sft":
+        cmd_push_sft(args)
     elif args.action == "status":
         cmd_status(args)
+    elif args.action == "status-sft":
+        cmd_status_sft(args)
     elif args.action == "logs":
         cmd_logs(args)
     elif args.action == "download":
