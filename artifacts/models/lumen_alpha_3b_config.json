@@ -1,0 +1,17 @@
+{
+  "vocab_size": 2048,
+  "d_model": 1024,
+  "n_layers": 16,
+  "n_heads": 16,
+  "d_head": 64,
+  "n_experts": 22,
+  "top_k": 2,
+  "d_hidden": 2730,
+  "max_seq_len": 256,
+  "n_actions": 14,
+  "dropout": 0.05,
+  "learning_rate": 0.00015,
+  "min_learning_rate": 1.5e-05,
+  "weight_decay": 0.01,
+  "aux_loss_coeff": 0.01
+}

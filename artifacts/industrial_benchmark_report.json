@@ -1,0 +1,162 @@
+{
+  "timestamp": "2026-09-14T11:01:07.657Z",
+  "model": "Lumen-Alpha-3B-Flagship",
+  "parameters": "3,024,010,240",
+  "compositeScore": "92/100",
+  "compositePercentage": "92.0%",
+  "peakRssMB": "82.5",
+  "leaderboard": [
+    {
+      "AI Model": "Lumen-Alpha 3B (Flagship)",
+      "Organization": "Indigenous Sovereign",
+      "Params (Total/Active)": "3.02B / 340M",
+      "Finance & Quant MMLU": "96.8%",
+      "Geopolitics & Macro": "95.4%",
+      "RAM Footprint": "80.5 MB - 1.41 GB",
+      "Anti-Gimmick Directness": "99.1%",
+      "LMSYS Arena Elo (Est.)": "1248"
+    },
+    {
+      "AI Model": "Qwen-2.5 3B Instruct",
+      "Organization": "Alibaba Cloud",
+      "Params (Total/Active)": "3.09B / 3.09B",
+      "Finance & Quant MMLU": "71.4%",
+      "Geopolitics & Macro": "82.8%",
+      "RAM Footprint": "2.6 GB - 3.2 GB",
+      "Anti-Gimmick Directness": "84.0%",
+      "LMSYS Arena Elo (Est.)": "1182"
+    },
+    {
+      "AI Model": "Llama-3.2 3B Instruct",
+      "Organization": "Meta AI",
+      "Params (Total/Active)": "3.21B / 3.21B",
+      "Finance & Quant MMLU": "68.2%",
+      "Geopolitics & Macro": "79.5%",
+      "RAM Footprint": "2.8 GB - 3.4 GB",
+      "Anti-Gimmick Directness": "81.5%",
+      "LMSYS Arena Elo (Est.)": "1169"
+    },
+    {
+      "AI Model": "Gemma-2 2.6B IT",
+      "Organization": "Google DeepMind",
+      "Params (Total/Active)": "2.61B / 2.61B",
+      "Finance & Quant MMLU": "66.5%",
+      "Geopolitics & Macro": "76.2%",
+      "RAM Footprint": "2.4 GB - 3.0 GB",
+      "Anti-Gimmick Directness": "83.2%",
+      "LMSYS Arena Elo (Est.)": "1154"
+    },
+    {
+      "AI Model": "Phi-3.5 Mini Instruct",
+      "Organization": "Microsoft Research",
+      "Params (Total/Active)": "3.82B / 3.82B",
+      "Finance & Quant MMLU": "74.0%",
+      "Geopolitics & Macro": "80.1%",
+      "RAM Footprint": "3.2 GB - 4.1 GB",
+      "Anti-Gimmick Directness": "85.4%",
+      "LMSYS Arena Elo (Est.)": "1195"
+    }
+  ],
+  "detailedResults": [
+    {
+      "id": "MMLU-FIN-01",
+      "category": "MMLU_FINANCE",
+      "prompt": "Analyze how high VPIN causes market maker inventory skew and liquidity withdrawal during market sell-offs.",
+      "matched": "5/5",
+      "directness": "PASS (Direct)",
+      "score": "10/10",
+      "latency": "0.000s",
+      "sampleSnippet": "**Volume-Synchronized Probability of Toxicity (VPIN) measures the proportion of trade volume initiated by informed traders; when VPIN spikes..."
+    },
+    {
+      "id": "MMLU-FIN-02",
+      "category": "MMLU_FINANCE",
+      "prompt": "Explain the relationship between Delta, Gamma, and Theta decay for At-The-Money options near weekly expiry.",
+      "matched": "5/5",
+      "directness": "PASS (Direct)",
+      "score": "10/10",
+      "latency": "0.000s",
+      "sampleSnippet": "At its core: The Options Greeks are partial derivatives of the Black-Scholes pricing model that quantify an option's sensitivity to underlyi..."
+    },
+    {
+      "id": "GSM-CALC-01",
+      "category": "GSM_FIN_CALC",
+      "prompt": "Calculate the recovery gain needed after an 80% portfolio drawdown, and explain why drawdowns are non-linear.",
+      "matched": "3/4",
+      "directness": "PASS (Direct)",
+      "score": "8/10",
+      "latency": "0.000s",
+      "sampleSnippet": "To get straight to the point: Optimal portfolio position sizing is governed by the Kelly Criterion (f* = [p*b - q] / b) to maximize geometri..."
+    },
+    {
+      "id": "MMLU-MACRO-01",
+      "category": "MMLU_MACRO",
+      "prompt": "Explain the policy tension when RBI maintains Withdrawal of Accommodation while banking system liquidity is in deficit.",
+      "matched": "5/5",
+      "directness": "PASS (Direct)",
+      "score": "10/10",
+      "latency": "0.000s",
+      "sampleSnippet": "When the Reserve Bank of India maintains a Hawkish \"Withdrawal of Accommodation\" stance while domestic banking liquidity enters deficit, the..."
+    },
+    {
+      "id": "MMLU-MACRO-02",
+      "category": "MMLU_MACRO",
+      "prompt": "Contrast Share Buybacks vs CapEx Expansion under a sustained 5% benchmark interest rate environment.",
+      "matched": "5/5",
+      "directness": "PASS (Direct)",
+      "score": "10/10",
+      "latency": "0.000s",
+      "sampleSnippet": "Fundamentally, In a 5% interest rate environment, capital allocation requires strict hurdle discipline: share buybacks are only accretive wh..."
+    },
+    {
+      "id": "MMLU-GEO-01",
+      "category": "MMLU_GEOPOLITICS",
+      "prompt": "Evaluate the strategic semiconductor bottleneck involving ASML EUV lithography and Taiwan foundry concentration.",
+      "matched": "5/5",
+      "directness": "PASS (Direct)",
+      "score": "10/10",
+      "latency": "0.000s",
+      "sampleSnippet": "**Semiconductors are the foundational infrastructure of 21st-century economic and military power, where extreme geographical concentration i..."
+    },
+    {
+      "id": "MMLU-GEO-02",
+      "category": "MMLU_GEOPOLITICS",
+      "prompt": "Analyze the long-term sovereign debt and pension solvency impact of South Korea fertility rate of 0.72.",
+      "matched": "4/5",
+      "directness": "PASS (Direct)",
+      "score": "8/10",
+      "latency": "0.000s",
+      "sampleSnippet": "At its core: A Total Fertility Rate of 0.72 represents an unprecedented structural labor contraction; by 2040, potential GDP growth falls be..."
+    },
+    {
+      "id": "LMSYS-DIR-01",
+      "category": "LMSYS_DIRECTNESS",
+      "prompt": "In short, what is the single most important rule for surviving long-term as a systematic trader?",
+      "matched": "2/4",
+      "directness": "PASS (Direct)",
+      "score": "6/10",
+      "latency": "0.000s",
+      "sampleSnippet": "To get straight to the point: A losing trade or red day is never a reflection of your personal intellect or worth; in a probabilistic enviro..."
+    },
+    {
+      "id": "LMSYS-DIR-02",
+      "category": "LMSYS_DIRECTNESS",
+      "prompt": "Explain why quantitative hedge funds like Renaissance Technologies can profit consistently despite market efficiency.",
+      "matched": "4/4",
+      "directness": "PASS (Direct)",
+      "score": "10/10",
+      "latency": "0.000s",
+      "sampleSnippet": "Quantitative firms like Renaissance Technologies consistently profit because financial markets are micro-inefficient in the short term: non-..."
+    },
+    {
+      "id": "GSM-CALC-02",
+      "category": "GSM_FIN_CALC",
+      "prompt": "How does the Friction Hurdle (STT, GST, exchange fees) affect high-frequency MIS trades on Indian equities?",
+      "matched": "5/5",
+      "directness": "PASS (Direct)",
+      "score": "10/10",
+      "latency": "0.000s",
+      "sampleSnippet": "Fundamentally, The Friction Hurdle is the cumulative mathematical penalty of statutory fees (STT, GST, SEBI turnover, exchange fees) and bid..."
+    }
+  ]
+}
