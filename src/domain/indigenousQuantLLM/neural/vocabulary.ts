@@ -57,6 +57,10 @@ export const ACTION_TOKENS = [
   'VERIFIED_SAFE',
   'QUANT_VERIFIED',
   'COMMUNICATE',
+  'COMMUNICATE_DIALOGUE',
+  'EXPLAIN_CONCEPT',
+  'CLARIFY_CONTEXT',
+  'EMPATHETIC_RESPONSE',
 ] as const;
 
 export const REGIME_TOKENS = [
@@ -146,6 +150,45 @@ export const INSTITUTIONAL_QUANT_WORDS = [
   'sec', '10k', '10q', 'operating', 'revenue', 'interest', 'expense'
 ] as const;
 
+export const CONVERSATIONAL_AND_REASONING_WORDS = [
+  // Greetings & Social
+  'hello', 'hi', 'hey', 'welcome', 'greetings', 'thanks', 'thank', 'you', 'please', 'good',
+  'morning', 'afternoon', 'evening', 'day', 'glad', 'delighted', 'happy', 'great', 'pleasure', 'meet',
+  'farewell', 'bye', 'yes', 'no', 'sure', 'certainly', 'absolutely', 'indeed', 'okay', 'alright',
+  'welcome_back', 'fine', 'wonderful', 'cheers', 'appreciated',
+  // Pronouns & Conversational Connectors
+  'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'us', 'your', 'yours',
+  'they', 'their', 'them', 'he', 'she', 'it', 'its', 'who', 'what', 'when',
+  'where', 'why', 'how', 'which', 'whose', 'can', 'could', 'would', 'should', 'might',
+  'may', 'must', 'shall', 'am',
+  // Conversational Understanding & Dialogue Flow
+  'understand', 'understanding', 'comprehend', 'context', 'meaning', 'perspective', 'insight', 'dialogue', 'conversation', 'chat',
+  'message', 'discuss', 'discussion', 'topic', 'explore', 'learn', 'learning', 'explain', 'explaining', 'explanation',
+  'clarify', 'clarification', 'question', 'answer', 'answering', 'response', 'query', 'inquiry', 'thoughtful', 'nuance',
+  'balance', 'balanced', 'honest', 'listen', 'listening', 'helpful', 'assist', 'assistant', 'assistance', 'guide',
+  'guidance', 'collaborate', 'collaborative', 'share',
+  // Reasoning, Logic & Explanatory Conjunctions
+  'because', 'therefore', 'however', 'moreover', 'furthermore', 'meanwhile', 'although', 'whereas', 'similarly', 'specifically',
+  'essentially', 'ultimately', 'firstly', 'secondly', 'finally', 'example', 'analogous', 'analogy', 'difference', 'similarity',
+  'advantage', 'disadvantage', 'tradeoff', 'cause', 'effect', 'consequence', 'implication', 'premise', 'conclusion', 'rationale',
+  'principle', 'framework', 'concept', 'structured', 'systematic', 'deduce', 'infer', 'synthesize', 'evaluate', 'assess',
+  'compare', 'contrast', 'contrastive', 'fundamental', 'intuitive',
+  // Personality, Demeanor & Humanized Empathy
+  'lumen', 'astra', 'sovereign', 'calm', 'objective', 'transparent', 'rigorous', 'curious', 'respectful', 'composed',
+  'humble', 'disciplined', 'companion', 'partner', 'colleague', 'intellect', 'poise', 'friendly', 'warm', 'reassuring',
+  'patient', 'clarity', 'integrity', 'empathy', 'feeling', 'sentiment', 'nervous', 'excited', 'cautious', 'confident',
+  'curiosity', 'enthusiasm', 'wisdom', 'experience', 'mindful', 'steady', 'grounded', 'reliable', 'trust', 'truth',
+  'candid', 'realistic', 'humor', 'philosophy', 'journey',
+  // General Knowledge & Conversational Financial Q&A
+  'market_order', 'limit_order', 'stop_order', 'broker', 'exchange', 'matching', 'investor', 'trader', 'beginner', 'basics',
+  'fundamentals', 'psychology', 'emotion', 'fear', 'greed', 'discipline', 'habit', 'mistake', 'lesson', 'advice',
+  'recommendation', 'suggestion', 'horizon', 'long_term', 'short_term', 'wealth', 'compounding', 'savings', 'retirement', 'inflation',
+  'purchasing_power', 'interest_rate', 'central_bank', 'economy', 'growth', 'recession', 'bear', 'bull', 'cycle', 'allocation',
+  'diversification', 'safety_net', 'emergency_fund', 'simple', 'easy',
+  // Nuanced Dialogue Tokens
+  'inquisitive', 'reflective', 'articulate', 'perspective_shift', 'thoughtfulness'
+] as const;
+
 // Assemble Complete Vocabulary
 const ALL_TOKENS: string[] = [
   ...SPECIAL_TOKENS,
@@ -155,6 +198,7 @@ const ALL_TOKENS: string[] = [
   ...INDIAN_ASSETS,
   ...REASONING_WORDS,
   ...INSTITUTIONAL_QUANT_WORDS,
+  ...CONVERSATIONAL_AND_REASONING_WORDS,
 ];
 
 

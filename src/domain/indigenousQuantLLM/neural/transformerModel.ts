@@ -36,7 +36,7 @@ export const DEFAULT_TRANSFORMER_CONFIG: TransformerConfig = {
 
 export const LARGE_1M_TRANSFORMER_CONFIG: TransformerConfig = {
   vocabSize: VOCAB_SIZE,
-  dModel: 144,
+  dModel: 152,
   nHeads: 4,
   nLayers: 4,
   maxSeqLen: 128,
@@ -539,10 +539,12 @@ export class NeuralTransformerModel {
     const b2_corr = 1.0 - Math.pow(beta2, t);
 
     for (let r = 0; r < param.length; r++) {
+      if (!m[r]) m[r] = new Array(param[r].length).fill(0);
+      if (!v[r]) v[r] = new Array(param[r].length).fill(0);
       for (let c = 0; c < param[r].length; c++) {
-        const g = grad[r][c];
-        m[r][c] = beta1 * m[r][c] + (1.0 - beta1) * g;
-        v[r][c] = beta2 * v[r][c] + (1.0 - beta2) * g * g;
+        const g = (grad[r] && grad[r][c] !== undefined) ? grad[r][c] : 0;
+        m[r][c] = beta1 * (m[r][c] || 0) + (1.0 - beta1) * g;
+        v[r][c] = beta2 * (v[r][c] || 0) + (1.0 - beta2) * g * g;
         const mHat = m[r][c] / b1_corr;
         const vHat = v[r][c] / b2_corr;
         param[r][c] -= lr * (mHat / (Math.sqrt(vHat) + eps) + wd * param[r][c]);
@@ -572,38 +574,66 @@ export class NeuralTransformerModel {
   public loadWeights(jsonStr: string): void {
     const data = JSON.parse(jsonStr);
     if (data.config) {
-      // Preserve current model's vocabSize and maxSeqLen if larger
+      // Preserve current model's architecture dimensions if larger or explicitly configured
       const currentVocab = this.config.vocabSize;
       const currentSeqLen = this.config.maxSeqLen;
+      const currentDModel = this.config.dModel;
+      const currentNActions = this.config.nActions;
+      const currentNLayers = this.config.nLayers;
+      const currentNHeads = this.config.nHeads;
+      const currentNExperts = this.config.nExperts;
+
       this.config = { ...this.config, ...data.config };
       if (currentVocab > this.config.vocabSize) this.config.vocabSize = currentVocab;
       if (currentSeqLen > this.config.maxSeqLen) this.config.maxSeqLen = currentSeqLen;
+      if (currentDModel > this.config.dModel) this.config.dModel = currentDModel;
+      if (currentNActions > this.config.nActions) this.config.nActions = currentNActions;
+      if (currentNLayers > this.config.nLayers) this.config.nLayers = currentNLayers;
+      if (currentNHeads > this.config.nHeads) this.config.nHeads = currentNHeads;
+      if (currentNExperts && currentNExperts > (this.config.nExperts || 0)) {
+        this.config.nExperts = currentNExperts;
+      }
     }
 
-    if (data.W_emb) {
-      for (let r = 0; r < Math.min(this.W_emb.length, data.W_emb.length); r++) {
-        for (let c = 0; c < Math.min(this.W_emb[r].length, data.W_emb[r].length); c++) {
-          this.W_emb[r][c] = data.W_emb[r][c];
+    const copySubMatrix = (target: Matrix, src: Matrix) => {
+      if (!src || !target) return;
+      for (let r = 0; r < Math.min(target.length, src.length); r++) {
+        for (let c = 0; c < Math.min(target[r].length, src[r].length); c++) {
+          target[r][c] = src[r][c];
+        }
+      }
+    };
+
+    const copySubVector = (target: Vector, src: Vector) => {
+      if (!src || !target) return;
+      for (let i = 0; i < Math.min(target.length, src.length); i++) {
+        target[i] = src[i];
+      }
+    };
+
+    if (data.W_emb) copySubMatrix(this.W_emb, data.W_emb);
+    if (data.W_pos) copySubMatrix(this.W_pos, data.W_pos);
+
+    if (data.layers && Array.isArray(data.layers)) {
+      for (let i = 0; i < Math.min(this.layers.length, data.layers.length); i++) {
+        const tgtL = this.layers[i];
+        const srcL = data.layers[i];
+        if (srcL) {
+          copySubMatrix(tgtL.W_q, srcL.W_q);
+          copySubMatrix(tgtL.W_k, srcL.W_k);
+          copySubMatrix(tgtL.W_v, srcL.W_v);
+          copySubMatrix(tgtL.W_o, srcL.W_o);
+          copySubMatrix(tgtL.W_1, srcL.W_1);
+          copySubVector(tgtL.b_1, srcL.b_1);
+          copySubMatrix(tgtL.W_2, srcL.W_2);
+          copySubVector(tgtL.b_2, srcL.b_2);
         }
       }
     }
-    if (data.W_pos) {
-      for (let r = 0; r < Math.min(this.W_pos.length, data.W_pos.length); r++) {
-        for (let c = 0; c < Math.min(this.W_pos[r].length, data.W_pos[r].length); c++) {
-          this.W_pos[r][c] = data.W_pos[r][c];
-        }
-      }
-    }
-    if (data.layers) this.layers = data.layers;
-    if (data.W_lm) {
-      for (let r = 0; r < Math.min(this.W_lm.length, data.W_lm.length); r++) {
-        for (let c = 0; c < Math.min(this.W_lm[r].length, data.W_lm[r].length); c++) {
-          this.W_lm[r][c] = data.W_lm[r][c];
-        }
-      }
-    }
-    if (data.W_policy) this.W_policy = data.W_policy;
-    if (data.W_value) this.W_value = data.W_value;
+
+    if (data.W_lm) copySubMatrix(this.W_lm, data.W_lm);
+    if (data.W_policy) copySubMatrix(this.W_policy, data.W_policy);
+    if (data.W_value) copySubMatrix(this.W_value, data.W_value);
     if (data.optimizerStep) this.optimizerStep = data.optimizerStep;
   }
 

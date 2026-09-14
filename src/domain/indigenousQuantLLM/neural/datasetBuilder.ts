@@ -73,6 +73,7 @@ export class ScenarioDatasetBuilder {
     nemotronSafety?: any[];
     nemotronMath?: any[];
     nemotronCommunication?: any[];
+    conversationalRecords?: any[];
     rawAuditDataList?: any[];
     maxTotal?: number;
     tokenizer?: TokenizerInterface;
@@ -81,37 +82,44 @@ export class ScenarioDatasetBuilder {
     const scenarios: ScenarioExample[] = [];
     const tok = options.tokenizer || DomainTokenizer;
 
-    // 1. Ingest Nemotron Finance (SEC 10-K/10-Q disclosures & solvency)
+    // 1. Ingest Curated Multi-Turn Conversational Dialogue, Reasoning & Personality
+    if (options.conversationalRecords && options.conversationalRecords.length > 0) {
+      const convLimit = Math.floor(maxTotal * 0.30);
+      const convExamples = this.ingestConversationalRecords(options.conversationalRecords, tok, convLimit);
+      scenarios.push(...convExamples);
+    }
+
+    // 2. Ingest Nemotron Finance (SEC 10-K/10-Q disclosures & solvency)
     if (options.nemotronFinance && options.nemotronFinance.length > 0) {
-      const finLimit = Math.floor(maxTotal * 0.25);
+      const finLimit = Math.floor(maxTotal * 0.20);
       const finExamples = this.ingestNemotronFinance(options.nemotronFinance, tok, finLimit);
       scenarios.push(...finExamples);
     }
 
-    // 2. Ingest Nemotron Safety & Danger Sensing (Risk taxonomy, DeepSeek-R1 <think> reasoning)
+    // 3. Ingest Nemotron Safety & Danger Sensing (Risk taxonomy, DeepSeek-R1 <think> reasoning)
     if (options.nemotronSafety && options.nemotronSafety.length > 0) {
-      const safeLimit = Math.floor(maxTotal * 0.20);
+      const safeLimit = Math.floor(maxTotal * 0.15);
       const safeExamples = this.ingestNemotronSafety(options.nemotronSafety, tok, safeLimit);
       scenarios.push(...safeExamples);
     }
 
-    // 3. Ingest Nemotron Math & Quantitative Proofs
+    // 4. Ingest Nemotron Math & Quantitative Proofs
     if (options.nemotronMath && options.nemotronMath.length > 0) {
-      const mathLimit = Math.floor(maxTotal * 0.20);
+      const mathLimit = Math.floor(maxTotal * 0.15);
       const mathExamples = this.ingestNemotronMath(options.nemotronMath, tok, mathLimit);
       scenarios.push(...mathExamples);
     }
 
-    // 4. Ingest Nemotron HelpSteer2 Communication (Instruction following & clarity)
+    // 5. Ingest Nemotron HelpSteer2 Communication (Instruction following & clarity)
     if (options.nemotronCommunication && options.nemotronCommunication.length > 0) {
-      const commLimit = Math.floor(maxTotal * 0.15);
+      const commLimit = Math.floor(maxTotal * 0.10);
       const commExamples = this.ingestNemotronCommunication(options.nemotronCommunication, tok, commLimit);
       scenarios.push(...commExamples);
     }
 
-    // 5. Ingest Real Quant Trades from 5-Year Replays
+    // 6. Ingest Real Quant Trades from 5-Year Replays
     if (options.rawAuditDataList && options.rawAuditDataList.length > 0) {
-      const quantLimit = Math.floor(maxTotal * 0.15);
+      const quantLimit = Math.floor(maxTotal * 0.10);
       for (let i = 0; i < options.rawAuditDataList.length; i++) {
         if (scenarios.length >= maxTotal) break;
         const data = options.rawAuditDataList[i];
@@ -121,12 +129,12 @@ export class ScenarioDatasetBuilder {
       }
     }
 
-    // 6. Synthesize Advanced Quantitative Microstructure & Stochastic Trajectories
-    const advQuantLimit = Math.max(10, Math.min(2500, Math.floor(maxTotal * 0.2)));
+    // 7. Synthesize Advanced Quantitative Microstructure & Stochastic Trajectories
+    const advQuantLimit = Math.max(10, Math.min(2500, Math.floor(maxTotal * 0.15)));
     this.synthesizeAdvancedQuantMicrostructureScenarios(scenarios, tok, advQuantLimit);
 
-    // 7. Synthesize Premium Institutional Multi-Desk Scenarios
-    const premiumLimit = Math.max(10, Math.min(2500, Math.floor(maxTotal * 0.2)));
+    // 8. Synthesize Premium Institutional Multi-Desk Scenarios
+    const premiumLimit = Math.max(10, Math.min(2500, Math.floor(maxTotal * 0.15)));
     const premiumExamples = this.synthesizePremiumInstitutionalCorpus(tok, premiumLimit);
     scenarios.push(...premiumExamples);
 
@@ -308,9 +316,50 @@ export class ScenarioDatasetBuilder {
   }
 
   /**
-   * Extracts winning vs losing trade trajectory pairs for Direct Preference Optimization (DPO).
+   * Ingests curated multi-turn conversational dialogue, reasoning, conceptual QA, and personality records.
    */
-  public static buildDPOPreferencePairs(trades: any[], tok: TokenizerInterface = DomainTokenizer, maxPairs = 500): DPOPreferencePair[] {
+  public static ingestConversationalRecords(records: any[], tok: TokenizerInterface, maxCount = 1000): ScenarioExample[] {
+    const examples: ScenarioExample[] = [];
+
+    for (let i = 0; i < records.length && examples.length < maxCount; i++) {
+      const rec = records[i];
+      if (!rec || !rec.prompt || !rec.response) continue;
+
+      const promptClean = String(rec.prompt).replace(/\s+/g, ' ').substring(0, 160).trim();
+      const respClean = String(rec.response).replace(/\s+/g, ' ').substring(0, 200).trim();
+      const thoughtClean = rec.thought ? String(rec.thought).replace(/\s+/g, ' ').substring(0, 160).trim() : 'formulating articulate conversational response';
+      const actionName = rec.action || 'COMMUNICATE_DIALOGUE';
+      const targetActionIdx = Math.max(0, ACTION_TOKENS.indexOf(actionName as any));
+
+      const promptText = `<scenario> DOMAIN_COMMUNICATION ${promptClean} </scenario>`;
+      const thoughtText = `<thought> ${thoughtClean}: ${respClean} </thought> <action> ${actionName} </action>`;
+
+      examples.push({
+        id: `conv-data-${i}`,
+        inputTokens: tok.encode(promptText),
+        targetTokens: tok.encode(thoughtText),
+        targetActionIdx,
+        targetValue: 0.9,
+        rawText: promptText,
+        thoughtText,
+        actionName,
+        domain: 'communication',
+      });
+    }
+
+    return examples;
+  }
+
+  /**
+   * Extracts winning vs losing trajectory pairs for Direct Preference Optimization (DPO),
+   * covering both quantitative trading execution and articulate conversational dialogue.
+   */
+  public static buildDPOPreferencePairs(
+    trades: any[],
+    tok: TokenizerInterface = DomainTokenizer,
+    maxPairs = 500,
+    conversationalRecords?: any[]
+  ): DPOPreferencePair[] {
     const pairs: DPOPreferencePair[] = [];
     const winners: any[] = [];
     const losers: any[] = [];
@@ -322,7 +371,36 @@ export class ScenarioDatasetBuilder {
       else if (pnl < -80) losers.push(t);
     }
 
-    // Pair winning trade with losing trade
+    // 1. Add Conversational DPO Preference Pairs (Articulate vs Robotic)
+    if (conversationalRecords && conversationalRecords.length > 0) {
+      for (let i = 0; i < Math.min(conversationalRecords.length, 120); i++) {
+        const c = conversationalRecords[i];
+        if (!c.prompt || !c.response) continue;
+        const prompt = `<scenario> DOMAIN_COMMUNICATION ${c.prompt} </scenario>`;
+        const winningThought = `<thought> ${c.thought || 'formulating articulate response'}: ${c.response.slice(0, 140)} </thought> <action> ${c.action || 'COMMUNICATE_DIALOGUE'} </action>`;
+        const losingThought = `<thought> robotic fallback evaluating: "${c.prompt.slice(0, 30)}" total capital equity: $45000 </thought> <action> STAND_ASIDE </action>`;
+        const winIdx = Math.max(0, ACTION_TOKENS.indexOf((c.action || 'COMMUNICATE_DIALOGUE') as any));
+        const loseIdx = Math.max(0, ACTION_TOKENS.indexOf('STAND_ASIDE' as any));
+
+        pairs.push({
+          id: `dpo-conv-${i}`,
+          prompt,
+          scenarioPrompt: prompt,
+          promptTokens: tok.encode(prompt),
+          winningThought,
+          winningTokens: tok.encode(winningThought),
+          winningActionIdx: winIdx,
+          losingThought,
+          losingTokens: tok.encode(losingThought),
+          losingActionIdx: loseIdx,
+          actionName: c.action || 'COMMUNICATE_DIALOGUE',
+          marginReturnDelta: 1.0,
+          marginBenefit: 1.0,
+        });
+      }
+    }
+
+    // 2. Pair winning trade with losing trade
     for (let i = 0; i < Math.min(winners.length, losers.length, maxPairs); i++) {
       const win = winners[i];
       const loss = losers[i];

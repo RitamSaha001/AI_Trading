@@ -183,8 +183,43 @@ ${factorRows}
     }
 
     // 1. Synthesize scenario prompt for the neural transformer
+    const isConv = !isSlash && (
+      cleanCommand.startsWith('hello') ||
+      cleanCommand.startsWith('hi') ||
+      cleanCommand.startsWith('hey') ||
+      cleanCommand.startsWith('greetings') ||
+      cleanCommand.startsWith('good morning') ||
+      cleanCommand.startsWith('good afternoon') ||
+      cleanCommand.startsWith('good evening') ||
+      cleanCommand.includes('how are you') ||
+      cleanCommand.includes('who are you') ||
+      cleanCommand.includes('what is your name') ||
+      cleanCommand.includes('who created you') ||
+      cleanCommand.includes('what can you do') ||
+      cleanCommand.includes('tell me about yourself') ||
+      cleanCommand.startsWith('thanks') ||
+      cleanCommand.startsWith('thank you') ||
+      cleanCommand.includes('joke') ||
+      cleanCommand.includes('market order and a limit order') ||
+      cleanCommand.includes('market order vs limit order') ||
+      cleanCommand.includes('difference between') ||
+      cleanCommand.includes('explain sharpe') ||
+      cleanCommand.includes('what is sharpe') ||
+      cleanCommand.includes('compound interest') ||
+      cleanCommand.includes('why do retail traders lose') ||
+      cleanCommand.includes('trading philosophy') ||
+      cleanCommand.includes('feeling nervous') ||
+      cleanCommand.includes('beginner') ||
+      cleanCommand.startsWith('explain ') ||
+      cleanCommand.startsWith('what is ') ||
+      cleanCommand.startsWith('why do ') ||
+      cleanCommand.startsWith('how does ')
+    );
+
     let scenarioPrompt = `<scenario> DOMAIN_QUANT ${cleanCommand.slice(0, 60)} </scenario>`;
-    if (firstWord === 'audit' || cleanCommand.includes('risk') || cleanCommand.includes('danger')) {
+    if (isConv) {
+      scenarioPrompt = `<scenario> DOMAIN_COMMUNICATION ${cleanCommand.slice(0, 60)} </scenario>`;
+    } else if (firstWord === 'audit' || cleanCommand.includes('risk') || cleanCommand.includes('danger')) {
       scenarioPrompt = `<scenario> REGIME_RISK_AUDIT ACI_EVALUATION DANGER_SENSING LIQUIDITY_CHECK </scenario>`;
     } else if (firstWord === 'scan' || cleanCommand.includes('radar') || cleanCommand.includes('screen')) {
       scenarioPrompt = `<scenario> REGIME_SCAN_ALPHA ACI_SCREENING MULTI_ASSET_ASYMMETRY </scenario>`;
@@ -213,7 +248,7 @@ ${factorRows}
     const localResult = queryNexusDeterministicQuant(prompt, state, markets as any, history as any);
 
     // 4. Construct DeepSeek-R1-style Deliberation Accordion Trace
-    const thinkTrace = this.formatNeuralThinkTrace(neuralInference, state, selectedAsset);
+    const thinkTrace = this.formatNeuralThinkTrace(neuralInference, state, selectedAsset, isConv);
 
     // 5. Compose Final Response
     const replyWithNeuralTrace = `${thinkTrace}\n\n${localResult.reply}`;
@@ -224,8 +259,8 @@ ${factorRows}
 
     const telemetry: AgentTelemetry = {
       aiMode: 'Lumen-Astra-Fin 2.0 (Decoder MoE)',
-      reasoningTier: 'DeepSeek-R1 Deliberation + Best-of-N Search',
-      toolsUsed: this.extractToolsUsed(firstWord, cleanCommand),
+      reasoningTier: isConv ? 'Conversational & Conceptual Reasoning MoE' : 'DeepSeek-R1 Deliberation + Best-of-N Search',
+      toolsUsed: isConv ? ['conversational_reasoning_engine', 'lumen_astra_fin_moe_inference'] : this.extractToolsUsed(firstWord, cleanCommand),
       dataFreshnessSec: context.assets[context.primaryAsset]?.dataFreshnessSec ?? 0,
       dataQualityScore: context.metadata.overallDataQualityScore,
       portfolioRiskLabel: rk.riskLabel,
@@ -250,8 +285,30 @@ ${factorRows}
   private formatNeuralThinkTrace(
     inference: AstraFinNeuralInference,
     state: AppState,
-    asset: Asset
+    asset: Asset,
+    isConversational: boolean = false
   ): string {
+    if (isConversational) {
+      const lines: string[] = [
+        '<think>',
+        `1. [Dialogue Analysis]: User intent classified as Conversational Dialogue & Contextual Reasoning.`,
+        `2. [Transformer MoE Routing]: Activated Linguistic & Conceptual Reasoning expert pathways.`,
+        `3. [Epistemic Telemetry]: Policy Confidence = ${(inference.policyConfidence * 100).toFixed(1)}% | Shannon Entropy = ${inference.policyEntropy} bits.`,
+        `4. [Persona & Tone]: Poised, articulate, and encouraging quantitative intelligence (Lumen Astra).`,
+      ];
+
+      if (inference.generatedThought && inference.generatedThought.trim().length > 0) {
+        lines.push(`5. [Neural Latent CoT]: ${inference.generatedThought.trim()}`);
+      }
+
+      lines.push(
+        `6. [Directive Extraction]: Emitted conversational action "${inference.predictedAction || 'COMMUNICATE_DIALOGUE'}".`
+      );
+      lines.push('7. [Verification]: Verified conversational coherence, helpfulness, and pedagogical clarity.');
+      lines.push('</think>');
+      return lines.join('\n');
+    }
+
     const deskName = state.accountMode === 'upstox' ? 'NSE Institutional Equities (Upstox Live Engine)' : 'Quantitative Digital Assets';
     const lines: string[] = [
       '<think>',

@@ -172,7 +172,7 @@ describe('6. Sparse Mixture-of-Experts (MoE) FFN Block', () => {
 
 describe('7. Direct Preference Optimization (DPO) on Trading Trajectories', () => {
   it('trains on winning vs losing trade pairs and shifts policy mass toward winning actions', () => {
-    const model = new NeuralTransformerModel({ dModel: 32, nHeads: 2, nLayers: 1, maxSeqLen: 16 });
+    const model = new NeuralTransformerModel({ dModel: 32, nHeads: 2, nLayers: 1, maxSeqLen: 16, learningRate: 0.01 });
     const trainer = new DPOTrainer(model, 0.1);
 
     const pairs = [
@@ -186,7 +186,7 @@ describe('7. Direct Preference Optimization (DPO) on Trading Trajectories', () =
       },
     ];
 
-    const summary = trainer.trainDPO(pairs, 5, 0.01);
+    const summary = trainer.trainDPO(pairs, 15, 0.01);
     expect(summary.pairsTrained).toBe(1);
     expect(summary.winPreferenceAccuracyPct).toBeGreaterThanOrEqual(50);
   });

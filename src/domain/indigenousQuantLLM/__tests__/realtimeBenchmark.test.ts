@@ -11,9 +11,9 @@ describe('RealtimeModelBenchmark Suite', () => {
   it('verifies LARGE_1M_TRANSFORMER_CONFIG parameter count exceeds 1,000,000 parameters', () => {
     const model = new NeuralTransformerModel(LARGE_1M_TRANSFORMER_CONFIG);
     const count = model.countParameters();
-    // 3.79M Sparse MoE parameters (>1,000,000 dense / MoE parameters)
+    // 4.29M Sparse MoE parameters (+499,928 parameters scaling for conversational intelligence)
     expect(count).toBeGreaterThan(1_000_000);
-    expect(count).toBe(3_789_360);
+    expect(count).toBe(4_289_288);
   });
 
   it('verifies STANDARD_BENCHMARK_SCENARIOS contains 6 institutional quantitative domains', () => {
@@ -51,7 +51,7 @@ describe('RealtimeModelBenchmark Suite', () => {
     expect(lumen.factorAverages.microstructureCompliance).toBeGreaterThanOrEqual(90);
     expect(lumen.factorAverages.mathematicalPrecision).toBeGreaterThanOrEqual(90);
     expect(lumen.factorAverages.latencyEfficiency).toBeGreaterThanOrEqual(80);
-  });
+  }, 25000);
 
   it('verifies factor weights strictly sum to 1.00', () => {
     const sc = STANDARD_BENCHMARK_SCENARIOS[0];

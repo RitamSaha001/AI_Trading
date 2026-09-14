@@ -129,6 +129,7 @@ async function main() {
   );
 
   const nemotronDir = path.resolve(process.cwd(), 'artifacts/nemotron-data');
+  const convDir = path.resolve(process.cwd(), 'artifacts/conversational-data');
   const auditDir = path.resolve(process.cwd(), 'artifacts/fleet-replay-audit');
 
   const perDomainLimit = Math.ceil(maxScenarios / 3.2);
@@ -138,10 +139,16 @@ async function main() {
   const mathRecords = await loadJsonlFile(path.join(nemotronDir, 'nemotron_math.jsonl'), perDomainLimit);
   const commRecords = await loadJsonlFile(path.join(nemotronDir, 'nemotron_communication.jsonl'), perDomainLimit);
 
+  // Load Curated Conversational, Dialogue & Personality Datasets
+  const convDialogue = await loadJsonlFile(path.join(convDir, 'conversational_dialogue.jsonl'), 500);
+  const convReasoning = await loadJsonlFile(path.join(convDir, 'reasoning_context.jsonl'), 500);
+  const allConversationalRecords = [...convDialogue, ...convReasoning];
+
   console.log(`  • Nemotron-Finance records loaded:       ${finRecords.length}`);
   console.log(`  • Nemotron-Safety records loaded:        ${safeRecords.length}`);
   console.log(`  • Nemotron-Math records loaded:          ${mathRecords.length}`);
   console.log(`  • Nemotron-Communication records loaded: ${commRecords.length}`);
+  console.log(`  • Conversational & Personality records:  ${allConversationalRecords.length}`);
 
   // Ingest 5-Year Replay Audits
   console.log(`\n[Dataset Ingestion] Ingesting 5-year trading replay audits from ${auditDir} ...`);
@@ -184,6 +191,7 @@ async function main() {
     nemotronSafety: safeRecords,
     nemotronMath: mathRecords,
     nemotronCommunication: commRecords,
+    conversationalRecords: allConversationalRecords,
     rawAuditDataList: rawAudits,
     maxTotal: maxScenarios,
   });
@@ -306,11 +314,11 @@ async function main() {
   console.log(' STAGE 2: DIRECT PREFERENCE OPTIMIZATION (DPO) WITH PROFESSIONALISM ALIGNMENT   ');
   console.log('================================================================================');
 
-  const tradePairs = ScenarioDatasetBuilder.buildDPOPreferencePairs(allClosedTrades, undefined, 250);
-  const profPairs = ScenarioDatasetBuilder.buildProfessionalismDPOPairs(undefined, 250);
+  const tradePairs = ScenarioDatasetBuilder.buildDPOPreferencePairs(allClosedTrades, undefined, 200, allConversationalRecords);
+  const profPairs = ScenarioDatasetBuilder.buildProfessionalismDPOPairs(undefined, 200);
   const dpoPairs: DPOPreferencePair[] = [...tradePairs, ...profPairs];
   console.log(
-    `[DPO] Assembled ${tradePairs.length} trade pairs + ${profPairs.length} professionalism & anti-repetition pairs (${dpoPairs.length} total).`
+    `[DPO] Assembled ${tradePairs.length} trade & conversational pairs + ${profPairs.length} professionalism pairs (${dpoPairs.length} total).`
   );
 
   if (dpoPairs.length > 0) {
@@ -338,6 +346,18 @@ async function main() {
 
   const testPrompts = [
     {
+      domain: 'Conversational Dialogue & Natural Greeting',
+      prompt: '<scenario> DOMAIN_COMMUNICATION Hello Lumen! How are you doing today? </scenario>',
+    },
+    {
+      domain: 'Conversational Reasoning (Trading Order Concepts)',
+      prompt: '<scenario> DOMAIN_COMMUNICATION Can you explain the difference between a market order and a limit order simply? </scenario>',
+    },
+    {
+      domain: 'Persona & Philosophy (Lumen Astra)',
+      prompt: '<scenario> DOMAIN_COMMUNICATION Who are you and what is your trading philosophy? </scenario>',
+    },
+    {
       domain: 'Nemotron Finance (SEC 10-K Solvency Analysis)',
       prompt: '<scenario> DOMAIN_FINANCE_SEC General Dynamics: Net interest expense fell in 2021. Assess operating solvency and balance sheet health. </scenario>',
     },
@@ -352,10 +372,6 @@ async function main() {
     {
       domain: 'Live Quant Trading (NSE/BSE Bull Breakout Signal)',
       prompt: '<scenario> TATAPOWER REGIME_BULL_TREND ACI_EXEMPLARY_85_PLUS ABOVE_VWAP_EXPANSION VOLUME_SURGE_STRONG_2X </scenario>',
-    },
-    {
-      domain: 'Live Quant Trading (NSE/BSE Volatility Shock Risk Defense)',
-      prompt: '<scenario> INFY REGIME_VOLATILITY_SHOCK ACI_SUBPAR_BELOW_65 BELOW_VWAP_FAILED VOLUME_SURGE_EXTREME_3X </scenario>',
     },
   ];
 
