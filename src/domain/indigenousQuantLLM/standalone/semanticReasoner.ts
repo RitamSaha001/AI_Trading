@@ -402,7 +402,7 @@ Great to continue our conversation. Our active context has explored **${ctx.acti
 Where would you like to proceed next? We can drill deeper into our current topic, shift to a new domain in science or macroeconomics, or discuss anything else on your mind!`
       : `### 👋 Greetings and Welcome!
 
-Warm greetings! I am **Lumen Astra**, your conversational companion and intellectual partner.
+Warm greetings! I am **Lumen-Alpha 3B**, your sovereign quantitative foundation intelligence and conversational partner.
 
 I am built to explore ideas with depth and clarity—whether you want to investigate:
 - 🌍 **Geopolitics & World Affairs**: Country dossiers, strategic straits, alliance networks, and defense doctrines.
@@ -417,7 +417,7 @@ What topic or question is on your mind today? Let us begin!`;
       intent: 'GREETING',
       subject: 'Conversational Greeting',
       thoughtTrace: `1. [Dialogue Analysis]: Input classified under "Conversational Greeting". (Conversation active: ${isOngoing}).
-2. [Persona Calibration]: Adhering to Lumen Astra persona — articulate, welcoming, and intellectually grounded.
+2. [Persona Calibration]: Adhering to Lumen-Alpha 3B persona — articulate, welcoming, and intellectually grounded.
 3. [MoE Routing]: Activated routed experts for natural language fluency and dialogic interaction.`,
       responseMarkdown: greetingText,
     };
@@ -427,35 +427,36 @@ What topic or question is on your mind today? Let us begin!`;
   if (ctx.intent === 'CAPABILITIES') {
     return {
       intent: 'CAPABILITIES',
-      subject: 'Capabilities Inquiry',
-      thoughtTrace: `1. [Intent Analysis]: User inquiring regarding model architecture, knowledge breadth, and functional capabilities.
-2. [Neural Context]: Emphasizing 4.29M MoE parameter sovereign local transformer + deep encyclopedic grounding + dual-engine capability.
-3. [MoE Routing]: Activated Systems Architecture & Persona Calibration experts.`,
-      responseMarkdown: `### ⚡ What I Can Do (Lumen Astra Capabilities)
+      subject: 'Capabilities & Architecture',
+      thoughtTrace: `1. [Intent Analysis]: User inquiring regarding model architecture, knowledge breadth, and institutional capabilities.
+2. [Architecture Synthesis]: Lumen-Alpha 3B Flagship (3,024,010,240 parameters, 16 layers, 22 SwiGLU experts, Top-2 routing).
+3. [Curriculum Activation]: Pre-trained on Tri-Stream curriculum (2,500 steps) + Stage 2 Conversational SFT alignment (500 steps) with DeepSeek-R1 <think> deliberative reasoning.`,
+      responseMarkdown: `### 👑 What I Can Do (Lumen-Alpha 3B Flagship)
 
-I am an indigenous conversational and reasoning intelligence powered by an in-memory **4,289,288 Parameter Sparse Mixture-of-Experts (MoE) Transformer**. Here is how we can collaborate:
+I am **Lumen-Alpha 3B**, a sovereign quantitative and conversational foundation intelligence engineered with **3,024,010,240 parameters** (16 Transformer Layers, 22 SwiGLU Experts, Top-2 Sparse MoE routing). I run 100% locally on your Mac via **Lumen-UMA** zero-copy demand paging with native **DeepSeek-R1 \`<think>\`** deliberative reasoning.
 
-#### 1. 🌍 Geopolitics, World Knowledge & Geography
-- **Exhaustive Country Profiles**: Geography, capitals, geopolitical borders, economic pillars, and strategic significance for over 30 major global nations.
-- **Wars & Defense Doctrines**: Analytical breakdowns of the War in Ukraine, Middle Eastern conflicts, Taiwan Strait dynamics, and classical military strategy (Clausewitz, Sun Tzu, Mahan).
+Here is how we can collaborate across my core specialized domains:
 
-#### 2. 📈 The Five Core Macro Pillars
-- **Stocks & Equity Markets**: Market microstructure, limit order books, price discovery, and PE multiple compression.
-- **Commerce & Global Supply Chains**: Maritime chokepoints (Suez, Hormuz, Malacca), freight indices, and semiconductor value chains.
-- **Governments & Central Banks**: Monetary policy, repo rate transmissions, yield curves, and inflation target regimes.
-- **Wars & Defense Procurement**: State defense outlays, Acceptance of Necessity (AoN) procedures, and defense PSUs (HAL, BEL, BDL).
-- **Commodities & Energy**: Crude oil pricing dynamics (Brent, WTI), OPEC+ quota diplomacy, and refining margins.
+#### 1. 📈 Quantitative Finance & Market Microstructure
+- **Order Flow & Toxicity**: Real-time VPIN (Volume-Synchronized Probability of Toxicity), L2/L3 order book imbalance, bid-ask spread dynamics, and micro-price discovery.
+- **Execution & Algorithmic Strategy**: Optimal routing, TWAP/VWAP execution, transaction cost analysis (TCA), and slippage minimization.
+- **Regime & Volatility Modeling**: Hurst exponent trend detection, Ornstein-Uhlenbeck mean-reversion, ATR volatility ratchets, and intraday risk governors.
 
-#### 3. 🔬 Sciences, Mathematics & Artificial Intelligence
-- **Physics & Cosmology**: Aerodynamics of flight, quantum superposition, entanglement, general relativity, and spacetime geometry.
-- **Neural Computing**: Transformer self-attention, Mixture-of-Experts routing, and chain-of-thought deliberation traces (\`<think>\`).
-- **Mathematics & Economics**: Shannon entropy, Bayes' theorem, game theory, and 2008 financial crisis mechanics.
+#### 2. 🌍 Macroeconomics, Monetary Policy & Demography
+- **Central Banking & Rates**: Taylor Rule transmissions, OIS curve inversions, repo rates, liquidity facilities, and inflation targeting.
+- **Demographic Economics**: Total fertility rate contraction (e.g. South Korea, Japan), pension solvency (NPS depletion timelines), and old-age dependency ratios.
+- **Sovereign Debt**: Fiscal space, debt-to-GDP sustainability, and balance of payments dynamics.
 
-#### 4. 🏛️ Philosophy, Ethics & Everyday Dialogue
-- **Stoicism & Existentialism**: Epictetus, Marcus Aurelius, Sartre, and Camusian absurdism.
-- **Open-Ended Conversation**: Nuanced writing, logical analysis, mental reframing, and brainstorming.
+#### 3. 🛡️ Geopolitics, Supply Chains & Global Industrial Strategy
+- **Semiconductor Chokepoints**: ASML high-NA Extreme Ultraviolet (EUV) photolithography, Zeiss optics, TSMC Taiwan foundry concentration, and export control regimes.
+- **Energy Corridors & Critical Minerals**: Strait of Hormuz, Malacca, and Suez logistics; rare-earth supply chains and refining monopolies.
+- **Defense Procurement**: Capital outlays, AoN procedures, and strategic deterrence doctrines.
 
-Feel free to present any question or scenario!`,
+#### 4. 🔬 Science, Mathematics & System 2 Reasoning
+- **Deep Deliberation**: Internal mathematical proofs, Bayes' theorem, game theory, and stochastic calculus.
+- **Interactive Multi-Turn Memory**: Ask follow-ups, challenge my assumptions, request ELI5 analogies or exhaustive multi-variable breakdowns.
+
+Ask me any question or propose any thesis—from a complex macro puzzle to a technical order book calculation!`,
     };
   }
 

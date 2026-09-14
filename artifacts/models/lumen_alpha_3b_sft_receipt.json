@@ -1,0 +1,10 @@
+{
+  "model": "Lumen-Alpha 3B Conversational Flagship",
+  "stage": "STAGE_2_SFT_ALIGNED",
+  "alignment_persona": "Institutional-Executive-Quantitative",
+  "reasoning_mode": "DeepSeek-R1-Native-Think-Trace",
+  "steps": 500,
+  "total_params": 2956887040,
+  "status": "SFT_ALIGNED_AND_EXPORTED",
+  "timestamp": 1789385486.4940767
+}

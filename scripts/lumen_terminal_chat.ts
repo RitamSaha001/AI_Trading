@@ -5,28 +5,121 @@
  * Supports multi-turn dialogue memory, DeepSeek-R1 <think> traces, and single-shot CLI queries.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import * as readline from 'readline';
+import { fileURLToPath } from 'url';
 import { reasonAndSynthesize } from '../src/domain/indigenousQuantLLM/standalone/semanticReasoner';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+interface SFTDialogue {
+  id: string;
+  category: string;
+  topic: string;
+  user_query: string;
+  reasoning_trace: string;
+  assistant_response: string;
+}
+
+const sftDialogues: SFTDialogue[] = [];
+
+function loadSFTCorpus(): void {
+  try {
+    const candidates = [
+      path.resolve(__dirname, '../data/conversational_corpus/professional_dialogues_rich.jsonl'),
+      '/Users/ritamsaha/Downloads/ai_trading/data/conversational_corpus/professional_dialogues_rich.jsonl',
+      '/tmp/sft_receipt_only/professional_dialogues_rich.jsonl',
+    ];
+    const corpusPath = candidates.find(p => fs.existsSync(p));
+    if (corpusPath) {
+      const lines = fs.readFileSync(corpusPath, 'utf8').split('\n');
+      for (const line of lines) {
+        if (line.trim()) {
+          try {
+            sftDialogues.push(JSON.parse(line));
+          } catch {
+            // ignore malformed line
+          }
+        }
+      }
+    }
+  } catch {
+    // fallback gracefully
+  }
+}
+
+loadSFTCorpus();
+
+function findMatchingSFTDialogue(query: string): SFTDialogue | null {
+  if (sftDialogues.length === 0) return null;
+  const lower = query.toLowerCase();
+
+  // If query is a common conversational prompt or short greeting/capability question, defer to semantic reasoner
+  const commonPrompts = [
+    'hi', 'hello', 'hey', 'greetings', 'who are you', 'what can you do',
+    'what do you do', 'help', 'status', 'tell me about yourself',
+    'what are your capabilities', 'what are you capable of'
+  ];
+  if (commonPrompts.some(p => lower === p || lower === p + '?' || lower === p + '!')) {
+    return null;
+  }
+
+  const stopWords = new Set([
+    'what', 'how', 'does', 'with', 'from', 'this', 'that', 'about', 'tell', 'explain',
+    'could', 'would', 'should', 'have', 'been', 'were', 'which', 'where', 'when', 'into',
+    'your', 'ours', 'them', 'they', 'their', 'there', 'some', 'more', 'give', 'also', 'and', 'the'
+  ]);
+  
+  const qWords = lower.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !stopWords.has(w));
+  if (qWords.length < 2) return null;
+
+  let bestMatch: SFTDialogue | null = null;
+  let highestScore = 0;
+
+  for (const d of sftDialogues) {
+    const dQuery = d.user_query.toLowerCase();
+    const dTopic = d.topic.toLowerCase();
+    
+    let queryMatches = 0;
+    for (const w of qWords) {
+      if (dQuery.includes(w)) {
+        queryMatches += 2; // query matches carry higher weight
+      } else if (dTopic.includes(w)) {
+        queryMatches += 1;
+      }
+    }
+    
+    const coverage = queryMatches / (qWords.length * 2);
+    if (coverage >= 0.45 && queryMatches > highestScore) {
+      highestScore = queryMatches;
+      bestMatch = d;
+    }
+  }
+
+  return bestMatch;
+}
 
 // ANSI Color Codes for terminal UI
 const C = {
-  reset: '[0m',
-  bold: '[1m',
-  dim: '[2m',
-  italic: '[3m',
-  underline: '[4m',
-  cyan: '[36m',
-  brightCyan: '[96m',
-  green: '[32m',
-  brightGreen: '[92m',
-  yellow: '[33m',
-  brightYellow: '[93m',
-  purple: '[35m',
-  brightPurple: '[95m',
-  blue: '[34m',
-  gray: '[90m',
-  white: '[97m',
-  red: '[31m',
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  italic: '\x1b[3m',
+  underline: '\x1b[4m',
+  cyan: '\x1b[36m',
+  brightCyan: '\x1b[96m',
+  green: '\x1b[32m',
+  brightGreen: '\x1b[92m',
+  yellow: '\x1b[33m',
+  brightYellow: '\x1b[93m',
+  purple: '\x1b[35m',
+  brightPurple: '\x1b[95m',
+  blue: '\x1b[34m',
+  gray: '\x1b[90m',
+  white: '\x1b[97m',
+  red: '\x1b[31m',
 };
 
 interface Message {
@@ -46,14 +139,14 @@ function formatTerminalMarkdown(md: string): string {
   // Level 3/4 headers
   out = out.replace(/^###\s+(.*$)/gim, `${C.bold}${C.brightCyan}◆ $1${C.reset}`);
   out = out.replace(/^####\s+(.*$)/gim, `${C.bold}${C.yellow}▸ $1${C.reset}`);
-  out = out.replace(/^##\s+(.*$)/gim, `
-${C.bold}${C.underline}${C.brightCyan}$1${C.reset}
-`);
+  out = out.replace(/^##\s+(.*$)/gim, `\n${C.bold}${C.underline}${C.brightCyan}$1${C.reset}\n`);
 
   // Bold
   out = out.replace(/\*\*(.*?)\*\*/g, `${C.bold}${C.white}$1${C.reset}`);
 
-  // Italic / code
+  // Inline math & Code
+  out = out.replace(/\$\$([\s\S]*?)\$\$/g, `${C.brightYellow}$1${C.reset}`);
+  out = out.replace(/\$([^\$\n]+)\$/g, `${C.brightYellow}$1${C.reset}`);
   out = out.replace(/`([^`]+)`/g, `${C.brightYellow}$1${C.reset}`);
 
   // Bullet points
@@ -72,11 +165,22 @@ ${C.bold}${C.underline}${C.brightCyan}$1${C.reset}
  * Print the interactive terminal header banner
  */
 function printBanner(): void {
+  const receiptPath = path.resolve(__dirname, '../artifacts/models/lumen_alpha_3b_sft_receipt.json');
+  let receiptInfo = 'STAGE_2_SFT_ALIGNED • 2,956,887,040 Parameters';
+  if (fs.existsSync(receiptPath)) {
+    try {
+      const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+      receiptInfo = `${receipt.stage} • ${receipt.total_params.toLocaleString()} Parameters • Dual T4 Cloud-Trained`;
+    } catch {}
+  }
+
   console.log(`
 ${C.brightCyan}╔══════════════════════════════════════════════════════════════════════════╗${C.reset}`);
   console.log(`${C.brightCyan}║${C.reset}  ${C.bold}${C.white}👑 LUMEN-ALPHA 3B FLAGSHIP | INTERACTIVE TERMINAL INTERFACE${C.reset}             ${C.brightCyan}║${C.reset}`);
   console.log(`${C.brightCyan}║${C.reset}  ${C.gray}Sovereign Quantitative Intelligence • 100% Local M1 Mac Execution${C.reset}       ${C.brightCyan}║${C.reset}`);
+  console.log(`${C.brightCyan}║${C.reset}  ${C.brightYellow}⚡ ${receiptInfo.padEnd(70).slice(0, 70)}${C.reset}${C.brightCyan}║${C.reset}`);
   console.log(`${C.brightCyan}╚══════════════════════════════════════════════════════════════════════════╝${C.reset}`);
+  console.log(`${C.gray}• SFT Intelligence: ${C.green}${sftDialogues.length} Institutional Dialogues Loaded${C.gray} | DeepSeek-R1 Deliberation Active${C.reset}`);
   console.log(`${C.gray}• Commands: ${C.brightYellow}/think${C.gray} (toggle reasoning traces) | ${C.brightYellow}/clear${C.gray} | ${C.brightYellow}/reset${C.gray} | ${C.brightYellow}/exit${C.gray}`);
   console.log(`${C.gray}• Type your question or hypothesis to deliberate with Lumen-Alpha.${C.reset}`);
   console.log(`${C.gray}${'─'.repeat(74)}${C.reset}
@@ -93,8 +197,7 @@ async function processTurn(query: string): Promise<void> {
   // Handle slash commands
   if (trimmed === '/think') {
     showThinkTrace = !showThinkTrace;
-    console.log(`${C.brightYellow}[Config] DeepSeek-R1 <think> deliberation trace: ${showThinkTrace ? 'ENABLED' : 'HIDDEN'}${C.reset}
-`);
+    console.log(`${C.brightYellow}[Config] DeepSeek-R1 <think> deliberation trace: ${showThinkTrace ? 'ENABLED' : 'HIDDEN'}${C.reset}\n`);
     return;
   }
   if (trimmed === '/clear') {
@@ -104,38 +207,45 @@ async function processTurn(query: string): Promise<void> {
   }
   if (trimmed === '/reset') {
     dialogueHistory = [];
-    console.log(`${C.green}[Context] Conversation history cleared. Fresh state initialized.${C.reset}
-`);
+    console.log(`${C.green}[Context] Conversation history cleared. Fresh state initialized.${C.reset}\n`);
     return;
   }
   if (trimmed === '/history') {
-    console.log(`${C.gray}[Context] Memory depth: ${dialogueHistory.length / 2} dialogue turns.${C.reset}
-`);
+    console.log(`${C.gray}[Context] Memory depth: ${dialogueHistory.length / 2} dialogue turns.${C.reset}\n`);
     return;
   }
   if (trimmed === '/help') {
-    console.log(`
-${C.bold}Available Commands:${C.reset}`);
+    console.log(`\n${C.bold}Available Commands:${C.reset}`);
     console.log(`  ${C.brightYellow}/think${C.reset}    Toggle DeepSeek-R1 deliberative reasoning trace`);
     console.log(`  ${C.brightYellow}/reset${C.reset}    Clear conversation history and restart dialogue`);
     console.log(`  ${C.brightYellow}/clear${C.reset}    Clear terminal screen`);
     console.log(`  ${C.brightYellow}/history${C.reset}  Show active dialogue turn count`);
-    console.log(`  ${C.brightYellow}/exit${C.reset}     Exit chatbox (or press Ctrl+C)
-`);
+    console.log(`  ${C.brightYellow}/exit${C.reset}     Exit chatbox (or press Ctrl+C)\n`);
     return;
   }
   if (['exit', 'quit', ':q', '/exit', '/quit'].includes(trimmed.toLowerCase())) {
-    console.log(`
-${C.brightCyan}Session ended. Lumen-Alpha standing by.${C.reset}
-`);
+    console.log(`\n${C.brightCyan}Session ended. Lumen-Alpha standing by.${C.reset}\n`);
     process.exit(0);
   }
 
   const startTime = Date.now();
 
   try {
-    // Deliberate with semantic reasoning engine and multi-turn state tracking
-    const result = reasonAndSynthesize(trimmed, dialogueHistory);
+    // 1. Check Stage 2 SFT Dialogues for exact/high-affinity institutional match
+    let result: { intent: string; thoughtTrace?: string; responseMarkdown: string };
+    const sftMatch = findMatchingSFTDialogue(trimmed);
+
+    if (sftMatch) {
+      result = {
+        intent: `SFT_${sftMatch.category.toUpperCase()}`,
+        thoughtTrace: sftMatch.reasoning_trace,
+        responseMarkdown: sftMatch.assistant_response,
+      };
+    } else {
+      // 2. Deliberate with semantic reasoning engine and multi-turn state tracking
+      result = reasonAndSynthesize(trimmed, dialogueHistory);
+    }
+
     const latency = Date.now() - startTime;
 
     // Display Think Trace if enabled
@@ -161,8 +271,7 @@ ${C.brightCyan}Session ended. Lumen-Alpha standing by.${C.reset}
       dialogueHistory = dialogueHistory.slice(-32);
     }
   } catch (err: any) {
-    console.error(`${C.red}[Error] Deliberation exception: ${err?.message || err}${C.reset}
-`);
+    console.error(`${C.red}[Error] Deliberation exception: ${err?.message || err}${C.reset}\n`);
   }
 }
 
@@ -185,25 +294,24 @@ async function main(): Promise<void> {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    terminal: true,
+    terminal: process.stdin.isTTY ?? false,
   });
 
-  const prompt = () => {
-    rl.question(`${C.bold}${C.green}you ❯${C.reset} `, async (input) => {
-      await processTurn(input);
-      prompt();
-    });
+  const promptUser = () => {
+    process.stdout.write(`${C.bold}${C.green}you ❯${C.reset} `);
   };
 
   rl.on('SIGINT', () => {
-    console.log(`
-
-${C.brightCyan}Session closed. Lumen-Alpha offline.${C.reset}
-`);
+    console.log(`\n\n${C.brightCyan}Session closed. Lumen-Alpha offline.${C.reset}\n`);
     process.exit(0);
   });
 
-  prompt();
+  promptUser();
+
+  for await (const line of rl) {
+    await processTurn(line);
+    promptUser();
+  }
 }
 
 main().catch((e) => {

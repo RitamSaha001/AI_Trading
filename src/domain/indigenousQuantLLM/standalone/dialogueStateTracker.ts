@@ -352,8 +352,13 @@ export class DialogueStateTracker {
     if (
       lower.includes('what can you do') ||
       lower.includes('what are your capabilities') ||
+      lower.includes('what are you capable of') ||
       lower.includes('what do you do') ||
-      lower.includes('your skills')
+      lower.includes('who are you') ||
+      lower.includes('tell me about yourself') ||
+      lower.includes('what do you know') ||
+      lower.includes('your skills') ||
+      lower.includes('your architecture')
     ) {
       return 'CAPABILITIES';
     }
