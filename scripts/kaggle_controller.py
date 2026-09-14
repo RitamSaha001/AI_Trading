@@ -125,11 +125,55 @@ def cmd_push_sft(args):
                 os.remove(active_meta)
             os.rename(backup_meta, active_meta)
 
-def cmd_status_sft(args):
+def cmd_watch(args):
     username = get_kaggle_username() or "YOUR_KAGGLE_USERNAME"
-    kernel_id = f"{username}/lumen-alpha-3b-conversational-sft"
-    cmd = ["kaggle", "kernels", "status", kernel_id]
-    subprocess.run(cmd)
+    kernel_id = f"{username}/lumen-alpha-3b-training"
+    print("=" * 75)
+    print(f"  LUMEN-ALPHA 3B: REAL-TIME KAGGLE CLOUD TRAINING WATCHER")
+    print(f"  Kernel: {kernel_id} | Accelerator: Dual Tesla T4")
+    print(f"  Live URL: https://www.kaggle.com/code/{kernel_id}")
+    print("=" * 75)
+    print("  Polling Kaggle Cloud Worker every 10s... Press Ctrl+C to exit.\n")
+    
+    import time
+    log_dir = "/tmp/kaggle_live_watch"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    last_status = None
+    while True:
+        try:
+            status_res = subprocess.run(["kaggle", "kernels", "status", kernel_id], capture_output=True, text=True)
+            status_text = status_res.stdout.strip()
+            
+            # Download latest log
+            subprocess.run(["kaggle", "kernels", "output", kernel_id, "-p", log_dir, "--force"], capture_output=True)
+            
+            log_file = os.path.join(log_dir, "lumen-alpha-3b-training.log")
+            recent_progress = ""
+            if os.path.exists(log_file):
+                with open(log_file, "r") as f:
+                    lines = f.readlines()
+                    progress_lines = [l for l in lines if "[PROGRESS]" in l or "Step" in l]
+                    if progress_lines:
+                        recent_progress = progress_lines[-1].strip()
+                        
+            ts = time.strftime("%H:%M:%S")
+            print(f"[{ts}] {status_text} | {recent_progress if recent_progress else 'Worker active'}")
+            
+            if "COMPLETE" in status_text:
+                print("\n[SUCCESS] Cloud training run completed successfully!")
+                break
+            if "ERROR" in status_text:
+                print("\n[ALERT] Cloud worker reported an error. Fetching logs...")
+                break
+                
+            time.sleep(10)
+        except KeyboardInterrupt:
+            print("\nWatcher detached. Training continues uninterrupted in cloud.")
+            break
+        except Exception as e:
+            print(f"Polling error: {e}")
+            time.sleep(10)
 
 def main():
     parser = argparse.ArgumentParser(description="Lumen-Alpha 3B Kaggle Controller")
@@ -139,6 +183,7 @@ def main():
     subparsers.add_parser("push-sft", help="Push and start Stage 2 Conversational SFT run")
     subparsers.add_parser("status", help="Check base training status (queued, running, complete)")
     subparsers.add_parser("status-sft", help="Check Stage 2 Conversational SFT status")
+    subparsers.add_parser("watch", help="Watch cloud training progress in real time")
     subparsers.add_parser("logs", help="Fetch remote training logs and loss curves")
     dl = subparsers.add_parser("download", help="Download trained model checkpoint from Kaggle")
     dl.add_argument("--output", type=str, default="artifacts/models")
@@ -152,6 +197,8 @@ def main():
         cmd_status(args)
     elif args.action == "status-sft":
         cmd_status_sft(args)
+    elif args.action == "watch":
+        cmd_watch(args)
     elif args.action == "logs":
         cmd_logs(args)
     elif args.action == "download":
