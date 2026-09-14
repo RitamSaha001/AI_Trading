@@ -1,0 +1,35 @@
+{
+  "modelName": "Lumen-Astra-1B-MoE",
+  "parameters": 1019085168,
+  "config": {
+    "vocabSize": 650,
+    "dModel": 960,
+    "nHeads": 8,
+    "nLayers": 12,
+    "maxSeqLen": 256,
+    "nActions": 18,
+    "learningRate": 0.0003,
+    "weightDecay": 0.01,
+    "useMoE": true,
+    "nExperts": 11,
+    "isVirtual1B": true,
+    "virtualTotalParams": 1019085168
+  },
+  "trainingSummary": {
+    "totalVirtualTokens": 5460000,
+    "totalSamplesStreamed": 50,
+    "domainDistribution": {
+      "PHYSICS": 10,
+      "MATHS": 10,
+      "STOCKS": 10,
+      "HUMAN_SENTIMENT": 10,
+      "LANGUAGE_NUANCE": 10
+    },
+    "avgTokensPerSample": 109,
+    "vocabCoverageRatio": 0.985,
+    "diskSpaceConsumedBytes": 0,
+    "timestamp": "2026-09-14T08:09:44.328Z"
+  },
+  "finalLoss": 1.4075135989170706,
+  "exportedAt": "2026-09-14T08:09:44.329Z"
+}

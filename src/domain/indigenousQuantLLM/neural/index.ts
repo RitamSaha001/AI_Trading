@@ -17,3 +17,4 @@ export * from './dpoTrainer';
 export * from './grammarMask';
 export * from './generator';
 export * from './nexusAstraBridge';
+export * from './streamingDatasetEngine';

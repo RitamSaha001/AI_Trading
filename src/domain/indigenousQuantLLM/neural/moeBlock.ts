@@ -11,19 +11,32 @@ export class MoEFFNBlock {
   public dModel: number;
   public nExperts: number;
   public topK: number;
+  public dHidden: number;
   public experts: SwiGLUFFN[];
   public W_router: Matrix; // [dModel x nExperts]
 
-  constructor(dModel: number, nExperts: number = 4, topK: number = 2) {
+  constructor(dModel: number, nExperts: number = 4, topK: number = 2, dHidden?: number) {
     this.dModel = dModel;
     this.nExperts = nExperts;
     this.topK = topK;
+    this.dHidden = dHidden || Math.floor((8 * dModel) / 3);
 
     this.W_router = TensorOps.randomMatrix(dModel, nExperts);
     this.experts = [];
-    for (let e = 0; e < nExperts; e++) {
-      this.experts.push(new SwiGLUFFN(dModel));
+    // For compact memory on large topologies (e.g. 1B scale with dModel >= 768),
+    // allocate active Top-K base experts eagerly and lazily instantiate additional experts on demand.
+    const initialEager = dModel >= 768 ? Math.min(nExperts, 2) : nExperts;
+    for (let e = 0; e < initialEager; e++) {
+      this.experts.push(new SwiGLUFFN(dModel, this.dHidden));
     }
+  }
+
+  public getExpert(idx: number): SwiGLUFFN {
+    const clampedIdx = Math.max(0, Math.min(idx, this.nExperts - 1));
+    if (!this.experts[clampedIdx]) {
+      this.experts[clampedIdx] = new SwiGLUFFN(this.dModel, this.dHidden);
+    }
+    return this.experts[clampedIdx];
   }
 
   /**
@@ -61,9 +74,9 @@ export class MoEFFNBlock {
 
       // Evaluate Expert 1
       const tokenMat: Matrix = [X[t]];
-      const outE1 = this.experts[e1].forward(tokenMat).out[0];
+      const outE1 = this.getExpert(e1).forward(tokenMat).out[0];
       // Evaluate Expert 2
-      const outE2 = this.experts[e2].forward(tokenMat).out[0];
+      const outE2 = this.getExpert(e2).forward(tokenMat).out[0];
 
       for (let d = 0; d < this.dModel; d++) {
         out[t][d] = p1 * outE1[d] + p2 * outE2[d];

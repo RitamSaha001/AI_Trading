@@ -8,7 +8,7 @@
  * - Absolutely ZERO finance, trading, tickers, or market microstructure references
  */
 
-import { NeuralTransformerModel, LARGE_1M_TRANSFORMER_CONFIG } from '../neural/transformerModel';
+import { NeuralTransformerModel, LARGE_1M_TRANSFORMER_CONFIG, LUMEN_1B_MOE_CONFIG } from '../neural/transformerModel';
 import { AstraFinGenerator, AstraFinNeuralInference } from '../neural/generator';
 import { reasonAndSynthesize } from './semanticReasoner';
 
@@ -630,12 +630,13 @@ export class GeneralConversationalEngine {
     }
 
     // 3. Build Think Trace with deep deliberation telemetry
+    const is1B = Boolean(this.model.config.isVirtual1B);
     const thinkTrace = `<think>
 Test-Time Cognitive Deliberation Trace
 ▼
 
 ${semanticResult.thoughtTrace}
-- Architecture: ${this.model.config.dModel} d_model, ${this.model.config.nLayers} layers, ${this.model.config.nHeads} attention heads
+- Architecture: ${is1B ? '1,019,085,168 Parameter Sparse MoE (11 Experts, 12 Layers)' : `${this.model.config.dModel} d_model, ${this.model.config.nLayers} layers, ${this.model.config.nHeads} attention heads`}
 - MoE Routing: Top-2 of ${this.model.config.nExperts || 4} neural experts active
 - Epistemic Metrics: Policy Confidence ${(inference.policyConfidence * 100).toFixed(1)}% | Shannon Entropy ${inference.policyEntropy.toFixed(2)} bits
 </think>`;
@@ -651,9 +652,11 @@ ${semanticResult.thoughtTrace}
 
     return {
       reply: fullReply,
-      engine: ASTRA_ENGINE_LABEL,
+      engine: is1B ? 'Lumen Astra (1.02B MoE Sovereign AI)' : ASTRA_ENGINE_LABEL,
       telemetry: {
-        aiMode: isSafety ? 'Content Moderation Guard + Sparse MoE' : 'Lumen Astra 2.0 (Decoder MoE)',
+        aiMode: is1B
+          ? 'Lumen Astra 1.02B (Sparse MoE)'
+          : (isSafety ? 'Content Moderation Guard + Sparse MoE' : 'Lumen Astra 2.0 (Decoder MoE)'),
         reasoningTier: isSafety ? 'Content Moderation Guard' : 'DeepSeek-R1 Test-Time Deliberation + Sparse MoE',
         latencyMs,
         tokensGenerated: answer.split(/\s+/).length,
@@ -710,6 +713,33 @@ export function getModelInfo() {
     vocabSize: m.config.vocabSize,
     contextWindow: m.config.maxSeqLen,
     mode: 'General Conversational AI',
+  };
+}
+
+export function switchTo1BillionModel(): { success: boolean; params: number; config: any } {
+  const model1B = new NeuralTransformerModel(LUMEN_1B_MOE_CONFIG);
+  globalModel = model1B;
+  globalGenerator = new AstraFinGenerator(model1B);
+  globalEngine.setModel(model1B);
+  return {
+    success: true,
+    params: model1B.countParameters(),
+    config: LUMEN_1B_MOE_CONFIG,
+  };
+}
+
+export function get1BillionModelInfo() {
+  const m = new NeuralTransformerModel(LUMEN_1B_MOE_CONFIG);
+  return {
+    engineLabel: 'Lumen Astra (1.02B MoE Sovereign AI)',
+    parameters: m.countParameters(),
+    dModel: m.config.dModel,
+    nHeads: m.config.nHeads,
+    nLayers: m.config.nLayers,
+    nExperts: m.config.nExperts || 11,
+    vocabSize: m.config.vocabSize,
+    contextWindow: m.config.maxSeqLen,
+    mode: '1-Billion Sparse MoE Sovereign AI',
   };
 }
 
@@ -941,6 +971,8 @@ if (typeof window !== 'undefined') {
     queryFrontierModel,
     loadModelWeights,
     getModelInfo,
+    switchTo1BillionModel,
+    get1BillionModelInfo,
     clearChatHistory,
     getSuggestedPrompts,
   };

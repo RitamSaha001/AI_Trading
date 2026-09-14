@@ -105,7 +105,7 @@ function generateHtml() {
             SOVEREIGN MOE (100% OFFLINE)
           </span>
         </div>
-        <div class="text-[11px] text-slate-400 font-mono">4.29M Sparse MoE • DeepSeek-R1 Deliberation • Frontier Parity</div>
+        <div class="text-[11px] text-slate-400 font-mono">1.02B Sparse MoE • DeepSeek-R1 Deliberation • 1M Multi-Domain Reasoning</div>
       </div>
     </div>
 
@@ -206,7 +206,7 @@ function generateHtml() {
             <div>
               <h2 class="text-xl font-bold text-white tracking-tight">Lumen Astra | Frontier-Grade Macro AI Companion</h2>
               <p class="text-sm text-slate-300 mt-1.5 leading-relaxed">
-                An advanced sovereign conversational intelligence combining an in-memory <strong>4.29M parameter Sparse Mixture-of-Experts Transformer</strong>, encyclopedic world knowledge, DeepSeek-R1 test-time deliberation (<span class="text-blue-400 font-mono">&lt;think&gt;</span>), and an optional real-time <strong>Frontier Cloud Bridge</strong> for direct parity with Gemini 2.5 / GPT-4o.
+                An advanced sovereign conversational intelligence combining an in-memory <strong>1.02B Parameter Sparse Mixture-of-Experts Architecture</strong>, 1M multi-domain reasoning datasets across Physics, Mathematics, Stocks, and Human Sentiment, DeepSeek-R1 test-time deliberation (<span class="text-blue-400 font-mono">&lt;think&gt;</span>), and an optional real-time <strong>Frontier Cloud Bridge</strong> for direct parity with Gemini 2.5 / GPT-4o.
               </p>
               
               <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs font-mono">

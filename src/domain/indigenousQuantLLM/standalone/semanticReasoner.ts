@@ -27,6 +27,7 @@ import {
   ResolvedQueryContext,
   ConversationalIntent,
 } from './dialogueStateTracker';
+import { HumanDialogueEngine } from './humanDialogueEngine';
 
 export interface SemanticAnalysisResult {
   intent:
@@ -477,7 +478,33 @@ Feel free to present any question or scenario!`,
     };
   }
 
-  // 9. Pragmatic Depth Modulation: Simplification / ELI5
+  // 9. Macro Sector Lookup (Top Priority for Macro Pillars: Equities, Oil, Defense, Rates, Trade)
+  const macro = findMacroSectorDossier(ctx.cleanPrompt) || (ctx.activeSubTopic ? findMacroSectorDossier(ctx.activeSubTopic) : undefined);
+  if (macro) {
+    return {
+      intent: 'MACRO_SECTOR',
+      subject: macro.title,
+      thoughtTrace: `1. [Domain Classification]: Query corresponds to Macro Pillar "${macro.pillar}".
+2. [Structural Retrieval]: Sourced core mechanics, transmission channels, benchmark assets, and systemic tail risks.
+3. [MoE Routing]: Activated Top-2 Financial Economics & Macro Structure Experts.`,
+      responseMarkdown: formatMacroResponse(macro),
+    };
+  }
+
+  // 10. Deep Multi-Domain Reasoning Bank (Physics, Mathematics, Stocks, Human Sentiment, Dialogue Nuance)
+  const reasoningMatch = HumanDialogueEngine.synthesizeHumanResponse(q, '', 'SCIENCE_AI_MATH', history.length);
+  if (reasoningMatch.toneDescription.startsWith('Human Reasoning')) {
+    return {
+      intent: 'SCIENCE_AI_MATH',
+      subject: ctx.resolvedSubject || q.slice(0, 50),
+      thoughtTrace: `1. [Reasoning Engine]: Activated ${reasoningMatch.toneDescription}.
+2. [Affective Detection]: Classified user state as "${reasoningMatch.affect}".
+3. [Deductive Synthesis]: Formulating direct bottom-line, rigorous multi-step chain of thought, intuitive analogy, and practical takeaway.`,
+      responseMarkdown: reasoningMatch.response,
+    };
+  }
+
+  // 10. Pragmatic Depth Modulation: Simplification / ELI5
   if (ctx.intent === 'SIMPLIFICATION_ELI5') {
     return {
       intent: 'SIMPLIFICATION_ELI5',
@@ -526,19 +553,6 @@ Feel free to present any question or scenario!`,
 2. [Knowledge Retrieval]: Extracted theater, historical era, belligerent coalitions, tactical technologies, and macroeconomic impacts.
 3. [MoE Routing]: Activated Military Strategy & Macro Risk Neural Experts.`,
       responseMarkdown: formatConflictResponse(conflict),
-    };
-  }
-
-  // 13. Macro Sector Lookup
-  const macro = findMacroSectorDossier(ctx.cleanPrompt) || (ctx.activeSubTopic ? findMacroSectorDossier(ctx.activeSubTopic) : undefined);
-  if (macro) {
-    return {
-      intent: 'MACRO_SECTOR',
-      subject: macro.title,
-      thoughtTrace: `1. [Domain Classification]: Query corresponds to Macro Pillar "${macro.pillar}".
-2. [Structural Retrieval]: Sourced core mechanics, transmission channels, benchmark assets, and systemic tail risks.
-3. [MoE Routing]: Activated Top-2 Financial Economics & Macro Structure Experts.`,
-      responseMarkdown: formatMacroResponse(macro),
     };
   }
 
@@ -608,7 +622,7 @@ ${body}
     };
   }
 
-  // 16. Science & AI Topics
+  // 17. Science & AI Topics
   const science = findScienceTopic(ctx.cleanPrompt) || findScienceTopic(ctx.resolvedSubject);
   if (science) {
     return {
@@ -631,7 +645,7 @@ ${science.summary}
     };
   }
 
-  // 17. Philosophy & Living
+  // 18. Philosophy & Living
   const phil = findPhilosophyTopic(ctx.cleanPrompt) || findPhilosophyTopic(ctx.resolvedSubject);
   if (phil) {
     return {
@@ -654,7 +668,7 @@ ${phil.summary}
     };
   }
 
-  // 18. Dynamic Analytical Synthesis (Zero Boilerplate Templates!)
+  // 19. Dynamic Analytical Synthesis (Zero Boilerplate Templates!)
   const subject = ctx.resolvedSubject || ctx.cleanPrompt || 'this inquiry';
   return {
     intent: 'ANALYTICAL_SYNTHESIS',
