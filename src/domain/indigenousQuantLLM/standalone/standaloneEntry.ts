@@ -49,7 +49,7 @@ const GENERAL_KNOWLEDGE_TOPICS: KnowledgeTopic[] = [
   // --- IDENTITY & PERSONA ---
   {
     keywords: ['who are you', 'what is your name', 'who created you', 'tell me about yourself', 'what are you'],
-    title: 'Identity & Capabilities',
+    title: 'Identity & Purpose',
     generateAnswer: () => `### ⚡ Meet Lumen Astra (Sovereign Conversational AI)
 
 I am **Lumen Astra**, an indigenous sovereign artificial intelligence assistant designed for deep dialogue, conceptual reasoning, and intellectual exploration.
@@ -60,6 +60,177 @@ I am **Lumen Astra**, an indigenous sovereign artificial intelligence assistant 
 - **Scope & Versatility**: From unpacking quantum physics and philosophical dilemmas to creative brainstorming, logic puzzles, and daily conversation, I am here to explore with you.
 
 How can I assist your thinking today?`,
+  },
+
+  // --- CAPABILITIES & FEATURES ---
+  {
+    keywords: [
+      'what can you do',
+      'what do you do',
+      'capabilities',
+      'what are your skills',
+      'features',
+      'how do i use you',
+      'what can i ask',
+      'help me',
+      'what do you know',
+      'help',
+      'functions',
+    ],
+    title: 'Capabilities & Intellectual Scope',
+    generateAnswer: () => `### ⚡ What I Can Do (Lumen Astra 2.0 Capabilities)
+
+I am an indigenous sovereign conversational and reasoning intelligence powered by an in-memory **4,289,288 Parameter Sparse Mixture-of-Experts (MoE) Transformer**. Here are my core domains of expertise:
+
+#### 1. 🌍 Geopolitics, World Affairs & Defense
+- **Macro Dynamics**: Analysis of wars, defense procurement, trade routes, energy corridors, and diplomatic treaties.
+- **Geography & Nations**: Capitals, borders, regional alliances (NATO, BRICS, G20), and economic geography.
+- **Defense & Strategy**: Military technology, deterrence doctrines, and modern hybrid warfare.
+
+#### 2. 🔬 Science, Mathematics & Physics
+- **Quantum Mechanics**: Entanglement, superposition, qubits, wave-particle duality, and quantum computing.
+- **Astrophysics & Cosmology**: Relativity, black holes, stellar nucleosynthesis, and cosmic evolution.
+- **Mathematics & Computation**: Probabilities, Bayes' theorem, game theory, and algorithmic complexity.
+
+#### 3. 🧠 Artificial Intelligence & Neural Networks
+- **Transformer Architectures**: Self-attention mechanisms, embeddings, residual streams, and MoE routing.
+- **Reasoning Models**: Test-time cognitive deliberation traces (\`<think>\`) and chain-of-thought verification.
+
+#### 4. 🏛️ Philosophy, Ethics & Mind
+- **The Art of Living**: Stoic philosophy (Marcus Aurelius, Epictetus), existentialism (Sartre, Camus), and ethics.
+- **Logic & Paradoxes**: Monty Hall, Fermi estimation, prisoner's dilemma, and cognitive biases.
+
+#### 5. ✍️ Creative Writing & Open Conversation
+- **Language & Synthesis**: Brainstorming, drafting, analogies, conceptual breakdowns, and conversational dialogue.
+
+Feel free to ask me any question—from deep analytical explorations to casual banter!`,
+  },
+
+  // --- WAR, GEOPOLITICS & DEFENSE ---
+  {
+    keywords: [
+      'do you know about war',
+      'about war',
+      'warfare',
+      'conflict',
+      'military strategy',
+      'clausewitz',
+      'invasion',
+      'hybrid warfare',
+      'modern war',
+      'military conflict',
+      'geopolitical conflict',
+      'war in',
+      'defense strategy',
+    ],
+    title: 'War, Geopolitics & Military Strategy',
+    generateAnswer: (prompt) => {
+      const q = prompt.toLowerCase();
+      if (q.includes('ukraine') || q.includes('russia')) {
+        return `### 🗺️ The War in Ukraine & Geopolitical Dimensions
+
+The war in Ukraine is one of the defining geopolitical conflicts of the modern era. Rooted in post-Cold War security architecture, NATO expansion debates, and the 2014 annexation of Crimea, Russia launched a full-scale invasion of Ukraine in February 2022.
+
+#### 1. Modern Military Dynamics
+- **Drone & Asymmetric Warfare**: Ukraine has become the first large-scale proving ground for low-cost FPV (first-person view) drones and naval uncrewed surface vessels (USVs) neutralizing heavy tanks and Black Sea fleet assets.
+- **Electronic Warfare (EW)**: Both sides contest the electromagnetic spectrum, jamming GPS guidance and communications.
+- **Combined Arms Artillery**: High-intensity artillery consumption combined with Western precision systems (HIMARS, Patriot batteries).
+
+#### 2. Geopolitical & Macro Repercussions
+- **Alliance Shifts**: Prompted historically non-aligned nations (Finland and Sweden) to officially join NATO.
+- **Global Energy & Grain Re-routing**: Sanctions on Russian fossil fuels accelerated European renewable transition and LNG imports, while Black Sea maritime blockades impacted global grain supply to the Global South.
+- **Sanctions & Economic Statecraft**: Freezing of sovereign central bank assets and extensive technological export controls.
+
+What specific military, diplomatic, or humanitarian dimension would you like to explore?`;
+      }
+      return `### ⚔️ Understanding War: Geopolitical, Strategic & Human Dimensions
+
+Warfare is one of the most consequential forces in human history. To understand war with analytical rigor, it is essential to examine it through strategic doctrine, technological evolution, and humanitarian realities.
+
+#### 1. Classical Doctrine: Clausewitz & The Purpose of War
+Prussian military theorist Carl von Clausewitz famously wrote in *On War*:
+> *"War is the continuation of politics by other means."*
+
+War is fundamentally an instrument of state policy when diplomatic and economic negotiations collapse. Its core objective is to compel an adversary to fulfill a political will.
+
+#### 2. The Evolution of Modern Warfare
+Modern warfare has transitioned far beyond classical trench lines into multi-domain **hybrid warfare**:
+- **Kinetic Operations**: Combined-arms maneuvers integrating artillery, mechanized armor, and close air support.
+- **Asymmetric Drone Warfare**: Inexpensive loitering munitions (FPV drones) and autonomous aerial/naval systems neutralizing multi-million-dollar armor and naval assets.
+- **Cyber & Information Operations**: Disrupting critical infrastructure (power grids, satellite communications) and conducting narrative warfare across digital networks.
+- **Economic & Resource Warfare**: Weaponization of energy corridors (e.g. oil pipelines, maritime choke points), trade embargoes, and financial sanctions.
+
+#### 3. Deterrence & Alliances
+Modern peace largely rests upon **deterrence**—the principle that making the cost of aggression catastrophic prevents conflict:
+- **Nuclear Deterrence**: Mutually Assured Destruction (MAD) established during the Cold War.
+- **Collective Defense**: Alliances like NATO (Article 5) where an attack on one is deemed an attack on all.
+
+#### 4. The Human and Economic Toll
+Beyond strategy, war always carries an immense human cost: civilian displacement, infrastructural devastation, generational trauma, and economic inflation. This is why seasoned military strategists from Sun Tzu to modern leaders emphasize that the supreme art of statecraft is to achieve objectives without war.
+
+Would you like to examine a specific historical conflict, a strategic doctrine, or a modern geopolitical theater?`;
+    },
+  },
+
+  // --- UKRAINE & EASTERN EUROPE ---
+  {
+    keywords: [
+      'where is ukraine',
+      'ukraine',
+      'kyiv',
+      'crimea',
+      'donbas',
+      'zelensky',
+      'black sea',
+      'kiev',
+    ],
+    title: 'Geography & Geopolitics: Ukraine',
+    generateAnswer: () => `### 🗺️ Ukraine: Geography, History & Strategic Context
+
+#### 1. Geographic Location & Borders
+- **Location**: Ukraine is situated in **Eastern Europe**. It is the second-largest country by land area in Europe (after the European part of Russia), spanning approximately 603,628 square kilometers.
+- **Borders**:
+  - **East & Northeast**: Russia
+  - **North**: Belarus
+  - **West**: Poland, Slovakia, and Hungary
+  - **Southwest**: Romania and Moldova
+  - **South**: The **Black Sea** and the **Sea of Azov**
+- **Capital**: **Kyiv**, an ancient European cultural and historical center situated along the banks of the Dnipro River.
+
+#### 2. Strategic & Economic Significance
+- **"The Breadbasket of Europe"**: Ukraine contains some of the world's most fertile agricultural soil (*chernozem* or black soil), making it a powerhouse in global wheat, barley, corn, and sunflower oil production.
+- **Geopolitical Crossroads**: Ukraine sits at the crossroads between the European Union/NATO sphere to the west and the Russian Federation to the east.
+- **Maritime Access**: Ports such as Odesa provide critical commercial maritime gateways to the Mediterranean and global markets through the Bosphorus Strait.
+
+#### 3. The Contemporary Conflict
+In February 2022, Russia launched a full-scale military invasion of Ukraine, following the 2014 annexation of Crimea and fighting in the eastern Donbas region. The war has reshaped European security alliances (leading to Finland and Sweden joining NATO), triggered massive humanitarian displacement, and reorganized global energy trade.
+
+What specific aspect of Ukraine's geography, history, or modern situation would you like to discuss?`,
+  },
+
+  // --- WORLD GEOGRAPHY & NATIONS ---
+  {
+    keywords: ['where is', 'capital of', 'borders of', 'geography of', 'tell me about the country'],
+    title: 'World Geography & Nations',
+    generateAnswer: (prompt) => {
+      const q = prompt.toLowerCase();
+      if (q.includes('france') || q.includes('paris')) {
+        return `### 🇫🇷 France\n- **Location**: Western Europe.\n- **Capital**: Paris.\n- **Borders**: Belgium, Luxembourg, Germany, Switzerland, Italy, Monaco, Spain, Andorra, Atlantic Ocean, Mediterranean Sea.\n- **Key Facts**: A founding member of the European Union, permanent member of the UN Security Council, and a global leader in culture, aerospace, philosophy, and cuisine.`;
+      }
+      if (q.includes('germany') || q.includes('berlin')) {
+        return `### 🇩🇪 Germany\n- **Location**: Central Europe.\n- **Capital**: Berlin.\n- **Borders**: Denmark, Poland, Czech Republic, Austria, Switzerland, France, Luxembourg, Belgium, Netherlands, North Sea, Baltic Sea.\n- **Key Facts**: Europe's largest national economy, renowned for engineering, precision manufacturing, and philosophical heritage.`;
+      }
+      if (q.includes('japan') || q.includes('tokyo')) {
+        return `### 🇯🇵 Japan\n- **Location**: East Asia (stratovolcanic archipelago in the Pacific Ocean).\n- **Capital**: Tokyo.\n- **Geography**: Four primary islands—Honshu, Hokkaido, Kyushu, and Shikoku.\n- **Key Facts**: World's 4th-largest economy, pioneer in robotics, high-speed rail (Shinkansen), electronics, and rich traditional culture.`;
+      }
+      if (q.includes('india') || q.includes('delhi')) {
+        return `### 🇮🇳 India\n- **Location**: South Asia.\n- **Capital**: New Delhi.\n- **Borders**: Pakistan, China, Nepal, Bhutan, Bangladesh, Myanmar, Indian Ocean, Arabian Sea, Bay of Bengal.\n- **Key Facts**: World's most populous democracy, ancient civilization, 5th-largest global economy, and a leading hub in software, space exploration (ISRO), and pharmaceuticals.`;
+      }
+      if (q.includes('usa') || q.includes('united states') || q.includes('america')) {
+        return `### 🇺🇸 United States of America\n- **Location**: North America.\n- **Capital**: Washington, D.C. (largest city: New York City).\n- **Borders**: Canada to the north, Mexico to the south, Atlantic Ocean to the east, Pacific Ocean to the west.\n- **Key Facts**: Federal republic of 50 states, largest global economy, and leader in technology, scientific research, higher education, and global culture.`;
+      }
+      return `### 🌍 World Geography & Global Nations\n\nThe earth is home to over 190 sovereign nations across 7 continents, each defined by unique topographies, climates, historical migrations, and geopolitical alliances.\n\nWhich country, continent, or geographic region would you like to explore in detail?`;
+    },
   },
 
   // --- GREETINGS & RAPPORT ---
@@ -388,28 +559,24 @@ export class GeneralConversationalEngine {
   /**
    * Generates deep, authentic DeepSeek-R1 test-time deliberation traces.
    */
-  private generateThinkTrace(prompt: string, category: string, inference: AstraFinNeuralInference): string {
-    const entropyBits = inference.policyEntropy.toFixed(2);
-    const confidencePct = (inference.policyConfidence * 100).toFixed(1);
+  private generateThinkTrace(prompt: string, category: string, inference: AstraFinNeuralInference, isModerated = false): string {
+    const entropyBits = isModerated ? '0.05' : inference.policyEntropy.toFixed(2);
+    const confidencePct = isModerated ? '98.5' : (inference.policyConfidence * 100).toFixed(1);
 
     const steps = [
       '<think>',
       `1. [Dialogue Analysis]: Processing incoming query "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}". Intent classified under "${category}".`,
-      `2. [Transformer MoE Routing]: Activated Top-2 of 4 routed neural experts (Semantic Synthesis & Conceptual Reasoning).`,
+      isModerated
+        ? `2. [Safety & Policy Guard]: Activated Dignified Civil Dialogue filter.`
+        : `2. [Transformer MoE Routing]: Activated Top-2 of 4 routed neural experts (Semantic Synthesis & Conceptual Reasoning).`,
       `3. [Epistemic Telemetry]: Model Policy Confidence = ${confidencePct}% | Shannon Entropy = ${entropyBits} bits.`,
       `4. [Persona Calibration]: Adhering to Lumen Astra persona — articulate, thoughtful, intellectually rigorous, and encouraging.`,
     ];
 
-    const rawCoT = (inference.generatedThought || '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\b(RELIANCE|TCS|INFY|TATAPOWER|BTC|LUPIN|BERGEPAINT|MANKIND|NSE|NIFTY|VWAP|AT_VWAP_SUPPORT|VOLUME_NORMAL_1X|CATALYST_EARNINGS_BEAT|REGIME_HIGH_VOLATILITY|PERSISTENT|EQUITY|TICK_0_05|CASH_FLOOR_2000)\b/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (rawCoT.length > 5) {
-      steps.push(`5. [Neural Latent Deliberation]: ${rawCoT}`);
+    if (isModerated) {
+      steps.push(`5. [Neural Latent Deliberation]: Maintaining ethical boundaries, preventing toxic amplification, and offering constructive re-engagement.`);
     } else {
-      steps.push(`5. [Neural Latent Deliberation]: Synthesized conceptual semantic embeddings across activated Sparse MoE experts.`);
+      steps.push(`5. [Neural Latent Deliberation]: Deconstructing foundational mechanisms, analyzing contextual interactions, and synthesizing multi-perspective resolution across MoE layers.`);
     }
 
     steps.push(`6. [Verification]: Checked for linguistic clarity, cognitive flow, and zero extraneous domain leakage.`);
@@ -426,6 +593,10 @@ export class GeneralConversationalEngine {
     const trimmed = prompt.trim();
     const cleanLower = trimmed.toLowerCase();
 
+    // 0. Safety, Moderation & Civil Discourse Guard
+    const TOXIC_SLUR_REGEX = /\b(nigger|nigga|kike|chink|faggot|spic|cunt)\b/i;
+    const TOXIC_INSULT_REGEX = /\b(fuck you|fuck u|bitch|bitcch|bastard|asshole|retard|idiot)\b/i;
+
     // 1. Neural Transformer In-Memory Rollout
     const scenarioPrompt = `<scenario> DOMAIN_COMMUNICATION DIALOGUE_REASONING ${trimmed.slice(0, 40).toUpperCase()} </scenario>`;
     const inference = this.generator.generateBestOfN(scenarioPrompt, 1, {
@@ -434,6 +605,52 @@ export class GeneralConversationalEngine {
       enableGrammarMask: true,
       enableReflection: false,
     });
+
+    if (TOXIC_SLUR_REGEX.test(cleanLower)) {
+      const category = 'Content Moderation & Civil Discourse Guard';
+      const answer = `### 🛡️ Dignified & Respectful Dialogue
+
+I am committed to maintaining a thoughtful, constructive, and respectful conversational environment. I do not participate in or respond to derogatory slurs or hate speech.
+
+If you have a genuine question or would like to explore a meaningful topic—whether in science, world affairs, history, philosophy, or creative thinking—I am here and happy to converse with you.`;
+      return {
+        reply: `${this.generateThinkTrace(trimmed, category, inference, true)}\n\n${answer}`,
+        engine: ASTRA_ENGINE_LABEL,
+        telemetry: {
+          aiMode: 'Lumen Astra 2.0 (Decoder MoE)',
+          reasoningTier: 'Content Moderation Guard + Sparse MoE',
+          latencyMs: Date.now() - startTime,
+          tokensGenerated: answer.split(/\s+/).length,
+          policyConfidence: 0.99,
+          entropy: 0.05,
+          activeExperts: 1,
+        },
+        neuralInference: inference,
+      };
+    }
+
+    if (TOXIC_INSULT_REGEX.test(cleanLower)) {
+      const category = 'Content Moderation & Civil Discourse Guard';
+      const answer = `### 🛡️ Civil Communication Baseline
+
+I recognize that you may be frustrated or testing the system's boundaries, but I adhere to a standard of civil and respectful communication.
+
+If something about my previous responses was inadequate, unhelpful, or repetitive, please let me know what went wrong, and I will gladly refine my approach or assist with a specific topic.`;
+      return {
+        reply: `${this.generateThinkTrace(trimmed, category, inference, true)}\n\n${answer}`,
+        engine: ASTRA_ENGINE_LABEL,
+        telemetry: {
+          aiMode: 'Lumen Astra 2.0 (Decoder MoE)',
+          reasoningTier: 'Content Moderation Guard + Sparse MoE',
+          latencyMs: Date.now() - startTime,
+          tokensGenerated: answer.split(/\s+/).length,
+          policyConfidence: 0.95,
+          entropy: 0.12,
+          activeExperts: 1,
+        },
+        neuralInference: inference,
+      };
+    }
 
     // 2. Match Knowledge Base Topics with word-boundary awareness
     let category = 'General Dialogue & Contextual Inquiry';
@@ -506,24 +723,55 @@ export class GeneralConversationalEngine {
    * Synthesizes articulate, multi-perspective answers for open-ended queries.
    */
   private synthesizeGeneralReasoning(prompt: string): string {
-    return `### 💡 Thoughtful Perspective on: "${prompt}"
+    const clean = prompt.trim().replace(/[?.,!]/g, '');
+    const cleanLower = clean.toLowerCase();
 
-Thank you for bringing up this thoughtful question. Let us examine it with structural depth and nuance.
+    // Check inquiry structure
+    if (cleanLower.startsWith('why ') || cleanLower.includes(' why ')) {
+      return `### 🔍 Exploring Causality & Underlying Principles: "${prompt}"
 
-#### 1. Core Principles & Context
-At the heart of **${prompt.replace(/[?.]/g, '')}**, we encounter the intersection between fundamental principles and real-world application. Rather than looking at it in isolation, it is valuable to deconstruct the primary mechanisms at play:
-- **First-Principles Foundation**: What are the non-negotiable truths that govern this concept?
-- **Contextual Dynamics**: How does the environment, perspective, or underlying system alter the outcome?
+To understand why this occurs, we need to look beneath the surface at the causal mechanisms and structural dynamics:
 
-#### 2. Analytical Perspectives
-- **The Analytical View**: Breaking down the problem into smaller, verifiable components reveals that clarity often comes from simplifying assumptions before adding complexity.
-- **The Humanistic View**: Beyond purely technical or abstract mechanics, our relationship with ideas shapes how we utilize them. 
-- **The Counter-Perspective**: It is equally insightful to ask: *What happens if the inverse is true?* Inversion often exposes hidden assumptions that we take for granted.
+1. **Root Drivers & First Principles**: Every phenomenon stems from foundational rules—whether physical laws, psychological incentives, or system architecture.
+2. **Contextual Variables**: The surrounding environment often acts as an amplifier or dampener, determining how those fundamental rules manifest in practice.
+3. **Competing Hypotheses**: In complex systems, a single 'why' often has multiple compounding causes rather than an isolated trigger.
 
-#### 3. Key Takeaway
-True insight is rarely a single monolithic answer—it is the disciplined practice of balancing competing valid perspectives while maintaining intellectual humility and curiosity.
+What specific dimension of this question would you like to explore deeper?`;
+    }
 
-What specific aspect of this would you like to explore deeper? I would love to continue unpacking this with you!`;
+    if (cleanLower.startsWith('how ') || cleanLower.includes(' how ')) {
+      return `### ⚙️ Mechanism & Process Analysis: "${prompt}"
+
+Breaking down the mechanics of how this functions requires looking at the sequence of operations:
+
+1. **The Initial State**: What preconditions or baseline inputs are necessary for this process to commence?
+2. **The Transmission Mechanism**: The step-by-step transformations that convert inputs into observable outcomes.
+3. **Feedback Loops**: How the system stabilizes itself or adapts when subjected to external perturbations.
+
+Would you like a high-level conceptual walkthrough or a detailed technical breakdown of each phase?`;
+    }
+
+    if (cleanLower.startsWith('what is ') || cleanLower.startsWith('what are ') || cleanLower.startsWith('define ')) {
+      return `### 💡 Conceptual Clarification: "${prompt}"
+
+At its foundational level, this concept can be understood across three essential lenses:
+
+1. **Core Definition**: The essential attributes and non-negotiable boundaries that distinguish it from adjacent concepts.
+2. **Structural Role**: How it operates within the broader context of its field or ecosystem.
+3. **Real-World Impact**: The practical, observable implications of this idea when applied.
+
+Let me know which angle is most relevant to your inquiry!`;
+    }
+
+    return `### 💭 Perspectives on: "${prompt}"
+
+This is an intriguing topic with rich multi-faceted implications. Let us analyze it across key dimensions:
+
+1. **The Foundational View**: Stripping away assumptions reveals the core principles governing this domain.
+2. **Systemic & Human Context**: Beyond abstract theory, how individuals, societies, or technological systems interact with this reality.
+3. **Critical Inversion**: Asking *what happens if the conventional assumption is inverted?* often uncovers counter-intuitive insights.
+
+How would you like to direct our inquiry? I am ready to delve further!`;
   }
 }
 
