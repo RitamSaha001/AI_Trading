@@ -18,3 +18,5 @@ export * from './verification/prmCritic';
 export * from './verification/uncertaintyCalibrator';
 export * from './cognitiveEngine';
 export * from './neural';
+export * from './benchmarking';
+

@@ -42,6 +42,8 @@ export interface AstraFinNeuralInference {
   hasReflected?: boolean;
   reflectionNote?: string;
   candidateRankScore?: number;
+  candidates?: AstraFinNeuralInference[];
+  rolloutsEvaluated?: number;
 }
 
 export class AstraFinGenerator {

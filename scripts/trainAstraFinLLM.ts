@@ -26,6 +26,7 @@ import {
   DPOTrainer,
   ScenarioExample,
   DPOPreferencePair,
+  LARGE_1M_TRANSFORMER_CONFIG,
 } from '../src/domain/indigenousQuantLLM/neural';
 
 function parseArgs(): {
@@ -34,6 +35,7 @@ function parseArgs(): {
   lr: number;
   maxScenarios: number;
   dpoEpochs: number;
+  configType: 'default' | '1m';
 } {
   const args = process.argv.slice(2);
   let epochs = 5;
@@ -41,6 +43,7 @@ function parseArgs(): {
   let lr = 0.001;
   let maxScenarios = 3000;
   let dpoEpochs = 3;
+  let configType: 'default' | '1m' = 'default';
 
   for (const a of args) {
     if (a.startsWith('--epochs=')) epochs = parseInt(a.split('=')[1], 10);
@@ -48,10 +51,12 @@ function parseArgs(): {
     if (a.startsWith('--lr=')) lr = parseFloat(a.split('=')[1]);
     if (a.startsWith('--max-scenarios=')) maxScenarios = parseInt(a.split('=')[1], 10);
     if (a.startsWith('--dpo-epochs=')) dpoEpochs = parseInt(a.split('=')[1], 10);
+    if (a.startsWith('--config=')) configType = a.split('=')[1] === '1m' ? '1m' : 'default';
   }
 
-  return { epochs, batchSize, lr, maxScenarios, dpoEpochs };
+  return { epochs, batchSize, lr, maxScenarios, dpoEpochs, configType };
 }
+
 
 function compactRecord(parsed: any): any {
   if (!parsed || typeof parsed !== 'object') return parsed;
@@ -102,13 +107,15 @@ async function loadJsonlFile(filePath: string, maxLines = 1000): Promise<any[]> 
 }
 
 async function main() {
-  const { epochs, batchSize, lr, maxScenarios, dpoEpochs } = parseArgs();
+  const { epochs, batchSize, lr, maxScenarios, dpoEpochs, configType } = parseArgs();
 
   console.log('================================================================================');
   console.log('           LUMEN-ASTRA-FIN 2.0: SOVEREIGN NEURAL TRANSFORMER TRAINING           ');
   console.log('                 (Real NVIDIA Nemotron Multi-Task + DPO Alignment)              ');
   console.log('================================================================================');
-  console.log(`[Config] Epochs: ${epochs} | Batch Size: ${batchSize} | Learning Rate: ${lr} | Target Samples: ${maxScenarios}`);
+  console.log(
+    `[Config] Scale: ${configType === '1m' ? '1M+ Architecture (LARGE_1M_TRANSFORMER_CONFIG)' : 'Default Edge Scale'} | Epochs: ${epochs} | Batch: ${batchSize} | LR: ${lr} | Target Samples: ${maxScenarios}`
+  );
 
   const nemotronDir = path.resolve(process.cwd(), 'artifacts/nemotron-data');
   const auditDir = path.resolve(process.cwd(), 'artifacts/fleet-replay-audit');
@@ -195,15 +202,23 @@ async function main() {
 
   // Initialize Model & Trainer
   console.log('\n[Model] Initializing Decoder-only Multi-Head Self-Attention Transformer with Sparse MoE:');
-  const model = new NeuralTransformerModel({
-    dModel: 64,
-    nHeads: 4,
-    nLayers: 2,
-    maxSeqLen: 64,
-    learningRate: lr,
-    useMoE: true,
-    nExperts: 4,
-  });
+  const model = new NeuralTransformerModel(
+    configType === '1m'
+      ? {
+          ...LARGE_1M_TRANSFORMER_CONFIG,
+          learningRate: lr,
+        }
+      : {
+          dModel: 64,
+          nHeads: 4,
+          nLayers: 2,
+          maxSeqLen: 64,
+          learningRate: lr,
+          useMoE: true,
+          nExperts: 4,
+        }
+  );
+  console.log(`  • Trainable Parameters:         ${model.countParameters().toLocaleString()} (${(model.countParameters() / 1e6).toFixed(2)}M parameters)`);
   console.log(`  • Embedding Dimension (d_model): ${model.config.dModel}`);
   console.log(`  • Attention Heads (h):          ${model.config.nHeads}`);
   console.log(`  • Transformer Layers (L):       ${model.config.nLayers}`);
@@ -212,7 +227,10 @@ async function main() {
   console.log(`  • Vocabulary Size:              ${model.config.vocabSize} tokens (BPE + 256 byte-fallback)`);
   console.log(`  • Policy Actions:               ${model.config.nActions} classes`);
 
-  const checkpointPath = path.join(auditDir, 'lumen-astra-fin-weights.json');
+  const checkpointPath = path.join(
+    auditDir,
+    configType === '1m' ? 'lumen-astra-fin-weights-1m.json' : 'lumen-astra-fin-weights.json'
+  );
 
   // ============================================================================
   // STAGE 1: MULTI-TASK SUPERVISED PRETRAINING / SFT

@@ -34,6 +34,20 @@ export const DEFAULT_TRANSFORMER_CONFIG: TransformerConfig = {
   nExperts: 4,
 };
 
+export const LARGE_1M_TRANSFORMER_CONFIG: TransformerConfig = {
+  vocabSize: VOCAB_SIZE,
+  dModel: 144,
+  nHeads: 4,
+  nLayers: 4,
+  maxSeqLen: 128,
+  nActions: ACTION_TOKENS.length,
+  learningRate: 0.0008,
+  weightDecay: 0.01,
+  useMoE: true,
+  nExperts: 4,
+};
+
+
 export interface TransformerLayerWeights {
   W_q: Matrix; // [dModel x dModel]
   W_k: Matrix; // [dModel x dModel]
@@ -566,4 +580,45 @@ export class NeuralTransformerModel {
     if (data.W_value) this.W_value = data.W_value;
     if (data.optimizerStep) this.optimizerStep = data.optimizerStep;
   }
+
+  /**
+   * Computes the total number of trainable parameters in the model.
+   */
+  public countParameters(): number {
+    let total = 0;
+    const countMat = (m: Matrix) => (m ? m.length * (m[0]?.length || 0) : 0);
+    const countVec = (v: Vector) => (v ? v.length : 0);
+
+    total += countMat(this.W_emb);
+    total += countMat(this.W_pos);
+
+    for (const l of this.layers) {
+      total += countMat(l.W_q);
+      total += countMat(l.W_k);
+      total += countMat(l.W_v);
+      total += countMat(l.W_o);
+      total += countMat(l.W_1);
+      total += countVec(l.b_1);
+      total += countMat(l.W_2);
+      total += countVec(l.b_2);
+    }
+
+    if (this.moeBlocks) {
+      for (const moe of this.moeBlocks) {
+        total += countMat(moe.W_router);
+        for (const exp of moe.experts) {
+          total += countMat(exp.W_gate);
+          total += countMat(exp.W_up);
+          total += countMat(exp.W_down);
+        }
+      }
+    }
+
+    total += countMat(this.W_lm);
+    total += countMat(this.W_policy);
+    total += countMat(this.W_value);
+
+    return total;
+  }
 }
+

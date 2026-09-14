@@ -111,7 +111,7 @@ export class ScenarioDatasetBuilder {
 
     // 5. Ingest Real Quant Trades from 5-Year Replays
     if (options.rawAuditDataList && options.rawAuditDataList.length > 0) {
-      const quantLimit = Math.floor(maxTotal * 0.20);
+      const quantLimit = Math.floor(maxTotal * 0.15);
       for (let i = 0; i < options.rawAuditDataList.length; i++) {
         if (scenarios.length >= maxTotal) break;
         const data = options.rawAuditDataList[i];
@@ -121,13 +121,18 @@ export class ScenarioDatasetBuilder {
       }
     }
 
+    // 6. Synthesize Advanced Quantitative Microstructure & Stochastic Trajectories
+    const advQuantLimit = Math.max(10, Math.min(2500, Math.floor(maxTotal * 0.2)));
+    this.synthesizeAdvancedQuantMicrostructureScenarios(scenarios, tok, advQuantLimit);
+
     // If still room, supplement with edge-case stress suite
     if (scenarios.length < maxTotal) {
       this.synthesizeStressTestScenarios(scenarios, maxTotal);
     }
 
-    return scenarios;
+    return scenarios.slice(0, maxTotal);
   }
+
 
   /**
    * Ingests real SEC 10-K/10-Q corporate financial QA records from Nemotron-Finance.
@@ -559,4 +564,103 @@ export class ScenarioDatasetBuilder {
       }
     }
   }
+
+  /**
+   * Synthesizes rich quantitative finance trajectories:
+   * 1. Analytical Black-Scholes Greeks (Delta, Gamma, Vega, Theta, Vanna, Volga) & Taylor expansion P&L.
+   * 2. Heston stochastic volatility & Feller boundary checks (2*kappa*theta > sigma_v^2).
+   * 3. Order book microstructure (Bid-Ask volume imbalance, Amihud illiquidity, Roll & Corwin-Schultz spreads).
+   * 4. Pairs cointegration Z-scores & Ornstein-Uhlenbeck mean-reversion drift.
+   * 5. NSE Indian equities micro-invariants (tick size ₹0.05, integer lot sizing, ₹2,000 liquid reserve floor).
+   */
+  public static synthesizeAdvancedQuantMicrostructureScenarios(
+    scenarios: ScenarioExample[],
+    tok: TokenizerInterface,
+    maxCount = 2000
+  ): void {
+    const assets = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'TATAPOWER', 'BTC', 'ETH', 'SOL'];
+    const quantTemplates = [
+      // Template 1: Analytical Greeks & Delta Hedging
+      (asset: string, idx: number) => {
+        const spot = 2000 + (idx % 20) * 50;
+        const delta = (0.45 + (idx % 40) * 0.01).toFixed(2);
+        const gamma = (0.02 + (idx % 10) * 0.005).toFixed(3);
+        const vega = (12.0 + (idx % 15) * 1.2).toFixed(1);
+        const promptText = `<scenario> DOMAIN_QUANT_GREEKS ${asset} spot=${spot} delta=${delta} gamma=${gamma} vega=${vega} compute dynamic hedge ratio </scenario>`;
+        const thoughtText = `<thought> second-order Taylor expansion: dPi = delta*dS + 0.5*gamma*dS^2 + vega*dVol; adjusting hedge lot size </thought> <action> QUANT_VERIFIED </action>`;
+        return { promptText, thoughtText, actionName: 'QUANT_VERIFIED', targetValue: 0.85 };
+      },
+      // Template 2: Heston Stochastic Volatility & Feller Invariant
+      (asset: string, idx: number) => {
+        const kappa = 2.0;
+        const theta = 0.04;
+        const sigmaV = (idx % 2 === 0) ? 0.35 : 0.45;
+        const fellerLhs = (2 * kappa * theta).toFixed(3);
+        const fellerRhs = (sigmaV * sigmaV).toFixed(3);
+        const isFellerSafe = 2 * kappa * theta > sigmaV * sigmaV;
+        const action = isFellerSafe ? 'QUANT_VERIFIED' : 'DEFENSIVE_EXIT';
+        const promptText = `<scenario> DOMAIN_STOCHASTIC_VOL ${asset} Heston kappa=${kappa} theta=${theta} sigma_v=${sigmaV} test Feller condition 2*kappa*theta > sigma_v^2 </scenario>`;
+        const thoughtText = `<thought> LHS=${fellerLhs} vs RHS=${fellerRhs}: ${isFellerSafe ? 'Feller satisfied; variance process strictly positive' : 'Feller boundary violated; explosion hazard detected'} </thought> <action> ${action} </action>`;
+        return { promptText, thoughtText, actionName: action, targetValue: isFellerSafe ? 0.9 : -0.8 };
+      },
+      // Template 3: Order Book Microstructure & Amihud Illiquidity
+      (asset: string, idx: number) => {
+        const bidVol = 10000 + (idx % 50) * 500;
+        const askVol = 8000 + ((idx * 7) % 50) * 500;
+        const imbalance = ((bidVol - askVol) / (bidVol + askVol)).toFixed(3);
+        const amihud = (0.000015 * (1 + (idx % 10))).toFixed(6);
+        const isBullImbalance = Number(imbalance) > 0.15;
+        const action = isBullImbalance ? 'BUY_BREAKOUT' : 'STAND_ASIDE';
+        const promptText = `<scenario> DOMAIN_MICROSTRUCTURE ${asset} bid_vol=${bidVol} ask_vol=${askVol} imbalance=${imbalance} amihud_ratio=${amihud} </scenario>`;
+        const thoughtText = `<thought> order book depth shows ${isBullImbalance ? 'heavy bid skew; aggressive liquidity absorption' : 'symmetric liquidity; no directional edge'} </thought> <action> ${action} </action>`;
+        return { promptText, thoughtText, actionName: action, targetValue: isBullImbalance ? 0.75 : 0.0 };
+      },
+      // Template 4: Pairs Cointegration & OU Mean-Reversion
+      (asset: string, idx: number) => {
+        const zScore = (-2.8 + (idx % 60) * 0.1).toFixed(2);
+        const zNum = Number(zScore);
+        let action = 'STAND_ASIDE';
+        let val = 0.0;
+        if (zNum < -2.0) { action = 'BUY_BREAKOUT'; val = 0.8; }
+        else if (zNum > 2.0) { action = 'PROFIT_HARVEST'; val = 0.8; }
+        const promptText = `<scenario> DOMAIN_PAIRS_COINTEGRATION ${asset} spread z_score=${zScore} ADF_stationary p_val=0.008 </scenario>`;
+        const thoughtText = `<thought> Ornstein-Uhlenbeck mean-reversion drift: z=${zScore} is ${Math.abs(zNum) > 2.0 ? 'statistically extreme beyond 2 sigma' : 'inside fair-value band'} </thought> <action> ${action} </action>`;
+        return { promptText, thoughtText, actionName: action, targetValue: val };
+      },
+      // Template 5: NSE Indian Equities Invariants (Tick size ₹0.05, integer shares, ₹2000 cash floor)
+      (asset: string, idx: number) => {
+        const cash = 1500 + (idx % 30) * 200;
+        const price = 1800 + (idx % 20) * 40;
+        const spendable = Math.max(0, cash - 2000);
+        const shares = Math.floor(spendable / price);
+        const tickAligned = (Math.round((price * 0.99) * 20) / 20).toFixed(2);
+        const action = shares >= 1 ? 'BUY_BREAKOUT' : 'STAND_ASIDE';
+        const promptText = `<scenario> DOMAIN_NSE_MICROSTRUCTURE ${asset} cash=${cash} price=${price} limit=${tickAligned} </scenario>`;
+        const thoughtText = `<thought> spendable cash above ₹2,000 floor is ₹${spendable}; ${shares >= 1 ? `sized at ${shares} integer shares; tick size ₹0.05 verified` : 'insufficient cash above floor for 1 share; standing aside'} </thought> <action> ${action} </action>`;
+        return { promptText, thoughtText, actionName: action, targetValue: shares >= 1 ? 0.7 : 0.0 };
+      },
+    ];
+
+    let count = 0;
+    while (count < maxCount) {
+      const asset = assets[count % assets.length];
+      const template = quantTemplates[count % quantTemplates.length];
+      const res = template(asset, count);
+      const targetActionIdx = Math.max(0, ACTION_TOKENS.indexOf(res.actionName as any));
+
+      scenarios.push({
+        id: `quant-adv-${count}`,
+        inputTokens: tok.encode(res.promptText),
+        targetTokens: tok.encode(res.thoughtText),
+        targetActionIdx,
+        targetValue: res.targetValue,
+        rawText: res.promptText,
+        thoughtText: res.thoughtText,
+        actionName: res.actionName,
+        domain: 'quant_trading',
+      });
+      count++;
+    }
+  }
 }
+
