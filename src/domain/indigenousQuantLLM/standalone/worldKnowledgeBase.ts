@@ -1078,6 +1078,17 @@ export function findMacroSectorDossier(query: string): MacroSectorDossier | unde
   const specificIndustrySectors = ['BANKING', 'IT_SERVICES', 'AUTOMOBILE', 'PHARMA', 'METALS', 'FMCG'];
 
   for (const m of MACRO_SECTOR_DOSSIERS) {
+    // Avoid false matches for trading terms like auto-square-off or auto-trail
+    if (
+      m.pillar === 'AUTOMOBILE' &&
+      (q.includes('auto square') ||
+        q.includes('auto-square') ||
+        q.includes('auto trail') ||
+        q.includes('auto-trail'))
+    ) {
+      continue;
+    }
+
     let score = 0;
     if (m.title.toLowerCase().includes(q)) {
       score += 200;

@@ -3533,6 +3533,9 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
     let bestScore = 0;
     const specificIndustrySectors = ["BANKING", "IT_SERVICES", "AUTOMOBILE", "PHARMA", "METALS", "FMCG"];
     for (const m of MACRO_SECTOR_DOSSIERS) {
+      if (m.pillar === "AUTOMOBILE" && (q.includes("auto square") || q.includes("auto-square") || q.includes("auto trail") || q.includes("auto-trail"))) {
+        continue;
+      }
       let score = 0;
       if (m.title.toLowerCase().includes(q)) {
         score += 200;
@@ -4246,7 +4249,20 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
     },
     {
       domain: "STOCKS",
-      keywords: ["pre open auction", "nse tick size", "circuit breaker", "mis leverage", "sebi margin", "indian market microstructure"],
+      keywords: [
+        "pre open auction",
+        "pre-open",
+        "call auction",
+        "nse tick size",
+        "tick size",
+        "circuit breaker",
+        "mis leverage",
+        "sebi margin",
+        "auto-square-off",
+        "auto square off",
+        "3:15",
+        "indian market microstructure"
+      ],
       title: "Indian Equity Microstructure & Exchange Execution Mechanics",
       directAnswer: "Indian equities trade under an electronic central limit order book (CLOB) on NSE/BSE with a mandatory \u20B90.05 tick size, an algorithmic 9:00\u20139:08 AM call auction equilibrium discovery session, and tiered index circuit limits (10%, 15%, 20%).",
       chainOfThought: [
@@ -4261,7 +4277,7 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
     },
     {
       domain: "MATHS",
-      keywords: ["kelly criterion", "drawdown recovery", "position sizing formula", "risk of ruin", "var", "portfolio risk"],
+      keywords: ["kelly criterion", "drawdown recovery", "position sizing formula", "risk of ruin", "var", "portfolio risk", "portfolio drawdown"],
       title: "The Kelly Criterion & Drawdown Asymmetry Mathematics",
       directAnswer: "Optimal portfolio position sizing is governed by the Kelly Criterion (f* = [p*b - q] / b) to maximize geometric wealth growth, while the brutal non-linear asymmetry of drawdowns (Recovery % = D / [1 - D]) dictates that capital preservation must strictly supersede win rate.",
       chainOfThought: [
@@ -4291,7 +4307,26 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
     },
     {
       domain: "HUMAN_SENTIMENT",
-      keywords: ["red day", "bad trade", "lost today", "revenge trading", "drawdown mental", "trading tilt", "lost money today", "i feel down"],
+      keywords: [
+        "red day",
+        "bad trade",
+        "lost today",
+        "lost money",
+        "lost on",
+        "lost a lot",
+        "lost",
+        "loss",
+        "angry",
+        "furious",
+        "win it back",
+        "trade again",
+        "revenge trading",
+        "drawdown mental",
+        "trading tilt",
+        "lost money today",
+        "i feel down",
+        "tilt"
+      ],
       title: "Trading Psychology: Centering & Defeating the Tilt Monster",
       directAnswer: "A losing trade or red day is never a reflection of your personal intellect or worth; in a probabilistic environment with a 60% win rate, clusters of 4 to 6 consecutive losing trades are a mathematical certainty over any 100-trade sample.",
       chainOfThought: [
@@ -4862,17 +4897,30 @@ Feel free to present any question or scenario!`
         responseMarkdown: compareEntities(primary, comp, ctx.activeSubTopic || void 0)
       };
     }
-    const directReasoning = HumanDialogueEngine.findReasoningMatch(q);
     const affect = detectAffectiveState(q);
-    if (directReasoning && (directReasoning.domain === "HUMAN_SENTIMENT" || affect === "ANXIOUS_WORRIED")) {
-      const reasoningMatch2 = HumanDialogueEngine.synthesizeHumanResponse(q, "", "SCIENCE_AI_MATH", history.length);
+    const directReasoning = HumanDialogueEngine.findReasoningMatch(q);
+    const isLossOrTilt = q.toLowerCase().includes("lost") || q.toLowerCase().includes("loss") || q.toLowerCase().includes("angry") || q.toLowerCase().includes("tilt") || q.toLowerCase().includes("win it back") || q.toLowerCase().includes("red day");
+    if (directReasoning && directReasoning.domain === "HUMAN_SENTIMENT" || isLossOrTilt || affect === "ANXIOUS_WORRIED" && (q.toLowerCase().includes("trade") || q.toLowerCase().includes("option") || q.toLowerCase().includes("stock"))) {
+      const reasoningMatch = HumanDialogueEngine.synthesizeHumanResponse(q, "", "SCIENCE_AI_MATH", history.length);
+      return {
+        intent: "SCIENCE_AI_MATH",
+        subject: ctx.resolvedSubject || (directReasoning ? directReasoning.title : "Trading Psychology & Anti-Tilt"),
+        thoughtTrace: `1. [Psychological Grounding]: Classified user state as "${reasoningMatch.affect}".
+2. [Reasoning Engine]: Activated ${reasoningMatch.toneDescription}.
+3. [Empathetic Synthesis]: Delivering emotional centering, cognitive reframing, and systematic risk roadmap.`,
+        responseMarkdown: reasoningMatch.response
+      };
+    }
+    const isExplicitMacroStockQuery = q.toLowerCase().includes("in stocks") || q.toLowerCase().includes("about stocks") || q.toLowerCase().includes("in equities") || q.toLowerCase().includes("about equities") || q.toLowerCase().includes("equity markets") || q.toLowerCase().includes("stock markets");
+    if (directReasoning && !isExplicitMacroStockQuery && (directReasoning.domain === "STOCKS" || directReasoning.domain === "MATHS" || directReasoning.domain === "PHYSICS")) {
+      const reasoningMatch = HumanDialogueEngine.synthesizeHumanResponse(q, "", "SCIENCE_AI_MATH", history.length);
       return {
         intent: "SCIENCE_AI_MATH",
         subject: ctx.resolvedSubject || directReasoning.title,
-        thoughtTrace: `1. [Psychological Grounding]: Classified user state as "${reasoningMatch2.affect}".
-2. [Reasoning Engine]: Activated ${reasoningMatch2.toneDescription}.
-3. [Empathetic Synthesis]: Delivering emotional centering, cognitive reframing, and systematic risk roadmap.`,
-        responseMarkdown: reasoningMatch2.response
+        thoughtTrace: `1. [Reasoning Engine]: Activated ${reasoningMatch.toneDescription}.
+2. [Affective Detection]: Classified user state as "${reasoningMatch.affect}".
+3. [Deductive Synthesis]: Formulating direct bottom-line, rigorous multi-step chain of thought, intuitive analogy, and practical takeaway.`,
+        responseMarkdown: reasoningMatch.response
       };
     }
     const macro = findMacroSectorDossier(ctx.cleanPrompt) || (ctx.activeSubTopic ? findMacroSectorDossier(ctx.activeSubTopic) : void 0);
@@ -4884,17 +4932,6 @@ Feel free to present any question or scenario!`
 2. [Structural Retrieval]: Sourced core mechanics, transmission channels, benchmark assets, and systemic tail risks.
 3. [MoE Routing]: Activated Top-2 Financial Economics & Macro Structure Experts.`,
         responseMarkdown: formatMacroResponse(macro)
-      };
-    }
-    const reasoningMatch = HumanDialogueEngine.synthesizeHumanResponse(q, "", "SCIENCE_AI_MATH", history.length);
-    if (reasoningMatch.toneDescription.startsWith("Human Reasoning")) {
-      return {
-        intent: "SCIENCE_AI_MATH",
-        subject: ctx.resolvedSubject || q.slice(0, 50),
-        thoughtTrace: `1. [Reasoning Engine]: Activated ${reasoningMatch.toneDescription}.
-2. [Affective Detection]: Classified user state as "${reasoningMatch.affect}".
-3. [Deductive Synthesis]: Formulating direct bottom-line, rigorous multi-step chain of thought, intuitive analogy, and practical takeaway.`,
-        responseMarkdown: reasoningMatch.response
       };
     }
     if (ctx.intent === "SIMPLIFICATION_ELI5") {

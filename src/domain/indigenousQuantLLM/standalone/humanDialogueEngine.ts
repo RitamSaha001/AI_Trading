@@ -298,7 +298,20 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
   },
   {
     domain: 'STOCKS',
-    keywords: ['pre open auction', 'nse tick size', 'circuit breaker', 'mis leverage', 'sebi margin', 'indian market microstructure'],
+    keywords: [
+      'pre open auction',
+      'pre-open',
+      'call auction',
+      'nse tick size',
+      'tick size',
+      'circuit breaker',
+      'mis leverage',
+      'sebi margin',
+      'auto-square-off',
+      'auto square off',
+      '3:15',
+      'indian market microstructure',
+    ],
     title: 'Indian Equity Microstructure & Exchange Execution Mechanics',
     directAnswer: 'Indian equities trade under an electronic central limit order book (CLOB) on NSE/BSE with a mandatory ₹0.05 tick size, an algorithmic 9:00–9:08 AM call auction equilibrium discovery session, and tiered index circuit limits (10%, 15%, 20%).',
     chainOfThought: [
@@ -313,7 +326,7 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
   },
   {
     domain: 'MATHS',
-    keywords: ['kelly criterion', 'drawdown recovery', 'position sizing formula', 'risk of ruin', 'var', 'portfolio risk'],
+    keywords: ['kelly criterion', 'drawdown recovery', 'position sizing formula', 'risk of ruin', 'var', 'portfolio risk', 'portfolio drawdown'],
     title: 'The Kelly Criterion & Drawdown Asymmetry Mathematics',
     directAnswer: 'Optimal portfolio position sizing is governed by the Kelly Criterion (f* = [p*b - q] / b) to maximize geometric wealth growth, while the brutal non-linear asymmetry of drawdowns (Recovery % = D / [1 - D]) dictates that capital preservation must strictly supersede win rate.',
     chainOfThought: [
@@ -343,7 +356,26 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
   },
   {
     domain: 'HUMAN_SENTIMENT',
-    keywords: ['red day', 'bad trade', 'lost today', 'revenge trading', 'drawdown mental', 'trading tilt', 'lost money today', 'i feel down'],
+    keywords: [
+      'red day',
+      'bad trade',
+      'lost today',
+      'lost money',
+      'lost on',
+      'lost a lot',
+      'lost',
+      'loss',
+      'angry',
+      'furious',
+      'win it back',
+      'trade again',
+      'revenge trading',
+      'drawdown mental',
+      'trading tilt',
+      'lost money today',
+      'i feel down',
+      'tilt',
+    ],
     title: 'Trading Psychology: Centering & Defeating the Tilt Monster',
     directAnswer: 'A losing trade or red day is never a reflection of your personal intellect or worth; in a probabilistic environment with a 60% win rate, clusters of 4 to 6 consecutive losing trades are a mathematical certainty over any 100-trade sample.',
     chainOfThought: [
