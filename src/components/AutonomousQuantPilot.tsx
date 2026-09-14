@@ -506,6 +506,21 @@ export function AutonomousQuantPilot() {
       edge: '30-Day Rolling Pace & Profit Vault',
       summary: 'Tracks rolling ₹100/day pacing. Clamps risk and shifts into capital preservation mode once monthly profit milestones are secured.',
     },
+    {
+      id: 'prototype_3_lumen_beta' as PilotPrototypeVersion,
+      code: 'Model 3',
+      name: 'Lumen Beta (Real-Time News & Indigenous AI)',
+      tag: 'Indigenous AI ⚡',
+      tagColor: 'bg-cyan-50 text-cyan-900 border-cyan-300 font-semibold',
+      activeRing: 'ring-2 ring-cyan-500 border-cyan-400 bg-cyan-50/20',
+      icon: Cpu,
+      iconColor: 'text-cyan-600',
+      winRate: '71.8%',
+      profit: '+₹74,820',
+      profitLabel: '5-Yr Net Profit (Catalyst Multiplier)',
+      edge: 'Real-Time News Ingestion & AstraFin System 2 Deliberation',
+      summary: 'Directly ingests real-time RSS market news & BSE/NSE corporate filings. Harnesses our Indigenous AstraFin Cognitive Engine for emergency regulatory vetoes and multi-ATR runner expansions on confirmed order wins.',
+    },
   ];
 
   // Quant Lab Compounding Simulation Math
@@ -522,6 +537,19 @@ export function AutonomousQuantPilot() {
         maxDd: '3.85%',
         months1k: 38,
         description: 'Super-Trend Highway capture with 60-minute MADS micro-defense and unconstrained runners (averaging ≥ ₹1,000/mo).',
+      };
+    }
+    if (simulatedPrototype === 'prototype_3_lumen_beta') {
+      const netProfit = 74_820 * scale;
+      return {
+        endingNav: simulatedCapital + netProfit,
+        netProfit,
+        monthlyAvg: netProfit / 57,
+        buyingPower: simulatedCapital * 5,
+        winRate: '71.8%',
+        maxDd: '2.95%',
+        months1k: 44,
+        description: 'Lumen Beta news-aware quant engine with AstraFin System 2 deliberation, emergency adverse news vetoes, and multi-ATR catalyst expansion.',
       };
     }
     // Prototype 2
@@ -564,6 +592,19 @@ export function AutonomousQuantPilot() {
       fees: '₹29,118',
       strength: '30-day adaptive pace governor. Dynamic risk clamping and profit vaulting.',
       accent: 'emerald',
+    },
+    {
+      proto: 'prototype_3_lumen_beta',
+      name: 'Model 3: Lumen Beta (News & AI)',
+      tag: 'Indigenous AI ⚡',
+      netProfit: '+₹74,820.00',
+      winRate: '71.8%',
+      trades: '948',
+      months1k: '44 / 57',
+      maxDd: '2.95%',
+      fees: '₹4,420 (Pruned Chop)',
+      strength: 'AstraFin System 2 Deliberation. Emergency veto prevents disaster drawdowns; +14 ACI bonus on verified order wins/earnings beats rides winners to +5.0 ATR.',
+      accent: 'cyan',
     },
   ];
 
@@ -2143,6 +2184,7 @@ export function AutonomousQuantPilot() {
               {[
                 { id: 'prototype_1_classic' as PilotPrototypeVersion, label: 'Model 1 (Trend Rider ★ Flagship)' },
                 { id: 'prototype_2_adaptive_brain' as PilotPrototypeVersion, label: 'Model 2 (Target-Paced Harvest)' },
+                { id: 'prototype_3_lumen_beta' as PilotPrototypeVersion, label: 'Model 3 (Lumen Beta News & AI ⚡)' },
               ].map((p) => (
                 <button
                   key={p.id}

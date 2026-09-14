@@ -701,7 +701,7 @@ export interface PilotActionLog {
   status: 'EXECUTED' | 'THROTTLED' | 'BLOCKED' | 'PENDING';
 }
 
-export type PilotPrototypeVersion = 'prototype_1_classic' | 'prototype_2_adaptive_brain';
+export type PilotPrototypeVersion = 'prototype_1_classic' | 'prototype_2_adaptive_brain' | 'prototype_3_lumen_beta';
 
 export interface OmniSynthesisTelemetry {
   monthlyPnlPace: number;          // Current pace towards ₹1000/mo (0 - 100%)

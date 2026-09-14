@@ -33,7 +33,7 @@ export class EarningsSurpriseExpert {
       directionScore = -0.85;
       sizingMult = 0.50;
       insights.push(`Earnings missed street expectations (${consensusDeltaPct}%). Institutional liquidation risk.`);
-    } else if (/ORDER\s+WIN|WINS?.*(?:ORDER|CONTRACT)|BAGS?.*(?:ORDER|CONTRACT)|RECEIVES?.*(?:ORDER|CONTRACT)|AWARDED.*(?:ORDER|CONTRACT)/i.test(upper)) {
+    } else if (/ORDER\s+WIN|WINS?.*(?:ORDER|CONTRACT|DEAL)|BAGS?.*(?:ORDER|CONTRACT|DEAL)|RECEIVES?.*(?:ORDER|CONTRACT)|AWARDED.*(?:ORDER|CONTRACT)|SIGNS?.*(?:DEAL|CONTRACT|ORDER)/i.test(upper)) {
       directionScore = 0.80;
       sizingMult = 1.25;
       insights.push('Major commercial order inflow expands revenue backlog visibility.');

@@ -20,6 +20,7 @@ import { UPSTOX_FLEET_ASSETS, createDefaultAutonomousPilotState, PILOT_PROFILES 
 import { UpstoxInstrumentRegistry } from '../server/services/brokers/upstox/upstoxInstrumentRegistry';
 import { IndianMarketCalendar } from '../server/services/brokers/upstox/indianMarketCalendar';
 import { tickAutonomousPilot, initializeFleetStatus, createDefaultRateLimitStatus } from '../src/domain/autonomousPilotEngine';
+import { NewsCatalystRegistry, HistoricalCatalystFeed } from '../src/domain/newsEngine';
 import { AppState, Asset, Market, Order, AutonomousPilotProfile, AssetFleetStatus, PilotPrototypeVersion, RollingMonthlyPnlContext } from '../src/types';
 
 interface RawCandle {
@@ -252,6 +253,10 @@ async function replaySingleDay(
   // Upstox: ₹20/order or 0.05% brokerage + statutory taxes ~ 0.08% (8 bps)
   const feeRate = broker === 'flattrade' ? 0.00025 : 0.0008;
 
+  if (prototypeVersion === 'prototype_3_lumen_beta') {
+    NewsCatalystRegistry.clear();
+  }
+
   // Monitored fleet for this day: assets that have cached 1m candles for targetDate
   const availableFleet: Asset[] = UPSTOX_FLEET_ASSETS.filter((asset) => {
     const inst = UpstoxInstrumentRegistry.get(asset);
@@ -432,6 +437,14 @@ async function replaySingleDay(
     const timeStr = timeToStringMap.get(timestamp) || '';
     const minuteCandles = candleMapByTime.get(timestamp);
     if (!minuteCandles) continue;
+
+    if (prototypeVersion === 'prototype_3_lumen_beta') {
+      const dBar = new Date(timestamp);
+      const utc = dBar.getTime() + dBar.getTimezoneOffset() * 60000;
+      const ist = new Date(utc + 3600000 * 5.5);
+      const mins = ist.getHours() * 60 + ist.getMinutes();
+      HistoricalCatalystFeed.injectForBar(targetDate, mins, timestamp);
+    }
 
     const currentMarkets: Partial<Record<Asset, Market>> = {};
     for (const asset of availableFleet) {
@@ -864,12 +877,16 @@ async function runMultiDayWindowReplay() {
       capital = Number(args[++i]) || 40000;
     } else if (arg.startsWith('--prototype=')) {
       const pr = arg.split('=')[1].toLowerCase();
-      prototype = (pr.includes('2') || pr.includes('adaptive'))
+      prototype = (pr.includes('3') || pr.includes('lumen') || pr.includes('beta'))
+        ? 'prototype_3_lumen_beta'
+        : (pr.includes('2') || pr.includes('adaptive'))
         ? 'prototype_2_adaptive_brain'
         : 'prototype_1_classic';
     } else if (arg === '--prototype' && i + 1 < args.length) {
       const pr = args[++i].toLowerCase();
-      prototype = (pr.includes('2') || pr.includes('adaptive'))
+      prototype = (pr.includes('3') || pr.includes('lumen') || pr.includes('beta'))
+        ? 'prototype_3_lumen_beta'
+        : (pr.includes('2') || pr.includes('adaptive'))
         ? 'prototype_2_adaptive_brain'
         : 'prototype_1_classic';
     } else if (arg.startsWith('--profile=')) {
@@ -930,9 +947,11 @@ async function runMultiDayWindowReplay() {
   console.log(`Starting Capital:     ₹${capital.toLocaleString('en-IN')}`);
   console.log(`Risk Profile:         ${profile.toUpperCase()}`);
   console.log(`Engine Prototype:     ${
-    prototype === 'prototype_1_classic'
-      ? 'PROTOTYPE 1 (Momentum Trend Rider Flagship - Target: >= ₹1,000/mo Avg)'
-      : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'
+    prototype === 'prototype_3_lumen_beta'
+      ? 'PROTOTYPE 3 (Lumen Beta: Real-Time News & Indigenous AI)'
+      : prototype === 'prototype_2_adaptive_brain'
+      ? 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'
+      : 'PROTOTYPE 1 (Momentum Trend Rider Flagship - Target: >= ₹1,000/mo Avg)'
   }`);
   console.log(`Execution Venue:      ${broker.toUpperCase()} (${broker === 'flattrade' ? 'Zero Brokerage Retail-Algo Engine' : 'Traditional Discount Broker'})`);
   console.log(`Window Scope:         ${daysCount} Completed Indian Market Trading Sessions`);

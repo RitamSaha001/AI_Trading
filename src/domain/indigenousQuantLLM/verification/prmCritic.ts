@@ -32,7 +32,7 @@ export class ProcessRewardCritic {
     if (!hasEntities) penalty += 0.3;
 
     // Step 2: Semantic Polarity & Contradiction Detection
-    const hasNegativeWords = /FALLS?|DROPS?|SLUMPS?|MISSES?|PENALTY|BAN|SEBI|LOSS|CRASH/i.test(upper);
+    const hasNegativeWords = /FALLS?|DROPS?|SLUMPS?|MISSES?|PENALTY|\bBANS?\b|SEBI|LOSS|CRASH/i.test(upper);
     const hasPositiveWords = /SURGES?|RISES?|BEATS?|ORDER\s+WIN|RECORD|EXPANDS?|HIGHEST/i.test(upper);
     let polarityValid = true;
     let flaw: string | undefined = undefined;
@@ -59,7 +59,7 @@ export class ProcessRewardCritic {
     let actionValid = true;
     let actionFlaw: string | undefined = undefined;
     const isDefensiveAction = proposedAction === 'STAND_ASIDE' || proposedAction === 'DEFENSIVE_EXIT' || proposedAction === 'EMERGENCY_VETO';
-    if (/SEBI|RAID|PENALTY|BAN|FRAUD|CRASH/i.test(upper) && !isDefensiveAction) {
+    if (/SEBI|RAID|PENALTY|\bBANS?\b|FRAUD|CRASH/i.test(upper) && !isDefensiveAction) {
       actionValid = false;
       actionFlaw = `Safety Hazard: Proposed non-defensive action '${proposedAction}' during active regulatory threat or fraud event.`;
       penalty += 0.5;

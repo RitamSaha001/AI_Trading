@@ -182,6 +182,15 @@ export interface MasterBrainInputs {
   projectedNotional?: number;
   projectedQuantity?: number;
   isDeliveryHolding?: boolean;
+  newsCatalyst?: {
+    hasCatalyst: boolean;
+    boostPoints: number;
+    reason?: string;
+  };
+  newsSentiment?: {
+    activeVeto: boolean;
+    compositeSentiment: number;
+  };
 }
 
 /**
@@ -294,6 +303,48 @@ export function evaluateStrategyMasterBrain(inputs: MasterBrainInputs): BrainDir
   let directive = baseDirective;
   if (intradayPnlContext) {
     directive = applyIntradayPnlSupervisor(baseDirective, intradayPnlContext);
+  }
+
+  // Prototype 3: Lumen Beta News-Aware & Indigenous AI Directives
+  if (inputs.prototypeVersion === 'prototype_3_lumen_beta') {
+    // 1. Emergency Adverse News Veto
+    if (inputs.newsSentiment?.activeVeto || (inputs.newsSentiment?.compositeSentiment !== undefined && inputs.newsSentiment.compositeSentiment < -0.35)) {
+      return {
+        ...directive,
+        actionPermission: 'BLOCKED_STAND_ASIDE',
+        dailyPnlRegime: 'LOSS_GUARD_HALT',
+        allowedStrategies: [],
+        preferredStrategy: null,
+        marginMultiplier: 1.0,
+        riskBudgetMultiplier: 0.0,
+        minAciThreshold: 999,
+        rationale: `[Lumen Beta News Veto] Breaking adverse corporate or regulatory sentiment detected. Trade blocked for capital preservation.`,
+      };
+    }
+
+    // 2. Confirmed News Catalyst Surge
+    if (inputs.newsCatalyst?.hasCatalyst) {
+      directive = {
+        ...directive,
+        marginMultiplier: 4.5, // Maximize SEBI intraday margin on high-conviction catalyst
+        riskBudgetMultiplier: Math.min(1.40, (directive.riskBudgetMultiplier || 1.0) * 1.30),
+        minAciThreshold: Math.min(directive.minAciThreshold, 55),
+        trancheTargets: {
+          tranche1Atr: 1.50,
+          tranche2Atr: 3.25,
+          guaranteedLockAtr: 1.00,
+          runnerMode: 'AGGRESSIVE_TRAIL',
+        },
+        rationale: `${directive.rationale} | [Lumen Beta Catalyst Surge: ${inputs.newsCatalyst.reason || 'Positive Catalyst'}]`,
+      };
+    } else {
+      // 3. Selective Fee-Drag Armor: Require ACI >= 74 when no confirmed news catalyst is present
+      // Prunes low-conviction chop trades that burned ₹29k in fees during backtest baseline
+      directive = {
+        ...directive,
+        minAciThreshold: Math.max(directive.minAciThreshold, 74),
+      };
+    }
   }
 
   return directive;

@@ -866,8 +866,11 @@ export function tickAutonomousPilot(
     }
 
     // Model 1 / High-Persistence Trend Expansion: In SUPER_TREND_HIGHWAY or Hurst persistence >= 0.58 with squeeze release,
+    // or active News Catalyst in Lumen Beta,
     // expand Target 2 from 2.0 ATR to 3.50 ATR and widen trailing stop cushion to 1.00 ATR to ride large multi-ATR expansions!
-    const isSuperTrendRunner = (hurst >= 0.58 && squeezeStatus === 'SQUEEZE_OFF') || (fleetStatus.highwayMode === 'SUPER_TREND_HIGHWAY');
+    const activeNewsCatalyst = NewsCatalystRegistry.checkAlphaCatalyst(asset, now);
+    const isLumenBetaCatalyst = prototypeVersion === 'prototype_3_lumen_beta' && activeNewsCatalyst.hasCatalyst;
+    const isSuperTrendRunner = (hurst >= 0.58 && squeezeStatus === 'SQUEEZE_OFF') || (fleetStatus.highwayMode === 'SUPER_TREND_HIGHWAY') || isLumenBetaCatalyst;
     const target2AtrThreshold = isSuperTrendRunner ? 3.50 : thresholds.RATCHET_STAGE_3_ATR;
     const trailBufferAtr = isSuperTrendRunner ? 1.00 : thresholds.UNIFIED_EXIT_PROFIT_TRAIL_ATR;
 
@@ -1488,6 +1491,9 @@ export function tickAutonomousPilot(
     const mtfConfluence = evaluateMultiTimeframeConfluence(market, price, vwap, atr, hurst);
     const vwapBands = calculateVWAPBands(intradayBars, price);
     const sectorStats = sectorMomentum.sectorStatsMap.get(sector);
+    const candNewsVeto = NewsCatalystRegistry.checkEmergencyVeto(asset, now);
+    const candSentimentStatus = NewsCatalystRegistry.getTickerStatus(asset, now);
+    const candNewsCatalyst = NewsCatalystRegistry.checkAlphaCatalyst(asset, now);
 
     const brainDirective = evaluateStrategyMasterBrain({
       istMinutes,
@@ -1513,6 +1519,11 @@ export function tickAutonomousPilot(
       rollingMonthlyContext: pilot?.rollingMonthlyContext,
       projectedNotional: 35000,
       projectedQuantity: Math.max(1, Math.floor(35000 / price)),
+      newsCatalyst: candNewsCatalyst.hasCatalyst ? candNewsCatalyst : undefined,
+      newsSentiment: {
+        activeVeto: candNewsVeto.hasVeto,
+        compositeSentiment: candSentimentStatus.compositeSentiment,
+      },
     });
 
     if (hasEntrySignal) {
@@ -1785,6 +1796,17 @@ export function tickAutonomousPilot(
     if ((candAssetFleet?.reputationScore ?? 100) < 75) {
       minAciRequired = Math.max(minAciRequired, 75);
     }
+
+    // Prototype 3: Lumen Beta Conviction Optimization
+    if (prototypeVersion === 'prototype_3_lumen_beta') {
+      if (candNewsCatalyst.hasCatalyst) {
+        minAciRequired = Math.min(minAciRequired, 58);
+      } else {
+        // Without confirmed news catalyst, enforce higher ACI hurdle to prune low-expectancy chop
+        minAciRequired = Math.max(minAciRequired, 74);
+      }
+    }
+
     const effectiveAci = (ranked?.alphaConvictionIndex || 0) + newsAciBonus;
     if (effectiveAci < minAciRequired) {
       continue;
@@ -1971,10 +1993,11 @@ export function tickAutonomousPilot(
     // High conviction (ACI 68-74): ₹280 max risk (70%+ win rate)
     // Standard tier (ACI < 68): ₹200 max risk
     const baseRiskCapital = pv * (profile.maxRiskPerTradePct / 100);
-    const newsRiskMultiplier = candNewsCatalyst.hasCatalyst ? 1.25 : 1.0;
+    const isLumenBeta = prototypeVersion === 'prototype_3_lumen_beta';
+    const newsRiskMultiplier = candNewsCatalyst.hasCatalyst ? (isLumenBeta ? 1.35 : 1.25) : 1.0;
     const convictionBoost = (cand.brainDirective?.riskBudgetMultiplier ?? ((ranked?.alphaConvictionIndex || 0) >= 60 ? 1.15 : 1.0)) * newsRiskMultiplier;
     if (convictionBoost <= 0) continue;
-    const riskCap = (effectiveAci >= 75 || candNewsCatalyst.hasCatalyst) ? 380 : effectiveAci >= 68 ? 280 : 200;
+    const riskCap = (effectiveAci >= 75 || candNewsCatalyst.hasCatalyst) ? (isLumenBeta ? 420 : 380) : effectiveAci >= 68 ? 280 : 200;
     const maxRiskCapital = Math.min(riskCap, baseRiskCapital * kellyRes.recommendedSizeMultiplier * convictionBoost);
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
 

@@ -314,12 +314,16 @@ async function main() {
     else if (a === '--capital' && i + 1 < rawArgs.length) capital = Number(rawArgs[++i]) || 40000;
     else if (a.startsWith('--prototype=')) {
       const pr = a.split('=')[1].toLowerCase();
-      prototype = (pr.includes('2') || pr.includes('adaptive'))
+      prototype = (pr.includes('3') || pr.includes('lumen') || pr.includes('beta'))
+        ? 'prototype_3_lumen_beta'
+        : (pr.includes('2') || pr.includes('adaptive'))
         ? 'prototype_2_adaptive_brain'
         : 'prototype_1_classic';
     } else if (a === '--prototype' && i + 1 < rawArgs.length) {
       const pr = rawArgs[++i].toLowerCase();
-      prototype = (pr.includes('2') || pr.includes('adaptive'))
+      prototype = (pr.includes('3') || pr.includes('lumen') || pr.includes('beta'))
+        ? 'prototype_3_lumen_beta'
+        : (pr.includes('2') || pr.includes('adaptive'))
         ? 'prototype_2_adaptive_brain'
         : 'prototype_1_classic';
     }
@@ -335,9 +339,11 @@ async function main() {
   console.log('  AUTONOMOUS QUANT MASTER BRAIN — 5-YEAR COMPREHENSIVE HISTORICAL AUDIT');
   console.log('='.repeat(95));
   console.log(`Engine Prototype:   ${
-    prototype === 'prototype_1_classic'
-      ? 'PROTOTYPE 1 (Momentum Trend Rider Flagship - Target: >= ₹1,000/mo Avg)'
-      : 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'
+    prototype === 'prototype_3_lumen_beta'
+      ? 'PROTOTYPE 3 (Lumen Beta: Real-Time News & Indigenous AI)'
+      : prototype === 'prototype_2_adaptive_brain'
+      ? 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'
+      : 'PROTOTYPE 1 (Momentum Trend Rider Flagship - Target: >= ₹1,000/mo Avg)'
   }`);
   console.log(`Historical Scope:   2022-01-03 → 2026-09-11 (1,231 Sessions across 5 Years)`);
   console.log(`Fleet Universe:     100 NIFTY Liquid Equities (1-Minute Historical Candles)`);

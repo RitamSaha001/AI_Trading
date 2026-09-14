@@ -3,3 +3,4 @@ export * from "./finbertLocalEngine";
 export * from "./newsDeduplicator";
 export * from "./newsCatalystGate";
 export * from "./newsIngestionService";
+export * from "./historicalCatalystFeed";
