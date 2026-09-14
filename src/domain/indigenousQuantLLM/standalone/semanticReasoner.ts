@@ -27,7 +27,7 @@ import {
   ResolvedQueryContext,
   ConversationalIntent,
 } from './dialogueStateTracker';
-import { HumanDialogueEngine } from './humanDialogueEngine';
+import { HumanDialogueEngine, detectAffectiveState } from './humanDialogueEngine';
 
 export interface SemanticAnalysisResult {
   intent:
@@ -478,7 +478,22 @@ Feel free to present any question or scenario!`,
     };
   }
 
-  // 9. Macro Sector Lookup (Top Priority for Macro Pillars: Equities, Oil, Defense, Rates, Trade)
+  // 9. Emotional & Human Sentiment Priority (Trading Psychology, Red Days, Tilt, Anxiety)
+  const directReasoning = HumanDialogueEngine.findReasoningMatch(q);
+  const affect = detectAffectiveState(q);
+  if (directReasoning && (directReasoning.domain === 'HUMAN_SENTIMENT' || affect === 'ANXIOUS_WORRIED')) {
+    const reasoningMatch = HumanDialogueEngine.synthesizeHumanResponse(q, '', 'SCIENCE_AI_MATH', history.length);
+    return {
+      intent: 'SCIENCE_AI_MATH',
+      subject: ctx.resolvedSubject || directReasoning.title,
+      thoughtTrace: `1. [Psychological Grounding]: Classified user state as "${reasoningMatch.affect}".
+2. [Reasoning Engine]: Activated ${reasoningMatch.toneDescription}.
+3. [Empathetic Synthesis]: Delivering emotional centering, cognitive reframing, and systematic risk roadmap.`,
+      responseMarkdown: reasoningMatch.response,
+    };
+  }
+
+  // 10. Macro Sector Lookup (Top Priority for Macro Pillars: Equities, Banking, IT, Auto, Pharma, Metals, FMCG, Oil, Defense, Rates, Trade)
   const macro = findMacroSectorDossier(ctx.cleanPrompt) || (ctx.activeSubTopic ? findMacroSectorDossier(ctx.activeSubTopic) : undefined);
   if (macro) {
     return {
@@ -491,7 +506,7 @@ Feel free to present any question or scenario!`,
     };
   }
 
-  // 10. Deep Multi-Domain Reasoning Bank (Physics, Mathematics, Stocks, Human Sentiment, Dialogue Nuance)
+  // 11. Deep Multi-Domain Reasoning Bank (Physics, Mathematics, Stocks, Dialogue Nuance)
   const reasoningMatch = HumanDialogueEngine.synthesizeHumanResponse(q, '', 'SCIENCE_AI_MATH', history.length);
   if (reasoningMatch.toneDescription.startsWith('Human Reasoning')) {
     return {

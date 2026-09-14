@@ -16,7 +16,7 @@
     "virtualTotalParams": 1019085168
   },
   "trainingSummary": {
-    "totalVirtualTokens": 5460000,
+    "totalVirtualTokens": 5695000,
     "totalSamplesStreamed": 50,
     "domainDistribution": {
       "PHYSICS": 10,
@@ -25,11 +25,11 @@
       "HUMAN_SENTIMENT": 10,
       "LANGUAGE_NUANCE": 10
     },
-    "avgTokensPerSample": 109,
+    "avgTokensPerSample": 114,
     "vocabCoverageRatio": 0.985,
     "diskSpaceConsumedBytes": 0,
-    "timestamp": "2026-09-14T08:09:44.328Z"
+    "timestamp": "2026-09-14T08:33:43.340Z"
   },
-  "finalLoss": 1.4075135989170706,
-  "exportedAt": "2026-09-14T08:09:44.329Z"
+  "finalLoss": 1.3509335166624892,
+  "exportedAt": "2026-09-14T08:33:43.341Z"
 }

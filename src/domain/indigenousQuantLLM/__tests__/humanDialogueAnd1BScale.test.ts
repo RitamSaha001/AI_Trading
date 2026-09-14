@@ -145,6 +145,19 @@ describe('Lumen Astra 1B Parameter & Human Dialogue Architecture', () => {
       expect(titles).toContain('Intraday VWAP & Algorithmic Institutional Execution');
       expect(titles).toContain('Transaction Cost Analysis (TCA) & The Friction Hurdle');
       expect(titles).toContain('Quantum Entanglement & Non-Local Correlation');
+      expect(titles).toContain('Options Greeks & The Volatility Surface');
+      expect(titles).toContain('Indian Equity Microstructure & Exchange Execution Mechanics');
+      expect(titles).toContain('The Kelly Criterion & Drawdown Asymmetry Mathematics');
+      expect(titles).toContain('Trading Psychology: Centering & Defeating the Tilt Monster');
+    });
+
+    it('handles emotional tilt and red day queries with psychological grounding', () => {
+      clearChatHistory();
+      const res = queryModel('I had a terrible red day today, lost a lot on Nifty options and I am angry and want to trade again right now');
+      expect(res.reply).toContain('<think>');
+      expect(res.reply).toContain('Psychological Grounding');
+      expect(res.reply).toMatch(/breath|stress|calm|step back/i);
+      expect(res.reply).toContain('The Professional Reset Protocol');
     });
   });
 
@@ -161,6 +174,28 @@ describe('Lumen Astra 1B Parameter & Human Dialogue Architecture', () => {
       expect(res.engine).toContain('1.02B MoE');
       expect(res.reply).toContain('Quantum entanglement');
       expect(res.reply).toContain("Bell's Inequality");
+    });
+
+    it('resolves specialized Indian stock market sector dossiers (Banking NIMs, IT TCV, Auto)', () => {
+      clearChatHistory();
+      const itRes = queryModel('Tell me about the Indian IT sector and why deal TCV matters');
+      expect(itRes.reply).toContain('Nifty IT');
+      expect(itRes.reply).toContain('Total Contract Value');
+      expect(itRes.reply).toContain('Tata Consultancy Services');
+
+      const bankRes = queryModel('How do interest rate cycles affect Indian banking NIMs and HDFC Bank?');
+      expect(bankRes.reply).toContain('Nifty Bank');
+      expect(bankRes.reply).toContain('Net Interest Margin');
+      expect(bankRes.reply).toContain('HDFC Bank');
+    });
+
+    it('answers advanced options Greeks questions with derivative rigor and intuition', () => {
+      clearChatHistory();
+      const greeksRes = queryModel('Explain options greeks like delta and gamma with an analogy');
+      expect(greeksRes.reply).toContain('Options Greeks');
+      expect(greeksRes.reply).toContain('Delta');
+      expect(greeksRes.reply).toContain('Gamma');
+      expect(greeksRes.reply).toContain('auto insurance');
     });
   });
 });

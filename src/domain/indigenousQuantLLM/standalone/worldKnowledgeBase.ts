@@ -34,7 +34,18 @@ export interface ConflictDossier {
 }
 
 export interface MacroSectorDossier {
-  pillar: 'STOCKS' | 'COMMERCE' | 'CENTRAL_BANKS' | 'DEFENSE' | 'COMMODITIES';
+  pillar:
+    | 'STOCKS'
+    | 'COMMERCE'
+    | 'CENTRAL_BANKS'
+    | 'DEFENSE'
+    | 'COMMODITIES'
+    | 'BANKING'
+    | 'IT_SERVICES'
+    | 'AUTOMOBILE'
+    | 'PHARMA'
+    | 'METALS'
+    | 'FMCG';
   title: string;
   aliases: string[];
   coreMechanisms: string;
@@ -473,6 +484,159 @@ export const MACRO_SECTOR_DOSSIERS: MacroSectorDossier[] = [
     keyInstitutionsAndAssets: 'OPEC+, Saudi Aramco, Indian downstream refiners (Reliance, IOCL, BPCL, HPCL), upstream explorers (ONGC, Oil India), US Strategic Petroleum Reserve (SPR).',
     strategicRisks: 'Closure or missile strikes in the Strait of Hormuz, refining outages, sanctions enforcement on maritime shadow tankers, and geopolitical weaponization of energy flows.',
   },
+  {
+    pillar: 'BANKING',
+    title: 'Banking & Financial Services (Nifty Bank & NBFCs)',
+    aliases: [
+      'banking',
+      'banking sector',
+      'bank',
+      'banks',
+      'nifty bank',
+      'bank nifty',
+      'hdfc bank',
+      'icici bank',
+      'sbi',
+      'state bank of india',
+      'kotak',
+      'axis bank',
+      'nbfc',
+      'bajaj finance',
+      'credit growth',
+      'npa',
+      'nim',
+      'nims',
+      'net interest margin',
+      'casa',
+    ],
+    coreMechanisms: 'Commercial banking executes maturity transformation—gathering short-term savings/current account deposits (CASA) to fund multi-year corporate capital expenditure, infrastructure, and retail consumer loans. Key financial metrics include Net Interest Margin (NIM = Net Interest Income / Total Earning Assets), Gross & Net Non-Performing Assets (GNPA/NNPA), Provision Coverage Ratio (PCR), and Capital Adequacy Ratio (CAR/CRAR under Basel III).',
+    transmissionChannels: 'When the RBI hikes or cuts repo rates, lending rates (linked to External Benchmark Lending Rates / EBLR) reprice immediately, whereas term deposits reprice with a 6-12 month lag. During monetary tightening, banks experience temporary NIM expansion followed by deposit margin compression. Retail credit expansion (credit cards, personal loans) fuels consumer GDP, while elevated corporate credit drives manufacturing capacity utilization.',
+    keyInstitutionsAndAssets: 'Systemically Important Banks (D-SIBs): HDFC Bank, ICICI Bank, State Bank of India (SBI); private heavyweights (Axis Bank, Kotak Mahindra Bank); premier NBFCs (Bajaj Finance, Cholamandalam); regulator: Reserve Bank of India (RBI).',
+    strategicRisks: 'Asset-Liability Mismatches (ALM), asset quality deterioration in unsecured retail credit portfolios, sudden increases in regulatory risk weights by RBI, and liquidity tightening in interbank call money markets.',
+  },
+  {
+    pillar: 'IT_SERVICES',
+    title: 'Information Technology & Software Services (Nifty IT)',
+    aliases: [
+      'it sector',
+      'it services',
+      'nifty it',
+      'tcs',
+      'tata consultancy',
+      'infosys',
+      'wipro',
+      'hcl tech',
+      'tech mahindra',
+      'ltimindtree',
+      'software services',
+      'bfsi spending',
+      'deal wins',
+      'tcv',
+      'it spending',
+    ],
+    coreMechanisms: 'India\'s $250B+ IT services sector operates as a high-margin intellectual export engine, delivering enterprise software architecture, cloud migration, ERP implementation, cybersecurity, and applied GenAI solutions for Fortune 500 multinationals. Revenue visibility is anchored in Total Contract Value (TCV) multi-year deal announcements and Constant Currency (CC) revenue growth.',
+    transmissionChannels: 'Corporate enterprise capital allocation in North America and Western Europe directly dictates Indian IT pipeline velocity. BFSI (Banking, Financial Services, and Insurance) represents the single largest vertical (~30% of revenues). A 1% depreciation of the Indian Rupee against the US Dollar translates to a 30-50 basis point operating EBIT margin expansion.',
+    keyInstitutionsAndAssets: 'Tier-1 IT Giants: Tata Consultancy Services (TCS), Infosys, HCL Technologies, Wipro, Tech Mahindra, LTIMindtree; benchmark index: Nifty IT; key client ecosystems: Microsoft Azure, AWS, Google Cloud, SAP, Salesforce.',
+    strategicRisks: 'Postponement or cancellation of discretionary enterprise IT budgets during US recessionary fears, wage inflation for specialized AI architects, margin pricing pressure from client insourcing/GCCs (Global Capability Centers), and rapid AI automation reducing traditional billable-hour headcounts.',
+  },
+  {
+    pillar: 'AUTOMOBILE',
+    title: 'Automobile, Mobility & EV Infrastructure (Nifty Auto)',
+    aliases: [
+      'auto',
+      'automobile',
+      'automotive',
+      'nifty auto',
+      'tata motors',
+      'maruti',
+      'maruti suzuki',
+      'm&m',
+      'mahindra',
+      'bajaj auto',
+      'tvs motor',
+      'electric vehicles',
+      'ev',
+      'two wheelers',
+      'commercial vehicles',
+    ],
+    coreMechanisms: 'The automotive sector reflects aggregate domestic discretionary consumption and freight transportation velocity. Encompasses passenger vehicles (PVs), commercial vehicles (CVs), two-wheelers (2Ws), and tractors. Governed by vehicle financing availability, Average Selling Prices (ASPs), raw material input costs (cold-rolled steel, aluminum, natural rubber), and the structural shift toward electric drivetrains.',
+    transmissionChannels: 'Favorable rural monsoon harvests spur rural two-wheeler (Hero, Bajaj) and tractor (M&M) cash purchases. Festive sales (Navratri through Diwali) generate up to 25-30% of annual retail dispatches. Government production-linked incentives (Auto PLI) and FAME subsidies accelerate local battery cell manufacturing and EV charging infrastructure rollout.',
+    keyInstitutionsAndAssets: 'Automotive OEMs: Maruti Suzuki (passenger vehicle market share leader), Tata Motors (commercial vehicles, EV leader, Jaguar Land Rover), Mahindra & Mahindra (SUVs & agricultural tractors), Bajaj Auto & TVS Motor (2W/3W exports), Eicher Motors (Royal Enfield).',
+    strategicRisks: 'Commodity inflation in steel and lithium battery cells, high auto loan interest rates dampening middle-class vehicle affordability, delayed regulatory clarity on EV emissions/subsidies, and global maritime supply chain disruptions impacting export markets.',
+  },
+  {
+    pillar: 'PHARMA',
+    title: 'Pharmaceuticals, Healthcare & Specialty Chemical APIs (Nifty Pharma)',
+    aliases: [
+      'pharma',
+      'pharmaceuticals',
+      'nifty pharma',
+      'sun pharma',
+      'dr reddy',
+      'dr reddys',
+      'cipla',
+      'divis lab',
+      'divis laboratories',
+      'generic drugs',
+      'us fda',
+      'form 483',
+      'api',
+      'biosimilars',
+    ],
+    coreMechanisms: 'India serves as the "Pharmacy of the World", supplying over 20% of global generic medications by volume and over 40% of generic formulations in the United States. Revenue models span commoditized oral solid generics, complex biosimilars, injectable therapies, and contract development and manufacturing (CDMO) of Active Pharmaceutical Ingredients (APIs).',
+    transmissionChannels: 'The primary regulatory catalyst and gatekeeper is the United States Food and Drug Administration (US FDA). A clean Current Good Manufacturing Practice (cGMP) plant audit yielding an Establishment Inspection Report (EIR) unlocks Abbreviated New Drug Application (ANDA) drug approvals, while severe Form 483 inspection observations or Import Alerts halt US exports.',
+    keyInstitutionsAndAssets: 'Major Formulators: Sun Pharmaceutical Industries (specialty dermatology & ophthalmology), Dr. Reddy\'s Laboratories (oncology generics & US market reach), Cipla (respiratory therapies & India domestic leadership), Divi\'s Laboratories (global custom chemical API synthesis); regulatory authorities: US FDA, EMA, CDSCO.',
+    strategicRisks: 'Price erosion in US commodity generic oral formulations (historic 8-12% annual price declines), adverse patent challenge litigations (Hatch-Waxman Paragraph IV), strict US FDA regulatory compliance crackdowns, and dependency on imported chemical intermediates.',
+  },
+  {
+    pillar: 'METALS',
+    title: 'Metals, Mining & Infrastructure Materials (Nifty Metal)',
+    aliases: [
+      'metals',
+      'metal',
+      'mining',
+      'nifty metal',
+      'tata steel',
+      'jsw steel',
+      'hindalco',
+      'coal india',
+      'vedanta',
+      'steel',
+      'aluminum',
+      'copper',
+      'zinc',
+      'iron ore',
+      'coking coal',
+    ],
+    coreMechanisms: 'Deeply cyclical upstream materials industry producing crude steel, primary aluminum, refined copper, and industrial coal. Pricing is determined at the margin by international benchmark spot rates on the London Metal Exchange (LME) and Shanghai Futures Exchange (SHFE), combined with domestic landed import parity prices.',
+    transmissionChannels: 'China\'s macroeconomic property construction demand and environmental blast furnace production curtailments drive global steel price parity. Domestic national infrastructure capital outlay (railway electrification, highways, defense armor plating) establishes a resilient floor for domestic Indian steel consumption (JSW, Tata Steel). Elevated coking coal import costs squeeze blast-furnace gross margins.',
+    keyInstitutionsAndAssets: 'Steel Giants: Tata Steel, JSW Steel, Jindal Steel & Power (JSPL); Non-Ferrous & Mining: Hindalco Industries (aluminum, Novelis can recycling), Coal India (world\'s largest coal producer), NMDC (merchant iron ore); benchmark: London Metal Exchange (LME).',
+    strategicRisks: 'Chinese steel dumping in international export markets during domestic property downturns, sudden imposition of export tariffs, environmental carbon tax barriers (EU Carbon Border Adjustment Mechanism / CBAM), and volatility in imported metallurgical coking coal.',
+  },
+  {
+    pillar: 'FMCG',
+    title: 'Consumer Fast-Moving Goods & Retail Staples (Nifty FMCG)',
+    aliases: [
+      'fmcg',
+      'consumer goods',
+      'nifty fmcg',
+      'hul',
+      'hindustan unilever',
+      'itc',
+      'nestle',
+      'nestle india',
+      'britannia',
+      'tata consumer',
+      'marico',
+      'dharohar',
+      'staples',
+      'rural demand',
+    ],
+    coreMechanisms: 'Consumer packaged staples represent defensive, high-ROCE cash-generating businesses delivering daily essentials across personal care, packaged foods, oral hygiene, and home care. Competitive moats are built on omni-channel retail distribution networks (reaching 9M+ traditional kirana storefronts across India), high brand equity, and advertising scale.',
+    transmissionChannels: 'Volume growth is governed by agricultural farm income, rural wage growth, and retail food inflation. Input cost volatility in palm fatty acid distillate (PFAD for soaps), crude-linked packaging polymers, and wheat/milk dictates gross margins. During inflationary cycles, FMCG giants enact grammage reductions (shrinkflation) to protect price points while defending volume.',
+    keyInstitutionsAndAssets: 'Market Leaders: Hindustan Unilever Ltd (HUL — soaps, detergents, skin care), ITC Ltd (cigarettes, agricultural sourcing, branded packaged foods), Nestlé India (packaged noodles, infant nutrition, dairy), Britannia Industries (biscuits & bakery), Tata Consumer Products (salt, tea, pulses).',
+    strategicRisks: 'Persistent rural wage stagnation causing volume contractions, agricultural commodity price spikes compressing gross margins, intense competitive incursions by agile Direct-to-Consumer (D2C) brands, and local unorganized regional brand price-cutting.',
+  },
 ];
 
 // --------------------------------------------------------------------------
@@ -908,16 +1072,47 @@ export function findMacroSectorDossier(query: string): MacroSectorDossier | unde
   const q = query.toLowerCase().trim();
   const words = q.split(/\W+/).filter(Boolean);
 
-  return MACRO_SECTOR_DOSSIERS.find((m) => {
-    if (m.title.toLowerCase().includes(q)) return true;
-    return m.aliases.some((alias) => {
+  let bestDossier: MacroSectorDossier | undefined = undefined;
+  let bestScore = 0;
+
+  const specificIndustrySectors = ['BANKING', 'IT_SERVICES', 'AUTOMOBILE', 'PHARMA', 'METALS', 'FMCG'];
+
+  for (const m of MACRO_SECTOR_DOSSIERS) {
+    let score = 0;
+    if (m.title.toLowerCase().includes(q)) {
+      score += 200;
+    }
+
+    let matchedAliases = 0;
+    for (const alias of m.aliases) {
       const a = alias.toLowerCase();
       if (a.includes(' ')) {
-        return q.includes(a);
+        if (q.includes(a)) {
+          score += a.length * 4;
+          matchedAliases++;
+        }
+      } else {
+        if (words.includes(a)) {
+          score += a.length * 2;
+          matchedAliases++;
+        }
       }
-      return words.includes(a);
-    });
-  });
+    }
+
+    if (matchedAliases > 0) {
+      // Prioritize specific industry sector dossiers when the user explicitly queries sector dynamics
+      if (specificIndustrySectors.includes(m.pillar)) {
+        score += 60;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestDossier = m;
+    }
+  }
+
+  return bestDossier;
 }
 
 export function findScienceTopic(query: string): { title: string; summary: string } | undefined {

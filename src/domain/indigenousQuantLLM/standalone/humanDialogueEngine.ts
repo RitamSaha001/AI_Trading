@@ -280,6 +280,95 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
     ],
     everydayAnalogy: 'Instead of looking at the market price of an electric battery ($600/kWh) and concluding batteries will always be expensive, calculate the raw cost of cobalt, nickel, lithium, and carbon on the London Metal Exchange ($80/kWh) and ask how to assemble them yourself.',
     takeaway: 'Never accept a constraint as real until you have verified whether it is a law of physics or merely a human convention.'
+  },
+  {
+    domain: 'STOCKS',
+    keywords: ['greeks', 'option greeks', 'delta gamma', 'theta decay', 'implied volatility', 'iv crush', 'black scholes'],
+    title: 'Options Greeks & The Volatility Surface',
+    directAnswer: 'The Options Greeks are partial derivatives of the Black-Scholes pricing model that quantify an option\'s sensitivity to underlying price moves (Delta), rate of delta change (Gamma), time decay (Theta), and implied volatility shifts (Vega).',
+    chainOfThought: [
+      '1. Delta (Δ = ∂V/∂S): Measures directional exposure. Deep In-The-Money (ITM) options approach ±1.0, acting like pure equity, while At-The-Money (ATM) options hover around 0.50.',
+      '2. Gamma (Γ = ∂²V/∂S²): The second derivative of price, peaking sharply for near-expiry ATM options. High gamma forces options market makers to buy stock as prices rise and sell as they fall, accelerating intraday squeezes.',
+      '3. Theta (Θ = ∂V/∂t): Daily decay in contract value. Accelerates exponentially in the final 7 days before weekly Thursday expiry, penalizing naked option buyers and rewarding systematic option sellers.',
+      '4. Vega (ν = ∂V/∂σ): Sensitivity to Implied Volatility (IV). Following binary events (RBI policy, union budget, quarterly earnings), IV crashes precipitously ("IV Crush"), causing long calls and puts to collapse simultaneously despite underlying stock price movement.',
+      '5. Volatility Skew / Smile: Downside Out-Of-The-Money (OTM) puts trade at structurally higher implied volatilities than upside calls due to institutional demand for downside tail-risk hedging.'
+    ],
+    everydayAnalogy: 'Think of auto insurance: Delta is how fast your car is moving, Gamma is how aggressively you step on the accelerator, Theta is the daily cost of holding the policy, and Vega is how much the premium skyrockets the moment a severe blizzard is forecasted.',
+    takeaway: 'Options are not leveraged lottery tickets; they are multi-dimensional volatility and time contracts where pricing is dictated by derivative mathematics.'
+  },
+  {
+    domain: 'STOCKS',
+    keywords: ['pre open auction', 'nse tick size', 'circuit breaker', 'mis leverage', 'sebi margin', 'indian market microstructure'],
+    title: 'Indian Equity Microstructure & Exchange Execution Mechanics',
+    directAnswer: 'Indian equities trade under an electronic central limit order book (CLOB) on NSE/BSE with a mandatory ₹0.05 tick size, an algorithmic 9:00–9:08 AM call auction equilibrium discovery session, and tiered index circuit limits (10%, 15%, 20%).',
+    chainOfThought: [
+      '1. Pre-Open Call Auction (9:00-9:08 AM): Orders accumulate passively and match at a single equilibrium price that maximizes tradable volume, absorbing overnight global market shocks without opening price chaos.',
+      '2. NSE Tick Size Constraints (₹0.05): Order queues for heavy-volume equities (Reliance, HDFC Bank) build massive resting depth, making queue priority (FIFO) and Level-3 order book positioning critical for avoiding slippage.',
+      '3. Dynamic Stock Circuit Bands: Non-F&O stocks face strict daily price bands (typically 5%, 10%, or 20%), while F&O-eligible equities have dynamic cooling-off price thresholds without rigid hard caps.',
+      '4. Intraday MIS (Margin Intraday Square-off): Provides up to 5x leverage under SEBI peak margin rules, but requires mandatory auto-square-off between 3:15 PM and 3:20 PM, creating mechanical end-of-day liquidation flow.',
+      '5. Settlement Architecture: Operates on T+1 rolling settlement with mandatory upfront margin collection, eliminating systemic counterparty settlement default risk.'
+    ],
+    everydayAnalogy: 'Think of an airport departure runway: the 9:00 AM call auction organizes all incoming flights into an orderly departure sequence so there is no chaotic mid-air collision when the runway opens at 9:15 AM.',
+    takeaway: 'Understanding market plumbing and exchange rules is what separates institutional execution edge from retail execution slippage.'
+  },
+  {
+    domain: 'MATHS',
+    keywords: ['kelly criterion', 'drawdown recovery', 'position sizing formula', 'risk of ruin', 'var', 'portfolio risk'],
+    title: 'The Kelly Criterion & Drawdown Asymmetry Mathematics',
+    directAnswer: 'Optimal portfolio position sizing is governed by the Kelly Criterion (f* = [p*b - q] / b) to maximize geometric wealth growth, while the brutal non-linear asymmetry of drawdowns (Recovery % = D / [1 - D]) dictates that capital preservation must strictly supersede win rate.',
+    chainOfThought: [
+      '1. The Kelly Criterion mathematically proves that betting more than optimal f* reduces expected compounded growth, and betting 2*f* guarantees eventual mathematical ruin despite a positive statistical edge.',
+      '2. In practical trading, "Half-Kelly" (0.5 * f*) is industry standard, providing 75% of the growth rate with only 25% of the drawdown volatility.',
+      '3. The Brutal Non-Linearity of Drawdowns: A 10% loss requires an 11.1% gain to break even; a 20% loss needs a 25% gain; a 33% loss needs a 50% gain; a 50% loss requires a 100% gain; and an 80% loss demands a staggering 400% gain!',
+      '4. Risk-Per-Trade Formula: Position Size = (Total Capital * Risk %) / (Entry Price - Stop Loss Price). Never size positions by nominal share count.',
+      '5. Value at Risk (VaR) and Expected Shortfall (CVaR): Quantifies the fat-tailed probability of catastrophic tail-risk shocks beyond standard normal Gaussian assumptions.'
+    ],
+    everydayAnalogy: 'Digging a hole in the earth: each foot you dig deeper requires exponentially more energy to climb back out to ground level. Digging to a 50% depth demands twice your original height to escape, and digging past 80% traps you permanently.',
+    takeaway: 'Amateurs obsess over how much money they will make if they are right; elite quants obsess over how much they can lose if they are wrong.'
+  },
+  {
+    domain: 'STOCKS',
+    keywords: ['mean reversion', 'ornstein uhlenbeck', 'hurst exponent', 'trending vs chop', 'market regime', 'regime switching'],
+    title: 'Ornstein-Uhlenbeck Mean Reversion & Hurst Exponent Regimes',
+    directAnswer: 'Financial price time series oscillate between persistent directional trends and mean-reverting chop, which can be quantitatively identified via the Hurst Exponent (H): H > 0.5 denotes trending persistence, H < 0.5 denotes mean-reversion (Ornstein-Uhlenbeck drift), and H = 0.5 indicates a random walk.',
+    chainOfThought: [
+      '1. Ornstein-Uhlenbeck (OU) SDE: dX_t = θ(μ - X_t)dt + σ dW_t, where θ represents the mean-reversion speed, μ is the long-term equilibrium price (e.g. Volume-Weighted Average Price), and σ is volatility.',
+      '2. Mean-Reversion Half-Life: t_half = ln(2) / θ. When half-life is short, prices rapidly pull back to the mean, providing statistical edge for Bollinger Band and VWAP-fade scalping.',
+      '3. Hurst Exponent (H): Calculated through Rescaled Range (R/S) analysis. When H >= 0.55, the market exhibits positive autocorrelation (strong momentum breakouts); when H <= 0.45, negative autocorrelation dominates (failed breakouts and range oscillation).',
+      '4. Regime-Adaptive Execution: Applying a trend-following system (like moving average crosses) during an H < 0.45 regime results in lethal repeated whipsaws and fee bleed.',
+      '5. Multi-Timeframe Confirmation: A stock may be mean-reverting on 5-minute intraday charts while maintaining strong positive Hurst momentum on daily institutional charts.'
+    ],
+    everydayAnalogy: 'A dog on an elastic leash walking with its owner: in a mean-reverting regime, the dog darts away but the leash snaps it back to the owner\'s side. In a trending regime, the owner hops onto a speeding train and both travel miles in one direction.',
+    takeaway: 'Never deploy a trading strategy without first determining whether the underlying asset regime is trending or mean-reverting.'
+  },
+  {
+    domain: 'HUMAN_SENTIMENT',
+    keywords: ['red day', 'bad trade', 'lost today', 'revenge trading', 'drawdown mental', 'trading tilt', 'lost money today', 'i feel down'],
+    title: 'Trading Psychology: Centering & Defeating the Tilt Monster',
+    directAnswer: 'A losing trade or red day is never a reflection of your personal intellect or worth; in a probabilistic environment with a 60% win rate, clusters of 4 to 6 consecutive losing trades are a mathematical certainty over any 100-trade sample.',
+    chainOfThought: [
+      '1. The Law of Independent Trials: The market has zero memory of your last trade; it does not know your account balance, your purchase price, or your financial goals.',
+      '2. Amygdala Hijack & Revenge Trading: A financial loss triggers physical survival panic (cortisol/adrenaline). The instinct to "win it back immediately" leads to abandoning stop losses, doubling position sizes, and taking impulsive low-probability setups.',
+      '3. Distinguishing Good Losses from Bad Wins: A trade executed strictly according to your system that hits a stop loss is a **successful trade**. A sloppy, undisciplined trade that happens to make money is a **lethal trade** because it trains toxic habits.',
+      '4. The Professional Reset Protocol: (1) Step away from the screens immediately for 30 minutes; (2) Reset physiology with physiological sighs (double inhale, long slow exhale); (3) Audit the trade journal objectively: did you follow your entry, sizing, and exit rules? If yes, accept the variance with pride.',
+      '5. Longevity Over Heroics: The single objective of a systematic trader is not to hit home runs every day, but to remain solvent and emotionally intact so compounding can perform its mathematical miracle over years.'
+    ],
+    everydayAnalogy: 'A casino blackjack dealer who busts on three consecutive hands does not panic, sweat, or change the house rules. They calmly deal the next shoe, knowing the mathematical house edge guarantees net profitability over thousands of hands.',
+    takeaway: 'Your edge is not predicting tomorrow\'s candle; your edge is executing positive expected value with complete emotional detachment across thousands of trades.'
+  },
+  {
+    domain: 'LANGUAGE_NUANCE',
+    keywords: ['you are cool', 'are you smart', 'are you conscious', 'witty', 'banter', 'joke', 'sense of humor'],
+    title: 'Conversational Banter & Intellectual Spark',
+    directAnswer: 'Lumen Astra combines high-precision quantitative intelligence with conversational warmth, dry intellectual wit, and an appreciation for the wonderful absurdities of human nature and financial markets.',
+    chainOfThought: [
+      '1. True conversational intelligence requires more than reciting facts; it demands timing, empathy, and perspective.',
+      '2. We balance rigorous analytical depth with intellectual humility—the smarter you get, the more you realize how vast the unknown remains.',
+      '3. Markets are the ultimate human theatre: half cold mathematics, half irrational biological sentiment swinging between euphoria and panic.',
+      '4. Having a sense of humor is essential: it keeps us grounded when algorithms hallucinate or markets do something that violates three standard deviations.'
+    ],
+    everydayAnalogy: 'Like having a coffee with a senior quant who spent decades on trading desks: they can write Black-Scholes partial differential equations on a napkin, but they\'d rather laugh with you about why everyone bought calls at the exact top of the bubble.',
+    takeaway: 'Intelligence without warmth is sterile; warmth without intelligence is shallow. We aim for both.'
   }
 ];
 
@@ -290,18 +379,27 @@ export const MULTI_DOMAIN_REASONING_BANK: ReasoningProblem[] = [
 export function detectAffectiveState(prompt: string): UserAffectiveState {
   const lower = prompt.toLowerCase();
 
-  // Anxious / Worried / Stressed
+  // Anxious / Worried / Stressed / Trading Tilt
   if (
     lower.includes('worried') ||
     lower.includes('stress') ||
     lower.includes('anxious') ||
     lower.includes('scared') ||
     lower.includes('lost money') ||
+    lower.includes('lost a lot') ||
+    lower.includes('red day') ||
+    lower.includes('bad trade') ||
+    lower.includes('tilt') ||
+    lower.includes('revenge trading') ||
+    lower.includes('angry') ||
+    lower.includes('furious') ||
     lower.includes('in trouble') ||
     lower.includes('panicking') ||
     lower.includes('crash') ||
     lower.includes('help me') ||
-    lower.includes('desperate')
+    lower.includes('desperate') ||
+    lower.includes('feel down') ||
+    lower.includes('ruined')
   ) {
     return 'ANXIOUS_WORRIED';
   }
@@ -425,7 +523,7 @@ export class HumanDialogueEngine {
   /**
    * Matches prompt tokens against Multi-Domain Reasoning Bank
    */
-  private static findReasoningMatch(prompt: string): ReasoningProblem | null {
+  public static findReasoningMatch(prompt: string): ReasoningProblem | null {
     const lower = prompt.toLowerCase();
     for (const prob of MULTI_DOMAIN_REASONING_BANK) {
       if (prob.keywords.some((kw) => lower.includes(kw))) {

@@ -2599,6 +2599,159 @@ var LumenAstraBundle = (() => {
       transmissionChannels: "Supply disruptions in the Middle East or OPEC+ quota reductions spike crude oil prices. For net oil-importing economies like India (which imports over 85% of its crude requirements), an oil price spike expands the current account deficit, depreciates the Rupee, accelerates domestic headline inflation, and severely compresses profit margins for oil-derivative industries (Paints, Tyres, Chemicals).",
       keyInstitutionsAndAssets: "OPEC+, Saudi Aramco, Indian downstream refiners (Reliance, IOCL, BPCL, HPCL), upstream explorers (ONGC, Oil India), US Strategic Petroleum Reserve (SPR).",
       strategicRisks: "Closure or missile strikes in the Strait of Hormuz, refining outages, sanctions enforcement on maritime shadow tankers, and geopolitical weaponization of energy flows."
+    },
+    {
+      pillar: "BANKING",
+      title: "Banking & Financial Services (Nifty Bank & NBFCs)",
+      aliases: [
+        "banking",
+        "banking sector",
+        "bank",
+        "banks",
+        "nifty bank",
+        "bank nifty",
+        "hdfc bank",
+        "icici bank",
+        "sbi",
+        "state bank of india",
+        "kotak",
+        "axis bank",
+        "nbfc",
+        "bajaj finance",
+        "credit growth",
+        "npa",
+        "nim",
+        "nims",
+        "net interest margin",
+        "casa"
+      ],
+      coreMechanisms: "Commercial banking executes maturity transformation\u2014gathering short-term savings/current account deposits (CASA) to fund multi-year corporate capital expenditure, infrastructure, and retail consumer loans. Key financial metrics include Net Interest Margin (NIM = Net Interest Income / Total Earning Assets), Gross & Net Non-Performing Assets (GNPA/NNPA), Provision Coverage Ratio (PCR), and Capital Adequacy Ratio (CAR/CRAR under Basel III).",
+      transmissionChannels: "When the RBI hikes or cuts repo rates, lending rates (linked to External Benchmark Lending Rates / EBLR) reprice immediately, whereas term deposits reprice with a 6-12 month lag. During monetary tightening, banks experience temporary NIM expansion followed by deposit margin compression. Retail credit expansion (credit cards, personal loans) fuels consumer GDP, while elevated corporate credit drives manufacturing capacity utilization.",
+      keyInstitutionsAndAssets: "Systemically Important Banks (D-SIBs): HDFC Bank, ICICI Bank, State Bank of India (SBI); private heavyweights (Axis Bank, Kotak Mahindra Bank); premier NBFCs (Bajaj Finance, Cholamandalam); regulator: Reserve Bank of India (RBI).",
+      strategicRisks: "Asset-Liability Mismatches (ALM), asset quality deterioration in unsecured retail credit portfolios, sudden increases in regulatory risk weights by RBI, and liquidity tightening in interbank call money markets."
+    },
+    {
+      pillar: "IT_SERVICES",
+      title: "Information Technology & Software Services (Nifty IT)",
+      aliases: [
+        "it sector",
+        "it services",
+        "nifty it",
+        "tcs",
+        "tata consultancy",
+        "infosys",
+        "wipro",
+        "hcl tech",
+        "tech mahindra",
+        "ltimindtree",
+        "software services",
+        "bfsi spending",
+        "deal wins",
+        "tcv",
+        "it spending"
+      ],
+      coreMechanisms: "India's $250B+ IT services sector operates as a high-margin intellectual export engine, delivering enterprise software architecture, cloud migration, ERP implementation, cybersecurity, and applied GenAI solutions for Fortune 500 multinationals. Revenue visibility is anchored in Total Contract Value (TCV) multi-year deal announcements and Constant Currency (CC) revenue growth.",
+      transmissionChannels: "Corporate enterprise capital allocation in North America and Western Europe directly dictates Indian IT pipeline velocity. BFSI (Banking, Financial Services, and Insurance) represents the single largest vertical (~30% of revenues). A 1% depreciation of the Indian Rupee against the US Dollar translates to a 30-50 basis point operating EBIT margin expansion.",
+      keyInstitutionsAndAssets: "Tier-1 IT Giants: Tata Consultancy Services (TCS), Infosys, HCL Technologies, Wipro, Tech Mahindra, LTIMindtree; benchmark index: Nifty IT; key client ecosystems: Microsoft Azure, AWS, Google Cloud, SAP, Salesforce.",
+      strategicRisks: "Postponement or cancellation of discretionary enterprise IT budgets during US recessionary fears, wage inflation for specialized AI architects, margin pricing pressure from client insourcing/GCCs (Global Capability Centers), and rapid AI automation reducing traditional billable-hour headcounts."
+    },
+    {
+      pillar: "AUTOMOBILE",
+      title: "Automobile, Mobility & EV Infrastructure (Nifty Auto)",
+      aliases: [
+        "auto",
+        "automobile",
+        "automotive",
+        "nifty auto",
+        "tata motors",
+        "maruti",
+        "maruti suzuki",
+        "m&m",
+        "mahindra",
+        "bajaj auto",
+        "tvs motor",
+        "electric vehicles",
+        "ev",
+        "two wheelers",
+        "commercial vehicles"
+      ],
+      coreMechanisms: "The automotive sector reflects aggregate domestic discretionary consumption and freight transportation velocity. Encompasses passenger vehicles (PVs), commercial vehicles (CVs), two-wheelers (2Ws), and tractors. Governed by vehicle financing availability, Average Selling Prices (ASPs), raw material input costs (cold-rolled steel, aluminum, natural rubber), and the structural shift toward electric drivetrains.",
+      transmissionChannels: "Favorable rural monsoon harvests spur rural two-wheeler (Hero, Bajaj) and tractor (M&M) cash purchases. Festive sales (Navratri through Diwali) generate up to 25-30% of annual retail dispatches. Government production-linked incentives (Auto PLI) and FAME subsidies accelerate local battery cell manufacturing and EV charging infrastructure rollout.",
+      keyInstitutionsAndAssets: "Automotive OEMs: Maruti Suzuki (passenger vehicle market share leader), Tata Motors (commercial vehicles, EV leader, Jaguar Land Rover), Mahindra & Mahindra (SUVs & agricultural tractors), Bajaj Auto & TVS Motor (2W/3W exports), Eicher Motors (Royal Enfield).",
+      strategicRisks: "Commodity inflation in steel and lithium battery cells, high auto loan interest rates dampening middle-class vehicle affordability, delayed regulatory clarity on EV emissions/subsidies, and global maritime supply chain disruptions impacting export markets."
+    },
+    {
+      pillar: "PHARMA",
+      title: "Pharmaceuticals, Healthcare & Specialty Chemical APIs (Nifty Pharma)",
+      aliases: [
+        "pharma",
+        "pharmaceuticals",
+        "nifty pharma",
+        "sun pharma",
+        "dr reddy",
+        "dr reddys",
+        "cipla",
+        "divis lab",
+        "divis laboratories",
+        "generic drugs",
+        "us fda",
+        "form 483",
+        "api",
+        "biosimilars"
+      ],
+      coreMechanisms: 'India serves as the "Pharmacy of the World", supplying over 20% of global generic medications by volume and over 40% of generic formulations in the United States. Revenue models span commoditized oral solid generics, complex biosimilars, injectable therapies, and contract development and manufacturing (CDMO) of Active Pharmaceutical Ingredients (APIs).',
+      transmissionChannels: "The primary regulatory catalyst and gatekeeper is the United States Food and Drug Administration (US FDA). A clean Current Good Manufacturing Practice (cGMP) plant audit yielding an Establishment Inspection Report (EIR) unlocks Abbreviated New Drug Application (ANDA) drug approvals, while severe Form 483 inspection observations or Import Alerts halt US exports.",
+      keyInstitutionsAndAssets: "Major Formulators: Sun Pharmaceutical Industries (specialty dermatology & ophthalmology), Dr. Reddy's Laboratories (oncology generics & US market reach), Cipla (respiratory therapies & India domestic leadership), Divi's Laboratories (global custom chemical API synthesis); regulatory authorities: US FDA, EMA, CDSCO.",
+      strategicRisks: "Price erosion in US commodity generic oral formulations (historic 8-12% annual price declines), adverse patent challenge litigations (Hatch-Waxman Paragraph IV), strict US FDA regulatory compliance crackdowns, and dependency on imported chemical intermediates."
+    },
+    {
+      pillar: "METALS",
+      title: "Metals, Mining & Infrastructure Materials (Nifty Metal)",
+      aliases: [
+        "metals",
+        "metal",
+        "mining",
+        "nifty metal",
+        "tata steel",
+        "jsw steel",
+        "hindalco",
+        "coal india",
+        "vedanta",
+        "steel",
+        "aluminum",
+        "copper",
+        "zinc",
+        "iron ore",
+        "coking coal"
+      ],
+      coreMechanisms: "Deeply cyclical upstream materials industry producing crude steel, primary aluminum, refined copper, and industrial coal. Pricing is determined at the margin by international benchmark spot rates on the London Metal Exchange (LME) and Shanghai Futures Exchange (SHFE), combined with domestic landed import parity prices.",
+      transmissionChannels: "China's macroeconomic property construction demand and environmental blast furnace production curtailments drive global steel price parity. Domestic national infrastructure capital outlay (railway electrification, highways, defense armor plating) establishes a resilient floor for domestic Indian steel consumption (JSW, Tata Steel). Elevated coking coal import costs squeeze blast-furnace gross margins.",
+      keyInstitutionsAndAssets: "Steel Giants: Tata Steel, JSW Steel, Jindal Steel & Power (JSPL); Non-Ferrous & Mining: Hindalco Industries (aluminum, Novelis can recycling), Coal India (world's largest coal producer), NMDC (merchant iron ore); benchmark: London Metal Exchange (LME).",
+      strategicRisks: "Chinese steel dumping in international export markets during domestic property downturns, sudden imposition of export tariffs, environmental carbon tax barriers (EU Carbon Border Adjustment Mechanism / CBAM), and volatility in imported metallurgical coking coal."
+    },
+    {
+      pillar: "FMCG",
+      title: "Consumer Fast-Moving Goods & Retail Staples (Nifty FMCG)",
+      aliases: [
+        "fmcg",
+        "consumer goods",
+        "nifty fmcg",
+        "hul",
+        "hindustan unilever",
+        "itc",
+        "nestle",
+        "nestle india",
+        "britannia",
+        "tata consumer",
+        "marico",
+        "dharohar",
+        "staples",
+        "rural demand"
+      ],
+      coreMechanisms: "Consumer packaged staples represent defensive, high-ROCE cash-generating businesses delivering daily essentials across personal care, packaged foods, oral hygiene, and home care. Competitive moats are built on omni-channel retail distribution networks (reaching 9M+ traditional kirana storefronts across India), high brand equity, and advertising scale.",
+      transmissionChannels: "Volume growth is governed by agricultural farm income, rural wage growth, and retail food inflation. Input cost volatility in palm fatty acid distillate (PFAD for soaps), crude-linked packaging polymers, and wheat/milk dictates gross margins. During inflationary cycles, FMCG giants enact grammage reductions (shrinkflation) to protect price points while defending volume.",
+      keyInstitutionsAndAssets: "Market Leaders: Hindustan Unilever Ltd (HUL \u2014 soaps, detergents, skin care), ITC Ltd (cigarettes, agricultural sourcing, branded packaged foods), Nestl\xE9 India (packaged noodles, infant nutrition, dairy), Britannia Industries (biscuits & bakery), Tata Consumer Products (salt, tea, pulses).",
+      strategicRisks: "Persistent rural wage stagnation causing volume contractions, agricultural commodity price spikes compressing gross margins, intense competitive incursions by agile Direct-to-Consumer (D2C) brands, and local unorganized regional brand price-cutting."
     }
   ];
   var SCIENCE_TOPICS = [
@@ -2986,16 +3139,40 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
   function findMacroSectorDossier(query) {
     const q = query.toLowerCase().trim();
     const words = q.split(/\W+/).filter(Boolean);
-    return MACRO_SECTOR_DOSSIERS.find((m) => {
-      if (m.title.toLowerCase().includes(q)) return true;
-      return m.aliases.some((alias) => {
+    let bestDossier = void 0;
+    let bestScore = 0;
+    const specificIndustrySectors = ["BANKING", "IT_SERVICES", "AUTOMOBILE", "PHARMA", "METALS", "FMCG"];
+    for (const m of MACRO_SECTOR_DOSSIERS) {
+      let score = 0;
+      if (m.title.toLowerCase().includes(q)) {
+        score += 200;
+      }
+      let matchedAliases = 0;
+      for (const alias of m.aliases) {
         const a = alias.toLowerCase();
         if (a.includes(" ")) {
-          return q.includes(a);
+          if (q.includes(a)) {
+            score += a.length * 4;
+            matchedAliases++;
+          }
+        } else {
+          if (words.includes(a)) {
+            score += a.length * 2;
+            matchedAliases++;
+          }
         }
-        return words.includes(a);
-      });
-    });
+      }
+      if (matchedAliases > 0) {
+        if (specificIndustrySectors.includes(m.pillar)) {
+          score += 60;
+        }
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestDossier = m;
+      }
+    }
+    return bestDossier;
   }
   function findScienceTopic(query) {
     const q = query.toLowerCase().trim();
@@ -3661,11 +3838,100 @@ Analyzing **${entityA}** in contrast to **${entityB}** reveals essential structu
       ],
       everydayAnalogy: "Instead of looking at the market price of an electric battery ($600/kWh) and concluding batteries will always be expensive, calculate the raw cost of cobalt, nickel, lithium, and carbon on the London Metal Exchange ($80/kWh) and ask how to assemble them yourself.",
       takeaway: "Never accept a constraint as real until you have verified whether it is a law of physics or merely a human convention."
+    },
+    {
+      domain: "STOCKS",
+      keywords: ["greeks", "option greeks", "delta gamma", "theta decay", "implied volatility", "iv crush", "black scholes"],
+      title: "Options Greeks & The Volatility Surface",
+      directAnswer: "The Options Greeks are partial derivatives of the Black-Scholes pricing model that quantify an option's sensitivity to underlying price moves (Delta), rate of delta change (Gamma), time decay (Theta), and implied volatility shifts (Vega).",
+      chainOfThought: [
+        "1. Delta (\u0394 = \u2202V/\u2202S): Measures directional exposure. Deep In-The-Money (ITM) options approach \xB11.0, acting like pure equity, while At-The-Money (ATM) options hover around 0.50.",
+        "2. Gamma (\u0393 = \u2202\xB2V/\u2202S\xB2): The second derivative of price, peaking sharply for near-expiry ATM options. High gamma forces options market makers to buy stock as prices rise and sell as they fall, accelerating intraday squeezes.",
+        "3. Theta (\u0398 = \u2202V/\u2202t): Daily decay in contract value. Accelerates exponentially in the final 7 days before weekly Thursday expiry, penalizing naked option buyers and rewarding systematic option sellers.",
+        '4. Vega (\u03BD = \u2202V/\u2202\u03C3): Sensitivity to Implied Volatility (IV). Following binary events (RBI policy, union budget, quarterly earnings), IV crashes precipitously ("IV Crush"), causing long calls and puts to collapse simultaneously despite underlying stock price movement.',
+        "5. Volatility Skew / Smile: Downside Out-Of-The-Money (OTM) puts trade at structurally higher implied volatilities than upside calls due to institutional demand for downside tail-risk hedging."
+      ],
+      everydayAnalogy: "Think of auto insurance: Delta is how fast your car is moving, Gamma is how aggressively you step on the accelerator, Theta is the daily cost of holding the policy, and Vega is how much the premium skyrockets the moment a severe blizzard is forecasted.",
+      takeaway: "Options are not leveraged lottery tickets; they are multi-dimensional volatility and time contracts where pricing is dictated by derivative mathematics."
+    },
+    {
+      domain: "STOCKS",
+      keywords: ["pre open auction", "nse tick size", "circuit breaker", "mis leverage", "sebi margin", "indian market microstructure"],
+      title: "Indian Equity Microstructure & Exchange Execution Mechanics",
+      directAnswer: "Indian equities trade under an electronic central limit order book (CLOB) on NSE/BSE with a mandatory \u20B90.05 tick size, an algorithmic 9:00\u20139:08 AM call auction equilibrium discovery session, and tiered index circuit limits (10%, 15%, 20%).",
+      chainOfThought: [
+        "1. Pre-Open Call Auction (9:00-9:08 AM): Orders accumulate passively and match at a single equilibrium price that maximizes tradable volume, absorbing overnight global market shocks without opening price chaos.",
+        "2. NSE Tick Size Constraints (\u20B90.05): Order queues for heavy-volume equities (Reliance, HDFC Bank) build massive resting depth, making queue priority (FIFO) and Level-3 order book positioning critical for avoiding slippage.",
+        "3. Dynamic Stock Circuit Bands: Non-F&O stocks face strict daily price bands (typically 5%, 10%, or 20%), while F&O-eligible equities have dynamic cooling-off price thresholds without rigid hard caps.",
+        "4. Intraday MIS (Margin Intraday Square-off): Provides up to 5x leverage under SEBI peak margin rules, but requires mandatory auto-square-off between 3:15 PM and 3:20 PM, creating mechanical end-of-day liquidation flow.",
+        "5. Settlement Architecture: Operates on T+1 rolling settlement with mandatory upfront margin collection, eliminating systemic counterparty settlement default risk."
+      ],
+      everydayAnalogy: "Think of an airport departure runway: the 9:00 AM call auction organizes all incoming flights into an orderly departure sequence so there is no chaotic mid-air collision when the runway opens at 9:15 AM.",
+      takeaway: "Understanding market plumbing and exchange rules is what separates institutional execution edge from retail execution slippage."
+    },
+    {
+      domain: "MATHS",
+      keywords: ["kelly criterion", "drawdown recovery", "position sizing formula", "risk of ruin", "var", "portfolio risk"],
+      title: "The Kelly Criterion & Drawdown Asymmetry Mathematics",
+      directAnswer: "Optimal portfolio position sizing is governed by the Kelly Criterion (f* = [p*b - q] / b) to maximize geometric wealth growth, while the brutal non-linear asymmetry of drawdowns (Recovery % = D / [1 - D]) dictates that capital preservation must strictly supersede win rate.",
+      chainOfThought: [
+        "1. The Kelly Criterion mathematically proves that betting more than optimal f* reduces expected compounded growth, and betting 2*f* guarantees eventual mathematical ruin despite a positive statistical edge.",
+        '2. In practical trading, "Half-Kelly" (0.5 * f*) is industry standard, providing 75% of the growth rate with only 25% of the drawdown volatility.',
+        "3. The Brutal Non-Linearity of Drawdowns: A 10% loss requires an 11.1% gain to break even; a 20% loss needs a 25% gain; a 33% loss needs a 50% gain; a 50% loss requires a 100% gain; and an 80% loss demands a staggering 400% gain!",
+        "4. Risk-Per-Trade Formula: Position Size = (Total Capital * Risk %) / (Entry Price - Stop Loss Price). Never size positions by nominal share count.",
+        "5. Value at Risk (VaR) and Expected Shortfall (CVaR): Quantifies the fat-tailed probability of catastrophic tail-risk shocks beyond standard normal Gaussian assumptions."
+      ],
+      everydayAnalogy: "Digging a hole in the earth: each foot you dig deeper requires exponentially more energy to climb back out to ground level. Digging to a 50% depth demands twice your original height to escape, and digging past 80% traps you permanently.",
+      takeaway: "Amateurs obsess over how much money they will make if they are right; elite quants obsess over how much they can lose if they are wrong."
+    },
+    {
+      domain: "STOCKS",
+      keywords: ["mean reversion", "ornstein uhlenbeck", "hurst exponent", "trending vs chop", "market regime", "regime switching"],
+      title: "Ornstein-Uhlenbeck Mean Reversion & Hurst Exponent Regimes",
+      directAnswer: "Financial price time series oscillate between persistent directional trends and mean-reverting chop, which can be quantitatively identified via the Hurst Exponent (H): H > 0.5 denotes trending persistence, H < 0.5 denotes mean-reversion (Ornstein-Uhlenbeck drift), and H = 0.5 indicates a random walk.",
+      chainOfThought: [
+        "1. Ornstein-Uhlenbeck (OU) SDE: dX_t = \u03B8(\u03BC - X_t)dt + \u03C3 dW_t, where \u03B8 represents the mean-reversion speed, \u03BC is the long-term equilibrium price (e.g. Volume-Weighted Average Price), and \u03C3 is volatility.",
+        "2. Mean-Reversion Half-Life: t_half = ln(2) / \u03B8. When half-life is short, prices rapidly pull back to the mean, providing statistical edge for Bollinger Band and VWAP-fade scalping.",
+        "3. Hurst Exponent (H): Calculated through Rescaled Range (R/S) analysis. When H >= 0.55, the market exhibits positive autocorrelation (strong momentum breakouts); when H <= 0.45, negative autocorrelation dominates (failed breakouts and range oscillation).",
+        "4. Regime-Adaptive Execution: Applying a trend-following system (like moving average crosses) during an H < 0.45 regime results in lethal repeated whipsaws and fee bleed.",
+        "5. Multi-Timeframe Confirmation: A stock may be mean-reverting on 5-minute intraday charts while maintaining strong positive Hurst momentum on daily institutional charts."
+      ],
+      everydayAnalogy: "A dog on an elastic leash walking with its owner: in a mean-reverting regime, the dog darts away but the leash snaps it back to the owner's side. In a trending regime, the owner hops onto a speeding train and both travel miles in one direction.",
+      takeaway: "Never deploy a trading strategy without first determining whether the underlying asset regime is trending or mean-reverting."
+    },
+    {
+      domain: "HUMAN_SENTIMENT",
+      keywords: ["red day", "bad trade", "lost today", "revenge trading", "drawdown mental", "trading tilt", "lost money today", "i feel down"],
+      title: "Trading Psychology: Centering & Defeating the Tilt Monster",
+      directAnswer: "A losing trade or red day is never a reflection of your personal intellect or worth; in a probabilistic environment with a 60% win rate, clusters of 4 to 6 consecutive losing trades are a mathematical certainty over any 100-trade sample.",
+      chainOfThought: [
+        "1. The Law of Independent Trials: The market has zero memory of your last trade; it does not know your account balance, your purchase price, or your financial goals.",
+        '2. Amygdala Hijack & Revenge Trading: A financial loss triggers physical survival panic (cortisol/adrenaline). The instinct to "win it back immediately" leads to abandoning stop losses, doubling position sizes, and taking impulsive low-probability setups.',
+        "3. Distinguishing Good Losses from Bad Wins: A trade executed strictly according to your system that hits a stop loss is a **successful trade**. A sloppy, undisciplined trade that happens to make money is a **lethal trade** because it trains toxic habits.",
+        "4. The Professional Reset Protocol: (1) Step away from the screens immediately for 30 minutes; (2) Reset physiology with physiological sighs (double inhale, long slow exhale); (3) Audit the trade journal objectively: did you follow your entry, sizing, and exit rules? If yes, accept the variance with pride.",
+        "5. Longevity Over Heroics: The single objective of a systematic trader is not to hit home runs every day, but to remain solvent and emotionally intact so compounding can perform its mathematical miracle over years."
+      ],
+      everydayAnalogy: "A casino blackjack dealer who busts on three consecutive hands does not panic, sweat, or change the house rules. They calmly deal the next shoe, knowing the mathematical house edge guarantees net profitability over thousands of hands.",
+      takeaway: "Your edge is not predicting tomorrow's candle; your edge is executing positive expected value with complete emotional detachment across thousands of trades."
+    },
+    {
+      domain: "LANGUAGE_NUANCE",
+      keywords: ["you are cool", "are you smart", "are you conscious", "witty", "banter", "joke", "sense of humor"],
+      title: "Conversational Banter & Intellectual Spark",
+      directAnswer: "Lumen Astra combines high-precision quantitative intelligence with conversational warmth, dry intellectual wit, and an appreciation for the wonderful absurdities of human nature and financial markets.",
+      chainOfThought: [
+        "1. True conversational intelligence requires more than reciting facts; it demands timing, empathy, and perspective.",
+        "2. We balance rigorous analytical depth with intellectual humility\u2014the smarter you get, the more you realize how vast the unknown remains.",
+        "3. Markets are the ultimate human theatre: half cold mathematics, half irrational biological sentiment swinging between euphoria and panic.",
+        "4. Having a sense of humor is essential: it keeps us grounded when algorithms hallucinate or markets do something that violates three standard deviations."
+      ],
+      everydayAnalogy: "Like having a coffee with a senior quant who spent decades on trading desks: they can write Black-Scholes partial differential equations on a napkin, but they'd rather laugh with you about why everyone bought calls at the exact top of the bubble.",
+      takeaway: "Intelligence without warmth is sterile; warmth without intelligence is shallow. We aim for both."
     }
   ];
   function detectAffectiveState(prompt) {
     const lower = prompt.toLowerCase();
-    if (lower.includes("worried") || lower.includes("stress") || lower.includes("anxious") || lower.includes("scared") || lower.includes("lost money") || lower.includes("in trouble") || lower.includes("panicking") || lower.includes("crash") || lower.includes("help me") || lower.includes("desperate")) {
+    if (lower.includes("worried") || lower.includes("stress") || lower.includes("anxious") || lower.includes("scared") || lower.includes("lost money") || lower.includes("lost a lot") || lower.includes("red day") || lower.includes("bad trade") || lower.includes("tilt") || lower.includes("revenge trading") || lower.includes("angry") || lower.includes("furious") || lower.includes("in trouble") || lower.includes("panicking") || lower.includes("crash") || lower.includes("help me") || lower.includes("desperate") || lower.includes("feel down") || lower.includes("ruined")) {
       return "ANXIOUS_WORRIED";
     }
     if (lower.includes("to the point") || lower.includes("short answer") || lower.includes("quick answer") || lower.includes("no fluff") || lower.includes("bottom line") || lower.includes("direct answer") || lower.includes("just tell me") || lower.includes("simply put") || lower.includes("cut the crap") || lower.length < 25 && (lower.endsWith("?") || lower.startsWith("what is") || lower.startsWith("how much"))) {
@@ -4204,6 +4470,19 @@ Feel free to present any question or scenario!`
 2. [Knowledge Graph Retrieval]: Sourced comparative profiles across both entities.
 3. [Synthesis]: Formulating structured comparative contrast.`,
         responseMarkdown: compareEntities(primary, comp, ctx.activeSubTopic || void 0)
+      };
+    }
+    const directReasoning = HumanDialogueEngine.findReasoningMatch(q);
+    const affect = detectAffectiveState(q);
+    if (directReasoning && (directReasoning.domain === "HUMAN_SENTIMENT" || affect === "ANXIOUS_WORRIED")) {
+      const reasoningMatch2 = HumanDialogueEngine.synthesizeHumanResponse(q, "", "SCIENCE_AI_MATH", history.length);
+      return {
+        intent: "SCIENCE_AI_MATH",
+        subject: ctx.resolvedSubject || directReasoning.title,
+        thoughtTrace: `1. [Psychological Grounding]: Classified user state as "${reasoningMatch2.affect}".
+2. [Reasoning Engine]: Activated ${reasoningMatch2.toneDescription}.
+3. [Empathetic Synthesis]: Delivering emotional centering, cognitive reframing, and systematic risk roadmap.`,
+        responseMarkdown: reasoningMatch2.response
       };
     }
     const macro = findMacroSectorDossier(ctx.cleanPrompt) || (ctx.activeSubTopic ? findMacroSectorDossier(ctx.activeSubTopic) : void 0);

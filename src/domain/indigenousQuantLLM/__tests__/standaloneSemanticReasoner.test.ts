@@ -73,9 +73,9 @@ describe('Lumen Astra: Standalone Semantic Reasoner & World Knowledge Base', () 
     });
   });
 
-  describe('3. Five Core Macro Pillars', () => {
-    it('covers all five required macroeconomic sectors', () => {
-      expect(MACRO_SECTOR_DOSSIERS.length).toBe(5);
+  describe('3. Five Core Macro Pillars & Specialized Sectors', () => {
+    it('covers all core macroeconomic pillars and specialized equity sectors', () => {
+      expect(MACRO_SECTOR_DOSSIERS.length).toBeGreaterThanOrEqual(5);
 
       const stocks = findMacroSectorDossier('equity market microstructure');
       expect(stocks?.pillar).toBe('STOCKS');

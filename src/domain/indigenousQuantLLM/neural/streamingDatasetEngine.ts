@@ -207,6 +207,24 @@ export class StreamingDatasetEngine {
           'To remain hedged, market makers must continuously buy shares at escalating prices.',
         ],
       },
+      {
+        prompt: 'How do interest rate hikes affect Indian Bank Net Interest Margins (NIM)?',
+        bottomLine: 'Bank lending rates linked to external benchmarks reprice faster than fixed term deposits, leading to temporary NIM expansion followed by deposit margin compression.',
+        cot: [
+          'EBLR-linked floating retail and MSME loans reprice immediately with RBI repo rate changes.',
+          'Term deposits reprice gradually as 1-to-3-year fixed deposits mature.',
+          'CASA ratio determines the baseline low-cost deposit resilience during tight liquidity cycles.',
+        ],
+      },
+      {
+        prompt: 'Why is Total Contract Value (TCV) critical for Indian IT services companies?',
+        bottomLine: 'TCV captures the gross multi-year enterprise commitment across digital transformation and cloud deals, providing long-term revenue visibility and forecasting constant currency growth.',
+        cot: [
+          'Global Fortune 500 BFSI clients contract multi-year managed services.',
+          'Large mega-deals (>$100M) build order backlog for Tier-1 firms like TCS and Infosys.',
+          'Net new TCV signals future billable headcount expansion and operating margin leverage.',
+        ],
+      },
     ];
 
     const t = topics[idx % topics.length];
