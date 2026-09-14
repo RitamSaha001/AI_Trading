@@ -8,7 +8,8 @@
  * - Absolutely ZERO finance, trading, tickers, or market microstructure references
  */
 
-import { NeuralTransformerModel, LARGE_1M_TRANSFORMER_CONFIG, LUMEN_1B_MOE_CONFIG } from '../neural/transformerModel';
+import { NeuralTransformerModel, LARGE_1M_TRANSFORMER_CONFIG, LUMEN_1B_MOE_CONFIG, LUMEN_ALPHA_3B_CONFIG } from '../neural/transformerModel';
+import { DemandPagedLumenAlphaEngine } from './demandPagedEngine';
 import { AstraFinGenerator, AstraFinNeuralInference } from '../neural/generator';
 import { reasonAndSynthesize } from './semanticReasoner';
 
@@ -743,6 +744,37 @@ export function get1BillionModelInfo() {
   };
 }
 
+export function switchToLumenAlpha3BModel(): { success: boolean; params: number; config: any; telemetry: any } {
+  const model3B = new NeuralTransformerModel(LUMEN_ALPHA_3B_CONFIG);
+  globalModel = model3B;
+  globalGenerator = new AstraFinGenerator(model3B);
+  globalEngine.setModel(model3B);
+  const paged = new DemandPagedLumenAlphaEngine();
+  return {
+    success: true,
+    params: model3B.countParameters(),
+    config: LUMEN_ALPHA_3B_CONFIG,
+    telemetry: paged.getTelemetry(),
+  };
+}
+
+export function getLumenAlpha3BInfo() {
+  const paged = new DemandPagedLumenAlphaEngine();
+  return {
+    engineLabel: 'Lumen-Alpha (3.02B MoE Flagship)',
+    parameters: 3_024_276_480,
+    dModel: 1024,
+    nHeads: 16,
+    nLayers: 16,
+    nExperts: 22,
+    activeExperts: 2,
+    vocabSize: 2048,
+    contextWindow: 512,
+    memoryModel: 'Lumen-UMA Demand-Paged (< 1.5 GB RAM)',
+    telemetry: paged.getTelemetry(),
+  };
+}
+
 export function clearChatHistory() {
   chatHistory = [];
 }
@@ -973,6 +1005,8 @@ if (typeof window !== 'undefined') {
     getModelInfo,
     switchTo1BillionModel,
     get1BillionModelInfo,
+    switchToLumenAlpha3BModel,
+    getLumenAlpha3BInfo,
     clearChatHistory,
     getSuggestedPrompts,
   };

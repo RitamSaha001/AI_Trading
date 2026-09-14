@@ -166,7 +166,7 @@ describe('Lumen Astra: Standalone Semantic Reasoner & World Knowledge Base', () 
 
     it('reports accurate model architecture telemetry', () => {
       const info = getModelInfo();
-      expect(info.parameters).toBe(4289288);
+      expect(info.parameters).toBe(4315128);
       expect(info.dModel).toBe(152);
       expect(info.nLayers).toBe(4);
       expect(info.nHeads).toBe(4);

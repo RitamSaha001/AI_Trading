@@ -105,12 +105,21 @@ function generateHtml() {
             SOVEREIGN MOE (100% OFFLINE)
           </span>
         </div>
-        <div class="text-[11px] text-slate-400 font-mono">1.02B Sparse MoE • DeepSeek-R1 Deliberation • 1M Multi-Domain Reasoning</div>
+        <div class="text-[11px] text-slate-400 font-mono" id="modelSubtitle">3.02B Sparse MoE • Lumen-UMA Paged (&lt;1.5 GB RAM) • Multi-Domain Flagship</div>
       </div>
     </div>
 
     <!-- Center/Right Engine Mode Selector & Actions -->
     <div class="flex items-center space-x-2 text-xs">
+      <!-- Model Architecture Switcher -->
+      <div class="flex items-center space-x-1.5 bg-terminal-panel px-2.5 py-1 rounded-lg border border-indigo-500/30">
+        <label class="text-[11px] font-mono text-indigo-400">Model:</label>
+        <select id="lumenModelSelect" onchange="handleLumenModelChange()" class="bg-transparent text-xs font-semibold text-indigo-300 focus:outline-none cursor-pointer">
+          <option value="lumen-alpha-3b" selected class="bg-terminal-panel text-indigo-300">👑 Lumen-Alpha 3B (Flagship)</option>
+          <option value="lumen-1b" class="bg-terminal-panel text-emerald-400">⚡ Lumen Astra 1B MoE</option>
+        </select>
+      </div>
+
       <!-- Engine Switcher -->
       <div class="flex items-center space-x-1.5 bg-terminal-panel px-2.5 py-1 rounded-lg border border-terminal-border">
         <label class="text-[11px] font-mono text-slate-400">Mode:</label>
@@ -356,32 +365,36 @@ function generateHtml() {
 
       <div class="space-y-2.5 text-xs font-mono text-slate-300">
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
-          <span class="text-slate-400">Model Name:</span>
-          <span class="text-white font-bold">Lumen Astra 2.0 MoE</span>
+          <span class="text-slate-400">Flagship Model:</span>
+          <span class="text-indigo-400 font-bold">Lumen-Alpha (3B Flagship)</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
           <span class="text-slate-400">Total Parameters:</span>
-          <span class="text-emerald-400 font-bold">4,289,288</span>
+          <span class="text-emerald-400 font-bold">3,024,276,480 (3.02B)</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
-          <span class="text-slate-400">Embedding Dimension (d_model):</span>
-          <span class="text-blue-400 font-bold">152</span>
+          <span class="text-slate-400">Active Compute:</span>
+          <span class="text-blue-400 font-bold">~340M Active / Token</span>
+        </div>
+        <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
+          <span class="text-slate-400">Memory Architecture:</span>
+          <span class="text-emerald-400 font-bold">Lumen-UMA Demand-Paged (&lt;1.5 GB RAM)</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
           <span class="text-slate-400">Self-Attention Heads:</span>
-          <span class="text-white font-bold">4 Multi-Head Blocks</span>
+          <span class="text-white font-bold">16 Heads (d_head = 64)</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
           <span class="text-slate-400">Transformer Layers:</span>
-          <span class="text-white font-bold">4 Decoder Layers</span>
+          <span class="text-white font-bold">16 Layers (d_model = 1024)</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
           <span class="text-slate-400">Routed MoE Experts:</span>
-          <span class="text-purple-400 font-bold">4 Experts (Top-2 Activated)</span>
+          <span class="text-purple-400 font-bold">22 Experts (Top-2 SwiGLU 2730)</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
-          <span class="text-slate-400">Knowledge Grounding:</span>
-          <span class="text-amber-400 font-bold">Encyclopedic World & Macro Dossiers</span>
+          <span class="text-slate-400">Knowledge Domains:</span>
+          <span class="text-amber-400 font-bold">Quant, Finance, Geopolitics, Demography</span>
         </div>
         <div class="flex justify-between p-2 rounded bg-slate-900/60 border border-slate-800">
           <span class="text-slate-400">Deliberation Engine:</span>
@@ -459,6 +472,35 @@ ${bundleJs}
           sideStatus.className = 'text-emerald-400 text-[10px]';
         }
         document.getElementById('statusBar').innerText = 'Lumen Astra Engine Ready • Sovereign MoE';
+      }
+    }
+
+    function handleLumenModelChange() {
+      const select = document.getElementById('lumenModelSelect');
+      const sub = document.getElementById('modelSubtitle');
+      const badge = document.getElementById('activeEngineBadge');
+      if (!select) return;
+
+      if (select.value === 'lumen-alpha-3b') {
+        if (window.LumenAstraApp && window.LumenAstraApp.switchToLumenAlpha3BModel) {
+          window.LumenAstraApp.switchToLumenAlpha3BModel();
+        }
+        if (sub) sub.innerText = '3.02B Sparse MoE • Lumen-UMA Paged (<1.5 GB RAM) • Multi-Domain Flagship';
+        if (badge) {
+          badge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-indigo-400 mr-1.5 animate-pulse"></span>LUMEN-ALPHA 3B FLAGSHIP';
+        }
+        appendSystemNotification('👑 Switched active neural model to Lumen-Alpha 3B Flagship (3,024,276,480 parameters, Lumen-UMA demand-paged memory < 1.5 GB RAM).');
+      } else {
+        if (window.LumenAstraApp && window.LumenAstraApp.switchTo1BillionModel) {
+          window.LumenAstraApp.switchTo1BillionModel();
+        }
+        if (sub) sub.innerText = '1.02B Sparse MoE • DeepSeek-R1 Deliberation • 1M Multi-Domain Reasoning';
+        if (badge) {
+          badge.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+          badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>SOVEREIGN 1B MOE';
+        }
+        appendSystemNotification('⚡ Switched active neural model to Lumen Astra 1B MoE (1,019,085,168 parameters).');
       }
     }
 

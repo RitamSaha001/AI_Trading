@@ -189,6 +189,28 @@ export const CONVERSATIONAL_AND_REASONING_WORDS = [
   'inquisitive', 'reflective', 'articulate', 'perspective_shift', 'thoughtfulness'
 ] as const;
 
+export const GEOPOLITICAL_AND_MACRO_WORDS = [
+  // Geopolitics & Strategic Resources
+  'geopolitics', 'geopolitical', 'multipolar', 'bipolar', 'unipolar', 'hegemony', 'sanctions',
+  'embargo', 'chokepoint', 'malacca_strait', 'hormuz', 'taiwan_strait', 'bosphorus', 'suez_canal',
+  'deglobalization', 'reshoring', 'nearshoring', 'friendshoring', 'nato', 'brics', 'g20',
+  'sovereignty', 'treaty', 'diplomacy', 'protectionism', 'tariffs', 'strategic_petroleum_reserve',
+  'rare_earths', 'semiconductors', 'lithium', 'cobalt', 'nickel', 'opec', 'energy_security',
+  'food_security', 'trade_corridor', 'belt_and_road', 'hegemon', 'non_aligned',
+  // Demography & Human Capital
+  'demography', 'demographic', 'demographic_dividend', 'fertility_rate', 'replacement_rate',
+  'dependency_ratio', 'working_age_population', 'aging_population', 'median_age', 'urbanization',
+  'migration', 'labor_force_participation', 'pyramid_inversion', 'life_expectancy', 'demographic_drag',
+  'pension_solvency', 'productivity_growth', 'human_capital', 'automation', 'dependency',
+  // Politics, Statecraft & Macro Policy
+  'fiscal_stimulus', 'fiscal_deficit', 'monetary_expansion', 'quantitative_easing', 'quantitative_tightening',
+  'central_bank_balance_sheet', 'yield_curve_control', 'sovereign_debt_ceiling', 'petrodollar',
+  'dedollarization', 'foreign_exchange_reserves', 'current_account_deficit', 'capital_flight',
+  'capital_controls', 'inflationary_impulse', 'stagflation', 'debt_supercycle', 'currency_devaluation',
+  'sovereign_spread', 'default_risk', 'credit_rating', 'structural_reform', 'industrial_policy',
+  'subsidies', 'sovereign_wealth_fund', 'geoeconomics'
+] as const;
+
 // Assemble Complete Vocabulary
 const ALL_TOKENS: string[] = [
   ...SPECIAL_TOKENS,
@@ -199,6 +221,7 @@ const ALL_TOKENS: string[] = [
   ...REASONING_WORDS,
   ...INSTITUTIONAL_QUANT_WORDS,
   ...CONVERSATIONAL_AND_REASONING_WORDS,
+  ...GEOPOLITICAL_AND_MACRO_WORDS,
 ];
 
 

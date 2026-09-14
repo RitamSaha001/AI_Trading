@@ -19,6 +19,7 @@ export interface TransformerConfig {
   weightDecay: number;
   useMoE?: boolean;
   nExperts?: number;
+  topK?: number;
   isVirtual1B?: boolean;
   virtualTotalParams?: number;
 }
@@ -62,6 +63,22 @@ export const LUMEN_1B_MOE_CONFIG: TransformerConfig = {
   nExperts: 11,
   isVirtual1B: true,
   virtualTotalParams: 1_019_085_168,
+};
+
+export const LUMEN_ALPHA_3B_CONFIG: TransformerConfig = {
+  vocabSize: 2048,
+  dModel: 1024,
+  nHeads: 16,
+  nLayers: 16,
+  maxSeqLen: 512,
+  nActions: ACTION_TOKENS.length,
+  learningRate: 0.00015,
+  weightDecay: 0.01,
+  useMoE: true,
+  nExperts: 22,
+  topK: 2,
+  isVirtual1B: true,
+  virtualTotalParams: 3_024_276_480,
 };
 
 
