@@ -3,6 +3,9 @@ import {
   portfolioValue,
   positionValue,
   money,
+  moneyINR,
+  isIndianAsset,
+  getActiveAssetUnits,
   getAvailableCash,
   getReservedCash,
   getAvailablePosition,
@@ -378,20 +381,40 @@ export function validateAIProposal(
   );
   const web3StableSum = (state.web3Account?.balances?.['USDT'] || 0) + (state.web3Account?.balances?.['USDC'] || 0);
 
-  const currentCash = isExchangeMode ? stablecoinsSum : isWeb3Mode ? web3StableSum : state.cash;
-  const availableCash = isExchangeMode ? stablecoinsSum : isWeb3Mode ? web3StableSum : getAvailableCash(state);
-  const reservedCash = isExchangeMode || isWeb3Mode ? 0 : getReservedCash(state);
+  const isUpstoxMode = state.accountMode === 'upstox';
+  const isIndian = isIndianAsset(asset) || isUpstoxMode;
+  const currencyFormatter = isIndian ? moneyINR : money;
+
+  const currentCash = isExchangeMode
+    ? stablecoinsSum
+    : isWeb3Mode
+    ? web3StableSum
+    : isUpstoxMode
+    ? (state.upstoxAccount?.funds?.availableCash ?? state.cash)
+    : state.cash;
+  const availableCash = isExchangeMode
+    ? stablecoinsSum
+    : isWeb3Mode
+    ? web3StableSum
+    : isUpstoxMode
+    ? (state.upstoxAccount?.funds?.availableCash ?? getAvailableCash(state))
+    : getAvailableCash(state);
+  const reservedCash = isExchangeMode || isWeb3Mode || isUpstoxMode ? 0 : getReservedCash(state);
   const currentHolding = isExchangeMode
     ? (state.exchangeAccount?.balances[asset]?.free || 0)
     : isWeb3Mode
     ? (state.web3Positions?.[asset] || state.web3Account?.balances?.[asset] || 0)
+    : isUpstoxMode
+    ? getActiveAssetUnits(state, asset)
     : (state.positions[asset] || 0);
   const availableHolding = isExchangeMode
     ? (state.exchangeAccount?.balances[asset]?.free || 0)
     : isWeb3Mode
     ? (state.web3Positions?.[asset] || state.web3Account?.balances?.[asset] || 0)
+    : isUpstoxMode
+    ? getActiveAssetUnits(state, asset)
     : getAvailablePosition(state, asset);
-  const reservedHolding = isExchangeMode || isWeb3Mode ? 0 : getReservedPosition(state, asset);
+  const reservedHolding = isExchangeMode || isWeb3Mode || isUpstoxMode ? 0 : getReservedPosition(state, asset);
   const currentAssetVal = currentHolding * market.price;
 
   // Maximum Slippage Hard Limit (Requirement 19)
@@ -405,21 +428,28 @@ export function validateAIProposal(
   // Single order notional cap (applies to both buy and sell)
   if (quote.notional > totalPortVal * policy.maxSingleOrderPortfolioPct) {
     errors.push(
-      `Order size too large: Order exceeds maximum safe single-trade cap (${(policy.maxSingleOrderPortfolioPct * 100).toFixed(0)}% of portfolio). Trade requires ${money(quote.notional)}, but the maximum permitted per order is ${money(totalPortVal * policy.maxSingleOrderPortfolioPct)}.`
+      `Order size too large: Order exceeds maximum safe single-trade cap (${(policy.maxSingleOrderPortfolioPct * 100).toFixed(0)}% of portfolio). Trade requires ${currencyFormatter(quote.notional)}, but the maximum permitted per order is ${currencyFormatter(totalPortVal * policy.maxSingleOrderPortfolioPct)}.`
     );
   }
 
   // Capital & Holdings Checks
   if (side === 'buy') {
-    if (quote.totalCashRequired > availableCash + 0.01) {
+    // Leverage-aware capital requirements: For MIS intraday trades, SEBI requires 20% margin (5x leverage)
+    const isMIS = proposal.product === 'MIS' || (proposal.marginMultiplier && proposal.marginMultiplier > 1);
+    const effectiveMarginMultiplier = isMIS ? (proposal.marginMultiplier || 5.0) : 1.0;
+    const requiredOrderCash = isMIS ? (quote.totalCashRequired / effectiveMarginMultiplier) : quote.totalCashRequired;
+
+    if (requiredOrderCash > availableCash + 0.01) {
       const msg = isExchangeMode
-        ? `Not enough USDT (insufficient available exchange USDT) — you need ${money(quote.totalCashRequired)} (incl. fee) but only have ${money(availableCash)} available.`
-        : `Not enough cash (insufficient liquid cash) — you need ${money(quote.totalCashRequired)} (incl. fee) but only have ${money(availableCash)} available (after reserving ${money(reservedCash)} for pending orders).`;
+        ? `Not enough USDT (insufficient available exchange USDT) — you need ${money(requiredOrderCash)} (incl. fee) but only have ${money(availableCash)} available.`
+        : isUpstoxMode
+        ? `Not enough margin (insufficient Upstox available INR cash) — you need ${moneyINR(requiredOrderCash)} (incl. statutory charges) but only have ${moneyINR(availableCash)} available.`
+        : `Not enough cash (insufficient liquid cash) — you need ${money(requiredOrderCash)} (incl. fee) but only have ${money(availableCash)} available (after reserving ${money(reservedCash)} for pending orders).`;
       errors.push(msg);
     }
 
     // Cash Liquidity Reserve Enforcement (Policy minimum liquid buffer)
-    const resultingCashEstimated = Math.max(0, currentCash - quote.totalCashRequired);
+    const resultingCashEstimated = Math.max(0, currentCash - requiredOrderCash);
     const resultingCashPct = totalPortVal > 0 ? (resultingCashEstimated / totalPortVal) * 100 : 0;
     const minCashPct = policy.minCashReservePct * 100;
     if (resultingCashPct < minCashPct) {

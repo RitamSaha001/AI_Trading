@@ -28,6 +28,9 @@ export class AstraFinCognitiveEngine {
    * Synchronous circuit breaker for SEBI raids, regulatory bans, and immediate disaster exits.
    */
   public static reflexGuard(headline: string): { hasEmergencyVeto: boolean; reason?: string } {
+    if (!headline || typeof headline !== 'string') {
+      return { hasEmergencyVeto: false };
+    }
     const upper = headline.toUpperCase();
 
     if (/SEBI\s+(?:BAN|ORDER|RAID|PENALTY|PROBE|NOTICE|SEARCH|SEIZURE|INVESTIGATION)|SEARCH\s+(?:AND|&)\s+SEIZURE|ED\s+RAID|CBI\s+PROBE|ACCOUNTING\s+FRAUD|FORENSIC\s+AUDIT/i.test(upper)) {
@@ -52,6 +55,9 @@ export class AstraFinCognitiveEngine {
    * Multi-step test-time compute with MoE routing, causal graph contagion, and PRM verification.
    */
   public static deliberate(headline: string, now: number = Date.now()): AstraFinDirective[] {
+    if (!headline || typeof headline !== 'string') {
+      return [];
+    }
     const startTime = performance.now();
     const matchedTickers = FinancialTokenizer.extractAssets(headline);
     const upper = headline.toUpperCase();

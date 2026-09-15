@@ -102,7 +102,8 @@ export class IntradaySquareOffService {
         const openOrders = await db.query<any>(
           `SELECT * FROM exchange_orders 
            WHERE user_id = ? AND broker = 'upstox' 
-             AND status IN ('OPEN', 'PARTIALLY_FILLED', 'SUBMITTING')`,
+             AND status IN ('OPEN', 'PARTIALLY_FILLED', 'SUBMITTING')
+              AND (product IS NULL OR product NOT IN ('CNC', 'DELIVERY', 'D'))`,
           [userId]
         );
 
@@ -146,7 +147,8 @@ export class IntradaySquareOffService {
               product: 'I',
               validity: 'DAY',
               slice: true,
-              isSystemPanic: true, // Bypass human token confirmation for system square-off
+              isSystemSquareOff: true, // Bypass human token confirmation for authoritative 15:15 IST MIS square-off
+              orderRole: 'SYSTEM_SQUARE_OFF',
             });
             positionsClosedCount++;
           } catch (posErr: any) {

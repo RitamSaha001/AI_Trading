@@ -236,7 +236,7 @@ export class LiveOrderGateService {
     }
 
     // SEBI Order-to-Trade Ratio (OTR) Pre-Submission Check (Component 4)
-    if (!order.isSystemPanic && order.orderRole !== 'PROTECTIVE_STOP') {
+    if (!order.isSystemPanic && !order.isSystemSquareOff && order.orderRole !== 'PROTECTIVE_STOP' && order.orderRole !== 'SYSTEM_SQUARE_OFF') {
       OtrLimiterService.assertOtrLimit(order.userId, order.symbol, 'PLACE');
       await OtrLimiterService.assertDurableOtrLimit(order.userId, order.symbol, 'PLACE', options?.tx);
     }
@@ -266,21 +266,24 @@ export class LiveOrderGateService {
       );
     }
 
-    // 11. System Panic Bypass or Authorized Autonomous Algo or Two-Step Human Confirmation Token Verification
+    // 11. System Panic Bypass or System Square-Off or Authorized Autonomous Algo or Two-Step Human Confirmation Token Verification
     let isPanicBypass = false;
-    if (order.isSystemPanic) {
+    if (order.isSystemPanic || order.isSystemSquareOff || order.orderRole === 'SYSTEM_SQUARE_OFF') {
+      const isSquareOff = Boolean(order.isSystemSquareOff || order.orderRole === 'SYSTEM_SQUARE_OFF');
       await AuditService.logEvent({
         userId: order.userId,
-        eventType: 'PANIC_GATE_BYPASS',
+        eventType: isSquareOff ? 'SYSTEM_SQUARE_OFF_BYPASS' : 'PANIC_GATE_BYPASS',
         source: 'live_order_gate_service',
-        actor: 'emergency_control_service',
+        actor: isSquareOff ? 'intraday_square_off_service' : 'emergency_control_service',
         result: 'SUCCESS',
         metadata: {
           symbol: order.symbol,
           side: order.side,
           quantity: order.quantity,
           clientOrderId: order.clientOrderId,
-          reason: 'Emergency Panic Square-Off — bypassing human confirmation and risk drift',
+          reason: isSquareOff
+            ? 'Mandatory 15:15 IST Intraday MIS Square-Off — bypassing human confirmation'
+            : 'Emergency Panic Square-Off — bypassing human confirmation and risk drift',
         },
       });
       isPanicBypass = true;

@@ -31,15 +31,17 @@ export class NewsCatalystRegistry {
       this.recentAnalyses.pop();
     }
 
-    // Map to each matched ticker
+    // Map to each matched ticker (strictly uppercase normalized)
     for (const ticker of analysis.matchedTickers) {
-      const existing = this.tickerAnalyses.get(ticker) || [];
+      const sym = (ticker || '').toUpperCase().trim();
+      if (!sym) continue;
+      const existing = this.tickerAnalyses.get(sym) || [];
       existing.unshift(analysis);
       // Keep last 20 for ticker
       if (existing.length > 20) {
         existing.pop();
       }
-      this.tickerAnalyses.set(ticker, existing);
+      this.tickerAnalyses.set(sym, existing);
     }
   }
 
@@ -115,7 +117,9 @@ export class NewsCatalystRegistry {
       let totalWeight = 0;
       let weightedSum = 0;
       for (const item of list) {
+        if (!item.publishedAt || isNaN(item.publishedAt)) continue;
         const ageHours = (now - item.publishedAt) / (60 * 60 * 1000);
+        if (isNaN(ageHours)) continue;
         // Strictly prevent temporal leakage (future articles in historical replay or articles > 24h old)
         if (ageHours < 0 || ageHours > 24) continue;
         activeArticlesCount++;

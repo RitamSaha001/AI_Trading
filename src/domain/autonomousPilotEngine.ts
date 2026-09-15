@@ -2231,7 +2231,7 @@ export function tickAutonomousPilot(
       asset,
       side: 'buy',
       amount: unitsToBuy,
-      price: limitPrice,
+      price: alignToTickSize(limitPrice, asset),
       stopLoss: stopLossPrice,
       takeProfit: takeProfitPrice,
       takeProfit2: takeProfit2Price,

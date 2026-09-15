@@ -2357,7 +2357,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
                     takeProfit: prop.takeProfit,
                     auto: true,
                     strategyName: prop.strategyName,
-                    product: prop.product || (isIndianAsset(prop.asset) ? 'CNC' : undefined),
+                    product: prop.product || (isIndianAsset(prop.asset) ? 'MIS' : undefined),
                     live: isLiveUpstox,
                     accountMode: isLiveUpstox ? 'upstox' : 'paper',
                   }
@@ -2486,7 +2486,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
 
         // NSE 0.05 tick size validation
         if (options?.type === 'limit' && options.limitPrice) {
-          const rem = Math.round((options.limitPrice * 100) % 5);
+          const rem = Math.round(options.limitPrice * 100) % 5;
           if (rem !== 0) {
             triggerToast('Invalid Tick Size', 'NSE/BSE equities require limit prices in multiples of ₹0.05.', 'warn');
             return { ok: false, error: 'Price must be a multiple of ₹0.05' };
@@ -3667,7 +3667,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
                     takeProfit: prop.takeProfit,
                     auto: true,
                     strategyName: prop.strategyName,
-                    product: prop.product || (isIndianAsset(prop.asset) ? 'CNC' : undefined),
+                    product: prop.product || (isIndianAsset(prop.asset) ? 'MIS' : undefined),
                     live: isLiveUpstox,
                     accountMode: isLiveUpstox ? 'upstox' : 'paper',
                   });
@@ -3962,7 +3962,7 @@ export function Provider({ children }: { children: React.ReactNode }) {
           takeProfit: opp.takeProfitPrice,
           auto: true,
           strategyName: `Auto-Pilot (${PILOT_PROFILES[state.autonomousPilot?.profile || 'conservative'].name})`,
-          product: isIndianAsset(opp.asset) ? 'CNC' : undefined,
+          product: isIndianAsset(opp.asset) ? 'MIS' : undefined,
         }
       );
 

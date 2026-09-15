@@ -108,8 +108,13 @@ export class NewsIngestionService {
 
       for (const item of items) {
         if (NewsDeduplicator.register(item)) {
-          const analysis = LocalFinBERTEngine.analyze(item);
-          NewsCatalystRegistry.ingest(analysis);
+          // Dual-Speed Cognitive Routing: Evaluate through AstraFin Cognitive Engine (System 1 reflex + System 2 MoE)
+          const directives = NewsCatalystRegistry.processWithAstraFin(item.headline, item.source, Date.now());
+          if (directives.length === 0) {
+            // Fallback to LocalFinBERT for general market sentiment if no specific equity was targeted
+            const analysis = LocalFinBERTEngine.analyze(item);
+            NewsCatalystRegistry.ingest(analysis);
+          }
           ingestedCount++;
         }
       }

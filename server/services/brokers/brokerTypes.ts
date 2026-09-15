@@ -182,10 +182,11 @@ export interface BrokerOrderRequest {
   isAmo?: boolean;
   confirmationId?: string;
   isSystemPanic?: boolean;
+  isSystemSquareOff?: boolean;
   isAutonomous?: boolean;
   strategyName?: string;
   algoTag?: string;
-  orderRole?: 'STANDARD' | 'AUTONOMOUS_ENTRY' | 'AUTONOMOUS_EXIT' | 'PROTECTIVE_STOP';
+  orderRole?: 'STANDARD' | 'AUTONOMOUS_ENTRY' | 'AUTONOMOUS_EXIT' | 'PROTECTIVE_STOP' | 'SYSTEM_SQUARE_OFF';
   parentClientOrderId?: string;
   protectiveStopPrice?: number | string | ExactDecimal;
   internalExecutionSignature?: string;

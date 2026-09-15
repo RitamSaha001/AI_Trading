@@ -59,7 +59,11 @@ export class InFlightMtmService {
       `SELECT max_daily_loss_usd, is_emergency_frozen FROM account_limits WHERE user_id = ?`,
       [userId]
     );
-    const maxDailyLoss = Number(limits?.max_daily_loss_usd || 50000);
+    const maxDailyLossRaw = Number(limits?.max_daily_loss_usd || 50000);
+    // Currency normalization: Upstox operates in INR, while account_limits stores max_daily_loss in USD.
+    // Convert USD limit to INR using 87.20 so a ₹2,500 INR loss does not falsely trip a $2,500 USD limit.
+    const isIndianBroker = brokerId === 'upstox';
+    const maxDailyLoss = isIndianBroker ? maxDailyLossRaw * 87.20 : maxDailyLossRaw;
 
     // 3. Fetch authoritative funds and margins from broker
     let brokerFunds: any = null;
