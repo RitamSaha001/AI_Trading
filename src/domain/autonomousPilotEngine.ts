@@ -1802,8 +1802,9 @@ export function tickAutonomousPilot(
       if (candNewsCatalyst.hasCatalyst) {
         minAciRequired = Math.min(minAciRequired, 58);
       } else {
-        // Without confirmed news catalyst, enforce higher ACI hurdle to prune low-expectancy chop
-        minAciRequired = Math.max(minAciRequired, 74);
+        // Asymmetric Alpha Engine: mild +2 ACI fee-drag reduction on silent days
+        // (replaces the old ACI >= 74 hurdle that starved 620 profitable trades)
+        minAciRequired = minAciRequired + 2;
       }
     }
 
