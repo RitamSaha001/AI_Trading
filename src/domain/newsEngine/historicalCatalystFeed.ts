@@ -390,6 +390,7 @@ export class HistoricalCatalystFeed {
     minuteOfDay: number,
     currentTimestamp: number
   ): number {
+    if (!NewsCatalystRegistry.isEnabled) return 0;
     this.init();
     const dayEvents = this.eventsByDate.get(targetDate);
     if (!dayEvents || dayEvents.length === 0) return 0;

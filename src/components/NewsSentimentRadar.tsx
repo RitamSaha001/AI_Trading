@@ -119,12 +119,12 @@ export const NewsSentimentRadar: React.FC = () => {
               <h3 className="text-base font-semibold text-slate-900 tracking-tight">
                 Real-Time FinBERT News & Sentiment Radar
               </h3>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wider uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                100% Free Local AI
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wider uppercase bg-amber-50 text-amber-700 border border-amber-200">
+                Disabled &bull; Pure Quant Mode
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              Sub-millisecond NLP sentiment classifier & asymmetric risk veto shield for Indian equities
+              Sub-millisecond NLP sentiment classifier & asymmetric risk veto shield (Kept in codebase, currently disabled)
             </p>
           </div>
         </div>

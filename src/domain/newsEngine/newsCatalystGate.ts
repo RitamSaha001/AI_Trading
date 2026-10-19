@@ -15,6 +15,16 @@ export interface AlphaCatalystResult {
 }
 
 export class NewsCatalystRegistry {
+  /**
+   * Master switch: set to false to completely disable news ingestion, AI catalysts, and news vetoes.
+   * Enables pure deterministic quantitative model execution without news/AI latency or distortion.
+   */
+  public static isEnabled: boolean = false;
+
+  public static setEnabled(enabled: boolean): void {
+    this.isEnabled = enabled;
+  }
+
   private static recentAnalyses: NewsSentimentAnalysis[] = [];
   private static tickerAnalyses: Map<string, NewsSentimentAnalysis[]> = new Map();
   private static readonly MAX_GLOBAL_HISTORY = 200;
@@ -25,6 +35,8 @@ export class NewsCatalystRegistry {
    * Ingests a new sentiment analysis result and maps it to affected tickers.
    */
   public static ingest(analysis: NewsSentimentAnalysis): void {
+    if (!this.isEnabled) return;
+
     // Add to global feed
     this.recentAnalyses.unshift(analysis);
     if (this.recentAnalyses.length > this.MAX_GLOBAL_HISTORY) {
@@ -50,6 +62,8 @@ export class NewsCatalystRegistry {
    * If true, the position should be immediately liquidated or the trade entry blocked.
    */
   public static checkEmergencyVeto(symbol: string, now: number = Date.now()): EmergencyVetoResult {
+    if (!this.isEnabled) return { hasVeto: false };
+
     const list = this.tickerAnalyses.get(symbol.toUpperCase());
     if (!list || list.length === 0) {
       return { hasVeto: false };
@@ -74,6 +88,8 @@ export class NewsCatalystRegistry {
    * If true, returns the ACI confidence boost points (+8 to +14) to enhance breakout sizing.
    */
   public static checkAlphaCatalyst(symbol: string, now: number = Date.now()): AlphaCatalystResult {
+    if (!this.isEnabled) return { hasCatalyst: false, boostPoints: 0 };
+
     const list = this.tickerAnalyses.get(symbol.toUpperCase());
     if (!list || list.length === 0) {
       return { hasCatalyst: false, boostPoints: 0 };
@@ -104,6 +120,17 @@ export class NewsCatalystRegistry {
    */
   public static getTickerStatus(symbol: string, now: number = Date.now()): TickerSentimentStatus {
     const sym = symbol.toUpperCase();
+    if (!this.isEnabled) {
+      return {
+        symbol: sym,
+        activeVeto: false,
+        activeCatalyst: false,
+        compositeSentiment: 0,
+        recentArticlesCount: 0,
+        lastArticleTimestamp: 0,
+      };
+    }
+
     const veto = this.checkEmergencyVeto(sym, now);
     const catalyst = this.checkAlphaCatalyst(sym, now);
     const list = this.tickerAnalyses.get(sym) || [];
@@ -152,6 +179,7 @@ export class NewsCatalystRegistry {
    * Returns the global stream of recent analyses.
    */
   public static getRecentFeed(limit = 50): NewsSentimentAnalysis[] {
+    if (!this.isEnabled) return [];
     return this.recentAnalyses.slice(0, limit);
   }
 
@@ -160,6 +188,7 @@ export class NewsCatalystRegistry {
    * and automatically ingests its directives into the registry.
    */
   public static processWithAstraFin(headline: string, source = 'ASTRA_FIN_LLM', now: number = Date.now()): AstraFinDirective[] {
+    if (!this.isEnabled) return [];
     const directives = AstraFinCognitiveEngine.deliberate(headline, now);
     for (const d of directives) {
       const isEmergencyVeto = d.hasEmergencyVeto;

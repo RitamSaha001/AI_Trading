@@ -1330,8 +1330,8 @@ export function AutonomousQuantPilot() {
           >
             <Newspaper className="w-3.5 h-3.5" />
             <span>News &bull; Sentiment</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 font-mono font-bold">
-              FinBERT
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-zinc-100 text-zinc-500 font-mono font-bold">
+              Disabled
             </span>
           </button>
 
@@ -2184,7 +2184,7 @@ export function AutonomousQuantPilot() {
               {[
                 { id: 'prototype_1_classic' as PilotPrototypeVersion, label: 'Model 1 (Trend Rider ★ Flagship)' },
                 { id: 'prototype_2_adaptive_brain' as PilotPrototypeVersion, label: 'Model 2 (Target-Paced Harvest)' },
-                { id: 'prototype_3_lumen_beta' as PilotPrototypeVersion, label: 'Model 3 (Lumen Beta News & AI ⚡)' },
+                { id: 'prototype_3_lumen_beta' as PilotPrototypeVersion, label: 'Model 3 (Lumen Beta News & AI [Disabled])' },
               ].map((p) => (
                 <button
                   key={p.id}

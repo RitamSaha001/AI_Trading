@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   LocalFinBERTEngine,
   NewsCatalystRegistry,
@@ -9,7 +9,12 @@ import { AppState, Market, Asset } from "../../../types";
 
 describe("News Engine Trading Integration Suite", () => {
   beforeEach(() => {
+    NewsCatalystRegistry.setEnabled(true);
     NewsCatalystRegistry.clear();
+  });
+
+  afterEach(() => {
+    NewsCatalystRegistry.setEnabled(false);
   });
 
   it("registers breaking adverse news and triggers active veto in NewsCatalystRegistry", () => {

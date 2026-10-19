@@ -1835,8 +1835,12 @@ if (isMain || process.env.START_SERVER === 'true') {
       console.log(`[AutonomousPilot] Starting Autonomous Quant Pilot 5s background execution daemon...`);
       AutonomousPilotWorker.startScheduler();
 
-      console.log(`[NewsEngine] Starting real-time free news ingestion & FinBERT sentiment poller...`);
-      NewsIngestionService.start(60_000);
+      if (NewsIngestionService.isEnabled) {
+        console.log(`[NewsEngine] Starting real-time free news ingestion & FinBERT sentiment poller...`);
+        NewsIngestionService.start(60_000);
+      } else {
+        console.log(`[NewsEngine] News ingestion & AI layer disabled (pure deterministic quant execution active).`);
+      }
 
       const server = buildServer();
 

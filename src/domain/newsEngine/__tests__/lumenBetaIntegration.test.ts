@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   NewsCatalystRegistry,
   HistoricalCatalystFeed,
@@ -11,7 +11,12 @@ import { createDefaultAutonomousPilotState } from '../../autonomousPilot';
 
 describe('Lumen Beta (prototype_3_lumen_beta) News-Aware Quant Architecture', () => {
   beforeEach(() => {
+    NewsCatalystRegistry.setEnabled(true);
     NewsCatalystRegistry.clear();
+  });
+
+  afterEach(() => {
+    NewsCatalystRegistry.setEnabled(false);
   });
 
   it('historical catalyst feed provides structured chronological events across 2022-2026', () => {

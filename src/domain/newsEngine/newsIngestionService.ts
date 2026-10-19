@@ -28,6 +28,16 @@ export const FREE_NEWS_FEEDS: FreeFeedConfig[] = [
 ];
 
 export class NewsIngestionService {
+  /**
+   * Master switch: set to false to completely disable background RSS news polling.
+   * Keeps codebase intact while disabling news ingestion runtime execution.
+   */
+  public static isEnabled: boolean = false;
+
+  public static setEnabled(enabled: boolean): void {
+    this.isEnabled = enabled;
+  }
+
   private static pollerTimer: ReturnType<typeof setTimeout> | null = null;
   private static isPolling = false;
   private static pollIntervalMs = 60 * 1000; // 60s default
@@ -85,6 +95,7 @@ export class NewsIngestionService {
    * Fetches and processes a single feed URL.
    */
   public static async pollFeed(feed: FreeFeedConfig): Promise<number> {
+    if (!this.isEnabled) return 0;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
@@ -130,6 +141,7 @@ export class NewsIngestionService {
    * Polls all configured free feeds once.
    */
   public static async pollAllFeeds(): Promise<number> {
+    if (!this.isEnabled) return 0;
     this.lastPollTimestamp = Date.now();
     let totalIngested = 0;
 
@@ -145,6 +157,9 @@ export class NewsIngestionService {
    * Starts background news ingestion poller.
    */
   public static start(intervalMs: number = 60 * 1000): void {
+    if (!this.isEnabled) {
+      return;
+    }
     if (this.isPolling) return;
     this.isPolling = true;
     this.pollIntervalMs = intervalMs;
