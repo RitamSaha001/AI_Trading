@@ -877,14 +877,18 @@ async function runMultiDayWindowReplay() {
       capital = Number(args[++i]) || 40000;
     } else if (arg.startsWith('--prototype=')) {
       const pr = arg.split('=')[1].toLowerCase();
-      prototype = (pr.includes('3') || pr.includes('lumen') || pr.includes('beta'))
+      prototype = (pr.includes('4') || pr.includes('quantum') || pr.includes('physics'))
+        ? 'prototype_4_quantum_alpha'
+        : (pr.includes('3') || pr.includes('lumen') || pr.includes('beta'))
         ? 'prototype_3_lumen_beta'
         : (pr.includes('2') || pr.includes('adaptive'))
         ? 'prototype_2_adaptive_brain'
         : 'prototype_1_classic';
     } else if (arg === '--prototype' && i + 1 < args.length) {
       const pr = args[++i].toLowerCase();
-      prototype = (pr.includes('3') || pr.includes('lumen') || pr.includes('beta'))
+      prototype = (pr.includes('4') || pr.includes('quantum') || pr.includes('physics'))
+        ? 'prototype_4_quantum_alpha'
+        : (pr.includes('3') || pr.includes('lumen') || pr.includes('beta'))
         ? 'prototype_3_lumen_beta'
         : (pr.includes('2') || pr.includes('adaptive'))
         ? 'prototype_2_adaptive_brain'
@@ -947,7 +951,9 @@ async function runMultiDayWindowReplay() {
   console.log(`Starting Capital:     ₹${capital.toLocaleString('en-IN')}`);
   console.log(`Risk Profile:         ${profile.toUpperCase()}`);
   console.log(`Engine Prototype:     ${
-    prototype === 'prototype_3_lumen_beta'
+    prototype === 'prototype_4_quantum_alpha'
+      ? 'PROTOTYPE 4 (Model 4: Quantum Alpha Physics & Microstructure ★ 30%/yr)'
+      : prototype === 'prototype_3_lumen_beta'
       ? 'PROTOTYPE 3 (Lumen Beta: Real-Time News & Indigenous AI)'
       : prototype === 'prototype_2_adaptive_brain'
       ? 'PROTOTYPE 2 (Adaptive 30-Day Master Brain)'

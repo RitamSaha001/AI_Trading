@@ -57,6 +57,9 @@ import {
   MonthlyPnlGovernorResult,
   BrainDirective,
   IntradayDailyPnlContext,
+  DFARegimeEngine,
+  OUHalfLifeEngine,
+  DynamicKellySizer,
   thresholds,
 } from './quantEngine';
 import { NewsCatalystRegistry } from './newsEngine';
@@ -412,6 +415,7 @@ export function tickAutonomousPilot(
 
   // 1. Check Circuit Breaker & Prototype Version
   const prototypeVersion = pilot?.prototypeVersion || 'prototype_1_classic';
+  const isQuantumAlpha = prototypeVersion === 'prototype_4_quantum_alpha';
   const profileKey = pilot?.profile || 'balanced';
   const profile = PILOT_PROFILES[profileKey];
   const isEliteRunner = profileKey === 'elite_runner';
@@ -749,14 +753,41 @@ export function tickAutonomousPilot(
     // Stagnant Capital / Failed Momentum Timeout / Dead Trade Expiration
     const entryTimestamp = fleetStatus.entryTimestamp || now;
     const elapsedMs = now - entryTimestamp;
-    const stagnancyCheck = deadTradeStagnancyExit(
-      avgBuyPrice,
-      price,
-      atr,
-      elapsedMs,
-      volumeSurgeRatio,
-      1.0
-    );
+    const isQuantumAlpha = prototypeVersion === 'prototype_4_quantum_alpha';
+
+    let stagnancyShouldExit = false;
+    let stagnancyReason = '';
+
+    if (isQuantumAlpha) {
+      // Model 4: Ornstein-Uhlenbeck Statistical Half-Life Dynamic Exit
+      const candles = market.intradayCandles || market.candles || [];
+      const devSeries = candles.map((c) => c.close - (vwap > 0 ? vwap : avgBuyPrice));
+      const ouFit = OUHalfLifeEngine.fit(devSeries.slice(-40));
+      const entryDev = avgBuyPrice - (vwap > 0 ? vwap : avgBuyPrice);
+      const curDev = price - (vwap > 0 ? vwap : avgBuyPrice);
+      const ouEval = OUHalfLifeEngine.evaluateStagnancy(
+        entryTimestamp,
+        now,
+        entryDev,
+        curDev,
+        ouFit.halfLifeBars
+      );
+      if (ouEval.shouldExit) {
+        stagnancyShouldExit = true;
+        stagnancyReason = ouEval.reason;
+      }
+    } else {
+      const stagnancyCheck = deadTradeStagnancyExit(
+        avgBuyPrice,
+        price,
+        atr,
+        elapsedMs,
+        volumeSurgeRatio,
+        1.0
+      );
+      stagnancyShouldExit = stagnancyCheck.shouldExit;
+      stagnancyReason = stagnancyCheck.reason;
+    }
 
     let exitOrderQueued = false;
 
@@ -795,7 +826,7 @@ export function tickAutonomousPilot(
       });
     }
     const isProfitableOrRiskFree = currentStop >= avgBuyPrice || price >= avgBuyPrice + roundtripFriction.frictionPerShare;
-    if (stagnancyCheck.shouldExit && !isProfitableOrRiskFree && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
+    if (stagnancyShouldExit && !isProfitableOrRiskFree && price > currentStop && evaluateRateLimitAllowance(rateLimits, now).allowed) {
       ordersToDispatch.push({
         asset,
         side: 'sell',
@@ -804,7 +835,7 @@ export function tickAutonomousPilot(
         type: 'market',
         product: exitProduct,
         strategyName: `Auto-Pilot: ${strategy} Stagnancy Exit`,
-        reason: stagnancyCheck.reason,
+        reason: stagnancyReason,
       });
 
       rateLimits.requestsThisMinute++;
@@ -819,7 +850,7 @@ export function tickAutonomousPilot(
         asset,
         action: 'DEAD_TRADE_EXIT' as any,
         strategy,
-        detail: stagnancyCheck.reason,
+        detail: stagnancyReason,
         price,
         status: 'EXECUTED',
       });
@@ -1485,6 +1516,24 @@ export function tickAutonomousPilot(
       }
     }
 
+    // Model 4: Detrended Fluctuation Analysis (DFA) Bias-Free Structural Filter
+    if (isQuantumAlpha && hasEntrySignal) {
+      // Use 30m baseline history or full intraday candles to ensure sufficient sample length (N >= 30)
+      const sourcePrices = (market.history && market.history.length >= 30)
+        ? market.history
+        : intradayBars.map((b) => b.close);
+
+      if (sourcePrices.length >= 25) {
+        const dfa = DFARegimeEngine.calculate(sourcePrices.slice(-60));
+        // True noise filter: Only stand aside if the stock is trapped in pure Brownian noise (0.48 <= alpha <= 0.52)
+        // AND lacks institutional volume surge (< 1.25x)
+        if (dfa.alpha >= 0.48 && dfa.alpha <= 0.52 && volumeSurgeRatio < 1.25) {
+          hasEntrySignal = false;
+          entryRationale = `[Model 4 DFA Noise Guard: α=${dfa.alpha.toFixed(3)}] Pure Brownian noise without institutional volume absorption. Standing aside to preserve alpha.`;
+        }
+      }
+    }
+
     const dayOpenPrice = (market.intradayCandles && market.intradayCandles.length > 0)
       ? market.intradayCandles[0].open
       : ((market as any).open ?? (market.candles && market.candles.length > 0 ? market.candles[market.candles.length - 1].open : price));
@@ -2001,6 +2050,20 @@ export function tickAutonomousPilot(
     const riskCap = (effectiveAci >= 75 || candNewsCatalyst.hasCatalyst) ? (isLumenBeta ? 420 : 380) : effectiveAci >= 68 ? 280 : 200;
     const maxRiskCapital = Math.min(riskCap, baseRiskCapital * kellyRes.recommendedSizeMultiplier * convictionBoost);
     let unitsToBuy = Math.max(1, Math.floor(maxRiskCapital / riskPerShare));
+
+    if (isQuantumAlpha) {
+      // Model 4: Dynamic Volatility-Targeted Half-Kelly Sizing (pegged strictly to 0.75% risk = ₹300 on ₹40k NAV, capped by conviction tier)
+      const dynamicKelly = DynamicKellySizer.calculate(
+        pv,
+        limitPrice,
+        stopLossPrice,
+        [],
+        0.0075,
+        marginMultiplier
+      );
+      const safeKellyRisk = Math.min(riskCap, dynamicKelly.riskAmountInr);
+      unitsToBuy = Math.max(1, Math.floor(safeKellyRisk / riskPerShare));
+    }
 
     // Allocation mode asset-cap ceiling scaled by dynamic margin multiplier
     const baseExposurePct = allocationDecision.assetAllocationPct || thresholds.MAX_SINGLE_ASSET_ALLOCATION_PCT;

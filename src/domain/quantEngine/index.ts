@@ -16,4 +16,7 @@ export * from './dayTypeClassifier';
 export * from './strategyMasterBrain';
 export * from './synapticNeuralWeb';
 export * from './omniMasterSynthesis';
+export * from './dfaRegimeEngine';
+export * from './ouHalfLifeEngine';
+export * from './dynamicKellySizer';
 export * as thresholds from './config/thresholds';
